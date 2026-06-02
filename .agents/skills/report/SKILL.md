@@ -36,6 +36,9 @@ Each agent session is ephemeral. Without a report, the next session has to recon
 
 ## Next
 - [what the next step is]
+
+---
+Written by an agent on behalf of <user>.
 ```
 
 ## When to Report
@@ -95,6 +98,7 @@ Clean up anything embarrassing before you call it done.
 
 ## Gotchas
 
+- Every issue comment written by an agent must include `Written by an agent on behalf of <user>.`, replacing `<user>` with the human who requested the work.
 - Always verify git state before writing it — don't assume from conversation context
 - If the report says "next: X", the next session should find X actionable — be specific
 - Don't bury important decisions in long prose — the Decisions section should be scannable

@@ -78,6 +78,9 @@ Present a summary:
 
 ### No significant issues
 (If the branch is clean, say so explicitly — don't make the user wonder if you skipped something.)
+
+---
+Written by an agent on behalf of <user>.
 ```
 
 ## After review
@@ -88,6 +91,7 @@ Present a summary:
 
 ## Gotchas
 
+- If posting the review to GitHub, include `Written by an agent on behalf of <user>.`, replacing `<user>` with the human who requested the review.
 - Review findings are recommendations, not automatic truth. Verify file paths and claims before acting.
 - If `main` is stale locally, fetch first so you're comparing against a real baseline.
 - A very large branch will produce a broad, less precise review. Say so if that's the case.

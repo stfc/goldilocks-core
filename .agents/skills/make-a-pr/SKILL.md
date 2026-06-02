@@ -64,10 +64,14 @@ Commands, expected outputs, or how to exercise new behaviour.
 
 ## Changes
 - Bullet list of the meaningful changes. Not every file — the stuff that matters.
+
+---
+Written by an agent on behalf of <user>.
 ```
 
 ## After opening
 
+- PR descriptions written by an agent must include `Written by an agent on behalf of <user>.`, replacing `<user>` with the human who requested the work.
 - Move the linked issue to **In Review** on the project board.
 - If CI exists, wait for it to pass before requesting review.
 - Respond to review comments by pushing new commits — don't force-push reviewed code unless asked.

@@ -39,6 +39,9 @@ How to tackle it. Files to touch, key changes.
 ## Acceptance Criteria
 - [ ] [testable condition]
 - [ ] [testable condition]
+
+---
+Written by an agent on behalf of <user>.
 ```
 
 ```bash
@@ -79,6 +82,9 @@ Verification: How to check this phase is complete.
 ## Open Questions
 - Question 1?
 - Question 2?
+
+---
+Written by an agent on behalf of <user>.
 ```
 
 ```bash
@@ -97,6 +103,7 @@ gh issue create --title "feat: short description" --body-file plan.md
 
 ## Gotchas
 
+- Every issue body created by an agent must include `Written by an agent on behalf of <user>.`, replacing `<user>` with the human who requested the work.
 - Don't over-plan simple tasks — a 3-line issue for a typo fix is worse than just fixing it
 - Update the issue body as understanding evolves, don't just append comments
 - If the plan changes significantly, edit the issue — stale plans mislead future sessions

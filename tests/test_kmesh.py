@@ -10,8 +10,8 @@ from goldilocks_core.kmesh import (
 )
 
 
-def test_k_distance_to_mesh_returns_expected_uniform_mesh() -> None:
-    """Convert a reciprocal-space distance into a uniform mesh."""
+def test_k_distance_to_mesh_matches_vasp_kspacing_for_cubic_cell() -> None:
+    """Use solid-state reciprocal lengths for VASP-style k-spacing."""
     structure = Structure(
         lattice=Lattice.cubic(3.5),
         species=["Si"],
@@ -20,7 +20,7 @@ def test_k_distance_to_mesh_returns_expected_uniform_mesh() -> None:
 
     mesh = k_distance_to_mesh(structure, k_distance=1.0)
 
-    assert mesh == (2, 2, 2)
+    assert mesh == (math.ceil(2 * math.pi / 3.5),) * 3
 
 
 def test_k_distance_to_mesh_tracks_anisotropic_reciprocal_lengths() -> None:
@@ -33,20 +33,11 @@ def test_k_distance_to_mesh_tracks_anisotropic_reciprocal_lengths() -> None:
 
     mesh = k_distance_to_mesh(structure, k_distance=1.0)
 
-    assert mesh == (3, 2, 2)
-
-
-def test_k_distance_to_mesh_currently_ignores_force_parity() -> None:
-    """Record that force_parity is currently accepted but not applied."""
-    structure = Structure(
-        lattice=Lattice.cubic(3.5),
-        species=["Si"],
-        coords=[[0.0, 0.0, 0.0]],
+    assert mesh == (
+        math.ceil(2 * math.pi / 3.0),
+        math.ceil(2 * math.pi / 4.0),
+        math.ceil(2 * math.pi / 6.0),
     )
-
-    mesh = k_distance_to_mesh(structure, k_distance=1.0, force_parity=True)
-
-    assert mesh == (2, 2, 2)
 
 
 def test_generate_candidate_k_distances_returns_sorted_values() -> None:

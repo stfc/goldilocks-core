@@ -66,6 +66,21 @@ def test_analyze_structure_flags_transition_metal() -> None:
     assert analysis.contains_heavy_elements is False
 
 
+def test_analyze_structure_flags_period_five_element_as_heavy() -> None:
+    """Report period-five elements as heavy for SOC consideration."""
+    structure = Structure(
+        lattice=Lattice.cubic(4.0),
+        species=["I"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+
+    analysis = analyze_structure(structure)
+
+    assert analysis.contains_transition_metals is False
+    assert analysis.contains_lanthanides is False
+    assert analysis.contains_heavy_elements is True
+
+
 def test_analyze_structure_flags_lanthanide_as_heavy_element() -> None:
     """Report lanthanide and heavy-element content in analysis."""
     structure = Structure(

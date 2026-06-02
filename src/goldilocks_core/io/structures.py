@@ -64,8 +64,8 @@ def analyze_structure(structure: Structure) -> StructureAnalysis:
         element.is_transition_metal for element in periodic_elements
     )
     contains_lanthanides = any(element.is_lanthanoid for element in periodic_elements)
-    # v0.1: treat elements with Z >= 57 as heavy elements
-    contains_heavy_elements = any(element.Z >= 57 for element in periodic_elements)
+    # v0.1: flag period-5-and-heavier elements for SOC consideration.
+    contains_heavy_elements = any(element.row >= 5 for element in periodic_elements)
 
     return StructureAnalysis(
         contains_transition_metals=contains_transition_metals,

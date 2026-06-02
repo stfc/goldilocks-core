@@ -18,8 +18,9 @@ def k_distance_to_mesh(
 ) -> tuple[int, int, int]:
     """Convert a reciprocal-space k-point distance into a uniform mesh.
 
-    The distance is interpreted as the maximum spacing between adjacent
-    k-points along a reciprocal lattice direction, in units of 1/Angstrom.
+    The distance is interpreted like VASP ``KSPACING``: the maximum spacing
+    between adjacent k-points in units of 1/Angstrom. Mesh sizes are computed
+    from solid-state reciprocal lattice lengths that include the 2π factor.
 
     Notes
     -----
@@ -45,7 +46,7 @@ def generate_candidate_k_distances(
     structure: Structure,
     max_index: int = 30,
 ) -> list[float]:
-    """Generate candidate k-distance values from reciprocal lattice lengths."""
+    """Generate VASP-style k-distance candidates from reciprocal lengths."""
     reciprocal_lattice = structure.lattice.reciprocal_lattice
     reciprocal_lengths = (
         reciprocal_lattice.a,

@@ -86,8 +86,8 @@ This is a top-level domain module for k-mesh generation and analysis.
 
 It contains structure-driven logic such as:
 
-- converting `k_distance` into a k-mesh
-- generating candidate `k_distance` values
+- converting VASP-style `k_distance` / `KSPACING` values into a k-mesh
+- generating candidate `k_distance` values from solid-state reciprocal lengths, including the `2π` factor
 - constructing k-distance intervals
 - building indexed `KMeshEntry` objects
 - computing mesh metadata such as `k_pra`
@@ -151,7 +151,7 @@ The current k-mesh recommendation stack follows this flow:
 
 1. A `pymatgen.Structure` is converted into a CSLR feature vector.
 2. A trained ML model predicts a `k_index`.
-3. Candidate k-distance values are generated from the reciprocal lattice.
+3. Candidate k-distance values are generated from the solid-state reciprocal lattice convention, including the `2π` factor.
 4. These candidates are converted into `KMeshEntry` objects.
 5. The predicted `k_index` is mapped onto one selected entry.
 6. The selected entry is converted into a user-facing `KPointsAdvice`.
@@ -219,9 +219,10 @@ These are the primary tests and should be:
 
 Examples:
 
-- synthetic UPF snippets under `tmp_path`
+- synthetic UPF snippets written under `tmp_path`
 - synthetic pseudo directory trees for registry tests
-- small structure fixtures for k-mesh tests
+- small pymatgen structure fixtures for k-mesh and structure-analysis tests
+- fake model objects for inference tests
 
 ### Local exploratory validation
 
@@ -234,7 +235,7 @@ These are useful for:
 - identifying normalization mistakes
 - guiding new regression tests
 
-However, notebook experiments should be converted into focused tests once a behavior is understood and stabilized.
+However, notebook experiments should be converted into focused tests once a behavior is understood and stabilized. Committed tests should not require `local_data/`, private pseudopotential libraries, or machine-specific paths.
 
 ## Documentation Strategy
 
@@ -303,18 +304,20 @@ At the current stage, the package already has several strong foundations:
 - initial CLI entry point
 - real UPF parsing against multiple pseudo libraries
 - local pseudo registry loading and filtering
-- tests built from both synthetic fixtures and real local validation
+- portable tests built from synthetic fixtures
+- real local validation used as exploration before converting findings into tests
 
 ## Near-Term Priorities
 
 The next architectural priorities are:
 
-- improve pseudopotential registry capabilities beyond simple loading and element filtering
-- add pseudo selection logic based on structure, code, and task
-- add derived electronic metadata from selected pseudos
-- design a clear user-facing workflow for local pseudo download and installation
-- keep the CLI thin while expanding Python-level APIs first
-- continue improving normalization logic only when backed by real pseudo-library evidence
+- keep baseline tests green while internals are refactored
+- introduce explicit Core pipeline stages: Load → Analyse → Advise → Select → Generate → Bundle
+- define contracts for analysis, hints, advice, selection, and provenance
+- improve pseudopotential registry and selection capabilities beyond simple loading and filtering
+- design clear user-facing workflows for local pseudo management
+- keep CLI and HTTP surfaces thin while expanding Python-level APIs first
+- continue improving normalization logic only when backed by evidence from real pseudo-library exploration
 
 ## Migration Direction
 

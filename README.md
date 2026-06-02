@@ -18,7 +18,8 @@ The package is intended to grow toward code- and task-aware input recommendation
 ### K-mesh stack
 
 - generate candidate k-distance values from reciprocal lattice geometry
-- convert k-distance values into Monkhorst-Pack-style meshes
+- interpret `k_distance` as a VASP-style `KSPACING` value in Å⁻¹
+- convert k-distance values into Monkhorst-Pack-style meshes using solid-state reciprocal lengths with the `2π` factor
 - build indexed `KMeshEntry` objects
 - compute mesh-related metadata such as k-point density intervals and reduced-k-point counts
 - map ML-predicted `k_index` values onto concrete k-mesh recommendations
@@ -26,7 +27,7 @@ The package is intended to grow toward code- and task-aware input recommendation
 
 ### Pseudopotential stack
 
-- parse real UPF files into structured metadata
+- parse UPF files into structured metadata
 - support both attribute-style and text-style `PP_HEADER`
 - supplement header parsing with `PP_INFO` when needed
 - normalize key fields such as:
@@ -94,7 +95,7 @@ print(metadata)
 ### Build a local pseudo registry
 
 ```python
-from goldilocks_core.pseudo.registry import load_pseudo_metadata, filter_by_element
+from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata, filter_by_element
 
 metadata_list = load_pseudo_metadata("path/to/pseudopotentials")
 si_pseudos = filter_by_element(metadata_list, "Si")
@@ -116,8 +117,8 @@ The current Python-facing entry points are:
 ### Pseudopotentials
 
 - `goldilocks_core.pseudo.parse_upf.parse_upf_metadata`
-- `goldilocks_core.pseudo.registry.load_pseudo_metadata`
-- `goldilocks_core.pseudo.registry.filter_by_element`
+- `goldilocks_core.pseudo.pp_registry.load_pseudo_metadata`
+- `goldilocks_core.pseudo.pp_registry.filter_by_element`
 
 ### Shared models
 
@@ -204,12 +205,16 @@ uv run pre-commit run --all-files
 
 ## Testing Philosophy
 
-This project uses two complementary validation styles:
+The committed test suite must pass from a clean checkout with only the declared dependencies. Tests should not depend on `local_data/`, private pseudopotential libraries, notebooks, or machine-specific paths.
 
-- portable tests built from synthetic fixtures under `tmp_path`
-- local exploratory validation against real pseudopotential libraries and notebook experiments
+Use portable fixtures:
 
-When a local exploration reveals an important behavior, it should be turned into a focused regression test whenever possible.
+- synthetic pymatgen structures
+- temporary files under `tmp_path`
+- small UPF snippets written inside tests
+- constructed dataclass instances for selector and policy tests
+
+Local exploratory validation against real pseudopotential libraries is still useful, but once a behavior is understood it should be converted into a focused portable regression test.
 
 ## Current Status
 
@@ -224,7 +229,8 @@ The current codebase already has:
 
 The next major steps are expected to include:
 
-- richer pseudo registry filtering
-- pseudopotential selection logic
-- electron metadata derived from selected pseudos
+- keeping baseline tests green while refactoring internals
+- introducing explicit Core pipeline stages: Load → Analyse → Advise → Select → Generate → Bundle
+- defining contracts for analysis, hints, advice, selection, and provenance
+- expanding pseudopotential selection logic based on structure, code, and task
 - clearer user-facing workflows for local pseudo management

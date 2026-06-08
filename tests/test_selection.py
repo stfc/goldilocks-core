@@ -1,7 +1,7 @@
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.advice import advise_parameters
-from goldilocks_core.analysis import analyse_structure
+from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.contracts import CalculationHints, CalculationIntent
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.selection import select_parameters
@@ -35,7 +35,7 @@ def test_select_parameters_resolves_k_spacing_and_pseudos() -> None:
     """Select concrete grid, pseudo, and cutoffs from staged advice."""
     structure = make_structure()
     advice = advise_parameters(
-        analyse_structure(structure),
+        analyze_structure(structure),
         hints=CalculationHints(k_spacing=0.25, pseudo_type="NC"),
     )
 
@@ -53,7 +53,7 @@ def test_select_parameters_keeps_explicit_grid_hint() -> None:
     """Use an explicit grid hint without recalculating spacing."""
     structure = make_structure()
     advice = advise_parameters(
-        analyse_structure(structure),
+        analyze_structure(structure),
         hints=CalculationHints(k_grid=(2, 2, 1)),
     )
 
@@ -67,7 +67,7 @@ def test_select_parameters_warns_when_pseudo_is_missing() -> None:
     """Surface missing pseudopotentials as structured selection warnings."""
     structure = make_structure()
     advice = advise_parameters(
-        analyse_structure(structure),
+        analyze_structure(structure),
         intent=CalculationIntent(functional="PBEsol"),
     )
 

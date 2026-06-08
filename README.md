@@ -10,7 +10,7 @@ The project is designed around domain-focused modules such as k-mesh constructio
 
 - recommending k-mesh settings from structure-aware logic and ML-predicted `k_index`
 - parsing UPF pseudopotential files and building local pseudopotential registries
-- running an explicit staged recommendation pipeline: Load → Analyse → Advise → Select
+- running an explicit staged recommendation pipeline: Load → Analyze → Advise → Select
 
 The package is growing toward code- and task-aware input recommendation, where structure, pseudopotential choice, and calculation settings can be coordinated in a clean and testable way. Generate and Bundle are represented by the structured manifest boundary first; code-specific file writers can then stay mechanical.
 
@@ -44,7 +44,7 @@ The package is growing toward code- and task-aware input recommendation, where s
 ### Staged Core pipeline
 
 - load structures through a pure I/O stage
-- analyse structure facts without recommending parameters
+- analyze structure facts without recommending parameters
 - advise k-points, smearing, magnetism, SOC, pseudo intent, and convergence with provenance
 - select concrete k-point grids, pseudopotentials, and cutoffs from advice
 - bundle the structured result as a JSON-safe manifest for downstream tools
@@ -155,10 +155,9 @@ The current Python-facing entry points are:
 - `goldilocks_core.pseudo.pp_registry.load_pseudo_metadata`
 - `goldilocks_core.pseudo.pp_registry.filter_by_element`
 
-### Contracts and compatibility models
+### Contracts
 
 - `goldilocks_core.contracts`
-- `goldilocks_core.shared.types` remains as a legacy compatibility import path
 
 This package is intended to be notebook-friendly, but the package modules and tests should remain the source of truth rather than notebook-only logic.
 
@@ -200,7 +199,7 @@ src/goldilocks_core/
 ### High-level responsibilities
 
 - `advisors/`
-  Coordinates legacy recommendation workflows and policy decisions.
+  Coordinates recommendation workflows and policy decisions.
 
 - `analysis.py`, `advice.py`, `selection.py`, `pipeline.py`
   Implement the staged Core recommendation flow.
@@ -222,9 +221,6 @@ src/goldilocks_core/
 
 - `pseudo/`
   Contains UPF parsing and local pseudopotential registry logic.
-
-- `shared/`
-  Legacy compatibility re-exports for older import paths. New package code should use `contracts.py`.
 
 For a fuller explanation, see [docs/architecture.md](docs/architecture.md).
 

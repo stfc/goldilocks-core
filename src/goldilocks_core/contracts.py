@@ -26,34 +26,10 @@ StructureInput = Structure | PathLike
 CodeName = Literal["quantum_espresso"]
 CalcTask = Literal["scf_single_point"]
 AccuracyLevel = Literal["low", "standard", "high"]
-AdvisorKind = Literal["heuristic", "ml", "external"]
 ModelSource = Literal["huggingface", "local"]
 ModelType = Literal["random_forest", "cgcnn", "xgboost"]
 KPointGrid = tuple[int, int, int]
 KPointShift = tuple[int, int, int]
-
-
-@dataclass(slots=True)
-class KPointsAdvice:
-    """Recommended k-point settings for a calculation."""
-
-    code: CodeName
-    task: CalcTask
-    mesh_type: str
-    grid: KPointGrid
-    shift: KPointShift
-    accuracy_level: AccuracyLevel
-    advisor_kind: AdvisorKind
-    advisor_name: str
-
-
-@dataclass(slots=True)
-class StructureAnalysis:
-    """Compatibility summary of structure features relevant to DFT setup."""
-
-    contains_transition_metals: bool
-    contains_lanthanides: bool
-    contains_heavy_elements: bool
 
 
 @dataclass(slots=True)
@@ -141,7 +117,7 @@ class CalculationHints:
 
 @dataclass(frozen=True, slots=True)
 class StructureAnalysisRecord:
-    """Facts reported by the Analyse stage without parameter decisions."""
+    """Facts reported by the Analyze stage without parameter decisions."""
 
     formula: str
     reduced_formula: str
@@ -161,7 +137,7 @@ class StructureAnalysisRecord:
 
 
 @dataclass(frozen=True, slots=True)
-class KPointAdviceRecord:
+class KPointAdvice:
     """Advised reciprocal-space sampling intent."""
 
     spacing: float | None
@@ -245,7 +221,7 @@ class ConvergenceAdvice:
 class ParameterAdvice:
     """Complete Advise-stage output."""
 
-    k_points: KPointAdviceRecord
+    k_points: KPointAdvice
     smearing: SmearingAdvice
     magnetism: MagnetismAdvice
     spin_orbit: SpinOrbitAdvice
@@ -324,40 +300,9 @@ class CoreRecommendation:
     generated_files: tuple[GeneratedFile, ...] = ()
     warnings: tuple[str, ...] = ()
 
-    @property
-    def grid(self) -> KPointGrid:
-        """Compatibility alias for the selected k-point grid."""
-        return self.selection.k_points.grid
-
-    @property
-    def shift(self) -> KPointShift:
-        """Compatibility alias for the selected k-point shift."""
-        return self.selection.k_points.shift
-
-    @property
-    def contains_heavy_elements(self) -> bool:
-        """Compatibility alias for heavy-element structure analysis."""
-        return self.analysis.contains_heavy_elements
-
-    @property
-    def contains_transition_metals(self) -> bool:
-        """Compatibility alias for transition-metal structure analysis."""
-        return self.analysis.contains_transition_metals
-
-    @property
-    def contains_lanthanides(self) -> bool:
-        """Compatibility alias for lanthanide structure analysis."""
-        return self.analysis.contains_lanthanides
-
     def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary with compatibility aliases."""
-        data = to_jsonable(self)
-        data["grid"] = to_jsonable(self.grid)
-        data["shift"] = to_jsonable(self.shift)
-        data["contains_heavy_elements"] = self.contains_heavy_elements
-        data["contains_transition_metals"] = self.contains_transition_metals
-        data["contains_lanthanides"] = self.contains_lanthanides
-        return data
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
 
 
 def to_jsonable(value: Any) -> Any:

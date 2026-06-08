@@ -7,7 +7,7 @@ from typing import Any
 from pymatgen.core import Structure
 
 from goldilocks_core.contracts import (
-    KPointAdviceRecord,
+    KPointAdvice,
     KPointSelection,
     ParameterAdvice,
     Provenance,
@@ -43,7 +43,7 @@ def select_parameters(
 
 def _select_k_points(
     structure: Structure,
-    advice: KPointAdviceRecord,
+    advice: KPointAdvice,
 ) -> KPointSelection:
     """Resolve k-point advice into a concrete unshifted mesh."""
     if advice.explicit_grid is not None:

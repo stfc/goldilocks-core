@@ -6,12 +6,7 @@ import math
 
 from pymatgen.core import Structure
 
-from goldilocks_core.contracts import (
-    AccuracyLevel,
-    KMeshEntry,
-    KPointsAdvice,
-    ModelSpec,
-)
+from goldilocks_core.contracts import KMeshEntry, KPointSelection, ModelSpec, Provenance
 from goldilocks_core.kmesh import (
     build_kmesh_entries,
     generate_candidate_k_distances,
@@ -36,9 +31,8 @@ def _select_kmesh_entry(
 def advise_kpoints(
     structure: Structure,
     spec: ModelSpec,
-    accuracy_level: AccuracyLevel = "standard",
-) -> KPointsAdvice:
-    """Advise k-point settings for a structure."""
+) -> KPointSelection:
+    """Select a k-point grid from an ML-predicted k-index."""
     features = extract_cslr_features(structure)
     model = load_model(spec)
     predicted_k_index = predict(model, features)
@@ -47,13 +41,13 @@ def advise_kpoints(
     entries = build_kmesh_entries(structure, candidate_distances)
     selected_entry = _select_kmesh_entry(entries, predicted_k_index)
 
-    return KPointsAdvice(
-        code="quantum_espresso",
-        task="scf_single_point",
+    return KPointSelection(
         mesh_type="monkhorst-pack",
         grid=selected_entry.mesh,
         shift=(0, 0, 0),
-        accuracy_level=accuracy_level,
-        advisor_kind="ml",
-        advisor_name=spec.name,
+        provenance=Provenance(
+            source="model",
+            reason="Select nearest k-mesh entry from predicted k-index.",
+            data_source=spec.name,
+        ),
     )

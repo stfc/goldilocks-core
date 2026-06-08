@@ -6,7 +6,7 @@ from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 
 def test_recommend_runs_staged_core_pipeline() -> None:
-    """Run Load → Analyse → Advise → Select through the public API."""
+    """Run Load → Analyze → Advise → Select through the public API."""
     structure = Structure(
         lattice=Lattice.cubic(4.0),
         species=["Si"],
@@ -32,7 +32,6 @@ def test_recommend_runs_staged_core_pipeline() -> None:
     assert result.analysis.reduced_formula == "Si"
     assert result.advice.k_points.provenance.source == "user_hint"
     assert result.selection.k_points.grid == (3, 3, 3)
-    assert result.grid == (3, 3, 3)
     assert result.selection.pseudopotentials[0].filename == "Si.UPF"
 
 
@@ -49,4 +48,4 @@ def test_bundle_recommendation_returns_manifest_dict() -> None:
     assert manifest["analysis"]["heavy_elements"] == ["I"]
     assert manifest["advice"]["spin_orbit"]["consider"] is True
     assert manifest["selection"]["k_points"]["grid"] == [8, 8, 8]
-    assert manifest["contains_heavy_elements"] is True
+    assert "contains_heavy_elements" not in manifest

@@ -10,7 +10,7 @@ At the current stage, the package has three main vertical slices:
 
 - k-mesh recommendation from structure-aware logic and ML-predicted `k_index`
 - pseudopotential parsing and local registry construction from UPF files
-- staged Core recommendation records for Load → Analyse → Advise → Select
+- staged Core recommendation records for Load → Analyze → Advise → Select
 
 These slices are designed to remain composable so recommendation workflows can combine structure, task, code, k-mesh policy, provenance, and pseudopotential choice in a clean way.
 
@@ -56,7 +56,7 @@ It should answer questions such as:
 
 Current example:
 
-- `kmesh_advisor.py` maps predicted `k_index` values onto concrete `KMeshEntry` objects and returns `KPointsAdvice`
+- `kmesh_advisor.py` maps predicted `k_index` values onto concrete `KPointSelection` objects
 
 This layer should remain orchestration-oriented rather than becoming a place for low-level parsing or geometry logic.
 
@@ -65,10 +65,10 @@ This layer should remain orchestration-oriented rather than becoming a place for
 The staged pipeline follows the wider Goldilocks architecture:
 
 ```text
-Load → Analyse → Advise → Select → Generate → Bundle
+Load → Analyze → Advise → Select → Generate → Bundle
 ```
 
-The first implementation exposes Load, Analyse, Advise, and Select directly in Python and bundles the result as a JSON-safe manifest. Code-specific Generate functions can be added later as mechanical translators that consume completed advice and selection records.
+The first implementation exposes Load, Analyze, Advise, and Select directly in Python and bundles the result as a JSON-safe manifest. Code-specific Generate functions can be added later as mechanical translators that consume completed advice and selection records.
 
 Current modules:
 
@@ -81,7 +81,7 @@ Current modules:
 Important boundaries:
 
 - Load is pure I/O.
-- Analyse reports facts; it does not decide parameters.
+- Analyze reports facts; it does not decide parameters.
 - Advise chooses physical/numerical intent and records provenance.
 - Select resolves concrete artefacts and values from advice.
 - Generators must not invent scientific defaults.
@@ -162,10 +162,6 @@ This package is expected to grow further to include:
 - code-specific pseudo configuration
 - optional download and installation utilities
 
-### Legacy compatibility imports
-
-`goldilocks_core.shared.types` remains as a compatibility import path for older code. New package code should import boundary models from `contracts.py` instead. This keeps the active architecture domain-oriented while avoiding an avoidable public API break.
-
 ## K-Mesh Recommendation Stack
 
 The current k-mesh recommendation stack follows this flow:
@@ -175,7 +171,7 @@ The current k-mesh recommendation stack follows this flow:
 3. Candidate k-distance values are generated from the solid-state reciprocal lattice convention, including the `2π` factor.
 4. These candidates are converted into `KMeshEntry` objects.
 5. The predicted `k_index` is mapped onto one selected entry.
-6. The selected entry is converted into a user-facing `KPointsAdvice`.
+6. The selected entry is converted into a user-facing `KPointSelection`.
 
 This design keeps responsibilities separate:
 
@@ -218,8 +214,7 @@ This has several goals:
 
 The rule of thumb is:
 
-- boundary records and compatibility models belong in `contracts.py`
-- `shared/types.py` only re-exports legacy import paths
+- boundary records belong in `contracts.py`
 - domain-specific structured metadata belongs near the domain module that owns it
 
 For example:

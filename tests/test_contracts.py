@@ -3,7 +3,7 @@ from goldilocks_core.contracts import (
     CalculationIntent,
     ConvergenceAdvice,
     CoreRecommendation,
-    KPointAdviceRecord,
+    KPointAdvice,
     KPointSelection,
     MagnetismAdvice,
     ParameterAdvice,
@@ -20,7 +20,7 @@ def test_contracts_serialize_to_json_safe_dicts() -> None:
     """Serialize nested pipeline records without tuples or dataclasses."""
     provenance = Provenance(source="default", reason="baseline default")
     advice = ParameterAdvice(
-        k_points=KPointAdviceRecord(
+        k_points=KPointAdvice(
             spacing=0.2,
             explicit_grid=None,
             mesh_type="monkhorst-pack",
@@ -81,8 +81,8 @@ def test_contracts_serialize_to_json_safe_dicts() -> None:
 
     assert data["analysis"]["elements"] == ["Si"]
     assert data["selection"]["k_points"]["grid"] == [4, 4, 4]
-    assert data["grid"] == [4, 4, 4]
-    assert data["contains_heavy_elements"] is False
+    assert "grid" not in data
+    assert "contains_heavy_elements" not in data
 
 
 def test_hints_serialize_explicit_grid_as_list() -> None:

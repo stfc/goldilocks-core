@@ -1,4 +1,4 @@
-"""Analyse-stage structure facts for the Core pipeline."""
+"""Analyze-stage structure facts for the Core pipeline."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pymatgen.core.periodic_table import Element
 from goldilocks_core.contracts import StructureAnalysisRecord
 
 
-def analyse_structure(structure: Structure) -> StructureAnalysisRecord:
+def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
     """Return deterministic structure facts used by later pipeline stages."""
     elements = tuple(
         sorted(element.symbol for element in structure.composition.elements)
@@ -42,11 +42,6 @@ def analyse_structure(structure: Structure) -> StructureAnalysisRecord:
         heavy_elements=heavy_elements,
         disorder_warnings=_find_disorder_warnings(structure),
     )
-
-
-def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
-    """Alias for callers using American spelling."""
-    return analyse_structure(structure)
 
 
 def _find_disorder_warnings(structure: Structure) -> tuple[str, ...]:

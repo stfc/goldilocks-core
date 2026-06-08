@@ -6,8 +6,7 @@ from pathlib import Path
 
 from pymatgen.core import Structure
 
-from goldilocks_core.analysis import analyse_structure
-from goldilocks_core.contracts import StructureAnalysis, StructureInput
+from goldilocks_core.contracts import StructureInput
 
 
 def load_structure(structure: StructureInput) -> Structure:
@@ -51,15 +50,4 @@ def load_structure(structure: StructureInput) -> Structure:
 
     raise TypeError(
         "structure must be a pymatgen Structure or a path to a structure file"
-    )
-
-
-def analyze_structure(structure: Structure) -> StructureAnalysis:
-    """Return the legacy structure-analysis summary."""
-    analysis = analyse_structure(structure)
-
-    return StructureAnalysis(
-        contains_transition_metals=analysis.contains_transition_metals,
-        contains_lanthanides=analysis.contains_lanthanides,
-        contains_heavy_elements=analysis.contains_heavy_elements,
     )

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pymatgen.core import Structure
 
 from goldilocks_core.advice import advise_parameters
-from goldilocks_core.analysis import analyse_structure
+from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
@@ -26,9 +26,9 @@ def load(structure: StructureInput) -> Structure:
     return load_structure(structure)
 
 
-def analyse(structure: Structure) -> StructureAnalysisRecord:
-    """Analyse-stage wrapper for structure facts."""
-    return analyse_structure(structure)
+def analyze(structure: Structure) -> StructureAnalysisRecord:
+    """Analyze-stage wrapper for structure facts."""
+    return analyze_structure(structure)
 
 
 def advise(
@@ -56,10 +56,10 @@ def recommend(
     hints: CalculationHints | None = None,
     pseudo_metadata: list[PseudoMetadata] | None = None,
 ) -> CoreRecommendation:
-    """Run Load → Analyse → Advise → Select and return structured output."""
+    """Run Load → Analyze → Advise → Select and return structured output."""
     intent = intent or CalculationIntent()
     loaded_structure = load(structure)
-    analysis = analyse(loaded_structure)
+    analysis = analyze(loaded_structure)
     advice = advise_parameters(analysis, intent=intent, hints=hints)
     selection = select_parameters(
         loaded_structure,

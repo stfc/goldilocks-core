@@ -1,7 +1,7 @@
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.advisors.kmesh_advisor import advise_kpoints
-from goldilocks_core.shared.types import ModelSpec
+from goldilocks_core.contracts import ModelSpec
 
 
 class DummyModel:
@@ -37,10 +37,8 @@ def test_advise_kpoints_returns_selected_mesh(monkeypatch) -> None:
 
     advice = advise_kpoints(structure, spec)
 
-    assert advice.code == "quantum_espresso"
-    assert advice.task == "scf_single_point"
     assert advice.mesh_type == "monkhorst-pack"
     assert advice.grid == (3, 3, 3)
     assert advice.shift == (0, 0, 0)
-    assert advice.advisor_kind == "ml"
-    assert advice.advisor_name == spec.name
+    assert advice.provenance.source == "model"
+    assert advice.provenance.data_source == spec.name

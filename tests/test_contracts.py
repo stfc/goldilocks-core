@@ -1,8 +1,8 @@
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
-    CoreRecommendation,
     ConvergenceAdvice,
+    CoreRecommendation,
     KPointAdviceRecord,
     KPointSelection,
     MagnetismAdvice,

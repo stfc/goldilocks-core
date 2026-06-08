@@ -31,9 +31,7 @@ def select_parameters(
         metadata_list or [],
     )
     warnings = tuple(
-        warning
-        for selection in pseudo_selections
-        for warning in selection.warnings
+        warning for selection in pseudo_selections for warning in selection.warnings
     )
 
     return SelectionRecord(

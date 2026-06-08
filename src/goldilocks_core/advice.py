@@ -52,9 +52,7 @@ def _advise_k_points(hints: CalculationHints) -> KPointAdviceRecord:
     warnings: tuple[str, ...] = ()
     if hints.k_grid is not None:
         if hints.k_spacing is not None:
-            warnings = (
-                "Both k_grid and k_spacing were provided; explicit grid wins.",
-            )
+            warnings = ("Both k_grid and k_spacing were provided; explicit grid wins.",)
         return KPointAdviceRecord(
             spacing=None,
             explicit_grid=hints.k_grid,

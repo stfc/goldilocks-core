@@ -298,7 +298,10 @@ def to_jsonable(value: Any) -> Any:
     if is_dataclass(value):
         if not hasattr(value, "__dataclass_fields__"):
             return asdict(value)
-        return {field.name: to_jsonable(getattr(value, field.name)) for field in fields(value)}
+        return {
+            field.name: to_jsonable(getattr(value, field.name))
+            for field in fields(value)
+        }
 
     if isinstance(value, tuple | list):
         return [to_jsonable(item) for item in value]

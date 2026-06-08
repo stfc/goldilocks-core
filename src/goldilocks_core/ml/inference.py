@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from goldilocks_core.shared.types import StructureFeatureVector
+from goldilocks_core.contracts import StructureFeatureVector
 
 
 def predict(model: object, features: StructureFeatureVector) -> float:

@@ -7,7 +7,7 @@ from pathlib import Path
 from pymatgen.core import Structure
 
 from goldilocks_core.analysis import analyse_structure
-from goldilocks_core.shared.types import StructureAnalysis, StructureInput
+from goldilocks_core.contracts import StructureAnalysis, StructureInput
 
 
 def load_structure(structure: StructureInput) -> Structure:
@@ -55,7 +55,7 @@ def load_structure(structure: StructureInput) -> Structure:
 
 
 def analyze_structure(structure: Structure) -> StructureAnalysis:
-    """Analyze element-based structure features relevant to DFT setup."""
+    """Return the legacy structure-analysis summary."""
     analysis = analyse_structure(structure)
 
     return StructureAnalysis(

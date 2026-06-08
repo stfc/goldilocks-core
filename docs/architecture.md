@@ -39,8 +39,7 @@ src/goldilocks_core/
 ├── ml/
 ├── pipeline.py
 ├── pseudo/
-├── selection.py
-└── shared/
+└── selection.py
 ```
 
 ## Module Roles
@@ -163,19 +162,9 @@ This package is expected to grow further to include:
 - code-specific pseudo configuration
 - optional download and installation utilities
 
-### `shared/`
+### Legacy compatibility imports
 
-This layer contains reusable data models and shared type definitions used across the package.
-
-Examples include:
-
-- `KMeshEntry`
-- `KPointsAdvice`
-- `ModelSpec`
-- `StructureFeatureVector`
-- `StructureAnalysis`
-
-This layer exists to keep shared interfaces explicit and stable.
+`goldilocks_core.shared.types` remains as a compatibility import path for older code. New package code should import boundary models from `contracts.py` instead. This keeps the active architecture domain-oriented while avoiding an avoidable public API break.
 
 ## K-Mesh Recommendation Stack
 
@@ -229,15 +218,14 @@ This has several goals:
 
 The rule of thumb is:
 
-- established compatibility models can remain in `shared/`
-- staged pipeline boundary records belong in `contracts.py`
+- boundary records and compatibility models belong in `contracts.py`
+- `shared/types.py` only re-exports legacy import paths
 - domain-specific structured metadata belongs near the domain module that owns it
 
 For example:
 
-- `KMeshEntry` belongs to the general shared model layer because it is used across recommendation logic
+- `KMeshEntry` and `CoreRecommendation` belong in `contracts.py` because they are boundary objects returned or consumed across stages
 - `PseudoMetadata` belongs in `pseudo/` because it is specifically tied to pseudopotential parsing and registry work
-- `CoreRecommendation` belongs in `contracts.py` because it is the boundary object returned by the staged pipeline
 
 ## Testing Strategy
 
@@ -334,7 +322,7 @@ A research user should be able to import the same package APIs into notebooks an
 At the current stage, the package already has several strong foundations:
 
 - explicit k-mesh recommendation flow
-- shared typed data models
+- explicit contract dataclasses
 - thin advisor layer for ML-driven k-mesh selection
 - initial CLI entry point
 - real UPF parsing against multiple pseudo libraries
@@ -365,6 +353,6 @@ The ongoing direction is:
 - let `pseudo/` own pseudopotential parsing and registry logic
 - let `advisors/` own recommendation orchestration
 - let `cli/` expose a thin user interface
-- keep shared interfaces centralized in `shared/`
+- keep active boundary interfaces centralized in `contracts.py`
 
 This staged approach reduces refactor risk while allowing the package to keep growing in a research-grade but maintainable way.

@@ -6,7 +6,8 @@ from dataclasses import asdict, dataclass, fields, is_dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from goldilocks_core.shared.types import AccuracyLevel, CalcTask, CodeName
+import numpy as np
+from pymatgen.core import Structure
 
 ProvenanceSource = Literal[
     "analysis",
@@ -19,8 +20,74 @@ ProvenanceSource = Literal[
 
 
 JsonDict = dict[str, Any]
+PathLike = str | Path
+StructureInput = Structure | PathLike
+
+CodeName = Literal["quantum_espresso"]
+CalcTask = Literal["scf_single_point"]
+AccuracyLevel = Literal["low", "standard", "high"]
+AdvisorKind = Literal["heuristic", "ml", "external"]
+ModelSource = Literal["huggingface", "local"]
+ModelType = Literal["random_forest", "cgcnn", "xgboost"]
 KPointGrid = tuple[int, int, int]
 KPointShift = tuple[int, int, int]
+
+
+@dataclass(slots=True)
+class KPointsAdvice:
+    """Recommended k-point settings for a calculation."""
+
+    code: CodeName
+    task: CalcTask
+    mesh_type: str
+    grid: KPointGrid
+    shift: KPointShift
+    accuracy_level: AccuracyLevel
+    advisor_kind: AdvisorKind
+    advisor_name: str
+
+
+@dataclass(slots=True)
+class StructureAnalysis:
+    """Compatibility summary of structure features relevant to DFT setup."""
+
+    contains_transition_metals: bool
+    contains_lanthanides: bool
+    contains_heavy_elements: bool
+
+
+@dataclass(slots=True)
+class StructureFeatureVector:
+    """Named numerical feature vector extracted from a structure."""
+
+    values: np.ndarray
+    feature_names: list[str]
+
+
+@dataclass(slots=True)
+class ModelSpec:
+    """Metadata describing a trained model used by the package."""
+
+    name: str
+    version: str
+    model_type: ModelType
+    target: str
+    feature_set: str
+    source: ModelSource
+    location: str
+    revision: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class KMeshEntry:
+    """One indexed k-mesh entry produced from a structure scan."""
+
+    k_index: int
+    mesh: KPointGrid
+    k_distance_interval: tuple[float, float]
+    k_line_density_interval: tuple[float, float] | None
+    k_pra: float
+    n_reduced_kpoints: int
 
 
 @dataclass(frozen=True, slots=True)

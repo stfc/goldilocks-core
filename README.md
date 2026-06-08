@@ -74,7 +74,7 @@ from pathlib import Path
 
 from goldilocks_core.advisors import advise_kpoints
 from goldilocks_core.io.structures import load_structure
-from goldilocks_core.shared.types import ModelSpec
+from goldilocks_core.contracts import ModelSpec
 
 structure = load_structure("path/to/structure.cif")
 
@@ -155,9 +155,10 @@ The current Python-facing entry points are:
 - `goldilocks_core.pseudo.pp_registry.load_pseudo_metadata`
 - `goldilocks_core.pseudo.pp_registry.filter_by_element`
 
-### Shared models
+### Contracts and compatibility models
 
-- `goldilocks_core.shared.types`
+- `goldilocks_core.contracts`
+- `goldilocks_core.shared.types` remains as a legacy compatibility import path
 
 This package is intended to be notebook-friendly, but the package modules and tests should remain the source of truth rather than notebook-only logic.
 
@@ -193,8 +194,7 @@ src/goldilocks_core/
 ├── ml/
 ├── pipeline.py
 ├── pseudo/
-├── selection.py
-└── shared/
+└── selection.py
 ```
 
 ### High-level responsibilities
@@ -224,7 +224,7 @@ src/goldilocks_core/
   Contains UPF parsing and local pseudopotential registry logic.
 
 - `shared/`
-  Contains reusable shared data models and type definitions.
+  Legacy compatibility re-exports for older import paths. New package code should use `contracts.py`.
 
 For a fuller explanation, see [docs/architecture.md](docs/architecture.md).
 

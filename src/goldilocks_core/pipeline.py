@@ -14,11 +14,11 @@ from goldilocks_core.contracts import (
     ParameterAdvice,
     SelectionRecord,
     StructureAnalysisRecord,
+    StructureInput,
 )
 from goldilocks_core.io.structures import load_structure
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.selection import select_parameters
-from goldilocks_core.shared.types import StructureInput
 
 
 def load(structure: StructureInput) -> Structure:

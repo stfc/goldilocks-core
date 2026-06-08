@@ -7,7 +7,7 @@ import math
 from pymatgen.core import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
-from goldilocks_core.shared.types import KMeshEntry
+from goldilocks_core.contracts import KMeshEntry
 
 
 def k_distance_to_mesh(

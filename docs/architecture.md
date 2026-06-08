@@ -1,353 +1,393 @@
 # Architecture
 
-## Overview
+`goldilocks-core` is the Core package for DFT input recommendation.
 
-`goldilocks-core` is a research-grade Python package for recommending and organizing DFT calculation inputs from crystal structures, parsed pseudopotentials, and machine-learning models.
+Core owns:
 
-The package is being organized around domain-focused modules rather than generic utility buckets. The goal is to keep scientific parsing, physical metadata extraction, model inference, recommendation policy, and user-facing interfaces clearly separated.
+- structure loading
+- structure analysis facts
+- parameter advice
+- concrete selection of k-grids, pseudopotentials, and cutoffs
+- recommendation manifests
 
-At the current stage, the package has three main vertical slices:
+Core does not own:
 
-- k-mesh recommendation from structure-aware logic and ML-predicted `k_index`
-- pseudopotential parsing and local registry construction from UPF files
-- staged Core recommendation records for Load → Analyze → Advise → Select
+- Runner or AiiDA workflows
+- scheduler scripts
+- frontend or workspace state
+- auth, sessions, WebSockets, or pods
+- completed-output analysis
 
-These slices are designed to remain composable so recommendation workflows can combine structure, task, code, k-mesh policy, provenance, and pseudopotential choice in a clean way.
+## Principles
 
-## Design Principles
+- Use domain modules. Do not add generic `helpers`, `utils`, or `processing` packages.
+- Keep one canonical API. Do not add compatibility shims unless explicitly requested.
+- Keep CLIs thin. Package APIs hold the logic.
+- Keep generators mechanical. Scientific defaults belong in advice or selection.
+- Keep tests portable. Do not require `local_data/` or private pseudo libraries.
+- Prefer small functions and explicit dataclasses.
 
-- Prefer domain-oriented modules over generic buckets such as `helpers` or `processing`.
-- Keep low-level scientific parsing separate from recommendation policy.
-- Keep command-line interfaces thin and delegate real work to package APIs.
-- Use explicit dataclasses for stable internal interfaces.
-- Favor small focused functions over large mixed-responsibility scripts.
-- Make the package testable without depending on private local datasets whenever possible.
-- Support notebook exploration, but treat package modules and tests as the source of truth.
-- Evolve incrementally while keeping tests passing during refactors.
-
-## Current Package Layout
+## Package layout
 
 ```text
 src/goldilocks_core/
-├── advisors/
+├── __init__.py
+├── contracts.py
+├── pipeline.py
 ├── analysis.py
 ├── advice.py
-├── cli/
-├── contracts.py
-├── io/
+├── selection.py
 ├── kmesh.py
+├── advisors/
+│   └── kmesh_advisor.py
+├── cli/
+│   └── cli_kmesh.py
+├── io/
+│   └── structures.py
 ├── ml/
-├── pipeline.py
-├── pseudo/
-└── selection.py
+│   ├── features.py
+│   ├── inference.py
+│   └── models.py
+└── pseudo/
+    ├── parse_upf.py
+    ├── pp_metadata.py
+    ├── pp_policy.py
+    ├── pp_registry.py
+    └── pp_selector.py
 ```
 
-## Module Roles
+Module dependencies should stay simple:
 
-### `advisors/`
+```mermaid
+flowchart TB
+    pipeline["pipeline.py"] --> io["io/structures.py"]
+    pipeline --> analysis["analysis.py"]
+    pipeline --> advice["advice.py"]
+    pipeline --> selection["selection.py"]
 
-This layer coordinates recommendation workflows and applies policy decisions.
+    analysis --> contracts["contracts.py"]
+    advice --> contracts
+    selection --> contracts
+    selection --> kmesh["kmesh.py"]
+    selection --> pseudo["pseudo/"]
 
-It should answer questions such as:
+    advisors["advisors/kmesh_advisor.py"] --> ml["ml/"]
+    advisors --> kmesh
+    advisors --> contracts
 
-- given a structure and model, which recommendation should be returned
-- how should model output be mapped onto a domain object
-- how should task- or code-specific rules affect the final recommendation
-
-Current example:
-
-- `kmesh_advisor.py` maps predicted `k_index` values onto concrete `KPointSelection` objects
-
-This layer should remain orchestration-oriented rather than becoming a place for low-level parsing or geometry logic.
-
-### Staged Core modules
-
-The staged pipeline follows the wider Goldilocks architecture:
-
-```text
-Load → Analyze → Advise → Select → Generate → Bundle
+    cli["cli/"] --> advisors
+    cli --> io
 ```
 
-The first implementation exposes Load, Analyze, Advise, and Select directly in Python and bundles the result as a JSON-safe manifest. Code-specific Generate functions can be added later as mechanical translators that consume completed advice and selection records.
+## Pipeline
 
-Current modules:
+The main pipeline is:
 
-- `contracts.py` defines provenance, intent, hints, analysis, advice, selection, and recommendation records.
-- `analysis.py` reports structure facts only: composition, heavy elements, magnetic candidates, and disorder warnings.
-- `advice.py` turns analysis, intent, and optional hints into provenance-backed scientific recommendations.
-- `selection.py` resolves advice into concrete k-point grids, pseudopotential choices, and cutoff values when metadata is available.
-- `pipeline.py` orchestrates the public `recommend()` flow and manifest bundling.
+```mermaid
+flowchart LR
+    input["Structure input"] --> load["Load"]
+    load --> analyzed["Analyze"]
+    analyzed --> advised["Advise"]
+    advised --> selected["Select"]
+    selected --> recommendation["CoreRecommendation"]
 
-Important boundaries:
+    intent["CalculationIntent"] -.-> advised
+    hints["CalculationHints"] -.-> advised
+    metadata["PseudoMetadata list"] -.-> selected
+```
+
+### Load
+
+Owner: `io/structures.py`
+
+Input:
+
+- `pymatgen.core.Structure`
+- path to a structure file readable by `pymatgen.Structure.from_file`
+
+Output:
+
+- `pymatgen.core.Structure`
+
+Rules:
 
 - Load is pure I/O.
-- Analyze reports facts; it does not decide parameters.
-- Advise chooses physical/numerical intent and records provenance.
-- Select resolves concrete artefacts and values from advice.
-- Generators must not invent scientific defaults.
+- Load does not analyze structures.
+- Load does not recommend parameters.
 
-### `cli/`
+### Analyze
 
-This layer exposes package functionality to users through command-line entry points.
+Owner: `analysis.py`
 
-Its responsibilities are:
+Input:
 
-- parse arguments
-- load inputs
-- call package APIs
-- print results
+- `pymatgen.core.Structure`
 
-The CLI should remain thin. It should not duplicate k-mesh or pseudopotential logic.
+Output:
 
-### `io/`
+- `StructureAnalysisRecord`
 
-This layer handles structure input and normalization.
+Current fields include:
 
-Typical responsibilities include:
+- formula
+- reduced formula
+- site count
+- element symbols
+- transition-metal flag
+- lanthanide flag
+- actinide flag
+- heavy-element flag
+- magnetic candidate elements
+- heavy elements
+- disorder warnings
 
-- loading structure files
-- validating supported input formats
-- converting user inputs into `pymatgen.Structure` objects
+Rules:
 
-This replaces the older practice of placing structure loading code under a generic helper namespace.
+- Analyze reports facts only.
+- Analyze does not choose k-points, smearing, spin, SOC, pseudopotentials, or cutoffs.
+- Heavy elements use the period-5-and-heavier heuristic.
 
-### `kmesh.py`
+### Advise
 
-This is a top-level domain module for k-mesh generation and analysis.
+Owner: `advice.py`
 
-It contains structure-driven logic such as:
+Inputs:
 
-- converting VASP-style `k_distance` / `KSPACING` values into a k-mesh
-- generating candidate `k_distance` values from solid-state reciprocal lengths, including the `2π` factor
-- constructing k-distance intervals
-- building indexed `KMeshEntry` objects
-- computing mesh metadata such as `k_pra`
-- computing reduced k-point counts
-- inferring line-density intervals when meaningful
+- `StructureAnalysisRecord`
+- optional `CalculationIntent`
+- optional `CalculationHints`
 
-This module should stay as neutral as possible:
+Output:
 
-- it should depend on structure, symmetry, and reciprocal-space geometry
-- it should not hard-code task-, code-, or pseudo-specific recommendation policy
+- `ParameterAdvice`
 
-### `ml/`
+Current advice categories:
 
-This layer contains machine-learning support utilities.
+- k-points
+- smearing
+- magnetism
+- spin-orbit coupling
+- pseudopotential intent
+- SCF convergence threshold
 
-Current responsibilities include:
+Rules:
 
-- CSLR feature extraction
-- model loading
-- model inference
+- Hints override package decisions.
+- Every scientific recommendation has `Provenance`.
+- Heavy elements make SOC worth considering. SOC is not enabled automatically.
+- Default smearing is fixed occupations because metallicity is not inferred yet.
 
-The ML layer should predict abstract targets such as `k_index`, rather than directly formatting final code-specific recommendations.
+### Select
 
-### `pseudo/`
+Owner: `selection.py`
 
-This package contains pseudopotential-specific logic.
+Inputs:
 
-Current responsibilities include:
+- `pymatgen.core.Structure`
+- `ParameterAdvice`
+- optional list of `PseudoMetadata`
 
-- parsing UPF files into structured metadata
-- handling both attribute-style and text-style `PP_HEADER`
-- extracting additional metadata from `PP_INFO`
-- constructing local pseudopotential registries
-- filtering registries by element
+Output:
 
-This package is expected to grow further to include:
+- `SelectionRecord`
 
-- local pseudo library indexing
-- pseudo selection for a structure
-- electron-count and related derived metadata
-- code-specific pseudo configuration
-- optional download and installation utilities
+Current selections:
 
-## K-Mesh Recommendation Stack
+- concrete k-point grid and shift
+- one pseudopotential selection per element when metadata is available
+- wavefunction and charge-density cutoffs from SSSP metadata when available
+- warnings for missing pseudopotentials or missing cutoff metadata
 
-The current k-mesh recommendation stack follows this flow:
+Rules:
 
-1. A `pymatgen.Structure` is converted into a CSLR feature vector.
-2. A trained ML model predicts a `k_index`.
-3. Candidate k-distance values are generated from the solid-state reciprocal lattice convention, including the `2π` factor.
-4. These candidates are converted into `KMeshEntry` objects.
-5. The predicted `k_index` is mapped onto one selected entry.
-6. The selected entry is converted into a user-facing `KPointSelection`.
+- Selection resolves concrete values from advice.
+- Selection may warn or return incomplete pseudo selections.
+- Selection does not parse files. Pseudopotential metadata must be supplied by the caller.
 
-This design keeps responsibilities separate:
+### Generate and Bundle
 
-- `ml/` handles prediction
-- `kmesh.py` handles k-mesh space construction
-- `advisors/` handles final recommendation selection
+Generate is not implemented yet.
 
-## Pseudopotential Stack
+Bundle currently means JSON-safe manifest serialization:
 
-The current pseudopotential stack follows this flow:
+```python
+manifest = recommendation.to_dict()
+```
+
+Future generators must consume completed advice and selection records. They must not invent scientific defaults.
 
-1. A UPF file is read as text.
-2. The parser detects whether `PP_HEADER` is attribute-style or text-style.
-3. Header metadata is parsed into a normalized internal dictionary.
-4. Supplemental information is extracted from `PP_INFO` when needed.
-5. Core metadata is promoted into `PseudoMetadata`.
-6. A local root directory can be scanned into a list of parsed metadata entries.
-7. Registry-level helpers can filter this list, for example by element.
-8. The Select stage can choose one deterministic matching pseudo per structure element and expose missing-data or missing-cutoff warnings.
+## Public Python API
 
-Important design rules for this stack:
+Top-level imports:
 
-- `element` may fall back to filename parsing when needed
-- `functional`, `pseudo_type`, `relativistic`, and `z_valence` should preferentially come from UPF content rather than filename heuristics
-- filename hints are useful, but header metadata is treated as authoritative when the two disagree
+```python
+from goldilocks_core import CalculationHints, CalculationIntent, recommend
+```
+
+Full pipeline:
+
+```python
+result = recommend(
+    "structure.cif",
+    intent=CalculationIntent(functional="PBE"),
+    hints=CalculationHints(k_spacing=0.2),
+    pseudo_metadata=metadata_list,
+)
+```
+
+Stage-by-stage:
+
+```python
+from goldilocks_core.pipeline import analyze, advise, load, select
 
-This is especially important because real-world pseudo libraries contain historical naming inconsistencies.
+structure = load("structure.cif")
+analysis = analyze(structure)
+advice = advise(analysis)
+selection = select(structure, advice, metadata_list)
+```
 
-## Data Model Strategy
+## Contract objects
 
-The package uses explicit dataclasses for stable internal interfaces.
+Owner: `contracts.py`
+
+Core contracts:
+
+```text
+CalculationIntent
+CalculationHints
+Provenance
+StructureAnalysisRecord
+ParameterAdvice
+SelectionRecord
+CoreRecommendation
+```
 
-This has several goals:
+Supporting contracts:
 
-- make boundaries between modules easy to understand
-- keep field names explicit
-- reduce hidden assumptions about ordering or shape
-- make testing easier
-- make notebook exploration more structured
+```text
+ModelSpec
+StructureFeatureVector
+KMeshEntry
+KPointAdvice
+KPointSelection
+SmearingAdvice
+MagnetismAdvice
+SpinOrbitAdvice
+PseudopotentialAdvice
+PseudopotentialSelection
+ConvergenceAdvice
+GeneratedFile
+```
 
-The rule of thumb is:
+Contract rules:
 
-- boundary records belong in `contracts.py`
-- domain-specific structured metadata belongs near the domain module that owns it
+- Boundary records live in `contracts.py`.
+- Domain-local metadata may live near the domain module. Example: `pseudo/pp_metadata.py`.
+- Do not add duplicate models for the same concept.
+- Do not add legacy import aliases.
+
+## K-mesh paths
 
-For example:
+There are two k-mesh paths.
 
-- `KMeshEntry` and `CoreRecommendation` belong in `contracts.py` because they are boundary objects returned or consumed across stages
-- `PseudoMetadata` belongs in `pseudo/` because it is specifically tied to pseudopotential parsing and registry work
+### Pipeline path
 
-## Testing Strategy
+```mermaid
+flowchart LR
+    hints["CalculationHints"] --> advice["KPointAdvice"]
+    advice --> select["selection.py"]
+    select --> grid["KPointSelection"]
+    kmesh["kmesh.py"] --> select
+```
 
-The package uses two complementary testing styles.
+This path is used by `recommend()`.
 
-### Unit and package tests
+### ML advisor path
 
-These are the primary tests and should be:
+```mermaid
+flowchart LR
+    structure["Structure"] --> features["CSLR features"]
+    features --> model["Model prediction"]
+    model --> index["k-index"]
+    index --> entries["KMeshEntry list"]
+    entries --> selection["KPointSelection"]
+```
 
-- portable
-- deterministic
-- runnable in CI
-- independent of private local data when possible
+This path is used by `advise_kpoints()` and the current CLI.
 
-Examples:
+## Pseudopotential path
 
-- synthetic UPF snippets written under `tmp_path`
-- synthetic pseudo directory trees for registry tests
-- small pymatgen structure fixtures for k-mesh and structure-analysis tests
-- fake model objects for inference tests
+```mermaid
+flowchart LR
+    upf["UPF files"] --> parse["parse_upf.py"]
+    parse --> metadata["PseudoMetadata"]
+    metadata --> registry["metadata list"]
+    registry --> filters["registry filters"]
+    registry --> select["selection.py"]
+    advice["PseudopotentialAdvice"] --> select
+    select --> result["PseudopotentialSelection"]
+```
 
-### Local exploratory validation
+Rules:
 
-Notebook exploration and local data scans are still important, especially for research-oriented parsing work.
+- UPF parsing promotes normalized metadata into `PseudoMetadata`.
+- Registry helpers filter metadata lists.
+- Select chooses deterministic matches from supplied metadata.
+- Missing metadata is reported as warnings, not hidden defaults.
 
-These are useful for:
+## CLI
 
-- validating behavior against large local pseudo libraries
-- checking unusual real-world file patterns
-- identifying normalization mistakes
-- guiding new regression tests
+Current script:
 
-However, notebook experiments should be converted into focused tests once a behavior is understood and stabilized. Committed tests should not require `local_data/`, private pseudopotential libraries, or machine-specific paths.
+```text
+goldilocks-kmesh
+```
 
-## Documentation Strategy
+Flow:
 
-The project should document three layers clearly.
+```mermaid
+flowchart LR
+    args["structure path and model path"] --> load["load structure"]
+    load --> model["load model"]
+    model --> predict["predict k-index"]
+    predict --> select["select k-grid"]
+    select --> output["print mesh"]
+```
 
-### Architecture documentation
+The CLI does not expose the full staged recommendation pipeline yet.
 
-This document explains:
+## Tests
 
-- why the package is structured the way it is
-- what each module owns
-- how data flows across the package
+Current test focus:
 
-### User-facing documentation
+- structure loading and analysis
+- staged contract serialization
+- advice provenance and hint override behavior
+- k-spacing to k-grid selection
+- pseudopotential parsing, registry, policy, and selection
+- ML model loading and prediction error paths
+- CLI argument/main flow
 
-The README and future usage guides should help a new user answer:
+Rules:
 
-- what can this package currently do
-- how do I use the Python API
-- how do I use the CLI
-- what input data do I need
+- Use synthetic fixtures.
+- Use `tmp_path` for files.
+- Use fake models for inference tests.
+- Do not use private data.
 
-### Developer-facing documentation
+## Extension points
 
-Module docstrings and tests should make it easy for a future contributor to understand:
+Next likely additions:
 
-- what a function is responsible for
-- what assumptions it makes
-- what output shape it guarantees
-- what cases are already covered by tests
+- code-specific Generate stage
+- output bundle directory writer
+- full staged CLI command
+- richer pseudopotential ranking
+- more complete convergence and smearing advice
+- optional model-backed advice strategies
 
-## User Onboarding Goals
+When adding these, keep the stage boundary intact:
 
-The package should become easy to approach in three ways.
-
-### Python-first usage
-
-A user should be able to do things like:
-
-- load a structure
-- ask for k-mesh advice
-- parse a UPF file
-- build a local pseudo registry
-
-without needing to understand the entire package internals.
-
-### CLI-first usage
-
-A user should be able to run a small number of focused commands for common tasks, such as:
-
-- recommending a k-mesh for a structure
-- scanning a pseudo library
-- inspecting parsed pseudo metadata
-
-### Notebook-first exploration
-
-A research user should be able to import the same package APIs into notebooks and inspect intermediate objects without relying on hidden notebook-only logic.
-
-## Current Strengths
-
-At the current stage, the package already has several strong foundations:
-
-- explicit k-mesh recommendation flow
-- explicit contract dataclasses
-- thin advisor layer for ML-driven k-mesh selection
-- initial CLI entry point
-- real UPF parsing against multiple pseudo libraries
-- local pseudo registry loading and filtering
-- portable tests built from synthetic fixtures
-- real local validation used as exploration before converting findings into tests
-
-## Near-Term Priorities
-
-The next architectural priorities are:
-
-- keep baseline tests green while the staged pipeline expands
-- add mechanical code-specific Generate functions that consume advice and selection records
-- turn the manifest bundle into a portable output directory once the schema settles
-- improve pseudopotential registry and selection capabilities beyond simple deterministic matching
-- design clear user-facing workflows for local pseudo management
-- keep CLI and HTTP surfaces thin while expanding Python-level APIs first
-- continue improving normalization logic only when backed by evidence from real pseudo-library exploration
-
-## Migration Direction
-
-The package has already moved away from generic buckets such as `helpers/` and `processing/`.
-
-The ongoing direction is:
-
-- keep top-level domains explicit
-- let `kmesh.py` own k-mesh construction
-- let `pseudo/` own pseudopotential parsing and registry logic
-- let `advisors/` own recommendation orchestration
-- let `cli/` expose a thin user interface
-- keep active boundary interfaces centralized in `contracts.py`
-
-This staged approach reduces refactor risk while allowing the package to keep growing in a research-grade but maintainable way.
+```text
+facts -> advice -> concrete selections -> syntax/output
+```

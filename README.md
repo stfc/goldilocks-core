@@ -6,12 +6,13 @@ The project is designed around domain-focused modules such as k-mesh constructio
 
 ## What It Does
 
-`goldilocks-core` currently focuses on two main workflows:
+`goldilocks-core` currently focuses on three connected workflows:
 
 - recommending k-mesh settings from structure-aware logic and ML-predicted `k_index`
 - parsing UPF pseudopotential files and building local pseudopotential registries
+- running an explicit staged recommendation pipeline: Load → Analyse → Advise → Select
 
-The package is intended to grow toward code- and task-aware input recommendation, where structure, pseudopotential choice, and calculation settings can be coordinated in a clean and testable way.
+The package is growing toward code- and task-aware input recommendation, where structure, pseudopotential choice, and calculation settings can be coordinated in a clean and testable way. Generate and Bundle are represented by the structured manifest boundary first; code-specific file writers can then stay mechanical.
 
 ## Current Capabilities
 
@@ -38,6 +39,15 @@ The package is intended to grow toward code- and task-aware input recommendation
   - `z_valence`
 - scan a local pseudo library into a list of `PseudoMetadata`
 - filter registry entries by element
+- select one deterministic pseudopotential candidate per structure element when metadata is available
+
+### Staged Core pipeline
+
+- load structures through a pure I/O stage
+- analyse structure facts without recommending parameters
+- advise k-points, smearing, magnetism, SOC, pseudo intent, and convergence with provenance
+- select concrete k-point grids, pseudopotentials, and cutoffs from advice
+- bundle the structured result as a JSON-safe manifest for downstream tools
 
 ## Installation
 
@@ -104,9 +114,34 @@ print(len(metadata_list))
 print(len(si_pseudos))
 ```
 
+### Run the staged recommendation pipeline
+
+```python
+from goldilocks_core import CalculationHints, recommend
+from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
+
+metadata_list = load_pseudo_metadata("path/to/pseudopotentials")
+result = recommend(
+    "path/to/structure.cif",
+    hints=CalculationHints(k_spacing=0.2, pseudo_type="NC"),
+    pseudo_metadata=metadata_list,
+)
+
+print(result.analysis.reduced_formula)
+print(result.selection.k_points.grid)
+print(result.to_dict())
+```
+
 ## Python API
 
 The current Python-facing entry points are:
+
+### Staged recommendation
+
+- `goldilocks_core.recommend`
+- `goldilocks_core.bundle_recommendation`
+- `goldilocks_core.CalculationIntent`
+- `goldilocks_core.CalculationHints`
 
 ### K-mesh and advice
 
@@ -149,18 +184,29 @@ At this stage, the CLI is intentionally small and thin. The main logic lives in 
 ```text
 src/goldilocks_core/
 ├── advisors/
+├── analysis.py
+├── advice.py
 ├── cli/
+├── contracts.py
 ├── io/
 ├── kmesh.py
 ├── ml/
+├── pipeline.py
 ├── pseudo/
+├── selection.py
 └── shared/
 ```
 
 ### High-level responsibilities
 
 - `advisors/`
-  Coordinates recommendation workflows and policy decisions.
+  Coordinates legacy recommendation workflows and policy decisions.
+
+- `analysis.py`, `advice.py`, `selection.py`, `pipeline.py`
+  Implement the staged Core recommendation flow.
+
+- `contracts.py`
+  Contains JSON-serializable records for provenance, hints, analysis, advice, selection, and recommendations.
 
 - `cli/`
   Exposes thin command-line entry points.
@@ -229,8 +275,8 @@ The current codebase already has:
 
 The next major steps are expected to include:
 
-- keeping baseline tests green while refactoring internals
-- introducing explicit Core pipeline stages: Load → Analyse → Advise → Select → Generate → Bundle
-- defining contracts for analysis, hints, advice, selection, and provenance
+- keeping baseline tests green while expanding the staged pipeline
+- adding mechanical code-specific generators that consume advice and selection records
+- writing portable bundle directories once the manifest schema settles
 - expanding pseudopotential selection logic based on structure, code, and task
 - clearer user-facing workflows for local pseudo management

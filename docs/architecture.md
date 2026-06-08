@@ -6,12 +6,13 @@
 
 The package is being organized around domain-focused modules rather than generic utility buckets. The goal is to keep scientific parsing, physical metadata extraction, model inference, recommendation policy, and user-facing interfaces clearly separated.
 
-At the current stage, the package has two main vertical slices:
+At the current stage, the package has three main vertical slices:
 
 - k-mesh recommendation from structure-aware logic and ML-predicted `k_index`
 - pseudopotential parsing and local registry construction from UPF files
+- staged Core recommendation records for Load → Analyse → Advise → Select
 
-These slices are designed to remain composable so that future recommendation workflows can combine structure, task, code, k-mesh policy, and pseudopotential choice in a clean way.
+These slices are designed to remain composable so recommendation workflows can combine structure, task, code, k-mesh policy, provenance, and pseudopotential choice in a clean way.
 
 ## Design Principles
 
@@ -29,11 +30,16 @@ These slices are designed to remain composable so that future recommendation wor
 ```text
 src/goldilocks_core/
 ├── advisors/
+├── analysis.py
+├── advice.py
 ├── cli/
+├── contracts.py
 ├── io/
 ├── kmesh.py
 ├── ml/
+├── pipeline.py
 ├── pseudo/
+├── selection.py
 └── shared/
 ```
 
@@ -54,6 +60,32 @@ Current example:
 - `kmesh_advisor.py` maps predicted `k_index` values onto concrete `KMeshEntry` objects and returns `KPointsAdvice`
 
 This layer should remain orchestration-oriented rather than becoming a place for low-level parsing or geometry logic.
+
+### Staged Core modules
+
+The staged pipeline follows the wider Goldilocks architecture:
+
+```text
+Load → Analyse → Advise → Select → Generate → Bundle
+```
+
+The first implementation exposes Load, Analyse, Advise, and Select directly in Python and bundles the result as a JSON-safe manifest. Code-specific Generate functions can be added later as mechanical translators that consume completed advice and selection records.
+
+Current modules:
+
+- `contracts.py` defines provenance, intent, hints, analysis, advice, selection, and recommendation records.
+- `analysis.py` reports structure facts only: composition, heavy elements, magnetic candidates, and disorder warnings.
+- `advice.py` turns analysis, intent, and optional hints into provenance-backed scientific recommendations.
+- `selection.py` resolves advice into concrete k-point grids, pseudopotential choices, and cutoff values when metadata is available.
+- `pipeline.py` orchestrates the public `recommend()` flow and manifest bundling.
+
+Important boundaries:
+
+- Load is pure I/O.
+- Analyse reports facts; it does not decide parameters.
+- Advise chooses physical/numerical intent and records provenance.
+- Select resolves concrete artefacts and values from advice.
+- Generators must not invent scientific defaults.
 
 ### `cli/`
 
@@ -173,6 +205,7 @@ The current pseudopotential stack follows this flow:
 5. Core metadata is promoted into `PseudoMetadata`.
 6. A local root directory can be scanned into a list of parsed metadata entries.
 7. Registry-level helpers can filter this list, for example by element.
+8. The Select stage can choose one deterministic matching pseudo per structure element and expose missing-data or missing-cutoff warnings.
 
 Important design rules for this stack:
 
@@ -196,13 +229,15 @@ This has several goals:
 
 The rule of thumb is:
 
-- shared, stable interfaces belong in `shared/`
+- established compatibility models can remain in `shared/`
+- staged pipeline boundary records belong in `contracts.py`
 - domain-specific structured metadata belongs near the domain module that owns it
 
 For example:
 
 - `KMeshEntry` belongs to the general shared model layer because it is used across recommendation logic
 - `PseudoMetadata` belongs in `pseudo/` because it is specifically tied to pseudopotential parsing and registry work
+- `CoreRecommendation` belongs in `contracts.py` because it is the boundary object returned by the staged pipeline
 
 ## Testing Strategy
 
@@ -311,10 +346,10 @@ At the current stage, the package already has several strong foundations:
 
 The next architectural priorities are:
 
-- keep baseline tests green while internals are refactored
-- introduce explicit Core pipeline stages: Load → Analyse → Advise → Select → Generate → Bundle
-- define contracts for analysis, hints, advice, selection, and provenance
-- improve pseudopotential registry and selection capabilities beyond simple loading and filtering
+- keep baseline tests green while the staged pipeline expands
+- add mechanical code-specific Generate functions that consume advice and selection records
+- turn the manifest bundle into a portable output directory once the schema settles
+- improve pseudopotential registry and selection capabilities beyond simple deterministic matching
 - design clear user-facing workflows for local pseudo management
 - keep CLI and HTTP surfaces thin while expanding Python-level APIs first
 - continue improving normalization logic only when backed by evidence from real pseudo-library exploration

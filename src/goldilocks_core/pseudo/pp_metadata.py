@@ -25,11 +25,3 @@ class PseudoMetadata:
 
     def to_dict(self) -> dict:
         return asdict(self)
-
-
-@dataclass(frozen=True)
-class PseudoSelection:
-    """Selected pseudopotential for a specific element."""
-
-    element: str
-    pseudo: PseudoMetadata

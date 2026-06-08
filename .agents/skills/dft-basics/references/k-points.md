@@ -40,7 +40,7 @@ Goldilocks may encounter several related k-mesh representations:
 - **k-distance / k-spacing** in Å⁻¹ — target maximum reciprocal-space spacing.
 - **mesh** `(nk1, nk2, nk3)` — explicit grid dimensions.
 - **k-distance interval** — range of spacing values that map to the same mesh.
-- **k-line density interval** — range of line-density values that map to the same mesh.
+- **k-line density interval** — range of line-density values that map to the same mesh. For one axis, the admissible range is `[(n_k - 0.5) / |b*|, (n_k + 0.5) / |b*|]`, where `n_k` is the grid dimension and `|b*|` is the reciprocal vector length. For a full mesh, intersect the three per-axis ranges; if they do not overlap, the scalar interval is undefined.
 - **k-index** — integer rank for distinct meshes; the ML model predicts this kind of rank.
 - **k-pra** — k-points per reciprocal atom, typically `n_atoms × nk1 × nk2 × nk3`.
 - **n_reduced_kpoints** — number of symmetry-irreducible k-points after symmetry reduction.

@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from pymatgen.core import Structure
-from pymatgen.core.periodic_table import Element
 
+from goldilocks_core.analysis import analyse_structure
 from goldilocks_core.shared.types import StructureAnalysis, StructureInput
 
 
@@ -56,19 +56,10 @@ def load_structure(structure: StructureInput) -> Structure:
 
 def analyze_structure(structure: Structure) -> StructureAnalysis:
     """Analyze element-based structure features relevant to DFT setup."""
-
-    elements = {site.specie.symbol for site in structure}
-    periodic_elements = [Element(symbol) for symbol in elements]
-
-    contains_transition_metals = any(
-        element.is_transition_metal for element in periodic_elements
-    )
-    contains_lanthanides = any(element.is_lanthanoid for element in periodic_elements)
-    # v0.1: flag period-5-and-heavier elements for SOC consideration.
-    contains_heavy_elements = any(element.row >= 5 for element in periodic_elements)
+    analysis = analyse_structure(structure)
 
     return StructureAnalysis(
-        contains_transition_metals=contains_transition_metals,
-        contains_lanthanides=contains_lanthanides,
-        contains_heavy_elements=contains_heavy_elements,
+        contains_transition_metals=analysis.contains_transition_metals,
+        contains_lanthanides=analysis.contains_lanthanides,
+        contains_heavy_elements=analysis.contains_heavy_elements,
     )

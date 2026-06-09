@@ -128,9 +128,7 @@ def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
         electron_maxstep=args.electron_maxstep,
     )
     pseudo_metadata = (
-        tuple(load_pseudo_metadata(Path(args.pseudo_root)))
-        if args.pseudo_root
-        else ()
+        tuple(load_pseudo_metadata(Path(args.pseudo_root))) if args.pseudo_root else ()
     )
 
     return CoreJobRequest(

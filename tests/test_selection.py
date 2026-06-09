@@ -34,8 +34,7 @@ def make_metadata(
         functional="PBE",
         relativistic="scalar",
         is_sssp=True,
-        sssp_recommended_cutoff=cutoffs
-        or {"ecutwfc_ry": "30", "ecutrho_ry": 120},
+        sssp_recommended_cutoff=cutoffs or {"ecutwfc_ry": "30", "ecutrho_ry": 120},
     )
 
 

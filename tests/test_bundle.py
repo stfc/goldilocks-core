@@ -71,9 +71,9 @@ def test_write_bundle_directory_writes_manifest_and_files(tmp_path: Path) -> Non
 
     manifest = write_bundle_directory(recommendation, tmp_path)
 
-    assert (
-        tmp_path / "inputs" / "qe.in"
-    ).read_text(encoding="utf-8") == "&CONTROL\n/\n"
+    assert (tmp_path / "inputs" / "qe.in").read_text(
+        encoding="utf-8"
+    ) == "&CONTROL\n/\n"
     manifest_data = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
     assert manifest_data == manifest
     assert manifest_data["generated_files"][0]["path"] == "inputs/qe.in"

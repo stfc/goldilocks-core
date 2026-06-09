@@ -20,6 +20,7 @@ No CI yet. Run `pre-commit` before committing.
 - Dataclasses use `slots=True`. Frozen for immutable value objects.
 - `from __future__ import annotations` at the top of every module.
 - Domain modules, not generic buckets: no `helpers/`, no `utils/`, no `processing/`.
+- Prefer one clear API over compatibility shims. Do not add legacy aliases, duplicate import paths, or wrapper modules unless the user explicitly asks for backward compatibility.
 - `snake_case` for everything. No `CamelCase` except in string literals matching external formats.
 - Type hints on public API surfaces. Internal functions can be looser.
 - Docstrings: factual — what it does, what it returns, what it assumes. Not prose essays.

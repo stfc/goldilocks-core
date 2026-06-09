@@ -16,18 +16,26 @@ def make_structure() -> Structure:
     )
 
 
-def make_metadata() -> PseudoMetadata:
+def make_metadata(
+    *,
+    filename: str = "Si.UPF",
+    source_set: str | None = None,
+    cutoffs: dict | None = None,
+) -> PseudoMetadata:
     """Build synthetic pseudopotential metadata for selection tests."""
     return PseudoMetadata(
-        filepath="/pseudo/Si.UPF",
-        filename="Si.UPF",
+        filepath=f"/pseudo/{filename}",
+        filename=filename,
         header_format="attr",
         library="SSSP",
+        source_set=source_set,
         element="Si",
         pseudo_type="NC",
         functional="PBE",
         relativistic="scalar",
-        sssp_recommended_cutoff={"ecutwfc_ry": "30", "ecutrho_ry": 120},
+        is_sssp=True,
+        sssp_recommended_cutoff=cutoffs
+        or {"ecutwfc_ry": "30", "ecutrho_ry": 120},
     )
 
 
@@ -46,6 +54,64 @@ def test_select_parameters_resolves_k_spacing_and_pseudos() -> None:
     assert selection.pseudopotentials[0].filename == "Si.UPF"
     assert selection.pseudopotentials[0].ecutwfc_ry == 30.0
     assert selection.pseudopotentials[0].ecutrho_ry == 120.0
+    assert selection.warnings == ()
+
+
+def test_select_parameters_prefers_matching_pseudo_mode_and_cutoffs() -> None:
+    """Rank pseudo candidates by requested mode before filename order."""
+    structure = make_structure()
+    advice = advise_parameters(
+        analyze_structure(structure),
+        hints=CalculationHints(pseudo_type="NC", pseudo_mode="precision"),
+    )
+    efficiency = make_metadata(
+        filename="A-efficiency.UPF",
+        source_set="SSSP_efficiency",
+        cutoffs={"ecutwfc_ry": 30, "ecutrho_ry": 120},
+    )
+    precision = make_metadata(
+        filename="Z-precision.UPF",
+        source_set="SSSP_precision",
+        cutoffs={"ecutwfc_ry": 60, "ecutrho_ry": 240},
+    )
+
+    selection = select_parameters(
+        structure,
+        advice,
+        metadata_list=[efficiency, precision],
+    )
+
+    assert selection.pseudopotentials[0].filename == "Z-precision.UPF"
+    assert selection.pseudopotentials[0].ecutwfc_ry == 60.0
+    assert selection.pseudopotentials[0].provenance.source == "lookup"
+    assert "highest-ranked" in selection.pseudopotentials[0].provenance.reason
+
+
+def test_select_parameters_prefers_complete_cutoff_metadata() -> None:
+    """Rank candidates with complete cutoff metadata before incomplete ones."""
+    structure = make_structure()
+    advice = advise_parameters(
+        analyze_structure(structure),
+        hints=CalculationHints(pseudo_type="NC"),
+    )
+    incomplete = make_metadata(
+        filename="A-incomplete.UPF",
+        source_set="SSSP_efficiency",
+        cutoffs={"ecutwfc_ry": 30},
+    )
+    complete = make_metadata(
+        filename="Z-complete.UPF",
+        source_set="SSSP_efficiency",
+        cutoffs={"ecutwfc_ry": 35, "ecutrho_ry": 140},
+    )
+
+    selection = select_parameters(
+        structure,
+        advice,
+        metadata_list=[incomplete, complete],
+    )
+
+    assert selection.pseudopotentials[0].filename == "Z-complete.UPF"
     assert selection.warnings == ()
 
 

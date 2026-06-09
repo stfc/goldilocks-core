@@ -103,7 +103,13 @@ def _select_pseudopotential_for_element(
         pseudo_type=pseudo_advice.pseudo_type,
         relativistic=pseudo_advice.relativistic_mode,
     )
-    candidates = sorted(candidates, key=lambda metadata: metadata.filename)
+    candidates = sorted(
+        candidates,
+        key=lambda metadata: _rank_pseudo_candidate(
+            metadata,
+            pseudo_advice.pseudo_mode,
+        ),
+    )
 
     if not candidates:
         warning = (
@@ -129,12 +135,13 @@ def _select_pseudopotential_for_element(
     cutoffs = selected.sssp_recommended_cutoff or {}
     ecutwfc = _to_float(cutoffs.get("ecutwfc_ry"))
     ecutrho = _to_float(cutoffs.get("ecutrho_ry"))
-    warnings: tuple[str, ...] = ()
-
-    if ecutwfc is None or ecutrho is None:
-        warnings = (
-            f"Selected pseudopotential for {element} lacks complete cutoff metadata.",
-        )
+    warnings = _selection_warnings(
+        element=element,
+        selected=selected,
+        pseudo_mode=pseudo_advice.pseudo_mode,
+        ecutwfc=ecutwfc,
+        ecutrho=ecutrho,
+    )
 
     return PseudopotentialSelection(
         element=element,
@@ -144,12 +151,80 @@ def _select_pseudopotential_for_element(
         ecutrho_ry=ecutrho,
         provenance=Provenance(
             source="lookup",
-            reason="Select the first deterministic pseudo matching advice.",
+            reason="Select the highest-ranked deterministic pseudo matching advice.",
             data_source=selected.library or selected.source_set,
             warnings=warnings,
         ),
         warnings=warnings,
     )
+
+
+def _rank_pseudo_candidate(
+    metadata: PseudoMetadata,
+    pseudo_mode: str,
+) -> tuple[int, int, int, str, str]:
+    """Return an explicit deterministic ranking key for pseudo candidates."""
+    mode_rank = 0 if _metadata_matches_mode(metadata, pseudo_mode) else 1
+    cutoff_rank = 0 if _has_complete_cutoffs(metadata) else 1
+    sssp_rank = 0 if metadata.is_sssp else 1
+    source = metadata.source_set or metadata.library or ""
+    return (mode_rank, cutoff_rank, sssp_rank, source, metadata.filename)
+
+
+def _metadata_matches_mode(metadata: PseudoMetadata, pseudo_mode: str) -> bool:
+    """Return whether metadata appears to match an efficiency/precision mode."""
+    mode = pseudo_mode.lower()
+    searchable = " ".join(
+        value.lower()
+        for value in (
+            metadata.library,
+            metadata.source_set,
+            metadata.source_pseudopotential,
+            metadata.filename,
+        )
+        if value
+    )
+    if mode in searchable:
+        return True
+
+    if "efficiency" in searchable or "precision" in searchable:
+        return False
+
+    return metadata.is_sssp or (metadata.library or "").lower() == "sssp"
+
+
+def _has_complete_cutoffs(metadata: PseudoMetadata) -> bool:
+    """Return whether metadata contains both required QE cutoff values."""
+    cutoffs = metadata.sssp_recommended_cutoff or {}
+    return (
+        _to_float(cutoffs.get("ecutwfc_ry")) is not None
+        and _to_float(cutoffs.get("ecutrho_ry")) is not None
+    )
+
+
+def _selection_warnings(
+    *,
+    element: str,
+    selected: PseudoMetadata,
+    pseudo_mode: str,
+    ecutwfc: float | None,
+    ecutrho: float | None,
+) -> tuple[str, ...]:
+    """Return structured warnings about the selected pseudo metadata."""
+    warnings: list[str] = []
+
+    if not _metadata_matches_mode(selected, pseudo_mode):
+        warnings.append(
+            f"Selected pseudopotential for {element} does not explicitly match "
+            f"pseudo mode '{pseudo_mode}'."
+        )
+
+    if ecutwfc is None or ecutrho is None:
+        warnings.append(
+            f"Selected pseudopotential for {element} lacks complete cutoff metadata."
+        )
+
+    return tuple(warnings)
 
 
 def _to_float(value: Any) -> float | None:

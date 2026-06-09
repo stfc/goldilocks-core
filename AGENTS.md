@@ -38,3 +38,11 @@ No CI yet. Run `pre-commit` before committing.
 - Track work status in GitHub Issues/PRs.
 - Any GitHub issue, issue comment, PR description, or review comment written by an agent must explicitly say so and name the human it represents: `Written by an agent on behalf of <user>.`
 - Use `uv`, not `pip`.
+
+## Agent workflow
+
+- Start sustained work with `catchup`.
+- Use `plan` for multi-step changes; keep the issue body as the current plan.
+- Use `review` before PRs or after substantial changes.
+- Use `report` for handoff/progress comments.
+- Use `make-a-pr` only after implementation, tests, and review are ready.

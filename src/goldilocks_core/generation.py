@@ -147,11 +147,10 @@ def _system_section(
             ]
         )
 
-    if advice.magnetism.spin_polarized:
-        lines.append("  nspin = 2")
-
     if advice.spin_orbit.enabled:
         lines.extend(["  noncolin = .true.", "  lspinorb = .true."])
+    elif advice.magnetism.spin_polarized:
+        lines.append("  nspin = 2")
 
     lines.extend(["/", ""])
     return lines

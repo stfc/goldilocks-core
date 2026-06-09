@@ -46,6 +46,10 @@ class StructureFeatureVector:
     values: np.ndarray
     feature_names: list[str]
 
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
 
 @dataclass(slots=True)
 class ModelSpec:
@@ -392,5 +396,11 @@ def to_jsonable(value: Any) -> Any:
 
     if isinstance(value, Structure):
         return value.as_dict()
+
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+
+    if isinstance(value, np.generic):
+        return value.item()
 
     return value

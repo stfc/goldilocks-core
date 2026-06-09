@@ -71,6 +71,30 @@ def test_generate_inputs_writes_qe_values_from_advice_and_selection() -> None:
     assert "3  3  2  0  0  0" in content
 
 
+def test_generate_inputs_uses_noncollinear_soc_without_nspin() -> None:
+    """Write QE SOC flags without collinear nspin syntax."""
+    structure = make_structure()
+    metadata = make_metadata()
+    metadata.relativistic = "full"
+    advice = advise_parameters(
+        analyze_structure(structure),
+        hints=CalculationHints(
+            k_grid=(3, 3, 3),
+            pseudo_type="NC",
+            spin_polarized=True,
+            spin_orbit_coupling=True,
+        ),
+    )
+    selection = select_parameters(structure, advice, metadata_list=[metadata])
+
+    files = generate_inputs(structure, advice_context(), advice, selection)
+
+    content = files[0].content
+    assert "noncolin = .true." in content
+    assert "lspinorb = .true." in content
+    assert "nspin = 2" not in content
+
+
 def test_generate_inputs_rejects_missing_pseudopotential_selection() -> None:
     """Do not let generators invent missing pseudopotentials or cutoffs."""
     structure = make_structure()

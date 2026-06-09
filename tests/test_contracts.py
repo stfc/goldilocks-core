@@ -1,3 +1,5 @@
+import numpy as np
+
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
@@ -16,6 +18,7 @@ from goldilocks_core.contracts import (
     SpinOrbitAdvice,
     StageRecord,
     StructureAnalysisRecord,
+    StructureFeatureVector,
 )
 
 
@@ -93,6 +96,16 @@ def test_hints_serialize_explicit_grid_as_list() -> None:
     data = CalculationHints(k_grid=(2, 2, 1)).to_dict()
 
     assert data["k_grid"] == [2, 2, 1]
+
+
+def test_feature_vectors_serialize_numpy_values_as_json_lists() -> None:
+    """Convert NumPy arrays and scalars to JSON-safe values."""
+    data = StructureFeatureVector(
+        values=np.array([1.0, 2.0]),
+        feature_names=["a", "b"],
+    ).to_dict()
+
+    assert data["values"] == [1.0, 2.0]
 
 
 def test_job_records_serialize_to_json_safe_dicts() -> None:

@@ -14,6 +14,7 @@ Repo: `stfc/goldilocks-core`
 - Use `--repo stfc/goldilocks-core` unless you are already inside this repo and deliberately relying on the current remote.
 - Prefer `--json` and `--jq` for read operations so outputs are machine-checkable.
 - Use `--body-file` for long issue, comment, and PR bodies. Do not fight shell quoting goblins by pasting Markdown into one command.
+- Prefer issue comments for progress updates, reviews, decisions, blockers, and session reports. Edit issue bodies only when the issue's current plan/source-of-truth is stale or structurally wrong.
 - **Never merge directly to `main`.** All changes arrive through PRs.
 - Any GitHub issue, issue comment, PR description, or review comment written by an agent must include:
 
@@ -65,6 +66,8 @@ gh issue create --repo stfc/goldilocks-core --title "type: short title" --body-f
 
 ## Comment on an issue
 
+Use comments for timeline records: progress reports, reviews, verification results, decisions made during implementation, blockers, and handoff notes. A comment is usually the right move when you are adding new historical context rather than changing the plan itself.
+
 ```bash
 cat > /tmp/comment.md <<'EOF'
 ## Done
@@ -115,6 +118,16 @@ gh pr create --repo stfc/goldilocks-core --title "type(scope): short title" --bo
 
 ## Edit existing GitHub text
 
+Issue body edits are for maintaining the current source of truth, not for recording every event. Use them when:
+
+- the issue is a plan and the plan materially changed;
+- acceptance criteria, scope, goals, or non-goals are stale;
+- tasks are completed and the checklist is the active tracker;
+- the body is misleading future work;
+- the user explicitly asks to consolidate or edit the issue.
+
+Do **not** edit the issue body just to add a review, routine verification output, progress report, or session handoff. Post those as comments.
+
 Fetch current content first, edit locally, then write it back:
 
 ```bash
@@ -147,5 +160,6 @@ If the repo has no workflows yet, say so plainly and rely on local verification 
 
 - `gh pr create` uses the current branch by default — verify branch and base before creating.
 - `gh issue edit --body-file` replaces the whole body. Fetch first so you do not erase context.
+- Before editing an issue body, ask: "Am I changing the current plan/source-of-truth, or just adding history?" If it is history, comment instead.
 - `gh api ... -f body="$(cat file)"` can mangle complex Markdown in some shells. If in doubt, use a small Python snippet to PATCH JSON.
 - GitHub CLI output may omit fields unless requested with `--json`; don't parse human tables when JSON exists.

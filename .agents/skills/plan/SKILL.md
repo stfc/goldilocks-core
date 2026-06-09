@@ -23,7 +23,7 @@ Create a structured plan as a GitHub Issue. The issue body serves as the plan do
 1. **Research** — explore the codebase to understand current structure and constraints
 2. **Design** — define scope, goals, and key decisions
 3. **Write** — create a GitHub Issue with the plan
-4. **Track** — keep the issue body current and use comments/PR links so later sessions can see the state
+4. **Track** — keep the issue body current when the plan changes; use comments/PR links for progress, reviews, verification, and handoff history
 
 ## Issue Templates
 
@@ -95,12 +95,14 @@ gh issue create --title "feat: short description" --body-file plan.md
 
 1. Summarize the plan for the user
 2. Ask whether to proceed with implementation or refine the plan
-3. As phases complete, update the issue body — check off tasks, add notes about what changed
-4. Link the issue from follow-up PRs and reports so the thread remains the source of truth
+3. As phases complete, update checklist state in the issue body if that checklist is the active tracker
+4. Add progress, review results, verification output, and handoff notes as comments
+5. Link the issue from follow-up PRs and reports so the thread remains the durable record
 
 ## Gotchas
 
 - Every issue body created by an agent must include `Written by an agent on behalf of <user>.`, replacing `<user>` with the human who requested the work.
 - Don't over-plan simple tasks — a 3-line issue for a typo fix is worse than just fixing it
-- Update the issue body as understanding evolves, don't just append comments
+- Update the issue body as understanding evolves, but do not edit it for routine status notes
 - If the plan changes significantly, edit the issue — stale plans mislead future sessions
+- If you are adding historical context rather than changing the current plan, comment instead

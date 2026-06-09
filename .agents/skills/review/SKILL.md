@@ -1,9 +1,9 @@
 ---
-name: code-review
-description: Review changes against main before opening a PR or when the user asks for review. Checks correctness, edge cases, architecture, regressions, and test gaps.
+name: review
+description: Review changes against main before opening a PR or when the user asks for review. Checks correctness, edge cases, architecture, regressions, test gaps, and compatibility-shim risk.
 ---
 
-# Code Review
+# Review
 
 Review the current changes before they leave this branch. Catch problems here, not in PR comments.
 
@@ -88,6 +88,7 @@ Written by an agent on behalf of <user>.
 - If findings are critical or high, offer to fix them before opening the PR.
 - If findings are medium/low only, note them in the PR body and proceed.
 - If the branch is clean, proceed to open the PR.
+- If a durable review record is needed, post the review as an issue comment. Do not add review artifacts to the repository unless the user explicitly asks for a file.
 
 ## Gotchas
 

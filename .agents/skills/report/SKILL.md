@@ -19,8 +19,8 @@ Each agent session is ephemeral. Without a report, the next session has to recon
 1. **Identify the issue** — which issue does this work belong to? If none exists, create one.
 2. **Review the session** — what was accomplished, what was decided, what remains.
 3. **Write a comment** on the issue.
-4. **Update the issue body** if the approach or scope has changed.
-5. **Update the issue/PR record** if status has changed — issue body, comment, or PR link as appropriate.
+4. **Update the issue body only if needed** — approach, scope, acceptance criteria, or active checklist changed.
+5. **Update the issue/PR record** with the lightest durable action that fits: comments for history, body edits for current plan/source-of-truth changes.
 
 ## Comment Format
 
@@ -50,13 +50,23 @@ Written by an agent on behalf of <user>.
 
 ## Updating the Issue Body
 
-If the work changed the plan — new scope, different approach, discovered complications — edit the issue body. Comments document the journey; the issue body documents the current understanding.
+Comments document the journey; the issue body documents the current understanding. Be conservative with body edits.
 
-When to update:
-- A phase is complete → check off the tasks
-- The approach changed → rewrite the Approach section
-- New open questions emerged → add them
-- Scope expanded or shrank → update Goals/Non-Goals
+Edit the issue body when:
+- the work changed the plan — new scope, different approach, or discovered complications;
+- acceptance criteria, goals, non-goals, or active task checklists are stale;
+- a phase is complete and the body checklist is the active tracker;
+- new open questions change what future sessions should do;
+- the user asks to consolidate or revise the issue.
+
+Do not edit the issue body for:
+- routine progress reports;
+- review findings;
+- verification command output;
+- session handoffs;
+- small decisions that do not change the plan.
+
+Post those as comments.
 
 ## Updating Work Status
 
@@ -64,8 +74,8 @@ Use the issue thread and PR state as the durable record.
 
 Common transitions:
 - Starting work → leave a report comment or push a branch linked to the issue
-- Opening a PR → link it clearly in the issue comment or body
-- PR merged → confirm completion and any follow-up work
+- Opening a PR → link it clearly in an issue comment; edit the body only if the issue tracks active PR state there
+- PR merged → confirm completion and any follow-up work in a comment
 
 If status changed, say so explicitly in the report instead of assuming the next session will infer it.
 

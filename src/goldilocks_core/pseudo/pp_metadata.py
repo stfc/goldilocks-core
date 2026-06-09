@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
-@dataclass
+@dataclass(slots=True)
 class PseudoMetadata:
     filepath: str
     filename: str

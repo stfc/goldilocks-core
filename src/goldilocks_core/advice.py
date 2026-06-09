@@ -18,6 +18,9 @@ from goldilocks_core.contracts import (
 
 DEFAULT_K_SPACING = 0.2
 DEFAULT_CONV_THR = 1e-6
+DEFAULT_MIXING_BETA = 0.4
+DEFAULT_ELECTRON_MAXSTEP = 80
+METALLIC_SMEARING_WIDTH_RY = 0.01
 
 
 def advise_parameters(
@@ -34,17 +37,11 @@ def advise_parameters(
 
     return ParameterAdvice(
         k_points=_advise_k_points(hints),
-        smearing=_advise_smearing(hints),
+        smearing=_advise_smearing(analysis, hints),
         magnetism=_advise_magnetism(analysis, hints),
         spin_orbit=spin_orbit,
         pseudopotentials=_advise_pseudopotentials(intent, hints, spin_orbit),
-        convergence=ConvergenceAdvice(
-            conv_thr=DEFAULT_CONV_THR,
-            provenance=Provenance(
-                source="default",
-                reason="Use the package default SCF convergence threshold.",
-            ),
-        ),
+        convergence=_advise_convergence(hints),
     )
 
 
@@ -86,7 +83,10 @@ def _advise_k_points(hints: CalculationHints) -> KPointAdvice:
     )
 
 
-def _advise_smearing(hints: CalculationHints) -> SmearingAdvice:
+def _advise_smearing(
+    analysis: StructureAnalysisRecord,
+    hints: CalculationHints,
+) -> SmearingAdvice:
     if hints.smearing_type is not None or hints.smearing_width_ry is not None:
         return SmearingAdvice(
             smearing_type=hints.smearing_type,
@@ -97,12 +97,26 @@ def _advise_smearing(hints: CalculationHints) -> SmearingAdvice:
             ),
         )
 
+    if analysis.electronic_character in {"metal", "likely_metal"}:
+        return SmearingAdvice(
+            smearing_type="cold",
+            width_ry=METALLIC_SMEARING_WIDTH_RY,
+            provenance=Provenance(
+                source="analysis",
+                reason="Likely metallic composition benefits from modest smearing.",
+                warnings=(
+                    "Metallicity is inferred from structure-only heuristics; verify "
+                    "against electronic-structure data.",
+                ),
+            ),
+        )
+
     return SmearingAdvice(
         smearing_type="fixed",
         width_ry=None,
         provenance=Provenance(
             source="default",
-            reason="Metallicity is not inferred yet; use fixed occupations by default.",
+            reason="Metallicity is unknown; use fixed occupations by default.",
             warnings=("Verify smearing manually for likely metallic systems.",),
         ),
     )
@@ -216,6 +230,38 @@ def _advise_pseudopotentials(
     )
 
 
+def _advise_convergence(hints: CalculationHints) -> ConvergenceAdvice:
+    """Return SCF convergence advice with user hints applied."""
+    if _has_convergence_hint(hints):
+        return ConvergenceAdvice(
+            conv_thr=hints.conv_thr or DEFAULT_CONV_THR,
+            mixing_beta=hints.mixing_beta or DEFAULT_MIXING_BETA,
+            electron_maxstep=hints.electron_maxstep or DEFAULT_ELECTRON_MAXSTEP,
+            provenance=Provenance(
+                source="user_hint",
+                reason="Use operator-provided convergence settings where supplied.",
+            ),
+        )
+
+    return ConvergenceAdvice(
+        conv_thr=DEFAULT_CONV_THR,
+        mixing_beta=DEFAULT_MIXING_BETA,
+        electron_maxstep=DEFAULT_ELECTRON_MAXSTEP,
+        provenance=Provenance(
+            source="default",
+            reason="Use package default SCF convergence settings.",
+        ),
+    )
+
+
+def _has_convergence_hint(hints: CalculationHints) -> bool:
+    """Return whether any convergence-specific hint was provided."""
+    return any(
+        hint is not None
+        for hint in (hints.conv_thr, hints.mixing_beta, hints.electron_maxstep)
+    )
+
+
 def _has_pseudo_hint(hints: CalculationHints) -> bool:
     """Return whether any pseudopotential-specific hint was provided."""
     return any(
@@ -234,3 +280,12 @@ def _validate_hints(hints: CalculationHints) -> None:
 
     if hints.smearing_width_ry is not None and hints.smearing_width_ry < 0:
         raise ValueError("smearing_width_ry must be non-negative when provided")
+
+    if hints.conv_thr is not None and hints.conv_thr <= 0:
+        raise ValueError("conv_thr must be positive when provided")
+
+    if hints.mixing_beta is not None and hints.mixing_beta <= 0:
+        raise ValueError("mixing_beta must be positive when provided")
+
+    if hints.electron_maxstep is not None and hints.electron_maxstep < 1:
+        raise ValueError("electron_maxstep must be positive when provided")

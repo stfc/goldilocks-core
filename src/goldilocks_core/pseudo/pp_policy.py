@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PseudoPolicy:
     """Selection policy describing the allowed pseudo search space."""
 

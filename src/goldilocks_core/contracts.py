@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, fields, is_dataclass
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
 from pymatgen.core import Structure
+
+from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 ProvenanceSource = Literal[
     "analysis",
@@ -30,6 +32,11 @@ ModelSource = Literal["huggingface", "local"]
 ModelType = Literal["random_forest", "cgcnn", "xgboost"]
 KPointGrid = tuple[int, int, int]
 KPointShift = tuple[int, int, int]
+StageName = Literal["load", "analyze", "advise", "select", "generate", "bundle"]
+JobMode = Literal["recommend", "generate", "bundle"]
+StageStatus = Literal["completed"]
+Dimensionality = Literal["3d", "2d", "1d", "molecule", "unknown"]
+ElectronicCharacter = Literal["metal", "insulator", "likely_metal", "unknown"]
 
 
 @dataclass(slots=True)
@@ -109,6 +116,9 @@ class CalculationHints:
     pseudo_mode: str | None = None
     pseudo_type: str | None = None
     relativistic_mode: str | None = None
+    conv_thr: float | None = None
+    mixing_beta: float | None = None
+    electron_maxstep: int | None = None
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -130,6 +140,13 @@ class StructureAnalysisRecord:
     magnetic_elements: tuple[str, ...]
     heavy_elements: tuple[str, ...]
     disorder_warnings: tuple[str, ...] = ()
+    disordered_site_count: int = 0
+    space_group_symbol: str | None = None
+    space_group_number: int | None = None
+    crystal_system: str | None = None
+    dimensionality: Dimensionality = "unknown"
+    electronic_character: ElectronicCharacter = "unknown"
+    analysis_warnings: tuple[str, ...] = ()
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -211,6 +228,8 @@ class ConvergenceAdvice:
 
     conv_thr: float
     provenance: Provenance
+    mixing_beta: float = 0.4
+    electron_maxstep: int = 80
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -283,6 +302,7 @@ class GeneratedFile:
 
     path: str
     content: str
+    role: str = "input"
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -298,6 +318,52 @@ class CoreRecommendation:
     advice: ParameterAdvice
     selection: SelectionRecord
     generated_files: tuple[GeneratedFile, ...] = ()
+    warnings: tuple[str, ...] = ()
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class CoreJobRequest:
+    """Request for running the fixed Core stage graph."""
+
+    structure: StructureInput
+    intent: CalculationIntent = field(default_factory=CalculationIntent)
+    hints: CalculationHints = field(default_factory=CalculationHints)
+    mode: JobMode = "recommend"
+    pseudo_metadata: tuple[PseudoMetadata, ...] = ()
+    output_dir: str | None = None
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class StageRecord:
+    """Observable execution record for one fixed Core pipeline stage."""
+
+    name: StageName
+    status: StageStatus = "completed"
+    warnings: tuple[str, ...] = ()
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class CoreJobResult:
+    """Result from running a Core job request through the fixed stage graph."""
+
+    request: CoreJobRequest
+    recommendation: CoreRecommendation
+    stages: tuple[StageRecord, ...]
+    generated_files: tuple[GeneratedFile, ...] = ()
+    bundle_path: str | None = None
+    manifest: JsonDict | None = None
     warnings: tuple[str, ...] = ()
 
     def to_dict(self) -> JsonDict:
@@ -323,5 +389,8 @@ def to_jsonable(value: Any) -> Any:
 
     if isinstance(value, Path):
         return str(value)
+
+    if isinstance(value, Structure):
+        return value.as_dict()
 
     return value

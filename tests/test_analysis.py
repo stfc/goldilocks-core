@@ -20,6 +20,10 @@ def test_analyze_structure_reports_composition_and_element_facts() -> None:
     assert analysis.contains_heavy_elements is True
     assert analysis.magnetic_elements == ("Fe",)
     assert analysis.heavy_elements == ("I",)
+    assert analysis.space_group_number is not None
+    assert analysis.crystal_system is not None
+    assert analysis.electronic_character == "unknown"
+    assert analysis.analysis_warnings
 
 
 def test_analyze_structure_reports_partial_occupancy_warnings() -> None:
@@ -33,4 +37,19 @@ def test_analyze_structure_reports_partial_occupancy_warnings() -> None:
     analysis = analyze_structure(structure)
 
     assert analysis.disorder_warnings
+    assert analysis.disordered_site_count == 1
     assert "partial occupancies" in analysis.disorder_warnings[0]
+
+
+def test_analyze_structure_marks_all_metal_compositions_as_likely_metal() -> None:
+    """Classify all-metal compositions conservatively as likely metallic."""
+    structure = Structure(
+        lattice=Lattice.cubic(2.9),
+        species=["Fe"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+
+    analysis = analyze_structure(structure)
+
+    assert analysis.electronic_character == "likely_metal"
+    assert "likely" in analysis.analysis_warnings[0]

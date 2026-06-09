@@ -2,6 +2,8 @@ from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
     ConvergenceAdvice,
+    CoreJobRequest,
+    CoreJobResult,
     CoreRecommendation,
     KPointAdvice,
     KPointSelection,
@@ -12,6 +14,7 @@ from goldilocks_core.contracts import (
     SelectionRecord,
     SmearingAdvice,
     SpinOrbitAdvice,
+    StageRecord,
     StructureAnalysisRecord,
 )
 
@@ -90,3 +93,76 @@ def test_hints_serialize_explicit_grid_as_list() -> None:
     data = CalculationHints(k_grid=(2, 2, 1)).to_dict()
 
     assert data["k_grid"] == [2, 2, 1]
+
+
+def test_job_records_serialize_to_json_safe_dicts() -> None:
+    """Serialize job request/result records for CLI and future HTTP callers."""
+    provenance = Provenance(source="default", reason="baseline default")
+    advice = ParameterAdvice(
+        k_points=KPointAdvice(
+            spacing=0.2,
+            explicit_grid=None,
+            mesh_type="monkhorst-pack",
+            provenance=provenance,
+        ),
+        smearing=SmearingAdvice(
+            smearing_type="fixed",
+            width_ry=None,
+            provenance=provenance,
+        ),
+        magnetism=MagnetismAdvice(
+            spin_polarized=False,
+            magnetic_elements=(),
+            provenance=provenance,
+        ),
+        spin_orbit=SpinOrbitAdvice(
+            enabled=False,
+            consider=False,
+            heavy_elements=(),
+            provenance=provenance,
+        ),
+        pseudopotentials=PseudopotentialAdvice(
+            functional="PBE",
+            pseudo_mode="efficiency",
+            pseudo_type=None,
+            relativistic_mode="scalar",
+            provenance=provenance,
+        ),
+        convergence=ConvergenceAdvice(conv_thr=1e-6, provenance=provenance),
+    )
+    recommendation = CoreRecommendation(
+        intent=CalculationIntent(),
+        analysis=StructureAnalysisRecord(
+            formula="Si1",
+            reduced_formula="Si",
+            site_count=1,
+            elements=("Si",),
+            contains_transition_metals=False,
+            contains_lanthanides=False,
+            contains_actinides=False,
+            contains_heavy_elements=False,
+            magnetic_elements=(),
+            heavy_elements=(),
+        ),
+        advice=advice,
+        selection=SelectionRecord(
+            k_points=KPointSelection(
+                grid=(4, 4, 4),
+                shift=(0, 0, 0),
+                mesh_type="monkhorst-pack",
+                provenance=provenance,
+            ),
+            pseudopotentials=(),
+        ),
+    )
+    result = CoreJobResult(
+        request=CoreJobRequest(structure="Si.cif"),
+        recommendation=recommendation,
+        stages=(StageRecord(name="load"), StageRecord(name="analyze")),
+    )
+
+    data = result.to_dict()
+
+    assert data["request"]["structure"] == "Si.cif"
+    assert data["stages"][0]["name"] == "load"
+    assert data["recommendation"]["selection"]["k_points"]["grid"] == [4, 4, 4]

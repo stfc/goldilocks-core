@@ -1,28 +1,32 @@
 # goldilocks-core
 
-`goldilocks-core` recommends DFT calculation inputs from crystal structures, optional user hints, model output, and pseudopotential metadata.
+`goldilocks-core` recommends and generates DFT calculation inputs from crystal structures, operator intent, optional hints, and pseudopotential metadata.
 
-The current public API is Python-first. The full staged pipeline is available in Python. The CLI currently exposes the ML-backed k-mesh path only.
+The public API is Python-first. The staged pipeline is also exposed through a thin CLI. A future HTTP API should wrap the same internal job request/result surface rather than reimplementing Core logic.
 
 ## Current scope
 
 Implemented:
 
 - structure loading from `pymatgen.Structure` or structure files readable by pymatgen
-- structure analysis facts: formula, elements, heavy elements, magnetic candidates, disorder warnings
+- structure analysis facts: formula, elements, symmetry, crystal system, heavy elements, magnetic candidates, electronic-character heuristic, and disorder warnings
 - provenance-backed advice for k-points, smearing, magnetism, SOC, pseudopotential intent, and convergence
 - selection of concrete k-point grids
-- deterministic pseudopotential selection from provided metadata
+- deterministic pseudopotential ranking and selection from provided metadata
+- cutoff selection from pseudopotential metadata
+- Quantum ESPRESSO SCF input generation
+- portable output bundle directories with `manifest.json`
+- shared `CoreJobRequest` / `CoreJobResult` runner for Python, CLI, and future HTTP wrappers
 - UPF parsing and local pseudopotential registry loading
 - ML-backed k-index to k-grid selection
-- JSON-safe recommendation manifests
+- JSON-safe recommendation and job results
 
-Not implemented yet:
+Not in Core:
 
-- code-specific input file generation
-- portable output bundle directories
-- full staged CLI
-- Runner, AiiDA, scheduling, web app, auth, or workspace concerns
+- Runner, AiiDA, scheduling, web app, auth, sessions, or workspace state
+- structure database search/fetch
+- completed-output analysis
+- pseudopotential downloads or private pseudo libraries
 
 ## Pipeline
 
@@ -32,11 +36,13 @@ flowchart LR
     load --> analyze["Analyze"]
     analyze --> advise["Advise"]
     advise --> select["Select"]
-    select --> result["CoreRecommendation"]
+    select --> generate["Generate"]
+    generate --> bundle["Bundle"]
 
     intent["CalculationIntent"] -.-> advise
     hints["CalculationHints"] -.-> advise
     metadata["PseudoMetadata list"] -.-> select
+    output["Output directory"] -.-> bundle
 ```
 
 Stage boundaries:
@@ -45,8 +51,10 @@ Stage boundaries:
 - **Analyze**: report structure facts. No recommendations.
 - **Advise**: choose scientific and numerical intent. Record provenance.
 - **Select**: resolve concrete grids, pseudopotentials, cutoffs, and warnings.
-- **Generate**: not implemented yet. Future generators must only translate existing advice and selection records.
-- **Bundle**: currently `CoreRecommendation.to_dict()`. Directory output is not implemented yet.
+- **Generate**: translate completed advice/selection records into target-code syntax.
+- **Bundle**: write generated files and a portable manifest directory.
+
+Generators do not choose scientific defaults. If a value is needed by a generated input file, it must come from advice or selection.
 
 ## Install
 
@@ -84,6 +92,80 @@ print(result.selection.pseudopotentials)
 print(result.to_dict())
 ```
 
+### Generate input files
+
+```python
+from goldilocks_core import CalculationHints, generate
+from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
+
+pseudo_metadata = load_pseudo_metadata("path/to/pseudopotentials")
+
+result = generate(
+    "path/to/structure.cif",
+    hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
+    pseudo_metadata=pseudo_metadata,
+)
+
+for generated_file in result.generated_files:
+    print(generated_file.path)
+    print(generated_file.content)
+```
+
+### Write a portable bundle
+
+```python
+from goldilocks_core import CalculationHints, write_bundle
+from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
+
+pseudo_metadata = load_pseudo_metadata("path/to/pseudopotentials")
+
+result = write_bundle(
+    "path/to/structure.cif",
+    "run/",
+    hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
+    pseudo_metadata=pseudo_metadata,
+)
+
+print(result.bundle_path)
+print(result.manifest)
+```
+
+Initial bundle layout:
+
+```text
+run/
+├── manifest.json
+└── inputs/
+    └── qe.in
+```
+
+### Shared job runner
+
+Use the job runner when a caller needs one request/result model for Python, CLI, or future HTTP surfaces.
+
+```python
+from goldilocks_core import CoreJobRequest, run_core_job
+from goldilocks_core.contracts import CalculationHints
+
+result = run_core_job(
+    CoreJobRequest(
+        structure="path/to/structure.cif",
+        hints=CalculationHints(k_spacing=0.2),
+        mode="recommend",
+    )
+)
+
+print(result.to_dict())
+```
+
+`mode` controls how far the fixed graph runs:
+
+```text
+recommend -> Load → Analyze → Advise → Select
+generate  -> Load → Analyze → Advise → Select → Generate
+bundle    -> Load → Analyze → Advise → Select → Generate → Bundle
+```
+
 ### Stage-by-stage use
 
 Use this when notebooks, scripts, or agents need to inspect or override intermediate records.
@@ -112,11 +194,13 @@ print(selection.k_points.grid)
 Stage outputs:
 
 ```text
-load(...)      -> pymatgen.core.Structure
-analyze(...)   -> StructureAnalysisRecord
-advise(...)    -> ParameterAdvice
-select(...)    -> SelectionRecord
-recommend(...) -> CoreRecommendation
+load(...)        -> pymatgen.core.Structure
+analyze(...)     -> StructureAnalysisRecord
+advise(...)      -> ParameterAdvice
+select(...)      -> SelectionRecord
+recommend(...)   -> CoreRecommendation
+generate(...)    -> CoreRecommendation with generated_files
+write_bundle(...) -> CoreJobResult with bundle_path and manifest
 ```
 
 ### K-mesh ML advisor
@@ -170,11 +254,32 @@ CoreRecommendation
 └── warnings: tuple[str, ...]
 ```
 
-Nested records are dataclasses with `to_dict()` methods. Tuples and paths are converted to JSON-safe values.
+```text
+CoreJobResult
+├── request: CoreJobRequest
+├── recommendation: CoreRecommendation
+├── stages: tuple[StageRecord, ...]
+├── generated_files: tuple[GeneratedFile, ...]
+├── bundle_path: str | None
+├── manifest: dict | None
+└── warnings: tuple[str, ...]
+```
+
+Nested records are dataclasses with `to_dict()` methods. Tuples, paths, and structures are converted to JSON-safe values.
 
 ## CLI
 
-The current CLI is only for ML-backed k-mesh selection.
+### Staged Core CLI
+
+```bash
+uv run goldilocks-core recommend path/to/structure.cif --json
+uv run goldilocks-core generate path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --json
+uv run goldilocks-core bundle path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
+```
+
+The CLI is a thin wrapper around `CoreJobRequest` and `run_core_job()`. It parses arguments, calls the package API, and prints JSON or a short human summary.
+
+### ML k-mesh CLI
 
 ```bash
 uv run goldilocks-kmesh path/to/structure.cif --model path/to/model.joblib
@@ -186,18 +291,19 @@ Output:
 recommended mesh: (n1, n2, n3)
 ```
 
-CLI flow:
+## Future HTTP API mapping
 
-```mermaid
-flowchart LR
-    args["CLI args"] --> structure["Load structure"]
-    structure --> model["Load model"]
-    model --> predict["Predict k-index"]
-    predict --> select["Select k-grid"]
-    select --> print["Print mesh"]
+Core does not depend on an HTTP framework. A future service should map HTTP JSON directly onto `CoreJobRequest` and return `CoreJobResult.to_dict()`.
+
+Suggested endpoints:
+
+```http
+POST /recommend
+POST /generate
+POST /bundle
 ```
 
-A full `goldilocks recommend` CLI is not implemented yet.
+The HTTP layer should handle auth, uploads, workspace paths, and response transport. It should not choose k-points, pseudopotentials, cutoffs, smearing, SOC, or convergence settings.
 
 ## Package layout
 
@@ -205,10 +311,13 @@ A full `goldilocks recommend` CLI is not implemented yet.
 src/goldilocks_core/
 ├── __init__.py
 ├── contracts.py
+├── jobs.py
 ├── pipeline.py
 ├── analysis.py
 ├── advice.py
 ├── selection.py
+├── generation.py
+├── bundle.py
 ├── kmesh.py
 ├── advisors/
 ├── cli/
@@ -220,10 +329,13 @@ src/goldilocks_core/
 Responsibilities:
 
 - `contracts.py`: public boundary dataclasses and JSON-safe serialization
-- `pipeline.py`: Load → Analyze → Advise → Select orchestration
+- `jobs.py`: fixed Core job runner for Python, CLI, and future HTTP wrappers
+- `pipeline.py`: stage wrappers and ergonomic Python API
 - `analysis.py`: structure facts only
 - `advice.py`: provenance-backed recommendations
 - `selection.py`: concrete grids, pseudopotentials, cutoffs, warnings
+- `generation.py`: target-code syntax from completed advice/selection records
+- `bundle.py`: portable output directory and manifest writer
 - `kmesh.py`: reciprocal-space mesh mechanics
 - `advisors/`: model-backed recommendation paths
 - `cli/`: thin command entry points

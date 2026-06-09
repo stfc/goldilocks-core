@@ -9,6 +9,8 @@ from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
+    CoreJobRequest,
+    CoreJobResult,
     CoreRecommendation,
     JsonDict,
     ParameterAdvice,
@@ -72,10 +74,59 @@ def recommend(
         analysis=analysis,
         advice=advice,
         selection=selection,
-        warnings=(*analysis.disorder_warnings, *selection.warnings),
+        warnings=(
+            *analysis.disorder_warnings,
+            *analysis.analysis_warnings,
+            *selection.warnings,
+        ),
+    )
+
+
+def generate(
+    structure: StructureInput,
+    *,
+    intent: CalculationIntent | None = None,
+    hints: CalculationHints | None = None,
+    pseudo_metadata: list[PseudoMetadata] | None = None,
+) -> CoreRecommendation:
+    """Run Load → Analyze → Advise → Select → Generate."""
+    from goldilocks_core.jobs import run_core_job
+
+    result = run_core_job(
+        CoreJobRequest(
+            structure=structure,
+            intent=intent or CalculationIntent(),
+            hints=hints or CalculationHints(),
+            mode="generate",
+            pseudo_metadata=tuple(pseudo_metadata or ()),
+        )
+    )
+    return result.recommendation
+
+
+def write_bundle(
+    structure: StructureInput,
+    output_dir: str,
+    *,
+    intent: CalculationIntent | None = None,
+    hints: CalculationHints | None = None,
+    pseudo_metadata: list[PseudoMetadata] | None = None,
+) -> CoreJobResult:
+    """Run the full Core pipeline and write a portable bundle directory."""
+    from goldilocks_core.jobs import run_core_job
+
+    return run_core_job(
+        CoreJobRequest(
+            structure=structure,
+            intent=intent or CalculationIntent(),
+            hints=hints or CalculationHints(),
+            mode="bundle",
+            pseudo_metadata=tuple(pseudo_metadata or ()),
+            output_dir=output_dir,
+        )
     )
 
 
 def bundle_recommendation(recommendation: CoreRecommendation) -> JsonDict:
-    """Bundle-stage manifest for downstream tools and future file output."""
+    """Return a JSON-safe recommendation manifest dictionary."""
     return recommendation.to_dict()

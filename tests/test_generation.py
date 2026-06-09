@@ -1,0 +1,86 @@
+import pytest
+from pymatgen.core import Lattice, Structure
+
+from goldilocks_core.advice import advise_parameters
+from goldilocks_core.analysis import analyze_structure
+from goldilocks_core.contracts import CalculationHints, CalculationIntent
+from goldilocks_core.generation import generate_inputs
+from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
+from goldilocks_core.selection import select_parameters
+
+
+def make_structure() -> Structure:
+    """Build a simple silicon structure."""
+    return Structure(
+        lattice=Lattice.cubic(4.0),
+        species=["Si"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+
+
+def make_metadata() -> PseudoMetadata:
+    """Build synthetic pseudopotential metadata with cutoffs."""
+    return PseudoMetadata(
+        filepath="/pseudo/Si.UPF",
+        filename="Si.UPF",
+        header_format="attr",
+        library="SSSP",
+        element="Si",
+        pseudo_type="NC",
+        functional="PBE",
+        relativistic="scalar",
+        sssp_recommended_cutoff={"ecutwfc_ry": 35, "ecutrho_ry": 140},
+    )
+
+
+def test_generate_inputs_writes_qe_values_from_advice_and_selection() -> None:
+    """Generate QE input text from completed advice and selection records."""
+    structure = make_structure()
+    advice = advise_parameters(
+        analyze_structure(structure),
+        hints=CalculationHints(
+            k_grid=(3, 3, 2),
+            pseudo_type="NC",
+            smearing_type="cold",
+            smearing_width_ry=0.02,
+            conv_thr=1e-8,
+            mixing_beta=0.25,
+            electron_maxstep=120,
+        ),
+    )
+    selection = select_parameters(structure, advice, metadata_list=[make_metadata()])
+
+    files = generate_inputs(
+        structure,
+        advice=advice,
+        intent=advice_context(),
+        selection=selection,
+    )
+
+    assert len(files) == 1
+    assert files[0].path == "inputs/qe.in"
+    content = files[0].content
+    assert "ecutwfc = 35" in content
+    assert "ecutrho = 140" in content
+    assert "smearing = 'cold'" in content
+    assert "degauss = 0.02" in content
+    assert "conv_thr = 1.0000000000e-08" in content
+    assert "mixing_beta = 0.25" in content
+    assert "electron_maxstep = 120" in content
+    assert "Si.UPF" in content
+    assert "3  3  2  0  0  0" in content
+
+
+def test_generate_inputs_rejects_missing_pseudopotential_selection() -> None:
+    """Do not let generators invent missing pseudopotentials or cutoffs."""
+    structure = make_structure()
+    advice = advise_parameters(analyze_structure(structure))
+    selection = select_parameters(structure, advice, metadata_list=[])
+
+    with pytest.raises(ValueError, match="complete pseudo and cutoff"):
+        generate_inputs(structure, advice_context(), advice, selection)
+
+
+def advice_context() -> CalculationIntent:
+    """Return the default intent without obscuring test expectations."""
+    return CalculationIntent()

@@ -156,6 +156,39 @@ gh run download <run-id> --repo stfc/goldilocks-core
 
 If the repo has no workflows yet, say so plainly and rely on local verification instead of pretending CI exists.
 
+## Sub-issues
+
+This repo uses GitHub sub-issues to link parent planning issues to their implementation children.
+
+### Link a sub-issue to a parent
+
+The sub-issues API requires integer database IDs (not issue numbers). Get the DB ID first, then link:
+
+```bash
+PARENT_ID=$(gh api repos/stfc/goldilocks-core/issues/8 --jq '.id')
+CHILD_ID=$(gh api repos/stfc/goldilocks-core/issues/20 --jq '.id')
+gh api repos/stfc/goldilocks-core/issues/8/sub_issues --method POST -F sub_issue_id=$CHILD_ID
+```
+
+### View sub-issues
+
+```bash
+gh api repos/stfc/goldilocks-core/issues/8/sub_issues --jq '.[].number'
+```
+
+### Unlink a sub-issue
+
+```bash
+gh api repos/stfc/goldilocks-core/issues/8/sub_issues/$CHILD_ID --method DELETE
+```
+
+### Conventions
+
+- Umbrella issues (like #8) are the parent. Implementation issues (like #20, #21) are sub-issues.
+- Sub-issues show up nested under the parent with their status.
+- Closing all sub-issues does not auto-close the parent.
+- Use sub-issues instead of task-list checkboxes (`- [ ] #20`) for formal tracking. Task lists are fine for informal checklists within a single issue.
+
 ## Gotchas
 
 - `gh pr create` uses the current branch by default — verify branch and base before creating.
@@ -163,3 +196,4 @@ If the repo has no workflows yet, say so plainly and rely on local verification 
 - Before editing an issue body, ask: "Am I changing the current plan/source-of-truth, or just adding history?" If it is history, comment instead.
 - `gh api ... -f body="$(cat file)"` can mangle complex Markdown in some shells. If in doubt, use a small Python snippet to PATCH JSON.
 - GitHub CLI output may omit fields unless requested with `--json`; don't parse human tables when JSON exists.
+- Sub-issue API requires the integer database ID (`.id`), not the issue number (`.number`). Use `gh api ... --jq '.id'` to get the DB ID.

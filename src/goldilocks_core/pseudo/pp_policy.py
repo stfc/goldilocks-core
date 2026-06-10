@@ -9,7 +9,21 @@ from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 @dataclass(frozen=True, slots=True)
 class PseudoPolicy:
-    """Selection policy describing the allowed pseudo search space."""
+    """Selection policy describing the allowed pseudo search space.
+
+    Applied by ``apply_pseudo_policy()`` to filter a metadata list
+    before ranking.
+
+    Attributes:
+        relativistic_mode: required relativistic mode: ``scalar``,
+            ``full``, or ``none`` (no filter).
+        preferred_functional: only accept pseudos targeting this
+            functional.
+        allowed_sources: only accept pseudos from these libraries.
+            Empty means no filter.
+        allowed_pseudo_types: only accept these pseudo types (e.g.
+            ``NC``, ``USPP``). Empty means no filter.
+    """
 
     relativistic_mode: str = "none"
     preferred_functional: str | None = None

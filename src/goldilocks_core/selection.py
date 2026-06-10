@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Sequence
 
 from pymatgen.core import Structure
 
 from goldilocks_core.contracts import (
-    KPointAdvice,
     KPointSelection,
     ParameterAdvice,
     Provenance,
     PseudopotentialSelection,
     SelectionRecord,
 )
-from goldilocks_core.kmesh import k_distance_to_mesh
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.pseudo.pp_selector import select_pseudos
 
@@ -22,54 +20,23 @@ from goldilocks_core.pseudo.pp_selector import select_pseudos
 def select_parameters(
     structure: Structure,
     advice: ParameterAdvice,
-    metadata_list: list[PseudoMetadata] | None = None,
+    k_points: KPointSelection,
+    metadata_list: Sequence[PseudoMetadata] | None = None,
 ) -> SelectionRecord:
-    """Resolve advice into concrete k-point and pseudopotential selections."""
+    """Resolve advice into concrete pseudopotential selections."""
     pseudo_selections = _select_pseudopotentials(
         structure,
         advice,
-        metadata_list or [],
+        list(metadata_list or ()),
     )
     warnings = tuple(
         warning for selection in pseudo_selections for warning in selection.warnings
     )
 
     return SelectionRecord(
-        k_points=_select_k_points(structure, advice.k_points),
+        k_points=k_points,
         pseudopotentials=pseudo_selections,
         warnings=warnings,
-    )
-
-
-def _select_k_points(
-    structure: Structure,
-    advice: KPointAdvice,
-) -> KPointSelection:
-    """Resolve k-point advice into a concrete unshifted mesh."""
-    if advice.explicit_grid is not None:
-        return KPointSelection(
-            grid=advice.explicit_grid,
-            shift=(0, 0, 0),
-            mesh_type=advice.mesh_type,
-            provenance=Provenance(
-                source="user_hint",
-                reason="Use the explicit grid from k-point advice.",
-            ),
-        )
-
-    if advice.spacing is None:
-        raise ValueError("k-point advice must contain spacing or an explicit grid")
-
-    return KPointSelection(
-        grid=k_distance_to_mesh(structure, advice.spacing),
-        shift=(0, 0, 0),
-        mesh_type=advice.mesh_type,
-        provenance=Provenance(
-            source=advice.provenance.source,
-            reason="Convert advised VASP-style k-point spacing into a mesh.",
-            data_source="pymatgen solid-state reciprocal lattice",
-            warnings=advice.provenance.warnings,
-        ),
     )
 
 

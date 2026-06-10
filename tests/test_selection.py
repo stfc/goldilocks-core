@@ -2,7 +2,12 @@ from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.advice import advise_parameters
 from goldilocks_core.analysis import analyze_structure
-from goldilocks_core.contracts import CalculationHints, CalculationIntent
+from goldilocks_core.contracts import (
+    CalculationHints,
+    CalculationIntent,
+    ParameterAdvice,
+)
+from goldilocks_core.kmesh import resolve_kpoints_from_advice
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.selection import select_parameters
 
@@ -38,15 +43,35 @@ def make_metadata(
     )
 
 
-def test_select_parameters_resolves_k_spacing_and_pseudos() -> None:
-    """Select concrete grid, pseudo, and cutoffs from staged advice."""
-    structure = make_structure()
-    advice = advise_parameters(
-        analyze_structure(structure),
-        hints=CalculationHints(k_spacing=0.25, pseudo_type="NC"),
+def select_from_advice(
+    structure: Structure,
+    advice: ParameterAdvice,
+    *,
+    hints: CalculationHints | None = None,
+    metadata_list: list[PseudoMetadata] | None = None,
+):
+    """Resolve k-points through Kmesh before running Select."""
+    hints = hints or CalculationHints()
+    return select_parameters(
+        structure,
+        advice,
+        resolve_kpoints_from_advice(structure, hints, advice.k_points),
+        metadata_list=metadata_list,
     )
 
-    selection = select_parameters(structure, advice, metadata_list=[make_metadata()])
+
+def test_select_parameters_resolves_pseudos_with_kmesh_selection() -> None:
+    """Select concrete pseudo and cutoffs around a Kmesh-stage grid."""
+    structure = make_structure()
+    hints = CalculationHints(k_spacing=0.25, pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
 
     assert selection.k_points.grid == (7, 7, 7)
     assert selection.k_points.shift == (0, 0, 0)
@@ -74,7 +99,7 @@ def test_select_parameters_prefers_matching_pseudo_mode_and_cutoffs() -> None:
         cutoffs={"ecutwfc_ry": 60, "ecutrho_ry": 240},
     )
 
-    selection = select_parameters(
+    selection = select_from_advice(
         structure,
         advice,
         metadata_list=[efficiency, precision],
@@ -104,7 +129,7 @@ def test_select_parameters_prefers_complete_cutoff_metadata() -> None:
         cutoffs={"ecutwfc_ry": 35, "ecutrho_ry": 140},
     )
 
-    selection = select_parameters(
+    selection = select_from_advice(
         structure,
         advice,
         metadata_list=[incomplete, complete],
@@ -115,14 +140,12 @@ def test_select_parameters_prefers_complete_cutoff_metadata() -> None:
 
 
 def test_select_parameters_keeps_explicit_grid_hint() -> None:
-    """Use an explicit grid hint without recalculating spacing."""
+    """Use a Kmesh-stage explicit grid without recalculating spacing."""
     structure = make_structure()
-    advice = advise_parameters(
-        analyze_structure(structure),
-        hints=CalculationHints(k_grid=(2, 2, 1)),
-    )
+    hints = CalculationHints(k_grid=(2, 2, 1))
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
 
-    selection = select_parameters(structure, advice)
+    selection = select_from_advice(structure, advice, hints=hints)
 
     assert selection.k_points.grid == (2, 2, 1)
     assert selection.k_points.provenance.source == "user_hint"
@@ -136,7 +159,11 @@ def test_select_parameters_warns_when_pseudo_is_missing() -> None:
         intent=CalculationIntent(functional="PBEsol"),
     )
 
-    selection = select_parameters(structure, advice, metadata_list=[make_metadata()])
+    selection = select_from_advice(
+        structure,
+        advice,
+        metadata_list=[make_metadata()],
+    )
 
     assert selection.pseudopotentials[0].filename is None
     assert selection.pseudopotentials[0].provenance.source == "fallback"

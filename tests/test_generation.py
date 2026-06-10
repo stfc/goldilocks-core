@@ -3,8 +3,13 @@ from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.advice import advise_parameters
 from goldilocks_core.analysis import analyze_structure
-from goldilocks_core.contracts import CalculationHints, CalculationIntent
+from goldilocks_core.contracts import (
+    CalculationHints,
+    CalculationIntent,
+    ParameterAdvice,
+)
 from goldilocks_core.generation import generate_inputs
+from goldilocks_core.kmesh import resolve_kpoints_from_advice
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.selection import select_parameters
 
@@ -33,22 +38,41 @@ def make_metadata() -> PseudoMetadata:
     )
 
 
+def select_from_advice(
+    structure: Structure,
+    advice: ParameterAdvice,
+    *,
+    hints: CalculationHints,
+    metadata_list: list[PseudoMetadata],
+):
+    """Resolve k-points through Kmesh before running Select."""
+    return select_parameters(
+        structure,
+        advice,
+        resolve_kpoints_from_advice(structure, hints, advice.k_points),
+        metadata_list=metadata_list,
+    )
+
+
 def test_generate_inputs_writes_qe_values_from_advice_and_selection() -> None:
     """Generate QE input text from completed advice and selection records."""
     structure = make_structure()
-    advice = advise_parameters(
-        analyze_structure(structure),
-        hints=CalculationHints(
-            k_grid=(3, 3, 2),
-            pseudo_type="NC",
-            smearing_type="cold",
-            smearing_width_ry=0.02,
-            conv_thr=1e-8,
-            mixing_beta=0.25,
-            electron_maxstep=120,
-        ),
+    hints = CalculationHints(
+        k_grid=(3, 3, 2),
+        pseudo_type="NC",
+        smearing_type="cold",
+        smearing_width_ry=0.02,
+        conv_thr=1e-8,
+        mixing_beta=0.25,
+        electron_maxstep=120,
     )
-    selection = select_parameters(structure, advice, metadata_list=[make_metadata()])
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
 
     files = generate_inputs(
         structure,
@@ -76,16 +100,19 @@ def test_generate_inputs_uses_noncollinear_soc_without_nspin() -> None:
     structure = make_structure()
     metadata = make_metadata()
     metadata.relativistic = "full"
-    advice = advise_parameters(
-        analyze_structure(structure),
-        hints=CalculationHints(
-            k_grid=(3, 3, 3),
-            pseudo_type="NC",
-            spin_polarized=True,
-            spin_orbit_coupling=True,
-        ),
+    hints = CalculationHints(
+        k_grid=(3, 3, 3),
+        pseudo_type="NC",
+        spin_polarized=True,
+        spin_orbit_coupling=True,
     )
-    selection = select_parameters(structure, advice, metadata_list=[metadata])
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[metadata],
+    )
 
     files = generate_inputs(structure, advice_context(), advice, selection)
 
@@ -98,8 +125,14 @@ def test_generate_inputs_uses_noncollinear_soc_without_nspin() -> None:
 def test_generate_inputs_rejects_missing_pseudopotential_selection() -> None:
     """Do not let generators invent missing pseudopotentials or cutoffs."""
     structure = make_structure()
-    advice = advise_parameters(analyze_structure(structure))
-    selection = select_parameters(structure, advice, metadata_list=[])
+    hints = CalculationHints()
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[],
+    )
 
     with pytest.raises(ValueError, match="complete pseudo and cutoff"):
         generate_inputs(structure, advice_context(), advice, selection)

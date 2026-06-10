@@ -13,7 +13,9 @@ from goldilocks_core.contracts import (
     CoreJobResult,
     CoreRecommendation,
     JsonDict,
+    KPointSelection,
     ParameterAdvice,
+    Pipeline,
     SelectionRecord,
     StructureAnalysisRecord,
     StructureInput,
@@ -45,10 +47,16 @@ def advise(
 def select(
     structure: Structure,
     advice: ParameterAdvice,
+    k_points: KPointSelection,
     metadata_list: list[PseudoMetadata] | None = None,
 ) -> SelectionRecord:
     """Select-stage wrapper for concrete calculation choices."""
-    return select_parameters(structure, advice, metadata_list=metadata_list)
+    return select_parameters(
+        structure,
+        advice,
+        k_points,
+        metadata_list=metadata_list,
+    )
 
 
 def recommend(
@@ -57,29 +65,22 @@ def recommend(
     intent: CalculationIntent | None = None,
     hints: CalculationHints | None = None,
     pseudo_metadata: list[PseudoMetadata] | None = None,
+    pipeline: Pipeline | None = None,
 ) -> CoreRecommendation:
-    """Run Load → Analyze → Advise → Select and return structured output."""
-    intent = intent or CalculationIntent()
-    loaded_structure = load(structure)
-    analysis = analyze(loaded_structure)
-    advice = advise_parameters(analysis, intent=intent, hints=hints)
-    selection = select_parameters(
-        loaded_structure,
-        advice,
-        metadata_list=pseudo_metadata,
-    )
+    """Run Load → Analyze → Advise → Kmesh → Select."""
+    from goldilocks_core.jobs import run_core_job
 
-    return CoreRecommendation(
-        intent=intent,
-        analysis=analysis,
-        advice=advice,
-        selection=selection,
-        warnings=(
-            *analysis.disorder_warnings,
-            *analysis.analysis_warnings,
-            *selection.warnings,
+    result = run_core_job(
+        CoreJobRequest(
+            structure=structure,
+            intent=intent or CalculationIntent(),
+            hints=hints or CalculationHints(),
+            mode="recommend",
+            pseudo_metadata=tuple(pseudo_metadata or ()),
         ),
+        pipeline=pipeline,
     )
+    return result.recommendation
 
 
 def generate(
@@ -88,8 +89,9 @@ def generate(
     intent: CalculationIntent | None = None,
     hints: CalculationHints | None = None,
     pseudo_metadata: list[PseudoMetadata] | None = None,
+    pipeline: Pipeline | None = None,
 ) -> CoreRecommendation:
-    """Run Load → Analyze → Advise → Select → Generate."""
+    """Run Load → Analyze → Advise → Kmesh → Select → Generate."""
     from goldilocks_core.jobs import run_core_job
 
     result = run_core_job(
@@ -99,7 +101,8 @@ def generate(
             hints=hints or CalculationHints(),
             mode="generate",
             pseudo_metadata=tuple(pseudo_metadata or ()),
-        )
+        ),
+        pipeline=pipeline,
     )
     return result.recommendation
 
@@ -111,6 +114,7 @@ def write_bundle(
     intent: CalculationIntent | None = None,
     hints: CalculationHints | None = None,
     pseudo_metadata: list[PseudoMetadata] | None = None,
+    pipeline: Pipeline | None = None,
 ) -> CoreJobResult:
     """Run the full Core pipeline and write a portable bundle directory."""
     from goldilocks_core.jobs import run_core_job
@@ -123,7 +127,8 @@ def write_bundle(
             mode="bundle",
             pseudo_metadata=tuple(pseudo_metadata or ()),
             output_dir=output_dir,
-        )
+        ),
+        pipeline=pipeline,
     )
 
 

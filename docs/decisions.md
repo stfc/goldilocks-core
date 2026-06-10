@@ -20,6 +20,24 @@ When `goldilocks_core.shared` was removed, no backward-compatible aliases were a
 
 **Why:** a DAG engine is complexity that Core doesn't need. The stage graph is known at design time. A fixed sequence is easier to understand, test, and debug. If future stages need conditional execution, the mode enum can be extended rather than introducing dynamic dispatch.
 
+## Pipeline is composition, not inheritance
+
+Stage backends are callables composed into a `Pipeline` dataclass. There are no stage base classes, subclass hooks, plugin registries, or string-to-backend lookups in Core.
+
+**Why:** SOLID does not require inheritance. `run_core_job()` depends on the `Pipeline` abstraction and receives concrete behavior from outside. New backends extend behavior by supplying a new callable with the correct signature. This keeps the pipeline open for extension without modifying orchestration code.
+
+## Backend selection is not request data
+
+`CoreJobRequest` does not contain fields such as `model`, `generator`, or `backend`. Model-backed k-point selection is configured by passing `pipeline=replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))`.
+
+**Why:** `CoreJobRequest` is the JSON/HTTP-safe description of what to compute. A backend callable is executable Python behavior describing how to compute it. Mixing those concerns would make requests non-serializable and force Core to own backend-name resolution.
+
+## Kmesh is its own stage
+
+Concrete k-point grid resolution lives in Kmesh, between Advise and Select. Advise produces `KPointAdvice`; Kmesh produces `KPointSelection`; Select consumes the `KPointSelection` and resolves pseudopotentials/cutoffs.
+
+**Why:** k-point resolution is the natural backend seam. The default path converts advice to a grid. The ML path predicts a grid from a model. Both produce the same `KPointSelection` contract, so downstream stages do not care how the grid was chosen.
+
 ## SOC is never auto-enabled
 
 Even when heavy elements are detected, `SpinOrbitAdvice.enabled` remains `False`. The advice sets `consider=True` and emits a warning.

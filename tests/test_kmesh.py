@@ -1,13 +1,109 @@
 import math
 
+import pytest
 from pymatgen.core import Lattice, Structure
 
+from goldilocks_core.contracts import CalculationHints, KPointAdvice, Provenance
 from goldilocks_core.kmesh import (
     build_k_distance_intervals,
     build_kmesh_entries,
     generate_candidate_k_distances,
     k_distance_to_mesh,
+    resolve_kpoints_from_advice,
 )
+
+
+def test_resolve_kpoints_from_advice_prefers_explicit_grid_hint() -> None:
+    """Use explicit operator grids before advice-derived spacing."""
+    structure = Structure(
+        lattice=Lattice.cubic(4.0),
+        species=["Si"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+    advice = KPointAdvice(
+        spacing=0.2,
+        explicit_grid=None,
+        mesh_type="monkhorst-pack",
+        provenance=Provenance(
+            source="user_hint",
+            reason="explicit grid",
+            warnings=("Both k_grid and k_spacing were provided; explicit grid wins.",),
+        ),
+    )
+
+    selection = resolve_kpoints_from_advice(
+        structure,
+        CalculationHints(k_grid=(2, 3, 4)),
+        advice,
+    )
+
+    assert selection.grid == (2, 3, 4)
+    assert selection.provenance.source == "user_hint"
+    assert selection.provenance.warnings == (
+        "Both k_grid and k_spacing were provided; explicit grid wins.",
+    )
+
+
+def test_resolve_kpoints_from_advice_converts_spacing_hint() -> None:
+    """Convert operator k-spacing through the Kmesh stage."""
+    structure = Structure(
+        lattice=Lattice.cubic(4.0),
+        species=["Si"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+    advice = KPointAdvice(
+        spacing=0.2,
+        explicit_grid=None,
+        mesh_type="monkhorst-pack",
+        provenance=Provenance(source="default", reason="default"),
+    )
+
+    selection = resolve_kpoints_from_advice(
+        structure,
+        CalculationHints(k_spacing=0.25),
+        advice,
+    )
+
+    assert selection.grid == (7, 7, 7)
+    assert selection.provenance.source == "user_hint"
+
+
+def test_resolve_kpoints_from_advice_converts_advised_spacing() -> None:
+    """Convert default/advised spacing when no operator hint is set."""
+    structure = Structure(
+        lattice=Lattice.cubic(4.0),
+        species=["Si"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+    advice = KPointAdvice(
+        spacing=0.25,
+        explicit_grid=None,
+        mesh_type="monkhorst-pack",
+        provenance=Provenance(source="default", reason="default"),
+    )
+
+    selection = resolve_kpoints_from_advice(structure, CalculationHints(), advice)
+
+    assert selection.grid == (7, 7, 7)
+    assert selection.provenance.source == "default"
+
+
+def test_resolve_kpoints_from_advice_rejects_empty_advice() -> None:
+    """Require either explicit grid or spacing when no hint is set."""
+    structure = Structure(
+        lattice=Lattice.cubic(4.0),
+        species=["Si"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+    advice = KPointAdvice(
+        spacing=None,
+        explicit_grid=None,
+        mesh_type="monkhorst-pack",
+        provenance=Provenance(source="default", reason="default"),
+    )
+
+    with pytest.raises(ValueError, match="spacing or an explicit grid"):
+        resolve_kpoints_from_advice(structure, CalculationHints(), advice)
 
 
 def test_k_distance_to_mesh_matches_vasp_kspacing_for_cubic_cell() -> None:

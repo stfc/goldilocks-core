@@ -2,25 +2,52 @@
 
 Owner: `selection.py`
 
-The Select stage resolves advice into concrete values: k-point grids, pseudopotential assignments, and cutoffs.
+The Select stage resolves pseudopotential assignments and cutoffs, then combines them with the concrete k-point grid already produced by Kmesh.
 
 ## Input
 
 - `pymatgen.core.Structure`
 - `ParameterAdvice` (from Advise)
-- Optional list of `PseudoMetadata`
+- `KPointSelection` (from Kmesh)
+- optional list of `PseudoMetadata`
 
 ## Output
 
 - `SelectionRecord`
 
-## k-point selection
+## Responsibility
 
-1. If `KPointAdvice.explicit_grid` is set → `KPointSelection(grid=advice.explicit_grid, shift=(0,0,0), provenance.source="user_hint")`.
-2. If `KPointAdvice.spacing` is set → convert spacing to mesh via `k_distance_to_mesh()`, `KPointSelection(grid=mesh, shift=(0,0,0))`. Provenance source is inherited from the advice provenance.
-3. If neither is set → raises `ValueError`. This should not happen if the Advise stage ran correctly.
+Select owns:
 
-The conversion uses the VASP KSPACING convention. See [conventions](conventions.md).
+- one pseudopotential selection per element
+- cutoff extraction from selected pseudopotential metadata
+- pseudo-selection warnings
+- construction of the final `SelectionRecord`
+
+Select does **not** own:
+
+- k-point grid resolution — owned by Kmesh
+- structure analysis — owned by Analyze
+- scientific intent — owned by Advise
+- target-code syntax — owned by Generate
+- pseudo parsing — owned by `pseudo/` registry and parser modules
+
+## Kmesh interaction
+
+`select_parameters()` receives a concrete k-point selection:
+
+```python
+selection = select_parameters(
+    structure,
+    advice,
+    k_points,
+    metadata_list,
+)
+```
+
+The `k_points` argument is copied into the returned `SelectionRecord`.
+
+This keeps Select focused on pseudopotentials and makes k-point resolution hot-swappable through the Kmesh stage.
 
 ## Pseudopotential selection
 
@@ -30,9 +57,9 @@ For each element in the structure:
 2. Rank remaining candidates by the deterministic 5-tuple key.
 3. Take the highest-ranked candidate (first after sort).
 4. Extract `ecutwfc_ry` and `ecutrho_ry` from `sssp_recommended_cutoff`.
-5. If no candidate matches → return a `PseudopotentialSelection` with `filename=None` and a warning.
+5. If no candidate matches, return a `PseudopotentialSelection` with `filename=None` and a warning.
 
-### Ranking key
+## Ranking key
 
 Candidates are sorted by the tuple `(mode_rank, cutoff_rank, sssp_rank, source, filename)`:
 
@@ -48,13 +75,26 @@ Mode matching searches the concatenation of `library`, `source_set`, `source_pse
 
 ## Warnings
 
-Selection produces warnings in two places:
+Select produces warnings in two places:
 
 - `PseudopotentialSelection.warnings`: per-element warnings about missing pseudos or incomplete cutoff data.
 - `SelectionRecord.warnings`: aggregated from all pseudo selection warnings.
 
 Common warnings:
 
-- "No pseudopotential metadata matched {element} / {functional} / {relativistic_mode}."
-- "Selected pseudopotential for {element} does not explicitly match pseudo mode '{mode}'."
-- "Selected pseudopotential for {element} lacks complete cutoff metadata."
+- `No pseudopotential metadata matched {element} / {functional} / {relativistic_mode}.`
+- `Selected pseudopotential for {element} does not explicitly match pseudo mode '{mode}'.`
+- `Selected pseudopotential for {element} lacks complete cutoff metadata.`
+
+## Backend contract
+
+A custom Select backend must satisfy:
+
+```python
+SelectStage = Callable[
+    [Structure, ParameterAdvice, KPointSelection, Sequence[PseudoMetadata]],
+    SelectionRecord,
+]
+```
+
+It may implement different pseudo ranking or cutoff policy, but it should not recalculate k-points. If k-point behavior needs to change, replace the Kmesh backend instead.

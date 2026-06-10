@@ -44,19 +44,23 @@ print(result.advice.convergence.provenance.source)    # "default"
 For notebooks or interactive exploration, use the stage-by-stage API:
 
 ```python
+from goldilocks_core import CalculationHints, default_pipeline
 from goldilocks_core.pipeline import load, analyze, advise, select
 
+hints = CalculationHints()
 structure = load("structure.cif")
 analysis = analyze(structure)
 print(analysis.elements)                   # ("Fe", "O")
 print(analysis.electronic_character)       # "unknown"
 print(analysis.heavy_elements)             # ()
 
-advice = advise(analysis)
+advice = advise(analysis, hints=hints)
 print(advice.spin_orbit.consider)          # False
 print(advice.k_points.spacing)             # 0.2
 
-selection = select(structure, advice)
+pipeline = default_pipeline()
+k_points = pipeline.kmesh(structure, hints, advice.k_points)
+selection = select(structure, advice, k_points)
 print(selection.k_points.grid)             # (8, 8, 8)
 ```
 
@@ -144,6 +148,60 @@ print(result.to_dict())           # full JSON-safe output
 - **Invalid hints**: `advise_parameters()` raises `ValueError` for non-positive k_spacing, conv_thr, etc. before recording provenance.
 - **Disordered structures**: analysis reports `disorder_warnings`. Generation raises `ValueError` — disordered occupancies require manual resolution.
 - **Unsupported codes/tasks**: generation raises `ValueError` for anything other than QE SCF.
+
+## ML k-mesh backend
+
+Use `ml_kmesh_advisor(spec)` to plug model-backed k-point selection into the staged pipeline:
+
+```python
+from dataclasses import replace
+
+from goldilocks_core import default_pipeline, recommend
+from goldilocks_core.advisors import ml_kmesh_advisor
+from goldilocks_core.contracts import ModelSpec
+
+spec = ModelSpec(
+    name="local-kmesh-model",
+    version="v0",
+    model_type="random_forest",
+    target="k_index",
+    feature_set="cslr",
+    source="local",
+    location="path/to/model.joblib",
+)
+
+pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+result = recommend("structure.cif", pipeline=pipeline)
+
+print(result.selection.k_points.grid)
+print(result.selection.k_points.provenance.source)       # "model"
+print(result.selection.k_points.provenance.data_source)  # spec.name
+```
+
+The request remains data-only. The model is not stored on `CoreJobRequest`; it is executable backend configuration carried by `Pipeline`.
+
+Operator hints still take precedence:
+
+```python
+from goldilocks_core import CalculationHints
+
+result = recommend(
+    "structure.cif",
+    hints=CalculationHints(k_grid=(4, 4, 4)),
+    pipeline=pipeline,
+)
+
+print(result.selection.k_points.provenance.source)  # "user_hint"
+```
+
+The standalone advisor remains available when you only need a `KPointSelection`:
+
+```python
+from goldilocks_core.advisors import advise_kpoints
+from goldilocks_core.io.structures import load_structure
+
+selection = advise_kpoints(load_structure("structure.cif"), spec)
+```
 
 ## Common patterns
 

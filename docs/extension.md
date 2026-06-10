@@ -1,64 +1,199 @@
 # Extension guide
 
-How to extend goldilocks-core with new capabilities while preserving stage boundaries.
+Extend Core by composing new stage backends into `Pipeline`.
 
-## Adding a new DFT code generator
+A backend is a function with the stage signature. It returns the standard contract object for that stage. It does not subclass a base class and does not register itself in Core.
 
-1. Create a new generation function in `generation.py` (or a new module like `generation_vasp.py`).
-2. The function must take the same inputs: `Structure`, `CalculationIntent`, `ParameterAdvice`, `SelectionRecord`.
-3. Return `tuple[GeneratedFile, ...]`.
-4. Add the code name to the `CodeName` literal in `contracts.py`.
-5. Wire it into `generate_inputs()` with an `if intent.code == "your_code"` branch.
-6. Write tests that prove generated values come from advice/selection records, not from generator-side defaults.
+See [backends](backends.md) for detailed backend authoring examples.
 
-**Rules:**
-- Generators must not choose scientific defaults. Every value must come from an advice or selection record.
-- Generators must not bypass the pipeline. If you need a value, add it to the advice or selection contract.
+## Pipeline extension model
+
+```python
+from dataclasses import replace
+
+from goldilocks_core import default_pipeline, run_core_job
+
+pipeline = replace(default_pipeline(), kmesh=my_kmesh_backend)
+result = run_core_job(request, pipeline=pipeline)
+```
+
+Rules:
+
+- `CoreJobRequest` remains data-only and serializable.
+- `Pipeline` carries executable behavior.
+- CLI/HTTP layers may resolve names to callables outside Core.
+- Core does not maintain backend registries.
+- Add new public fields to contracts only when a stage needs to expose new data.
+
+## Adding a Kmesh backend
+
+Use this when changing how concrete k-point grids are chosen.
+
+Signature:
+
+```python
+KMeshAdvisor = Callable[[Structure, CalculationHints, KPointAdvice], KPointSelection]
+```
+
+Example:
+
+```python
+from goldilocks_core.contracts import KPointSelection, Provenance
+
+
+def project_kmesh(structure, hints, kpoint_advice):
+    if hints.k_grid is not None:
+        return KPointSelection(
+            grid=hints.k_grid,
+            shift=(0, 0, 0),
+            mesh_type=kpoint_advice.mesh_type,
+            provenance=Provenance(
+                source="user_hint",
+                reason="Use the operator-provided explicit grid.",
+            ),
+        )
+
+    return KPointSelection(
+        grid=(6, 6, 6),
+        shift=(0, 0, 0),
+        mesh_type=kpoint_advice.mesh_type,
+        provenance=Provenance(source="default", reason="Project default grid."),
+    )
+```
+
+Then compose it:
+
+```python
+pipeline = replace(default_pipeline(), kmesh=project_kmesh)
+```
+
+For ML k-points, use the built-in factory:
+
+```python
+from goldilocks_core.advisors import ml_kmesh_advisor
+
+pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+```
+
+## Adding a DFT code generator
+
+Use this when adding target-code syntax such as VASP, CP2K, CASTEP, or ABINIT.
+
+Signature:
+
+```python
+GenerateStage = Callable[
+    [Structure, CalculationIntent, ParameterAdvice, SelectionRecord],
+    tuple[GeneratedFile, ...],
+]
+```
+
+Steps:
+
+1. Write a generator function with the signature above.
+2. Return `GeneratedFile` records with paths relative to the bundle root.
+3. Read all scientific/numerical values from `intent`, `advice`, and `selection`.
+4. Compose it with `replace(default_pipeline(), generate=your_generator)`.
+5. Add tests through `run_core_job(..., pipeline=pipeline)`.
+
+Do not add generator-side scientific defaults. If a value is missing from the contracts, add it to the appropriate advice/selection record first.
 
 ## Adding a new calculation task
 
-1. Add the task name to `CalcTask` in `contracts.py`.
-2. Extend `generation.py` with task-specific generation logic.
-3. Extend the advice stage if the new task needs different default advice.
-4. Write tests covering the new task's generation and any changed advice.
+A new task changes intent and generation behavior.
 
-**Current limitation:** `CalculationIntent.task` only accepts `"scf_single_point"`. Adding relaxation, band-structure, or DFPT tasks requires advice changes first.
+Steps:
+
+1. Add the task name to `CalcTask` in `contracts.py`.
+2. Extend or replace the Advise backend if the task needs different advice.
+3. Write a Generate backend that supports the new task.
+4. Add tests for advice, generation, and full `run_core_job()` integration.
+
+Current task support is `scf_single_point` only.
 
 ## Adding a new pseudo source
 
-1. Create a new parser function (like `parse_upf_metadata()`) for the new format.
-2. Return `PseudoMetadata` instances with the same field contract.
-3. Add a new registry loader (like `load_pseudo_metadata()`) if the source has a different directory layout.
-4. Selection and ranking logic should work unchanged as long as `PseudoMetadata` fields are populated.
+Pseudo source support is data-oriented. Selection consumes `PseudoMetadata`, not raw files.
 
-**Rules:**
-- Pseudo selection is driven by `PseudoMetadata` fields, not by file paths or formats. Any parser that populates the fields correctly will work with selection.
-- Do not add pseudo-type-specific logic to the selection stage. Ranking is generic.
+Steps:
 
-## Adding a new advisor
+1. Create a parser for the source format.
+2. Return populated `PseudoMetadata` records.
+3. Add a loader if the source has a directory or archive layout.
+4. Use the existing Select backend if the metadata fields fit.
+5. Replace Select only if ranking/cutoff policy must change.
 
-1. Create a new advisor module under `advisors/`.
-2. The advisor should accept a `Structure` and return a typed record (e.g. `KPointSelection`).
-3. Wire it into `pipeline.py` or `jobs.py` as needed.
-4. Add `ModelSpec` entries if the advisor uses a trained model.
+Rules:
 
-**Rules:**
-- Advisors return typed records, not raw values.
-- Model-backed advisors should record `provenance.source="model"` and `provenance.data_source` with the model name.
+- Do not add file-format logic to Select.
+- Do not add pseudo downloads to Core.
+- Do not make Generate parse pseudo metadata.
+
+## Adding a Select backend
+
+Use this for project-specific pseudopotential ranking or cutoff policy.
+
+Signature:
+
+```python
+SelectStage = Callable[
+    [Structure, ParameterAdvice, KPointSelection, Sequence[PseudoMetadata]],
+    SelectionRecord,
+]
+```
+
+Select receives the Kmesh-stage grid. It should not call `k_distance_to_mesh()` or run model prediction.
+
+## Adding an Advise backend
+
+Use this when changing scientific intent:
+
+- smearing policy
+- SOC policy
+- magnetic policy
+- convergence defaults
+- pseudopotential intent
+
+Signature:
+
+```python
+AdviseStage = Callable[
+    [StructureAnalysisRecord, CalculationIntent, CalculationHints],
+    ParameterAdvice,
+]
+```
+
+Advice should produce `ParameterAdvice` with provenance on every nested record.
+
+## Adding an Analyze backend
+
+Use this when changing structure fact extraction or conservative classification.
+
+Signature:
+
+```python
+AnalyzeStage = Callable[[Structure], StructureAnalysisRecord]
+```
+
+Analyze should not choose parameters. If a new public fact is needed by later stages, add it to `StructureAnalysisRecord`.
+
+## Adding a Bundle backend
+
+Use this for a different deterministic output layout.
+
+Signature:
+
+```python
+BundleStage = Callable[[CoreRecommendation, str | Path], JsonDict]
+```
+
+Bundle may write files and return a manifest dictionary. It should not submit jobs, copy private pseudo libraries, or inspect completed outputs.
 
 ## What not to extend
 
-- **Do not add new job modes** without updating the fixed graph in `jobs.py`. The graph is explicit, not dynamic.
-- **Do not bypass stage boundaries.** If Generate needs a value that isn't in the current advice/selection contract, add it to the contract first.
-- **Do not add compatibility shims.** One canonical API, one canonical import path.
-- **Do not add new external dependencies** unless a stage genuinely cannot exist without one.
-- **Do not add Runner/AiiDA/frontend concerns.** Those belong in a separate package.
-
-## Adding new advice categories
-
-1. Define a new advice dataclass in `contracts.py` with `Provenance`.
-2. Add it to `ParameterAdvice` as a new field.
-3. Add the decision logic to `advice.py`.
-4. Add selection logic to `selection.py` if the advice needs concrete resolution.
-5. Add generation logic to `generation.py` if the selection produces output that generators need.
-6. Update serialization tests.
+- Do not add backend fields to `CoreJobRequest`.
+- Do not add global registries to Core.
+- Do not bypass stage boundaries.
+- Do not add compatibility shims or duplicate import paths.
+- Do not add Runner/AiiDA/frontend concerns.
+- Do not add new dependencies unless a stage genuinely needs one.

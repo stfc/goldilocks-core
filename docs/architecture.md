@@ -7,9 +7,11 @@ Core owns:
 - structure loading
 - structure analysis facts
 - parameter advice
-- concrete selection of k-grids, pseudopotentials, and cutoffs
+- k-point resolution
+- concrete pseudopotential and cutoff selection
 - code-specific input generation from completed selections
 - portable bundle manifests and directory output
+- composable stage backend injection through `Pipeline`
 
 Core does not own:
 
@@ -19,16 +21,19 @@ Core does not own:
 - auth, sessions, WebSockets, or pods
 - completed-output analysis
 - structure database search/fetch
+- backend-name registries for HTTP or CLI services
 
 ## Principles
 
-- Use domain modules. Do not add generic `helpers`, `utils`, or `processing` packages.
 - Keep one canonical API. Do not add compatibility shims unless explicitly requested.
-- Keep CLIs thin. Package APIs hold the logic.
-- Keep future HTTP handlers thin. They should map JSON to Core request/result records.
-- Keep generators mechanical. Scientific defaults belong in advice or selection.
+- Use SOLID boundaries: each stage owns one responsibility, and `run_core_job()` depends on injected stage callables instead of concrete implementations.
+- Prefer composition over inheritance. Backends are functions composed into `Pipeline`; they are not subclasses.
+- Keep `CoreJobRequest` data-only and serializable.
+- Keep executable backend choice outside request data.
+- Keep CLIs thin. They may resolve command-line options into a `Pipeline`, then call Core.
+- Keep future HTTP handlers thin. They may resolve JSON backend names into callables outside Core, then call Core.
+- Keep generators mechanical. Scientific defaults belong in advice, Kmesh, or selection.
 - Keep tests portable. Do not require `local_data/` or private pseudo libraries.
-- Prefer small functions and explicit dataclasses.
 - Add no new external dependencies unless a stage genuinely cannot exist without one.
 
 ## Package layout
@@ -64,78 +69,89 @@ src/goldilocks_core/
     └── pp_selector.py
 ```
 
-Module dependencies should stay simple:
+## Dependency direction
 
-```mermaid
-flowchart TB
-    api["Python API"] --> jobs["jobs.py"]
-    cli["cli/core.py"] --> jobs
-    http["Future HTTP API"] -.-> jobs
+`contracts.py` defines boundary records and callable signatures. Stage modules import contracts; contracts do not import stage modules.
 
-    jobs --> io["io/structures.py"]
-    jobs --> analysis["analysis.py"]
-    jobs --> advice["advice.py"]
-    jobs --> selection["selection.py"]
-    jobs --> generation["generation.py"]
-    jobs --> bundle["bundle.py"]
+`jobs.py` owns the job runner and the built-in `default_pipeline()` composition.
 
-    analysis --> contracts["contracts.py"]
-    advice --> contracts
-    selection --> contracts
-    generation --> contracts
-    bundle --> contracts
+`pipeline.py` owns user-facing convenience wrappers (`recommend`, `generate`, `write_bundle`) and stage-by-stage wrappers.
 
-    selection --> kmesh["kmesh.py"]
-    selection --> pseudo["pseudo/"]
-    advisors["advisors/kmesh_advisor.py"] --> ml["ml/"]
-    advisors --> kmesh
+Stage modules own domain behavior:
+
+```text
+analysis.py   -> structure facts
+advice.py     -> parameter intent and provenance
+kmesh.py      -> concrete k-point resolution
+selection.py  -> pseudopotentials, cutoffs, selection warnings
+generation.py -> target-code text
+bundle.py     -> portable output directory
 ```
 
-## Pipeline
+## Fixed graph, swappable backends
 
-The fixed Core graph is:
+The Core graph is fixed:
 
 ```mermaid
 flowchart LR
-    structure["Structure input"] --> load["Load"]
-    load --> analyze["Analyze"]
+    load["Load"] --> analyze["Analyze"]
     analyze --> advise["Advise"]
-    advise --> select["Select"]
+    advise --> kmesh["Kmesh"]
+    kmesh --> select["Select"]
     select --> generate["Generate"]
     generate --> bundle["Bundle"]
-
-    intent["CalculationIntent"] -.-> advise
-    hints["CalculationHints"] -.-> advise
-    metadata["PseudoMetadata list"] -.-> select
-    output["Output directory"] -.-> bundle
 ```
 
-The graph is fixed. Callers choose how far to run:
+Request data and backend composition enter the runner separately:
+
+```mermaid
+flowchart LR
+    request["CoreJobRequest<br/>serializable data"] --> runner["run_core_job()"]
+    pipeline["Pipeline<br/>stage callables"] --> runner
+    runner --> result["CoreJobResult<br/>serializable output"]
+```
+
+Callers choose how far to run:
 
 ```text
-recommend -> Load → Analyze → Advise → Select
-generate  -> Load → Analyze → Advise → Select → Generate
-bundle    -> Load → Analyze → Advise → Select → Generate → Bundle
+recommend -> Load → Analyze → Advise → Kmesh → Select
+generate  -> Load → Analyze → Advise → Kmesh → Select → Generate
+bundle    -> Load → Analyze → Advise → Kmesh → Select → Generate → Bundle
 ```
 
-### Shared job surface
+The graph is not dynamic. There is no scheduler or DAG engine. The backend behind each computational stage is injectable through `Pipeline`.
 
-Owner: `jobs.py`
+## Request versus Pipeline
 
-Inputs:
+`CoreJobRequest` is job data:
 
-- `CoreJobRequest`
+```python
+CoreJobRequest(
+    structure="Si.cif",
+    intent=CalculationIntent(functional="PBE"),
+    hints=CalculationHints(k_spacing=0.2),
+    mode="recommend",
+    pseudo_metadata=tuple(metadata),
+)
+```
 
-Output:
+`Pipeline` is executable composition:
 
-- `CoreJobResult`
+```python
+from dataclasses import replace
 
-Rules:
+pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+result = run_core_job(request, pipeline=pipeline)
+```
 
-- `run_core_job()` is the shared internal operation for Python API, CLI, and future HTTP wrappers.
-- It is not a scheduler, async queue, task runner, or dynamic DAG system.
-- It records completed stages as `StageRecord` values.
-- It delegates all scientific decisions to the stage modules.
+This separation is intentional:
+
+- requests can cross JSON/HTTP boundaries
+- pipelines can carry Python callables
+- Core does not need registries or string resolution
+- provenance still records which source produced each result
+
+## Stage ownership
 
 ### Load
 
@@ -144,7 +160,7 @@ Owner: `io/structures.py`
 Input:
 
 - `pymatgen.core.Structure`
-- path to a structure file readable by `pymatgen.Structure.from_file`
+- path readable by `pymatgen.Structure.from_file`
 
 Output:
 
@@ -152,9 +168,11 @@ Output:
 
 Rules:
 
-- Load is pure I/O.
-- Load does not analyze structures.
-- Load does not recommend parameters.
+- pure I/O
+- no analysis
+- no recommendations
+
+Load is recorded as a `StageRecord`, but it is not a `Pipeline` field.
 
 ### Analyze
 
@@ -162,37 +180,17 @@ Owner: `analysis.py`
 
 Input:
 
-- `pymatgen.core.Structure`
+- `Structure`
 
 Output:
 
 - `StructureAnalysisRecord`
 
-Current fields include:
-
-- formula
-- reduced formula
-- site count
-- element symbols
-- transition-metal flag
-- lanthanide flag
-- actinide flag
-- heavy-element flag
-- magnetic candidate elements
-- heavy elements
-- disorder warnings and disordered-site count
-- space group symbol and number, where pymatgen can determine them
-- crystal system, where pymatgen can determine it
-- dimensionality, currently `unknown`
-- electronic character, currently `likely_metal` for all-metal compositions or `unknown`
-- analysis warnings
-
 Rules:
 
-- Analyze reports facts and conservative classifications only.
-- Analyze does not choose k-points, smearing, spin, SOC, pseudopotentials, or cutoffs.
-- Heavy elements use the period-5-and-heavier heuristic.
-- Structure-only metallicity is uncertain; preserve uncertainty as warnings.
+- report facts and conservative classifications only
+- do not choose parameters
+- preserve uncertainty as warnings
 
 ### Advise
 
@@ -201,29 +199,40 @@ Owner: `advice.py`
 Inputs:
 
 - `StructureAnalysisRecord`
-- optional `CalculationIntent`
-- optional `CalculationHints`
+- `CalculationIntent`
+- `CalculationHints`
 
 Output:
 
 - `ParameterAdvice`
 
-Current advice categories:
+Rules:
 
-- k-points
-- smearing
-- magnetism
-- spin-orbit coupling
-- pseudopotential intent
-- SCF convergence threshold, mixing beta, and max SCF steps
+- hints override package decisions
+- every recommendation has `Provenance`
+- output is intent, not concrete target-code syntax
+- k-point output is `KPointAdvice`, not a final grid
+
+### Kmesh
+
+Owner: `kmesh.py` and `advisors/kmesh_advisor.py`
+
+Inputs:
+
+- `Structure`
+- `CalculationHints`
+- `KPointAdvice`
+
+Output:
+
+- `KPointSelection`
 
 Rules:
 
-- Hints override package decisions.
-- Every scientific recommendation has `Provenance`.
-- Heavy elements make SOC worth considering. SOC is not enabled automatically.
-- Likely-metal analysis can advise cold smearing with warnings.
-- Unknown metallicity uses fixed occupations and warns the operator to verify smearing manually.
+- operator k-point hints always win
+- default backend converts advice to a grid
+- ML backend uses model prediction when no k-point hint is set
+- provenance must distinguish `user_hint`, `default`, and `model`
 
 ### Select
 
@@ -231,27 +240,20 @@ Owner: `selection.py`
 
 Inputs:
 
-- `pymatgen.core.Structure`
+- `Structure`
 - `ParameterAdvice`
-- optional list of `PseudoMetadata`
+- `KPointSelection`
+- `PseudoMetadata` sequence
 
 Output:
 
 - `SelectionRecord`
 
-Current selections:
-
-- concrete k-point grid and shift
-- one pseudopotential selection per element when metadata is available
-- wavefunction and charge-density cutoffs from SSSP metadata when available
-- warnings for missing pseudopotentials or missing cutoff metadata
-
 Rules:
 
-- Selection resolves concrete values from advice.
-- Selection ranks pseudo candidates deterministically by requested mode, cutoff completeness, SSSP status, source, and filename.
-- Selection may warn or return incomplete pseudo selections.
-- Selection does not parse files. Pseudopotential metadata must be supplied by the caller.
+- do not recalculate k-points
+- select pseudos and cutoffs deterministically
+- warn instead of inventing missing metadata
 
 ### Generate
 
@@ -259,7 +261,7 @@ Owner: `generation.py`
 
 Inputs:
 
-- `pymatgen.core.Structure`
+- `Structure`
 - `CalculationIntent`
 - `ParameterAdvice`
 - `SelectionRecord`
@@ -268,16 +270,11 @@ Output:
 
 - tuple of `GeneratedFile`
 
-Current target:
-
-- Quantum ESPRESSO SCF single-point input at `inputs/qe.in`
-
 Rules:
 
-- Generate translates completed records into target-code syntax.
-- Generate does not choose k-point grids, pseudopotentials, cutoffs, smearing, spin, SOC, or convergence defaults.
-- Generate raises if required pseudo or cutoff selections are missing.
-- Generate raises for disordered structures rather than silently resolving occupancies.
+- translate completed records into target-code syntax
+- do not choose scientific defaults
+- raise when required pseudo/cutoff selections are incomplete
 
 ### Bundle
 
@@ -290,263 +287,47 @@ Inputs:
 
 Output:
 
-- `manifest.json`
-- generated input files
-- JSON-safe manifest dictionary
-
-Initial layout:
-
-```text
-run/
-├── manifest.json
-└── inputs/
-    └── qe.in
-```
+- manifest dictionary and files on disk
 
 Rules:
 
-- Bundle output is independent of Runner/AiiDA and frontend assumptions.
-- Bundle records intent, analysis, advice, selection, generated file metadata, warnings, and provenance.
-- Bundle does not silently download or copy pseudopotentials.
-- Generated file paths must remain inside the bundle directory.
-
-## Public Python API
-
-Top-level imports:
-
-```python
-from goldilocks_core import (
-    CalculationHints,
-    CalculationIntent,
-    CoreJobRequest,
-    generate,
-    recommend,
-    run_core_job,
-    write_bundle,
-)
-```
-
-Full recommendation:
-
-```python
-result = recommend(
-    "structure.cif",
-    intent=CalculationIntent(functional="PBE"),
-    hints=CalculationHints(k_spacing=0.2),
-    pseudo_metadata=metadata_list,
-)
-```
-
-Generate:
-
-```python
-result = generate(
-    "structure.cif",
-    hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
-    pseudo_metadata=metadata_list,
-)
-```
-
-Bundle:
-
-```python
-result = write_bundle(
-    "structure.cif",
-    "run/",
-    hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
-    pseudo_metadata=metadata_list,
-)
-```
-
-Stage-by-stage:
-
-```python
-from goldilocks_core.pipeline import analyze, advise, load, select
-
-structure = load("structure.cif")
-analysis = analyze(structure)
-advice = advise(analysis)
-selection = select(structure, advice, metadata_list)
-```
-
-Job runner:
-
-```python
-result = run_core_job(
-    CoreJobRequest(
-        structure="structure.cif",
-        hints=CalculationHints(k_spacing=0.2),
-        mode="recommend",
-    )
-)
-```
-
-## Contract objects
-
-Owner: `contracts.py`
-
-Core contracts:
-
-```text
-CalculationIntent
-CalculationHints
-Provenance
-StructureAnalysisRecord
-ParameterAdvice
-SelectionRecord
-GeneratedFile
-CoreRecommendation
-CoreJobRequest
-StageRecord
-CoreJobResult
-```
-
-Supporting contracts:
-
-```text
-ModelSpec
-StructureFeatureVector
-KMeshEntry
-KPointAdvice
-KPointSelection
-SmearingAdvice
-MagnetismAdvice
-SpinOrbitAdvice
-PseudopotentialAdvice
-PseudopotentialSelection
-ConvergenceAdvice
-```
-
-Contract rules:
-
-- Boundary records live in `contracts.py`.
-- Domain-local metadata may live near the domain module. Example: `pseudo/pp_metadata.py`.
-- Do not add duplicate models for the same concept.
-- Do not add legacy import aliases.
-
-## K-mesh paths
-
-There are two k-mesh paths.
-
-### Pipeline path
-
-```text
-CalculationHints -> KPointAdvice -> selection.py -> KPointSelection
-```
-
-This path is used by `recommend()`, `generate()`, `write_bundle()`, and `run_core_job()`.
-
-### ML advisor path
-
-```text
-Structure -> CSLR features -> model prediction -> k-index -> KMeshEntry list -> KPointSelection
-```
-
-This path is used by `advise_kpoints()` and `goldilocks-kmesh`.
-
-## Pseudopotential path
-
-```text
-UPF files -> parse_upf.py -> PseudoMetadata -> registry filters -> selection.py -> PseudopotentialSelection
-```
-
-Rules:
-
-- UPF parsing promotes normalized metadata into `PseudoMetadata`.
-- Registry helpers filter metadata lists.
-- Select ranks deterministic matches from supplied metadata.
-- Missing metadata is reported as warnings, not hidden defaults.
-- Missing cutoff metadata is reported as warnings and blocks input generation.
-
-## CLI
-
-Current scripts:
-
-```text
-goldilocks-core
-goldilocks-kmesh
-```
-
-### `goldilocks-core`
-
-Thin staged job wrapper:
-
-```bash
-goldilocks-core recommend structure.cif --json
-goldilocks-core generate structure.cif --pseudo-root pseudos/ --k-grid 4 4 4 --json
-goldilocks-core bundle structure.cif --pseudo-root pseudos/ --k-grid 4 4 4 --out run/ --json
-```
-
-Flow:
-
-```text
-CLI args -> CoreJobRequest -> run_core_job() -> CoreJobResult -> JSON or summary
-```
-
-The CLI does not contain scientific decision logic.
-
-### `goldilocks-kmesh`
-
-Legacy ML-backed k-mesh path:
-
-```bash
-goldilocks-kmesh structure.cif --model model.joblib
-```
-
-Flow:
-
-```text
-CLI args -> load structure -> load model -> predict k-index -> select k-grid -> print mesh
-```
-
-## Future HTTP API
-
-Core does not depend on HTTP frameworks. A future API service should map HTTP JSON to `CoreJobRequest` and return `CoreJobResult.to_dict()`.
-
-Suggested endpoints:
-
-```http
-POST /recommend
-POST /generate
-POST /bundle
-```
-
-HTTP layers own auth, upload handling, workspace paths, and transport. They do not choose scientific values.
-
-## Tests
-
-Current test focus:
-
-- structure loading and analysis
-- staged contract serialization
-- job request/result serialization
-- advice provenance and hint override behavior
-- k-spacing to k-grid selection
-- pseudopotential parsing, registry, policy, ranking, and selection
-- generation values derived from advice/selection records
-- bundle manifest and directory layout
-- staged CLI and k-mesh CLI flow
-- ML model loading and prediction error paths
-
-Rules:
-
-- Use synthetic fixtures.
-- Use `tmp_path` for files.
-- Use fake models for inference tests.
-- Do not use private data.
+- deterministic layout
+- no Runner/AiiDA/frontend assumptions
+- reject generated paths escaping the output directory
 
 ## Extension points
 
-Next likely additions:
+Each `Pipeline` field is an extension point:
 
-- more target-code generators
-- richer convergence advice by task and system size
-- improved dimensionality classification when reliable
-- optional model-backed advice strategies
-- Runner bundle consumption in a separate package
-
-When adding these, keep the stage boundary intact:
-
-```text
-facts -> advice -> concrete selections -> syntax/output
+```python
+Pipeline(
+    analyze=...,
+    advise=...,
+    kmesh=...,
+    select=...,
+    generate=...,
+    bundle=...,
+)
 ```
+
+The default composition is:
+
+```python
+def default_pipeline() -> Pipeline:
+    return Pipeline(
+        analyze=analyze_structure,
+        advise=advise_parameters,
+        kmesh=resolve_kpoints_from_advice,
+        select=select_parameters,
+        generate=generate_inputs,
+        bundle=write_bundle_directory,
+    )
+```
+
+Use `dataclasses.replace()` to customize one stage:
+
+```python
+pipeline = replace(default_pipeline(), generate=my_generator)
+```
+
+See [pipeline](pipeline.md) and [backends](backends.md) for full backend contracts.

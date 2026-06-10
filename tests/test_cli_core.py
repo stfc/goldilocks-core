@@ -8,6 +8,7 @@ from goldilocks_core.contracts import (
     CoreJobResult,
     CoreRecommendation,
     KPointSelection,
+    Pipeline,
     Provenance,
     SelectionRecord,
     StageRecord,
@@ -65,6 +66,8 @@ def test_build_parser_parses_recommend_arguments() -> None:
             "2",
             "2",
             "1",
+            "--model",
+            "model.joblib",
             "--spin-polarized",
             "true",
             "--json",
@@ -75,16 +78,22 @@ def test_build_parser_parses_recommend_arguments() -> None:
     assert args.structure == "Si.cif"
     assert args.functional == "PBEsol"
     assert args.k_grid == [2, 2, 1]
+    assert args.model == "model.joblib"
     assert args.spin_polarized == "true"
     assert args.json is True
 
 
 def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
     """Keep CLI main as parse -> request -> run_core_job -> print."""
-    captured: dict[str, CoreJobRequest] = {}
+    captured: dict[str, CoreJobRequest | Pipeline | None] = {}
 
-    def fake_run_core_job(request: CoreJobRequest) -> CoreJobResult:
+    def fake_run_core_job(
+        request: CoreJobRequest,
+        *,
+        pipeline: Pipeline | None = None,
+    ) -> CoreJobResult:
         captured["request"] = request
+        captured["pipeline"] = pipeline
         return make_result(request)
 
     monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)
@@ -108,19 +117,65 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
     cli_core.main()
 
     request = captured["request"]
+    assert isinstance(request, CoreJobRequest)
     assert request.structure == "Si.cif"
     assert request.mode == "recommend"
     assert request.hints.k_grid == (2, 2, 1)
     assert request.hints.pseudo_type == "NC"
+    assert captured["pipeline"] is None
     output = json.loads(capsys.readouterr().out)
     assert output["recommendation"]["selection"]["k_points"]["grid"] == [2, 2, 1]
+
+
+def test_main_builds_pipeline_for_model_backend(monkeypatch, capsys) -> None:
+    """Resolve CLI --model into a custom Core pipeline, not request data."""
+    captured: dict[str, CoreJobRequest | Pipeline | None] = {}
+
+    def fake_run_core_job(
+        request: CoreJobRequest,
+        *,
+        pipeline: Pipeline | None = None,
+    ) -> CoreJobResult:
+        captured["request"] = request
+        captured["pipeline"] = pipeline
+        return make_result(request)
+
+    monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "goldilocks-core",
+            "recommend",
+            "Si.cif",
+            "--model",
+            "model.joblib",
+            "--model-name",
+            "fixture-model",
+            "--json",
+        ],
+    )
+
+    cli_core.main()
+
+    request = captured["request"]
+    pipeline = captured["pipeline"]
+    assert isinstance(request, CoreJobRequest)
+    assert isinstance(pipeline, Pipeline)
+    assert request.to_dict().get("model") is None
+    assert pipeline.kmesh is not cli_core.default_pipeline().kmesh
+    assert json.loads(capsys.readouterr().out)["request"]["structure"] == "Si.cif"
 
 
 def test_main_builds_bundle_request_with_output_dir(monkeypatch, capsys) -> None:
     """Pass bundle output path through the shared Core job request."""
     captured: dict[str, CoreJobRequest] = {}
 
-    def fake_run_core_job(request: CoreJobRequest) -> CoreJobResult:
+    def fake_run_core_job(
+        request: CoreJobRequest,
+        *,
+        pipeline: Pipeline | None = None,
+    ) -> CoreJobResult:
         captured["request"] = request
         result = make_result(request)
         return CoreJobResult(

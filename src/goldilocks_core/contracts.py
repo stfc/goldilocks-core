@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Callable, Literal, Sequence
 
 import numpy as np
 from pymatgen.core import Structure
@@ -59,13 +59,21 @@ KPointGrid = tuple[int, int, int]
 KPointShift = tuple[int, int, int]
 """Monkhorst-Pack grid shift as (s1, s2, s3) with values 0 or 1."""
 
-StageName = Literal["load", "analyze", "advise", "select", "generate", "bundle"]
+StageName = Literal[
+    "load",
+    "analyze",
+    "advise",
+    "kmesh",
+    "select",
+    "generate",
+    "bundle",
+]
 """Name of a stage in the fixed Core pipeline graph."""
 
 JobMode = Literal["recommend", "generate", "bundle"]
 """How far the fixed Core pipeline runs.
 
-- ``recommend``: Load → Analyze → Advise → Select.
+- ``recommend``: Load → Analyze → Advise → Kmesh → Select.
 - ``generate``: … → Generate.
 - ``bundle``: … → Bundle.
 """
@@ -513,9 +521,10 @@ class ParameterAdvice:
 
 @dataclass(frozen=True, slots=True)
 class KPointSelection:
-    """Concrete k-point grid selected from advice.
+    """Concrete k-point grid selected from advice or a model.
 
-    Produced by the Select stage from ``KPointAdvice``.
+    Produced by the Kmesh stage from ``KPointAdvice`` and optional
+    operator hints.
 
     Attributes:
         grid: uniform k-point grid (nk1, nk2, nk3).
@@ -572,7 +581,7 @@ class PseudopotentialSelection:
 class SelectionRecord:
     """Complete Select-stage output.
 
-    Contains concrete grids, pseudopotential selections, and any
+    Contains the Kmesh-stage grid, pseudopotential selections, and any
     accumulated warnings from the selection process.
 
     Attributes:
@@ -730,6 +739,59 @@ class CoreJobResult:
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
+
+
+AnalyzeStage = Callable[[Structure], StructureAnalysisRecord]
+"""Analyze-stage backend signature."""
+
+AdviseStage = Callable[
+    [StructureAnalysisRecord, CalculationIntent, CalculationHints],
+    ParameterAdvice,
+]
+"""Advise-stage backend signature."""
+
+KMeshAdvisor = Callable[[Structure, CalculationHints, KPointAdvice], KPointSelection]
+"""Kmesh-stage backend signature."""
+
+SelectStage = Callable[
+    [Structure, ParameterAdvice, KPointSelection, Sequence[PseudoMetadata]],
+    SelectionRecord,
+]
+"""Select-stage backend signature."""
+
+GenerateStage = Callable[
+    [Structure, CalculationIntent, ParameterAdvice, SelectionRecord],
+    tuple[GeneratedFile, ...],
+]
+"""Generate-stage backend signature."""
+
+BundleStage = Callable[[CoreRecommendation, str | Path], JsonDict]
+"""Bundle-stage backend signature."""
+
+
+@dataclass(slots=True)
+class Pipeline:
+    """Composable stage backends for the Core pipeline.
+
+    Each field is a callable with a typed signature. Replace any field
+    to customize that stage. The request remains data-only; this record
+    describes how the request is computed.
+
+    Attributes:
+        analyze: Analyze-stage backend.
+        advise: Advise-stage backend.
+        kmesh: Kmesh-stage backend that resolves concrete k-points.
+        select: Select-stage backend that resolves concrete selections.
+        generate: Generate-stage backend that writes target-code text.
+        bundle: Bundle-stage backend that writes portable outputs.
+    """
+
+    analyze: AnalyzeStage
+    advise: AdviseStage
+    kmesh: KMeshAdvisor
+    select: SelectStage
+    generate: GenerateStage
+    bundle: BundleStage
 
 
 def to_jsonable(value: Any) -> Any:

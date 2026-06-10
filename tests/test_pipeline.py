@@ -6,7 +6,7 @@ from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 
 def test_recommend_runs_staged_core_pipeline() -> None:
-    """Run Load → Analyze → Advise → Select through the public API."""
+    """Run Load → Analyze → Advise → Kmesh → Select through the public API."""
     structure = Structure(
         lattice=Lattice.cubic(4.0),
         species=["Si"],

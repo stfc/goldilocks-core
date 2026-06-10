@@ -11,22 +11,41 @@ from goldilocks_core.contracts import (
     CoreJobRequest,
     CoreJobResult,
     CoreRecommendation,
+    Pipeline,
     StageRecord,
 )
 from goldilocks_core.generation import generate_inputs
 from goldilocks_core.io.structures import load_structure
+from goldilocks_core.kmesh import resolve_kpoints_from_advice
 from goldilocks_core.selection import select_parameters
 
 
-def run_core_job(request: CoreJobRequest) -> CoreJobResult:
-    """Run a Core job request through the fixed staged pipeline."""
+def default_pipeline() -> Pipeline:
+    """Return the built-in Core stage backend composition."""
+    return Pipeline(
+        analyze=analyze_structure,
+        advise=advise_parameters,
+        kmesh=resolve_kpoints_from_advice,
+        select=select_parameters,
+        generate=generate_inputs,
+        bundle=write_bundle_directory,
+    )
+
+
+def run_core_job(
+    request: CoreJobRequest,
+    *,
+    pipeline: Pipeline | None = None,
+) -> CoreJobResult:
+    """Run a Core job request through the configured staged pipeline."""
     _validate_request(request)
+    active_pipeline = pipeline or default_pipeline()
 
     stages: list[StageRecord] = []
     structure = load_structure(request.structure)
     stages.append(StageRecord(name="load"))
 
-    analysis = analyze_structure(structure)
+    analysis = active_pipeline.analyze(structure)
     stages.append(
         StageRecord(
             name="analyze",
@@ -34,13 +53,17 @@ def run_core_job(request: CoreJobRequest) -> CoreJobResult:
         )
     )
 
-    advice = advise_parameters(analysis, intent=request.intent, hints=request.hints)
+    advice = active_pipeline.advise(analysis, request.intent, request.hints)
     stages.append(StageRecord(name="advise"))
 
-    selection = select_parameters(
+    k_points = active_pipeline.kmesh(structure, request.hints, advice.k_points)
+    stages.append(StageRecord(name="kmesh", warnings=k_points.provenance.warnings))
+
+    selection = active_pipeline.select(
         structure,
         advice,
-        metadata_list=list(request.pseudo_metadata),
+        k_points,
+        tuple(request.pseudo_metadata),
     )
     stages.append(StageRecord(name="select", warnings=selection.warnings))
 
@@ -52,6 +75,7 @@ def run_core_job(request: CoreJobRequest) -> CoreJobResult:
         warnings=(
             *analysis.disorder_warnings,
             *analysis.analysis_warnings,
+            *k_points.provenance.warnings,
             *selection.warnings,
         ),
     )
@@ -60,7 +84,7 @@ def run_core_job(request: CoreJobRequest) -> CoreJobResult:
     bundle_path = None
 
     if request.mode in {"generate", "bundle"}:
-        generated_files = generate_inputs(
+        generated_files = active_pipeline.generate(
             structure,
             request.intent,
             advice,
@@ -72,7 +96,7 @@ def run_core_job(request: CoreJobRequest) -> CoreJobResult:
     if request.mode == "bundle":
         if request.output_dir is None:
             raise ValueError("output_dir is required for bundle mode")
-        manifest = write_bundle_directory(recommendation, request.output_dir)
+        manifest = active_pipeline.bundle(recommendation, request.output_dir)
         bundle_path = request.output_dir
         stages.append(StageRecord(name="bundle"))
 

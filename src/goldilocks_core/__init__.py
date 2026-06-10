@@ -8,8 +8,9 @@ from goldilocks_core.contracts import (
     CoreJobRequest,
     CoreJobResult,
     CoreRecommendation,
+    Pipeline,
 )
-from goldilocks_core.jobs import run_core_job
+from goldilocks_core.jobs import default_pipeline, run_core_job
 from goldilocks_core.pipeline import (
     bundle_recommendation,
     generate,
@@ -23,7 +24,9 @@ __all__ = [
     "CoreJobRequest",
     "CoreJobResult",
     "CoreRecommendation",
+    "Pipeline",
     "bundle_recommendation",
+    "default_pipeline",
     "generate",
     "recommend",
     "run_core_job",

@@ -1,6 +1,8 @@
 # Serialization
 
-All staged pipeline records support JSON-safe serialization via `to_dict()`. This is the contract for CLI `--json` output, future HTTP API responses, and manifest content.
+All staged pipeline data records support JSON-safe serialization via `to_dict()`. This is the contract for CLI `--json` output, future HTTP API responses, and manifest content.
+
+`Pipeline` is intentionally not serialized. It contains Python callables that configure how stages run. `CoreJobRequest` and `CoreJobResult` remain the serializable request/response boundary.
 
 ## Type conversions
 
@@ -94,4 +96,5 @@ For a silicon structure with default settings:
 
 - `pymatgen Structure` serialization produces a large nested dict. Callers that don't need the full structure may want to strip it.
 - NumPy arrays are converted to nested lists. Very large feature vectors may produce large JSON output.
-- Circular references are not handled. The pipeline graph is a DAG, so this should not occur in practice.
+- Circular references are not handled. Core records are acyclic, so this should not occur in practice.
+- `Pipeline` callables are not JSON values. A CLI or HTTP layer that exposes backend names must resolve those names to callables outside Core.

@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import replace
 from pathlib import Path
 
+from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
     CoreJobRequest,
+    ModelSpec,
+    Pipeline,
 )
-from goldilocks_core.jobs import run_core_job
+from goldilocks_core.jobs import default_pipeline, run_core_job
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 
@@ -42,7 +46,7 @@ def main() -> None:
     args = parser.parse_args()
 
     request = _request_from_args(args)
-    result = run_core_job(request)
+    result = run_core_job(request, pipeline=_pipeline_from_args(args))
 
     if args.json:
         print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
@@ -76,6 +80,20 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--pseudo-type")
     parser.add_argument("--relativistic-mode")
     parser.add_argument("--pseudo-root", help="Directory containing UPF files.")
+    parser.add_argument(
+        "--model",
+        help="Local ML model path for Kmesh-stage k-point selection.",
+    )
+    parser.add_argument(
+        "--model-name",
+        default="cli-kmesh-model",
+        help="Model name recorded in k-point provenance when --model is used.",
+    )
+    parser.add_argument(
+        "--model-version",
+        default="unknown",
+        help="Model version recorded in metadata when --model is used.",
+    )
     parser.add_argument("--k-spacing", type=float)
     parser.add_argument(
         "--k-grid",
@@ -139,6 +157,23 @@ def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
         pseudo_metadata=pseudo_metadata,
         output_dir=getattr(args, "out", None),
     )
+
+
+def _pipeline_from_args(args: argparse.Namespace) -> Pipeline | None:
+    """Build a custom pipeline from CLI backend options."""
+    if args.model is None:
+        return None
+
+    spec = ModelSpec(
+        name=args.model_name,
+        version=args.model_version,
+        model_type="random_forest",
+        target="k_index",
+        feature_set="cslr",
+        source="local",
+        location=args.model,
+    )
+    return replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
 
 
 def _parse_optional_bool(value: str | None) -> bool | None:

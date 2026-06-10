@@ -27,9 +27,9 @@ Warnings flow through the pipeline in two parallel paths:
 
 1. **Provenance-level warnings**: each `Provenance` record carries its own `warnings` tuple. These are specific to that one decision — e.g. "SOC is not enabled automatically because it changes cost and setup" on `SpinOrbitAdvice.provenance`.
 
-2. **Aggregate warnings**: `CoreRecommendation.warnings` and `CoreJobResult.warnings` collect warnings from analysis and selection stages. These are the top-level warnings a caller should surface.
+2. **Aggregate warnings**: `CoreRecommendation.warnings` and `CoreJobResult.warnings` collect warnings from analysis, Kmesh, and selection stages. These are the top-level warnings a caller should surface.
 
-Currently, advice-level provenance warnings are preserved in nested advice records but are **not** all aggregated into the top-level `warnings` tuples. A JSON caller should inspect `result.advice.spin_orbit.provenance.warnings` directly, not rely solely on `result.warnings`.
+Advice-level provenance warnings are preserved in nested advice records but are **not** all aggregated into the top-level `warnings` tuples. A JSON caller should inspect nested advice provenance directly when a specific decision matters.
 
 ## Interpreting provenance
 
@@ -49,9 +49,12 @@ from goldilocks_core import recommend
 
 result = recommend("structure.cif")
 
-# Why was k-spacing chosen?
+# Why was k-spacing advised?
 print(result.advice.k_points.provenance.source)   # "default"
 print(result.advice.k_points.provenance.reason)   # "Use the default VASP-style k-point spacing."
+
+# How was the concrete grid selected?
+print(result.selection.k_points.provenance.source)  # "default"
 
 # Why is SOC considered but not enabled?
 print(result.advice.spin_orbit.provenance.source)  # "analysis"

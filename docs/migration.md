@@ -20,7 +20,7 @@ The staged Core refactor removes several pre-existing import paths and changes s
 | Old name | New name | Notes |
 | --- | --- | --- |
 | `KPointAdviceRecord` | `KPointAdvice` | Advice-stage record, not a selection |
-| `KPointsAdvice` | `KPointSelection` | Concrete selection from the Select stage |
+| `KPointsAdvice` | `KPointSelection` | Concrete k-point selection from the Kmesh stage |
 
 ## Moved functions
 
@@ -42,9 +42,39 @@ result.selection.k_points.grid
 result.analysis.contains_heavy_elements
 ```
 
-## Changed ML advisor return type
+## Changed Select signature
 
-`advisors/kmesh_advisor.advise_kpoints()` now returns `KPointSelection` instead of the old standalone `KPointsAdvice`. The fields are the same (`grid`, `shift`, `mesh_type`, `provenance`), just under the new type.
+`select_parameters()` no longer resolves k-points internally. Call the Kmesh backend first and pass the resulting `KPointSelection` into Select:
+
+```python
+from goldilocks_core import CalculationHints, default_pipeline
+from goldilocks_core.pipeline import analyze, advise, load, select
+
+hints = CalculationHints()
+structure = load("structure.cif")
+analysis = analyze(structure)
+advice = advise(analysis, hints=hints)
+k_points = default_pipeline().kmesh(structure, hints, advice.k_points)
+selection = select(structure, advice, k_points)
+```
+
+## Changed ML advisor integration
+
+`advisors/kmesh_advisor.advise_kpoints()` returns `KPointSelection` and remains useful for standalone k-point prediction.
+
+For staged pipeline integration, use `ml_kmesh_advisor(spec)` as a Kmesh backend:
+
+```python
+from dataclasses import replace
+
+from goldilocks_core import default_pipeline, recommend
+from goldilocks_core.advisors import ml_kmesh_advisor
+
+pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+result = recommend("structure.cif", pipeline=pipeline)
+```
+
+This preserves `provenance.source="model"` inside the staged pipeline.
 
 ## Changed heavy-element heuristic
 

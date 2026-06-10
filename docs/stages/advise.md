@@ -2,7 +2,7 @@
 
 Owner: `advice.py`
 
-The Advise stage chooses scientific and numerical intent for each recommendation category, recording provenance for every choice. It is the only stage that makes scientific decisions.
+The Advise stage chooses scientific and numerical intent for each recommendation category, recording provenance for every choice. It makes intent-level decisions, not concrete k-point grid resolution.
 
 ## Input
 
@@ -20,9 +20,13 @@ Each advice category follows a precedence: **hint > analysis > default**.
 
 ### k-points
 
+Advise produces `KPointAdvice`, not `KPointSelection`. The Kmesh stage consumes this advice and resolves the concrete grid.
+
 1. If `hints.k_grid` is set → `KPointAdvice(explicit_grid=hint, provenance.source="user_hint")`. If `hints.k_spacing` is also set, emit a warning that explicit grid wins.
 2. If `hints.k_spacing` is set → `KPointAdvice(spacing=hint, provenance.source="user_hint")`.
 3. Otherwise → `KPointAdvice(spacing=0.2, provenance.source="default")`.
+
+The default Kmesh backend converts the advice to a `KPointSelection`. A model-backed Kmesh backend may use the model instead when no k-point hint is set.
 
 ### Smearing
 
@@ -82,3 +86,16 @@ SOC is never auto-enabled. See [conventions](conventions.md) for the rationale.
 - `electron_maxstep < 1`
 
 This prevents invalid operator inputs from becoming provenance-backed advice.
+
+## Backend contract
+
+A custom Advise backend must satisfy:
+
+```python
+AdviseStage = Callable[
+    [StructureAnalysisRecord, CalculationIntent, CalculationHints],
+    ParameterAdvice,
+]
+```
+
+Advice should remain intent-level. Concrete k-point grids belong to Kmesh. Pseudopotential filenames and cutoffs belong to Select. Target-code syntax belongs to Generate.

@@ -11,7 +11,7 @@ Implemented:
 - structure loading from `pymatgen.Structure` or structure files readable by pymatgen
 - structure analysis facts: formula, elements, symmetry, crystal system, heavy elements, magnetic candidates, electronic-character heuristic, and disorder warnings
 - provenance-backed advice for k-points, smearing, magnetism, SOC, pseudopotential intent, and convergence
-- selection of concrete k-point grids
+- Kmesh-stage resolution of concrete k-point grids
 - deterministic pseudopotential ranking and selection from provided metadata
 - cutoff selection from pseudopotential metadata
 - Quantum ESPRESSO SCF input generation
@@ -32,25 +32,23 @@ Not in Core:
 
 ```mermaid
 flowchart LR
-    structure["Structure input"] --> load["Load"]
-    load --> analyze["Analyze"]
+    load["Load"] --> analyze["Analyze"]
     analyze --> advise["Advise"]
-    advise --> select["Select"]
+    advise --> kmesh["Kmesh"]
+    kmesh --> select["Select"]
     select --> generate["Generate"]
     generate --> bundle["Bundle"]
-
-    intent["CalculationIntent"] -.-> advise
-    hints["CalculationHints"] -.-> advise
-    metadata["PseudoMetadata list"] -.-> select
-    output["Output directory"] -.-> bundle
 ```
+
+Inputs are supplied through `CoreJobRequest`: structure input, intent, hints, pseudopotential metadata, mode, and optional output directory. Stage backends are supplied separately through `Pipeline`.
 
 Stage boundaries:
 
 - **Load**: parse structure input. No decisions.
 - **Analyze**: report structure facts. No recommendations.
 - **Advise**: choose scientific and numerical intent. Record provenance.
-- **Select**: resolve concrete grids, pseudopotentials, cutoffs, and warnings.
+- **Kmesh**: resolve concrete k-point grids from advice, hints, or model backends.
+- **Select**: resolve pseudopotentials, cutoffs, and warnings around the Kmesh result.
 - **Generate**: translate completed advice/selection records into target-code syntax.
 - **Bundle**: write generated files and a portable manifest directory.
 
@@ -161,9 +159,9 @@ print(result.to_dict())
 `mode` controls how far the fixed graph runs:
 
 ```text
-recommend -> Load → Analyze → Advise → Select
-generate  -> Load → Analyze → Advise → Select → Generate
-bundle    -> Load → Analyze → Advise → Select → Generate → Bundle
+recommend -> Load → Analyze → Advise → Kmesh → Select
+generate  -> Load → Analyze → Advise → Kmesh → Select → Generate
+bundle    -> Load → Analyze → Advise → Kmesh → Select → Generate → Bundle
 ```
 
 ### Stage-by-stage use
@@ -171,20 +169,20 @@ bundle    -> Load → Analyze → Advise → Select → Generate → Bundle
 Use this when notebooks, scripts, or agents need to inspect or override intermediate records.
 
 ```python
-from goldilocks_core import CalculationHints
+from goldilocks_core import CalculationHints, default_pipeline
 from goldilocks_core.pipeline import analyze, advise, load, select
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
+hints = CalculationHints(k_grid=(4, 4, 4))
 structure = load("path/to/structure.cif")
 analysis = analyze(structure)
+advice = advise(analysis, hints=hints)
 
-advice = advise(
-    analysis,
-    hints=CalculationHints(k_grid=(4, 4, 4)),
-)
+pipeline = default_pipeline()
+k_points = pipeline.kmesh(structure, hints, advice.k_points)
 
 pseudo_metadata = load_pseudo_metadata("path/to/pseudopotentials")
-selection = select(structure, advice, pseudo_metadata)
+selection = select(structure, advice, k_points, pseudo_metadata)
 
 print(analysis.elements)
 print(advice.k_points.provenance)
@@ -197,20 +195,23 @@ Stage outputs:
 load(...)        -> pymatgen.core.Structure
 analyze(...)     -> StructureAnalysisRecord
 advise(...)      -> ParameterAdvice
+pipeline.kmesh(...) -> KPointSelection
 select(...)      -> SelectionRecord
 recommend(...)   -> CoreRecommendation
 generate(...)    -> CoreRecommendation with generated_files
 write_bundle(...) -> CoreJobResult with bundle_path and manifest
 ```
 
-### K-mesh ML advisor
+### K-mesh ML backend
+
+Use a custom `Pipeline` when a model should provide the Kmesh-stage grid:
 
 ```python
-from goldilocks_core.advisors import advise_kpoints
-from goldilocks_core.contracts import ModelSpec
-from goldilocks_core.io.structures import load_structure
+from dataclasses import replace
 
-structure = load_structure("path/to/structure.cif")
+from goldilocks_core import default_pipeline, recommend
+from goldilocks_core.advisors import ml_kmesh_advisor
+from goldilocks_core.contracts import ModelSpec
 
 spec = ModelSpec(
     name="local-kmesh-model",
@@ -222,10 +223,14 @@ spec = ModelSpec(
     location="path/to/model.joblib",
 )
 
-selection = advise_kpoints(structure, spec)
-print(selection.grid)
-print(selection.provenance)
+pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+result = recommend("path/to/structure.cif", pipeline=pipeline)
+
+print(result.selection.k_points.grid)
+print(result.selection.k_points.provenance.source)  # "model"
 ```
+
+`CoreJobRequest` stays data-only. The model backend lives in `Pipeline`, not on the request.
 
 ### Pseudopotentials
 
@@ -273,6 +278,7 @@ Nested records are dataclasses with `to_dict()` methods. Tuples, paths, and stru
 
 ```bash
 uv run goldilocks-core recommend path/to/structure.cif --json
+uv run goldilocks-core recommend path/to/structure.cif --model path/to/model.joblib --json
 uv run goldilocks-core generate path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --json
 uv run goldilocks-core bundle path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
 ```

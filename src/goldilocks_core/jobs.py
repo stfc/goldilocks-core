@@ -21,7 +21,12 @@ from goldilocks_core.selection import select_parameters
 
 
 def default_pipeline() -> Pipeline:
-    """Return the built-in Core stage backend composition."""
+    """Return the built-in Core stage backend composition.
+
+    Returns:
+        A ``Pipeline`` wired to the package's default Analyze, Advise, Kmesh,
+        Select, Generate, and Bundle implementations.
+    """
     return Pipeline(
         analyze=analyze_structure,
         advise=advise_parameters,
@@ -37,7 +42,23 @@ def run_core_job(
     *,
     pipeline: Pipeline | None = None,
 ) -> CoreJobResult:
-    """Run a Core job request through the configured staged pipeline."""
+    """Run a Core job request through the configured staged pipeline.
+
+    Args:
+        request: Serializable job data: structure input, intent, hints,
+            pseudopotential metadata, mode, and optional output directory.
+        pipeline: Optional executable stage composition. When omitted,
+            ``default_pipeline()`` is used.
+
+    Returns:
+        A ``CoreJobResult`` containing the request, recommendation, stage
+        records, generated files when requested, bundle path/manifest for bundle
+        mode, and aggregated warnings.
+
+    Raises:
+        ValueError: If the job mode is unsupported, bundle mode lacks
+            ``output_dir``, or a downstream stage rejects its inputs.
+    """
     _validate_request(request)
     active_pipeline = pipeline or default_pipeline()
 

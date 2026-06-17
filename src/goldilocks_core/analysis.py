@@ -10,7 +10,20 @@ from goldilocks_core.contracts import StructureAnalysisRecord
 
 
 def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
-    """Return deterministic structure facts used by later pipeline stages."""
+    """Return deterministic structure facts used by later pipeline stages.
+
+    Args:
+        structure: Ordered or disordered pymatgen structure to inspect.
+
+    Returns:
+        A ``StructureAnalysisRecord`` with composition, element classes,
+        disorder warnings, symmetry facts when available, and conservative
+        electronic-character hints.
+
+    Assumes:
+        The input structure has already been loaded and normalized by the Load
+        stage. This function reports facts only; it does not choose parameters.
+    """
     elements = tuple(
         sorted(element.symbol for element in structure.composition.elements)
     )

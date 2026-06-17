@@ -12,7 +12,17 @@ MANIFEST_VERSION = 1
 
 
 def build_bundle_manifest(recommendation: CoreRecommendation) -> JsonDict:
-    """Return a JSON-safe manifest for a Core output bundle."""
+    """Return a JSON-safe manifest for a Core output bundle.
+
+    Args:
+        recommendation: Completed recommendation, usually including generated
+            files from Generate mode.
+
+    Returns:
+        Manifest dictionary with schema version, serialized intent, analysis,
+        advice, selection, generated-file metadata, and warnings. Generated file
+        content is not embedded.
+    """
     files = [
         {
             "path": generated_file.path,
@@ -37,7 +47,18 @@ def write_bundle_directory(
     recommendation: CoreRecommendation,
     output_dir: str | Path,
 ) -> JsonDict:
-    """Write generated files and manifest to a deterministic bundle directory."""
+    """Write generated files and manifest to a deterministic bundle directory.
+
+    Args:
+        recommendation: Completed recommendation with generated files to write.
+        output_dir: Bundle root directory. It is created if needed.
+
+    Returns:
+        The same manifest dictionary written to ``manifest.json``.
+
+    Raises:
+        ValueError: If a generated file path would escape ``output_dir``.
+    """
     target_dir = Path(output_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
 

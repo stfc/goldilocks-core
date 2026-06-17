@@ -26,12 +26,26 @@ from goldilocks_core.selection import select_parameters
 
 
 def load(structure: StructureInput) -> Structure:
-    """Load-stage wrapper for structure inputs."""
+    """Load a structure input for stage-by-stage use.
+
+    Args:
+        structure: A pymatgen ``Structure`` or path readable by pymatgen.
+
+    Returns:
+        Loaded ``Structure``.
+    """
     return load_structure(structure)
 
 
 def analyze(structure: Structure) -> StructureAnalysisRecord:
-    """Analyze-stage wrapper for structure facts."""
+    """Analyze a loaded structure for stage-by-stage use.
+
+    Args:
+        structure: Loaded pymatgen structure.
+
+    Returns:
+        Structure facts used by later stages.
+    """
     return analyze_structure(structure)
 
 
@@ -40,7 +54,16 @@ def advise(
     intent: CalculationIntent | None = None,
     hints: CalculationHints | None = None,
 ) -> ParameterAdvice:
-    """Advise-stage wrapper for provenance-backed parameter advice."""
+    """Build provenance-backed parameter advice for stage-by-stage use.
+
+    Args:
+        analysis: Structure facts from ``analyze``.
+        intent: Optional calculation intent. Defaults to ``CalculationIntent()``.
+        hints: Optional operator hints. Defaults to ``CalculationHints()``.
+
+    Returns:
+        Complete parameter advice record.
+    """
     return advise_parameters(analysis, intent=intent, hints=hints)
 
 
@@ -50,7 +73,17 @@ def select(
     k_points: KPointSelection,
     metadata_list: list[PseudoMetadata] | None = None,
 ) -> SelectionRecord:
-    """Select-stage wrapper for concrete calculation choices."""
+    """Resolve concrete calculation choices for stage-by-stage use.
+
+    Args:
+        structure: Loaded structure.
+        advice: Parameter advice.
+        k_points: Concrete k-point selection from the Kmesh stage.
+        metadata_list: Available pseudopotential metadata.
+
+    Returns:
+        Concrete selection record.
+    """
     return select_parameters(
         structure,
         advice,
@@ -67,7 +100,18 @@ def recommend(
     pseudo_metadata: list[PseudoMetadata] | None = None,
     pipeline: Pipeline | None = None,
 ) -> CoreRecommendation:
-    """Run Load → Analyze → Advise → Kmesh → Select."""
+    """Run Load → Analyze → Advise → Kmesh → Select.
+
+    Args:
+        structure: Structure object or structure file path.
+        intent: Optional calculation intent.
+        hints: Optional operator hints.
+        pseudo_metadata: Available pseudopotential metadata.
+        pipeline: Optional stage backend composition.
+
+    Returns:
+        Recommendation containing analysis, advice, selection, and warnings.
+    """
     from goldilocks_core.jobs import run_core_job
 
     result = run_core_job(
@@ -91,7 +135,22 @@ def generate(
     pseudo_metadata: list[PseudoMetadata] | None = None,
     pipeline: Pipeline | None = None,
 ) -> CoreRecommendation:
-    """Run Load → Analyze → Advise → Kmesh → Select → Generate."""
+    """Run Load → Analyze → Advise → Kmesh → Select → Generate.
+
+    Args:
+        structure: Structure object or structure file path.
+        intent: Optional calculation intent.
+        hints: Optional operator hints.
+        pseudo_metadata: Available pseudopotential metadata.
+        pipeline: Optional stage backend composition.
+
+    Returns:
+        Recommendation with generated files attached.
+
+    Raises:
+        ValueError: If generation is requested with unsupported intent or
+            incomplete selections.
+    """
     from goldilocks_core.jobs import run_core_job
 
     result = run_core_job(
@@ -116,7 +175,23 @@ def write_bundle(
     pseudo_metadata: list[PseudoMetadata] | None = None,
     pipeline: Pipeline | None = None,
 ) -> CoreJobResult:
-    """Run the full Core pipeline and write a portable bundle directory."""
+    """Run the full Core pipeline and write a portable bundle directory.
+
+    Args:
+        structure: Structure object or structure file path.
+        output_dir: Bundle output directory.
+        intent: Optional calculation intent.
+        hints: Optional operator hints.
+        pseudo_metadata: Available pseudopotential metadata.
+        pipeline: Optional stage backend composition.
+
+    Returns:
+        Job result with generated files, bundle path, manifest, stages, and
+        warnings.
+
+    Raises:
+        ValueError: If generation or bundle writing rejects its inputs.
+    """
     from goldilocks_core.jobs import run_core_job
 
     return run_core_job(
@@ -133,5 +208,12 @@ def write_bundle(
 
 
 def bundle_recommendation(recommendation: CoreRecommendation) -> JsonDict:
-    """Return a JSON-safe recommendation manifest dictionary."""
+    """Return a JSON-safe recommendation dictionary.
+
+    Args:
+        recommendation: Recommendation to serialize.
+
+    Returns:
+        ``recommendation.to_dict()``.
+    """
     return recommendation.to_dict()

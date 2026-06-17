@@ -19,7 +19,21 @@ def generate_inputs(
     advice: ParameterAdvice,
     selection: SelectionRecord,
 ) -> tuple[GeneratedFile, ...]:
-    """Generate target-code input files from completed advice and selections."""
+    """Generate target-code input files from completed advice and selections.
+
+    Args:
+        structure: Loaded structure for the calculation.
+        intent: Target code and task to generate.
+        advice: Completed parameter advice.
+        selection: Concrete k-points, pseudopotentials, and cutoffs.
+
+    Returns:
+        Generated input files for the requested code/task.
+
+    Raises:
+        ValueError: If the requested code or task is not implemented, or if the
+            target writer cannot generate from incomplete selections.
+    """
     if intent.code != "quantum_espresso":
         raise ValueError("Only Quantum ESPRESSO generation is implemented")
 
@@ -46,7 +60,24 @@ def generate_quantum_espresso_scf_input(
     advice: ParameterAdvice,
     selection: SelectionRecord,
 ) -> str:
-    """Generate a Quantum ESPRESSO SCF input from staged Core records."""
+    """Generate a Quantum ESPRESSO SCF input from staged Core records.
+
+    Args:
+        structure: Ordered structure to write in QE cell/position cards.
+        intent: Calculation intent. The caller is responsible for selecting the
+            QE SCF writer only for compatible intents.
+        advice: Smearing, magnetism, SOC, and convergence advice.
+        selection: K-point grid plus complete pseudopotential and cutoff
+            selections.
+
+    Returns:
+        Complete QE input text ending with a trailing newline.
+
+    Raises:
+        ValueError: If the structure is disordered, pseudopotential selections
+            are missing, cutoff metadata is incomplete, or smearing is enabled
+            without a width.
+    """
     if not structure.is_ordered:
         raise ValueError(
             "Cannot generate Quantum ESPRESSO input for disordered structures"

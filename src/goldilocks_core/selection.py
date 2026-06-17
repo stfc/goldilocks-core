@@ -23,7 +23,19 @@ def select_parameters(
     k_points: KPointSelection,
     metadata_list: Sequence[PseudoMetadata] | None = None,
 ) -> SelectionRecord:
-    """Resolve advice into concrete pseudopotential selections."""
+    """Resolve advice into concrete pseudopotential selections.
+
+    Args:
+        structure: Structure whose elements require pseudopotentials.
+        advice: Parameter advice produced by the Advise stage.
+        k_points: Concrete k-point selection produced by the Kmesh stage.
+        metadata_list: Available pseudopotential metadata. Missing or empty
+            metadata is allowed and produces fallback selections with warnings.
+
+    Returns:
+        A ``SelectionRecord`` containing the supplied k-point selection,
+        one pseudopotential selection per element, and selection warnings.
+    """
     pseudo_selections = _select_pseudopotentials(
         structure,
         advice,

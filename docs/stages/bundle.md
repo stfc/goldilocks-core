@@ -28,41 +28,9 @@ Pseudopotential files are not copied. If the caller needs pseudo files, they mus
 
 ## Manifest schema
 
-```json
-{
-  "manifest_version": 1,
-  "intent": { ... },
-  "analysis": { ... },
-  "advice": { ... },
-  "selection": { ... },
-  "generated_files": [
-    {
-      "path": "inputs/qe.in",
-      "role": "input",
-      "bytes": 456
-    }
-  ],
-  "warnings": ["..."]
-}
-```
-
-### Fields
-
-| Field | Type | Description |
-| --- | --- | --- |
-| `manifest_version` | int | Schema version. Currently always `1`. |
-| `intent` | dict | Serialized `CalculationIntent`. |
-| `analysis` | dict | Serialized `StructureAnalysisRecord`. |
-| `advice` | dict | Serialized `ParameterAdvice`. |
-| `selection` | dict | Serialized `SelectionRecord`. |
-| `generated_files` | list | File metadata: `path`, `role`, `bytes`. Content is not included in the manifest. |
-| `warnings` | list[str] | Aggregated warnings from the recommendation. |
+See [bundle manifest](../manifest.md) for the versioned schema and field reference.
 
 The manifest is written with `json.dumps(indent=2, sort_keys=True)` for deterministic output.
-
-## Versioning
-
-`manifest_version` is an integer. Increment it when the schema changes incompatibly. Version 1 is the initial schema.
 
 ## Path traversal protection
 

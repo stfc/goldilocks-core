@@ -28,7 +28,22 @@ def advise_parameters(
     intent: CalculationIntent | None = None,
     hints: CalculationHints | None = None,
 ) -> ParameterAdvice:
-    """Return complete parameter advice with provenance for each choice."""
+    """Return complete parameter advice with provenance for each choice.
+
+    Args:
+        analysis: Structure facts produced by the Analyze stage.
+        intent: Calculation intent such as target code, task, functional, and
+            pseudopotential mode. Defaults to ``CalculationIntent()``.
+        hints: Optional operator overrides for k-points, smearing, magnetism,
+            SOC, pseudopotentials, and convergence.
+
+    Returns:
+        A ``ParameterAdvice`` record containing k-point, smearing, magnetism,
+        SOC, pseudopotential, and convergence advice.
+
+    Raises:
+        ValueError: If numeric hints are invalid.
+    """
     intent = intent or CalculationIntent()
     hints = hints or CalculationHints()
     _validate_hints(hints)

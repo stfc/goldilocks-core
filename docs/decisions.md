@@ -10,7 +10,7 @@ All new dataclasses use `slots=True`. Pre-existing dataclasses (`PseudoMetadata`
 
 ## No compatibility shims
 
-When `goldilocks_core.shared` was removed, no backward-compatible aliases were added. Same for top-level shortcuts on `CoreRecommendation`.
+When `goldilocks_core.shared` was removed, no backward-compatible aliases were added. The same applies to removed names from the ergonomics refactor (`CoreRecommendation`, `CoreJobResult`, `default_pipeline`, `bundle_recommendation`, the stage standalones, and the `goldilocks_core.pipeline` module). There are no consumers, so removed names are removed outright.
 
 **Why:** compatibility shims accumulate into permanent maintenance burden. They create multiple import paths for the same concept, which confuses new users and makes refactoring harder. One canonical API is cheaper in the long run.
 
@@ -28,7 +28,7 @@ Stage backends are callables composed into a `Pipeline` dataclass. There are no 
 
 ## Backend selection is not request data
 
-`CoreJobRequest` does not contain fields such as `model`, `generator`, or `backend`. Model-backed k-point selection is configured by passing `pipeline=replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))`.
+`CoreJobRequest` does not contain fields such as `model`, `generator`, or `backend`. Model-backed k-point selection is configured by passing `pipeline=Pipeline(kmesh=ml_kmesh_advisor(spec))`.
 
 **Why:** `CoreJobRequest` is the JSON/HTTP-safe description of what to compute. A backend callable is executable Python behavior describing how to compute it. Mixing those concerns would make requests non-serializable and force Core to own backend-name resolution.
 
@@ -73,3 +73,21 @@ The bundle directory contains generated input files and a manifest, but not pseu
 Unlike the contract dataclasses, `PseudoMetadata` is mutable (`slots=True` but not `frozen=True`).
 
 **Why:** test code frequently mutates `PseudoMetadata` fields (e.g. changing `relativistic` from `"scalar"` to `"full"`) when constructing synthetic fixtures. Making it frozen would require every test to use `dataclasses.replace()` instead of direct mutation, adding boilerplate for no safety benefit in test code.
+
+## One `CoreResult` accumulator with `BundleRecord` as the terminal stage record
+
+There is a single result type, `CoreResult`, returned by `recommend`, `generate`, `write_bundle`, and `run_core_job`. There is no separate `CoreRecommendation`/`CoreJobResult` split. Bundle's output is modeled as a stage record (`BundleRecord`) on the accumulator rather than as an envelope wrapper.
+
+**Why:** every stage in the fixed graph produces a record that feeds the next, and the records accumulate into one object — except Bundle, which is terminal and side-effecting. The old design stopped the accumulator at Generate and bolted Bundle's output on as a separate `CoreJobResult` envelope, which duplicated `generated_files`/`warnings`, forced a return-type asymmetry across the convenience trio, and made callers guess whether to read `result.x` or `result.recommendation.x`. Modeling Bundle's output as a `BundleRecord` field lets the accumulator run to the end of the graph and dissolves the split. The request is not echoed on the result (the caller already has it; CLI/HTTP layers echo it themselves).
+
+## `Pipeline` uses baked-in default field values
+
+`Pipeline` is a frozen dataclass whose fields default to the built-in backends. The default composition is `Pipeline()`; a single-stage swap is `Pipeline(kmesh=ml_kmesh_advisor(spec))`. There is no `default_pipeline()` function and no `dataclasses.replace`-based swap idiom taught.
+
+**Why:** the thing a caller wants to say is "a pipeline with these backends, defaults for the rest," which is literally a constructor with default arguments. `dataclasses.replace(default_pipeline(), kmesh=...)` expressed that idea less directly, imported a stdlib data-manipulation function to express a composition concept, and pushed `Pipeline` to be mutable purely to support a copy-with idiom. Baked-in defaults make the constructor the composition API, give full per-field type-safety and autocomplete, and let `Pipeline` be frozen like every other contract. `dataclasses.replace(pipeline, kmesh=...)` remains available as an escape hatch for the rare case of swapping one field on an already-custom pipeline.
+
+## No stage-by-stage standalones or serialization shims
+
+There are no `load`/`analyze`/`advise`/`select` wrapper functions and no `bundle_recommendation` helper. Stage-by-stage usage goes through `Pipeline` fields (and `load_structure` for Load). Serialization uses `result.to_dict()`.
+
+**Why:** the standalones were one-line renames of functions that already had canonical homes (`analyze_structure`, `advise_parameters`, `select_parameters`, `load_structure`), so they were duplicate import paths the project conventions explicitly forbid. The set was also incomplete (no `kmesh`/`generate`/`bundle`), so a stage-by-stage user had to mix standalones with `Pipeline` field access anyway. `bundle_recommendation(r)` just returned `r.to_dict()` and its name collided conceptually with `write_bundle`. Routing stage-by-stage usage through `Pipeline` fields teaches the real mental model (swappable stages live on `Pipeline`) and matches what backend authors see in the stage type aliases.

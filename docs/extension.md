@@ -9,11 +9,9 @@ See [backends](backends.md) for detailed backend authoring examples.
 ## Pipeline extension model
 
 ```python
-from dataclasses import replace
+from goldilocks_core import Pipeline, run_core_job
 
-from goldilocks_core import default_pipeline, run_core_job
-
-pipeline = replace(default_pipeline(), kmesh=my_kmesh_backend)
+pipeline = Pipeline(kmesh=my_kmesh_backend)
 result = run_core_job(request, pipeline=pipeline)
 ```
 
@@ -64,7 +62,7 @@ def project_kmesh(structure, hints, kpoint_advice):
 Then compose it:
 
 ```python
-pipeline = replace(default_pipeline(), kmesh=project_kmesh)
+pipeline = Pipeline(kmesh=project_kmesh)
 ```
 
 For ML k-points, use the built-in factory:
@@ -72,7 +70,7 @@ For ML k-points, use the built-in factory:
 ```python
 from goldilocks_core.advisors import ml_kmesh_advisor
 
-pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 ```
 
 ## Adding a DFT code generator
@@ -93,7 +91,7 @@ Steps:
 1. Write a generator function with the signature above.
 2. Return `GeneratedFile` records with paths relative to the bundle root.
 3. Read all scientific/numerical values from `intent`, `advice`, and `selection`.
-4. Compose it with `replace(default_pipeline(), generate=your_generator)`.
+4. Compose it with `Pipeline(generate=your_generator)`.
 5. Add tests through `run_core_job(..., pipeline=pipeline)`.
 
 Do not add generator-side scientific defaults. If a value is missing from the contracts, add it to the appropriate advice/selection record first.
@@ -184,7 +182,7 @@ Use this for a different deterministic output layout.
 Signature:
 
 ```python
-BundleStage = Callable[[CoreRecommendation, str | Path], JsonDict]
+BundleStage = Callable[[CoreResult, str | Path], BundleRecord]
 ```
 
 Bundle may write files and return a manifest dictionary. It should not submit jobs, copy private pseudo libraries, or inspect completed outputs.

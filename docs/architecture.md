@@ -24,7 +24,6 @@ Core does not own Runner/AiiDA workflows, schedulers, frontend/workspace state, 
 src/goldilocks_core/
 ├── contracts.py
 ├── jobs.py
-├── pipeline.py
 ├── analysis.py
 ├── advice.py
 ├── kmesh.py
@@ -43,8 +42,7 @@ Responsibilities:
 | Module | Owns |
 | --- | --- |
 | `contracts.py` | Public records, type aliases, stage callable contracts, JSON-safe serialization. |
-| `jobs.py` | `run_core_job()` and `default_pipeline()`. |
-| `pipeline.py` | Ergonomic Python API: `recommend`, `generate`, `write_bundle`, stage wrappers. |
+| `jobs.py` | `Pipeline` composition, `run_core_job()`, and the `recommend`/`generate`/`write_bundle` entry points. |
 | `analysis.py` | Structure facts only. No recommendations. |
 | `advice.py` | Provenance-backed scientific and numerical advice. |
 | `kmesh.py` | Concrete k-point grid resolution from advice or hints. |
@@ -61,21 +59,18 @@ Responsibilities:
 
 `contracts.py` defines boundary records and callable signatures. Stage modules import contracts; contracts do not import stage modules.
 
-`jobs.py` composes stage implementations through `Pipeline`. The built-in composition is:
+`jobs.py` composes stage implementations through `Pipeline`. `Pipeline` is a frozen
+dataclass whose fields default to the built-in backends, so the default
+composition is `Pipeline()` and a single-stage swap is
+`Pipeline(kmesh=ml_kmesh_advisor(spec))`. `contracts.py` defines boundary
+records and callable signatures; stage modules import contracts, and
+contracts does not import stage modules. `Pipeline` lives in `jobs.py`
+(behavior with behavior) to avoid a circular import between `contracts` and
+the stage modules.
 
-```python
-def default_pipeline() -> Pipeline:
-    return Pipeline(
-        analyze=analyze_structure,
-        advise=advise_parameters,
-        kmesh=resolve_kpoints_from_advice,
-        select=select_parameters,
-        generate=generate_inputs,
-        bundle=write_bundle_directory,
-    )
-```
-
-`pipeline.py` provides convenience wrappers around the same job runner. It does not carry a second implementation of the recommendation logic.
+The `recommend`/`generate`/`write_bundle` entry points in `jobs.py` are thin
+wrappers around the same job runner. They do not carry a second
+implementation of the recommendation logic.
 
 ## Fixed graph
 
@@ -121,9 +116,9 @@ CoreJobRequest(
 `Pipeline` is executable composition:
 
 ```python
-from dataclasses import replace
+from goldilocks_core import Pipeline
 
-pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 result = run_core_job(request, pipeline=pipeline)
 ```
 
@@ -144,16 +139,16 @@ The separation means:
 | Kmesh | `kmesh.py`, `advisors/` | `KPointSelection` | Operator k-point hints win. |
 | Select | `selection.py` | `SelectionRecord` | Pseudos and cutoffs; no k-point recalculation. |
 | Generate | `generation.py` | `tuple[GeneratedFile, ...]` | Mechanical target-code translation. |
-| Bundle | `bundle.py` | manifest dict and files | Deterministic, path-safe directory output. |
+| Bundle | `bundle.py` | `BundleRecord` and files | Deterministic, path-safe directory output. |
 
 ## Extension points
 
-Replace a `Pipeline` field to change one stage backend:
+Replace a `Pipeline` field at construction to change one stage backend:
 
 ```python
-from dataclasses import replace
+from goldilocks_core import Pipeline
 
-pipeline = replace(default_pipeline(), generate=my_generator)
+pipeline = Pipeline(generate=my_generator)
 ```
 
 Current fields:
@@ -175,4 +170,4 @@ See [pipeline](pipeline.md) and [backends](backends.md) for signatures and examp
 
 The Python API and CLI both call `run_core_job()`.
 
-A future HTTP API should do the same: deserialize request JSON into `CoreJobRequest`, resolve any service-level backend choices outside Core, call `run_core_job()`, and serialize `CoreJobResult.to_dict()`. HTTP concerns such as auth, uploads, workspaces, and response transport stay outside Core.
+A future HTTP API should do the same: deserialize request JSON into `CoreJobRequest`, resolve any service-level backend choices outside Core, call `run_core_job()`, and serialize `CoreResult.to_dict()` (echoing the request in the response envelope if desired). HTTP concerns such as auth, uploads, workspaces, and response transport stay outside Core.

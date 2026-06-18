@@ -87,9 +87,7 @@ from goldilocks_core.advisors import ml_kmesh_advisor
 Usage:
 
 ```python
-from dataclasses import replace
-
-from goldilocks_core import CoreJobRequest, default_pipeline, run_core_job
+from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
 from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.contracts import ModelSpec
 
@@ -103,7 +101,7 @@ spec = ModelSpec(
     location="models/kmesh.joblib",
 )
 
-pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 result = run_core_job(CoreJobRequest(structure="Si.cif"), pipeline=pipeline)
 ```
 

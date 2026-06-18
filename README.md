@@ -13,7 +13,7 @@ The public API is Python-first. The staged CLI calls the same internal job runne
 - Deterministic pseudopotential ranking and cutoff extraction from provided metadata.
 - Quantum ESPRESSO SCF input generation.
 - Bundle directory output with `manifest.json`.
-- JSON-safe `CoreJobRequest`, `CoreRecommendation`, and `CoreJobResult` records.
+- JSON-safe `CoreJobRequest` and `CoreResult` records.
 
 ## Install
 
@@ -79,8 +79,8 @@ result = write_bundle(
     pseudo_metadata=load_pseudo_metadata("path/to/pseudopotentials"),
 )
 
-print(result.bundle_path)
-print(result.manifest)
+print(result.bundle.path)
+print(result.bundle.manifest)
 ```
 
 Bundle layout:
@@ -126,9 +126,7 @@ bundle    -> Load → Analyze → Advise → Kmesh → Select → Generate → B
 `Pipeline` holds Python callables for stage backends. `CoreJobRequest` remains data-only.
 
 ```python
-from dataclasses import replace
-
-from goldilocks_core import default_pipeline, recommend
+from goldilocks_core import Pipeline, recommend
 from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.contracts import ModelSpec
 
@@ -142,7 +140,7 @@ spec = ModelSpec(
     location="path/to/model.joblib",
 )
 
-pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 result = recommend("path/to/structure.cif", pipeline=pipeline)
 ```
 
@@ -170,8 +168,7 @@ See [CLI reference](docs/cli.md).
 ```text
 src/goldilocks_core/
 ├── contracts.py   # public records, type aliases, serialization
-├── jobs.py        # fixed job runner and default Pipeline composition
-├── pipeline.py    # ergonomic Python API and stage wrappers
+├── jobs.py        # Pipeline composition, job runner, and entry points
 ├── analysis.py    # structure facts
 ├── advice.py      # provenance-backed parameter advice
 ├── kmesh.py       # k-point grid resolution

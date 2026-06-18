@@ -61,9 +61,7 @@ def resolve_kpoints_from_advice(
             ),
         )
 
-    if advice.spacing is None:
-        raise ValueError("k-point advice must contain spacing or an explicit grid")
-
+    # With KPointAdvice's exactly-one invariant, reaching here means spacing is set.
     return KPointSelection(
         grid=k_distance_to_mesh(structure, advice.spacing),
         shift=(0, 0, 0),

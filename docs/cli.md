@@ -67,7 +67,7 @@ Runs the full pipeline and writes a portable bundle directory. `--out` is requir
 
 ### JSON (`--json`)
 
-Full `CoreJobResult.to_dict()` output with `indent=2, sort_keys=True`. Suitable for piping to `jq` or HTTP services.
+Full `CoreResult.to_dict()` output (with the request echoed alongside as `request`) using `indent=2, sort_keys=True`. Suitable for piping to `jq` or HTTP services.
 
 ### Human-readable (default)
 

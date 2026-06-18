@@ -41,26 +41,30 @@ print(result.advice.convergence.provenance.source)    # "default"
 
 ## Inspecting intermediate stages
 
-For notebooks or interactive exploration, use the stage-by-stage API:
+For notebooks or interactive exploration, run the stages individually through
+`Pipeline` fields. Swappable stages live on `Pipeline`; Load is stable
+request-boundary I/O handled by `load_structure`:
 
 ```python
-from goldilocks_core import CalculationHints, default_pipeline
-from goldilocks_core.pipeline import load, analyze, advise, select
+from goldilocks_core import CalculationIntent, CalculationHints, Pipeline
+from goldilocks_core.io.structures import load_structure
 
+intent = CalculationIntent()
 hints = CalculationHints()
-structure = load("structure.cif")
-analysis = analyze(structure)
+pipeline = Pipeline()
+
+structure = load_structure("structure.cif")
+analysis = pipeline.analyze(structure)
 print(analysis.elements)                   # ("Fe", "O")
 print(analysis.electronic_character)       # "unknown"
 print(analysis.heavy_elements)             # ()
 
-advice = advise(analysis, hints=hints)
+advice = pipeline.advise(analysis, intent, hints)
 print(advice.spin_orbit.consider)          # False
 print(advice.k_points.spacing)             # 0.2
 
-pipeline = default_pipeline()
 k_points = pipeline.kmesh(structure, hints, advice.k_points)
-selection = select(structure, advice, k_points)
+selection = pipeline.select(structure, advice, k_points, ())
 print(selection.k_points.grid)             # (8, 8, 8)
 ```
 
@@ -118,8 +122,8 @@ result = write_bundle(
     pseudo_metadata=pseudo_metadata,
 )
 
-print(result.bundle_path)          # "run/"
-print(result.manifest)            # dict with manifest content
+print(result.bundle.path)          # "run/"
+print(result.bundle.manifest)     # dict with manifest content
 # run/manifest.json and run/inputs/qe.in are now on disk
 ```
 
@@ -154,9 +158,7 @@ print(result.to_dict())           # full JSON-safe output
 Use `ml_kmesh_advisor(spec)` to plug model-backed k-point selection into the staged pipeline:
 
 ```python
-from dataclasses import replace
-
-from goldilocks_core import default_pipeline, recommend
+from goldilocks_core import Pipeline, recommend
 from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.contracts import ModelSpec
 
@@ -170,7 +172,7 @@ spec = ModelSpec(
     location="path/to/model.joblib",
 )
 
-pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 result = recommend("structure.cif", pipeline=pipeline)
 
 print(result.selection.k_points.grid)

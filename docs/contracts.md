@@ -16,10 +16,10 @@ These objects are safe to serialize with `to_dict()`:
 - `KPointSelection`
 - `SelectionRecord`
 - `GeneratedFile`
-- `CoreRecommendation`
+- `BundleRecord`
+- `CoreResult`
 - `CoreJobRequest`
 - `StageRecord`
-- `CoreJobResult`
 - model and k-mesh records such as `ModelSpec`, `StructureFeatureVector`, and `KMeshEntry`
 
 `CoreJobRequest` is the request boundary. It contains only serializable job data:
@@ -37,20 +37,33 @@ It does not contain backend functions, model objects, registry keys, or generato
 
 ## Behavior contracts
 
-`Pipeline` is the behavior boundary. It contains callables:
+`Pipeline` is the behavior boundary. It is a frozen dataclass of callables,
+one per stage, with each field defaulting to the built-in backend for that
+stage. `Pipeline` lives in `jobs.py` (behavior with behavior); the stage
+signature aliases below live in `contracts.py`.
 
 ```python
-Pipeline(
-    analyze=...,
-    advise=...,
-    kmesh=...,
-    select=...,
-    generate=...,
-    bundle=...,
+Pipeline(                                     # default composition
+    analyze=analyze_structure,
+    advise=advise_parameters,
+    kmesh=resolve_kpoints_from_advice,
+    select=select_parameters,
+    generate=generate_inputs,
+    bundle=write_bundle_directory,
 )
+
+Pipeline(kmesh=ml_kmesh_advisor(spec))       # swap one stage
 ```
 
-A `Pipeline` is not part of `CoreJobRequest.to_dict()`. It is executable configuration for Python callers.
+A `Pipeline` is not part of `CoreJobRequest.to_dict()`. It is executable
+configuration for Python callers.
+
+`CoreResult` is the result boundary: a single accumulator of every stage
+record the fixed graph produces (intent, analysis, advice, selection,
+generated files, warnings, the terminal `BundleRecord`, and the `stages`
+execution trace). The request is not echoed on the result — the caller
+already has it; CLI/HTTP layers echo it themselves in their serialized
+output.
 
 ## Stage type aliases
 
@@ -106,10 +119,13 @@ Generates target-code files from completed Core records.
 ### `BundleStage`
 
 ```python
-Callable[[CoreRecommendation, str | Path], JsonDict]
+Callable[[CoreResult, str | Path], BundleRecord]
 ```
 
-Writes generated files and manifest output.
+Writes generated files and manifest output. Bundle is the only stage that
+reads the whole `CoreResult` accumulator — justified by being terminal (it
+needs every scientific record for the manifest). When Bundle runs,
+`result.bundle` is still `None`.
 
 ## Pipeline stage names
 

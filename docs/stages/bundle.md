@@ -6,14 +6,14 @@ The Bundle stage writes a portable output directory containing generated input f
 
 ## Input
 
-- `CoreRecommendation` with generated files
+- `CoreResult` with generated files
 - Output directory path
 
 ## Output
 
 - `manifest.json` file
 - Generated input files under `inputs/`
-- JSON-safe manifest dictionary (returned to the caller)
+- `BundleRecord` (bundle path + JSON-safe manifest dictionary) returned to the caller
 
 ## Directory layout
 

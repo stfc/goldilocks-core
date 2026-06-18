@@ -4,20 +4,20 @@ import sys
 from goldilocks_core.advice import advise_parameters
 from goldilocks_core.cli import core as cli_core
 from goldilocks_core.contracts import (
+    BundleRecord,
     CoreJobRequest,
-    CoreJobResult,
-    CoreRecommendation,
+    CoreResult,
     KPointSelection,
-    Pipeline,
     Provenance,
     SelectionRecord,
     StageRecord,
     StructureAnalysisRecord,
 )
+from goldilocks_core.jobs import Pipeline
 
 
-def make_result(request: CoreJobRequest) -> CoreJobResult:
-    """Build a minimal job result for CLI tests."""
+def make_result(request: CoreJobRequest) -> CoreResult:
+    """Build a minimal Core result for CLI tests."""
     analysis = StructureAnalysisRecord(
         formula="Si1",
         reduced_formula="Si",
@@ -31,7 +31,7 @@ def make_result(request: CoreJobRequest) -> CoreJobResult:
         heavy_elements=(),
     )
     advice = advise_parameters(analysis, intent=request.intent, hints=request.hints)
-    recommendation = CoreRecommendation(
+    return CoreResult(
         intent=request.intent,
         analysis=analysis,
         advice=advice,
@@ -44,10 +44,6 @@ def make_result(request: CoreJobRequest) -> CoreJobResult:
             ),
             pseudopotentials=(),
         ),
-    )
-    return CoreJobResult(
-        request=request,
-        recommendation=recommendation,
         stages=(StageRecord(name="load"), StageRecord(name="select")),
     )
 
@@ -91,7 +87,7 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
         request: CoreJobRequest,
         *,
         pipeline: Pipeline | None = None,
-    ) -> CoreJobResult:
+    ) -> CoreResult:
         captured["request"] = request
         captured["pipeline"] = pipeline
         return make_result(request)
@@ -124,7 +120,9 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
     assert request.hints.pseudo_type == "NC"
     assert captured["pipeline"] is None
     output = json.loads(capsys.readouterr().out)
-    assert output["recommendation"]["selection"]["k_points"]["grid"] == [2, 2, 1]
+    # CLI echoes the request itself alongside the CoreResult fields
+    assert output["request"]["structure"] == "Si.cif"
+    assert output["selection"]["k_points"]["grid"] == [2, 2, 1]
 
 
 def test_main_builds_pipeline_for_model_backend(monkeypatch, capsys) -> None:
@@ -135,7 +133,7 @@ def test_main_builds_pipeline_for_model_backend(monkeypatch, capsys) -> None:
         request: CoreJobRequest,
         *,
         pipeline: Pipeline | None = None,
-    ) -> CoreJobResult:
+    ) -> CoreResult:
         captured["request"] = request
         captured["pipeline"] = pipeline
         return make_result(request)
@@ -163,7 +161,7 @@ def test_main_builds_pipeline_for_model_backend(monkeypatch, capsys) -> None:
     assert isinstance(request, CoreJobRequest)
     assert isinstance(pipeline, Pipeline)
     assert request.to_dict().get("model") is None
-    assert pipeline.kmesh is not cli_core.default_pipeline().kmesh
+    assert pipeline.kmesh is not Pipeline().kmesh
     assert json.loads(capsys.readouterr().out)["request"]["structure"] == "Si.cif"
 
 
@@ -175,14 +173,18 @@ def test_main_builds_bundle_request_with_output_dir(monkeypatch, capsys) -> None
         request: CoreJobRequest,
         *,
         pipeline: Pipeline | None = None,
-    ) -> CoreJobResult:
+    ) -> CoreResult:
         captured["request"] = request
         result = make_result(request)
-        return CoreJobResult(
-            request=result.request,
-            recommendation=result.recommendation,
+        return CoreResult(
+            intent=result.intent,
+            analysis=result.analysis,
+            advice=result.advice,
+            selection=result.selection,
             stages=result.stages,
-            bundle_path=request.output_dir,
+            bundle=BundleRecord(
+                path=request.output_dir, manifest={"manifest_version": 1}
+            ),
         )
 
     monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)

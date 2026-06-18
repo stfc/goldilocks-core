@@ -24,27 +24,28 @@ This split keeps HTTP/JSON boundaries clean while making Python callers able to 
 ## Core objects
 
 ```python
-from goldilocks_core import CoreJobRequest, default_pipeline, run_core_job
-from goldilocks_core.contracts import Pipeline
+from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
 ```
 
-`Pipeline` is a dataclass with one callable per stage:
+`Pipeline` is a frozen dataclass with one callable per stage, and each field
+defaults to the built-in backend for that stage:
 
 ```python
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class Pipeline:
-    analyze: AnalyzeStage
-    advise: AdviseStage
-    kmesh: KMeshAdvisor
-    select: SelectStage
-    generate: GenerateStage
-    bundle: BundleStage
+    analyze: AnalyzeStage = analyze_structure
+    advise: AdviseStage = advise_parameters
+    kmesh: KMeshAdvisor = resolve_kpoints_from_advice
+    select: SelectStage = select_parameters
+    generate: GenerateStage = generate_inputs
+    bundle: BundleStage = write_bundle_directory
 ```
 
-The built-in composition is returned by `default_pipeline()`:
+`Pipeline()` is the default composition. Override any field at construction
+to swap that stage:
 
 ```python
-pipeline = default_pipeline()
+pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 ```
 
 `run_core_job()` accepts an optional pipeline:
@@ -53,7 +54,9 @@ pipeline = default_pipeline()
 result = run_core_job(request, pipeline=pipeline)
 ```
 
-If no pipeline is passed, `run_core_job()` calls `default_pipeline()` and uses the built-in backends.
+If no pipeline is passed, `run_core_job()` uses `Pipeline()` (the built-in
+backends). `Pipeline` lives in `jobs.py` (behavior with behavior); data
+contracts and stage signature aliases live in `contracts.py`.
 
 ## Stage contracts
 
@@ -184,17 +187,17 @@ Responsibility:
 ### Bundle
 
 ```python
-BundleStage = Callable[[CoreRecommendation, str | Path], JsonDict]
+BundleStage = Callable[[CoreResult, str | Path], BundleRecord]
 ```
 
 Inputs:
 
-- completed recommendation with generated files
+- completed `CoreResult` with generated files
 - output directory
 
 Output:
 
-- JSON-safe manifest dictionary
+- `BundleRecord` (bundle path + manifest dictionary)
 
 Responsibility:
 
@@ -222,25 +225,24 @@ from goldilocks_core import CoreJobRequest, run_core_job
 result = run_core_job(CoreJobRequest(structure="Si.cif"))
 ```
 
-This is equivalent to:
+This is equivalent to passing `Pipeline()` explicitly:
 
 ```python
-from goldilocks_core import CoreJobRequest, default_pipeline, run_core_job
+from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
 
 result = run_core_job(
     CoreJobRequest(structure="Si.cif"),
-    pipeline=default_pipeline(),
+    pipeline=Pipeline(),
 )
 ```
 
 ## Replacing one backend
 
-Use `dataclasses.replace()` to swap one stage while keeping the rest of the default pipeline:
+Override a field at construction to swap one stage while keeping the rest of
+the defaults:
 
 ```python
-from dataclasses import replace
-
-from goldilocks_core import CoreJobRequest, default_pipeline, run_core_job
+from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
 from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.contracts import ModelSpec
 
@@ -254,10 +256,10 @@ spec = ModelSpec(
     location="models/kmesh.joblib",
 )
 
-pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 result = run_core_job(CoreJobRequest(structure="Si.cif"), pipeline=pipeline)
 
-print(result.recommendation.selection.k_points.provenance.source)  # "model"
+print(result.selection.k_points.provenance.source)  # "model"
 ```
 
 The request contains no model field. The request says what to compute. The pipeline says how to compute it.
@@ -265,16 +267,13 @@ The request contains no model field. The request says what to compute. The pipel
 ## Replacing multiple backends
 
 ```python
-from dataclasses import replace
-
-pipeline = replace(
-    default_pipeline(),
+pipeline = Pipeline(
     kmesh=ml_kmesh_advisor(spec),
     generate=generate_vasp_inputs,
 )
 ```
 
-A backend is just a function with the right signature. No base class, registry, plugin loader, or string resolution is required inside Core.
+A backend is just a function with the right signature. No base class, registry, plugin loader, or string resolution is required inside Core. For the rare case of swapping one field on an already-custom pipeline, `dataclasses.replace(pipeline, kmesh=...)` remains available as an escape hatch — it is just not the taught idiom.
 
 ## Provenance expectations
 
@@ -300,7 +299,7 @@ Example CLI mapping:
 ```python
 from dataclasses import replace
 
-pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 result = run_core_job(request, pipeline=pipeline)
 ```
 

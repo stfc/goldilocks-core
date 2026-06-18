@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import replace
 from pathlib import Path
 
 from goldilocks_core.advisors import ml_kmesh_advisor
@@ -13,9 +12,8 @@ from goldilocks_core.contracts import (
     CalculationIntent,
     CoreJobRequest,
     ModelSpec,
-    Pipeline,
 )
-from goldilocks_core.jobs import default_pipeline, run_core_job
+from goldilocks_core.jobs import Pipeline, run_core_job
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 
@@ -49,7 +47,13 @@ def main() -> None:
     result = run_core_job(request, pipeline=_pipeline_from_args(args))
 
     if args.json:
-        print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+        print(
+            json.dumps(
+                {"request": request.to_dict(), **result.to_dict()},
+                indent=2,
+                sort_keys=True,
+            )
+        )
         return
 
     _print_human_summary(result)
@@ -173,7 +177,7 @@ def _pipeline_from_args(args: argparse.Namespace) -> Pipeline | None:
         source="local",
         location=args.model,
     )
-    return replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+    return Pipeline(kmesh=ml_kmesh_advisor(spec))
 
 
 def _parse_optional_bool(value: str | None) -> bool | None:
@@ -184,19 +188,18 @@ def _parse_optional_bool(value: str | None) -> bool | None:
 
 
 def _print_human_summary(result) -> None:
-    """Print a small human-readable summary from the Core job result."""
-    recommendation = result.recommendation
-    grid = recommendation.selection.k_points.grid
-    print(f"formula: {recommendation.analysis.reduced_formula}")
-    print(f"code: {recommendation.intent.code}")
-    print(f"task: {recommendation.intent.task}")
+    """Print a small human-readable summary from the Core result."""
+    grid = result.selection.k_points.grid
+    print(f"formula: {result.analysis.reduced_formula}")
+    print(f"code: {result.intent.code}")
+    print(f"task: {result.intent.task}")
     print(f"k-grid: {grid[0]} {grid[1]} {grid[2]}")
-    if recommendation.generated_files:
+    if result.generated_files:
         print("generated files:")
-        for generated_file in recommendation.generated_files:
+        for generated_file in result.generated_files:
             print(f"  {generated_file.path}")
-    if result.bundle_path:
-        print(f"bundle: {result.bundle_path}")
+    if result.bundle is not None:
+        print(f"bundle: {result.bundle.path}")
     if result.warnings:
         print("warnings:")
         for warning in result.warnings:

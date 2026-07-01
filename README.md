@@ -13,7 +13,7 @@ The public API is Python-first. The staged CLI calls the same internal job runne
 - Deterministic pseudopotential ranking and cutoff extraction from provided metadata.
 - Quantum ESPRESSO SCF input generation.
 - Bundle directory output with `manifest.json`.
-- JSON-safe `CoreJobRequest`, `CoreResult`, and `CoreResult` records.
+- JSON-safe `CoreJobRequest` and `CoreResult` records.
 
 ## Install
 
@@ -169,8 +169,7 @@ See [CLI reference](docs/cli.md).
 ```text
 src/goldilocks_core/
 ├── contracts.py   # public records, type aliases, serialization
-├── jobs.py        # fixed job runner and default Pipeline composition
-├── pipeline.py    # ergonomic Python API and stage wrappers
+├── jobs.py        # fixed job runner, Pipeline, and public convenience API
 ├── analysis.py    # structure facts
 ├── advice.py      # provenance-backed parameter advice
 ├── kmesh.py       # k-point grid resolution

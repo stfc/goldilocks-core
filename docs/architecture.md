@@ -24,7 +24,6 @@ Core does not own Runner/AiiDA workflows, schedulers, frontend/workspace state, 
 src/goldilocks_core/
 ├── contracts.py
 ├── jobs.py
-├── pipeline.py
 ├── analysis.py
 ├── advice.py
 ├── kmesh.py

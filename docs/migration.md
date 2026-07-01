@@ -30,7 +30,7 @@ The staged Core refactor removes several pre-existing import paths and changes s
 
 ## Removed top-level aliases
 
-The `CoreRecommendation` class used to re-export several attributes at the top level (`grid`, `contains_*`, etc.). These shortcuts are gone. Access fields through the nested structure:
+The `CoreResult` class used to re-export several attributes at the top level (`grid`, `contains_*`, etc.). These shortcuts are gone. Access fields through the nested structure:
 
 ```python
 # Old
@@ -47,14 +47,14 @@ result.analysis.contains_heavy_elements
 `select_parameters()` no longer resolves k-points internally. Call the Kmesh backend first and pass the resulting `KPointSelection` into Select:
 
 ```python
-from goldilocks_core import CalculationHints, default_pipeline
+from goldilocks_core import CalculationHints, Pipeline
 from goldilocks_core.pipeline import analyze, advise, load, select
 
 hints = CalculationHints()
 structure = load("structure.cif")
 analysis = analyze(structure)
 advice = advise(analysis, hints=hints)
-k_points = default_pipeline().kmesh(structure, hints, advice.k_points)
+k_points = Pipeline().kmesh(structure, hints, advice.k_points)
 selection = select(structure, advice, k_points)
 ```
 
@@ -65,12 +65,11 @@ selection = select(structure, advice, k_points)
 For staged pipeline integration, use `ml_kmesh_advisor(spec)` as a Kmesh backend:
 
 ```python
-from dataclasses import replace
 
-from goldilocks_core import default_pipeline, recommend
+from goldilocks_core import Pipeline, recommend
 from goldilocks_core.advisors import ml_kmesh_advisor
 
-pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 result = recommend("structure.cif", pipeline=pipeline)
 ```
 
@@ -85,4 +84,4 @@ This broadens the set of "heavy" elements to include period-5 non-lanthanides li
 
 ## No compatibility layer
 
-There are no backward-compatible aliases. If you were importing from `goldilocks_core.shared`, update your imports to `goldilocks_core.contracts`. If you were using top-level shortcuts on `CoreRecommendation`, access the nested fields directly.
+There are no backward-compatible aliases. If you were importing from `goldilocks_core.shared`, update your imports to `goldilocks_core.contracts`. If you were using top-level shortcuts on `CoreResult`, access the nested fields directly.

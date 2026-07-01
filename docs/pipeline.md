@@ -24,7 +24,7 @@ This split keeps HTTP/JSON boundaries clean while making Python callers able to 
 ## Core objects
 
 ```python
-from goldilocks_core import CoreJobRequest, default_pipeline, run_core_job
+from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
 from goldilocks_core.contracts import Pipeline
 ```
 
@@ -41,10 +41,10 @@ class Pipeline:
     bundle: BundleStage
 ```
 
-The built-in composition is returned by `default_pipeline()`:
+The built-in composition is returned by `Pipeline()`:
 
 ```python
-pipeline = default_pipeline()
+pipeline = Pipeline()
 ```
 
 `run_core_job()` accepts an optional pipeline:
@@ -53,7 +53,7 @@ pipeline = default_pipeline()
 result = run_core_job(request, pipeline=pipeline)
 ```
 
-If no pipeline is passed, `run_core_job()` calls `default_pipeline()` and uses the built-in backends.
+If no pipeline is passed, `run_core_job()` calls `Pipeline()` and uses the built-in backends.
 
 ## Stage contracts
 
@@ -184,7 +184,7 @@ Responsibility:
 ### Bundle
 
 ```python
-BundleStage = Callable[[CoreRecommendation, str | Path], JsonDict]
+BundleStage = Callable[[CoreResult, str | Path], JsonDict]
 ```
 
 Inputs:
@@ -225,22 +225,21 @@ result = run_core_job(CoreJobRequest(structure="Si.cif"))
 This is equivalent to:
 
 ```python
-from goldilocks_core import CoreJobRequest, default_pipeline, run_core_job
+from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
 
 result = run_core_job(
     CoreJobRequest(structure="Si.cif"),
-    pipeline=default_pipeline(),
+    pipeline=Pipeline(),
 )
 ```
 
 ## Replacing one backend
 
-Use `dataclasses.replace()` to swap one stage while keeping the rest of the default pipeline:
+Construct ``Pipeline`` with the field you want to swap; the remaining stages keep their default backends:
 
 ```python
-from dataclasses import replace
 
-from goldilocks_core import CoreJobRequest, default_pipeline, run_core_job
+from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
 from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.contracts import ModelSpec
 
@@ -254,10 +253,10 @@ spec = ModelSpec(
     location="models/kmesh.joblib",
 )
 
-pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 result = run_core_job(CoreJobRequest(structure="Si.cif"), pipeline=pipeline)
 
-print(result.recommendation.selection.k_points.provenance.source)  # "model"
+print(result.selection.k_points.provenance.source)  # "model"
 ```
 
 The request contains no model field. The request says what to compute. The pipeline says how to compute it.
@@ -265,10 +264,9 @@ The request contains no model field. The request says what to compute. The pipel
 ## Replacing multiple backends
 
 ```python
-from dataclasses import replace
 
 pipeline = replace(
-    default_pipeline(),
+    Pipeline(),
     kmesh=ml_kmesh_advisor(spec),
     generate=generate_vasp_inputs,
 )
@@ -298,9 +296,8 @@ A CLI or HTTP layer may expose names such as `--model model.joblib` or JSON fiel
 Example CLI mapping:
 
 ```python
-from dataclasses import replace
 
-pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 result = run_core_job(request, pipeline=pipeline)
 ```
 

@@ -10,7 +10,7 @@ All new dataclasses use `slots=True`. Pre-existing dataclasses (`PseudoMetadata`
 
 ## No compatibility shims
 
-When `goldilocks_core.shared` was removed, no backward-compatible aliases were added. Same for top-level shortcuts on `CoreRecommendation`.
+When `goldilocks_core.shared` was removed, no backward-compatible aliases were added. Same for top-level shortcuts on `CoreResult`.
 
 **Why:** compatibility shims accumulate into permanent maintenance burden. They create multiple import paths for the same concept, which confuses new users and makes refactoring harder. One canonical API is cheaper in the long run.
 
@@ -28,7 +28,7 @@ Stage backends are callables composed into a `Pipeline` dataclass. There are no 
 
 ## Backend selection is not request data
 
-`CoreJobRequest` does not contain fields such as `model`, `generator`, or `backend`. Model-backed k-point selection is configured by passing `pipeline=replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))`.
+`CoreJobRequest` does not contain fields such as `model`, `generator`, or `backend`. Model-backed k-point selection is configured by passing `pipeline=Pipeline(kmesh=ml_kmesh_advisor(spec))`.
 
 **Why:** `CoreJobRequest` is the JSON/HTTP-safe description of what to compute. A backend callable is executable Python behavior describing how to compute it. Mixing those concerns would make requests non-serializable and force Core to own backend-name resolution.
 
@@ -72,4 +72,4 @@ The bundle directory contains generated input files and a manifest, but not pseu
 
 Unlike the contract dataclasses, `PseudoMetadata` is mutable (`slots=True` but not `frozen=True`).
 
-**Why:** test code frequently mutates `PseudoMetadata` fields (e.g. changing `relativistic` from `"scalar"` to `"full"`) when constructing synthetic fixtures. Making it frozen would require every test to use `dataclasses.replace()` instead of direct mutation, adding boilerplate for no safety benefit in test code.
+**Why:** test code frequently mutates `PseudoMetadata` fields (e.g. changing `relativistic` from `"scalar"` to `"full"`) when constructing synthetic fixtures. Making it frozen would require recreating fixtures for every variation instead of mutating them, adding boilerplate for no safety benefit in test code.

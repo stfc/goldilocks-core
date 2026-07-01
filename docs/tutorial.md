@@ -44,7 +44,7 @@ print(result.advice.convergence.provenance.source)    # "default"
 For notebooks or interactive exploration, use the stage-by-stage API:
 
 ```python
-from goldilocks_core import CalculationHints, default_pipeline
+from goldilocks_core import CalculationHints, Pipeline
 from goldilocks_core.pipeline import load, analyze, advise, select
 
 hints = CalculationHints()
@@ -58,7 +58,7 @@ advice = advise(analysis, hints=hints)
 print(advice.spin_orbit.consider)          # False
 print(advice.k_points.spacing)             # 0.2
 
-pipeline = default_pipeline()
+pipeline = Pipeline()
 k_points = pipeline.kmesh(structure, hints, advice.k_points)
 selection = select(structure, advice, k_points)
 print(selection.k_points.grid)             # (8, 8, 8)
@@ -118,7 +118,7 @@ result = write_bundle(
     pseudo_metadata=pseudo_metadata,
 )
 
-print(result.bundle_path)          # "run/"
+print(result.bundle.path)          # "run/"
 print(result.manifest)            # dict with manifest content
 # run/manifest.json and run/inputs/qe.in are now on disk
 ```
@@ -154,9 +154,8 @@ print(result.to_dict())           # full JSON-safe output
 Use `ml_kmesh_advisor(spec)` to plug model-backed k-point selection into the staged pipeline:
 
 ```python
-from dataclasses import replace
 
-from goldilocks_core import default_pipeline, recommend
+from goldilocks_core import Pipeline, recommend
 from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.contracts import ModelSpec
 
@@ -170,7 +169,7 @@ spec = ModelSpec(
     location="path/to/model.joblib",
 )
 
-pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 result = recommend("structure.cif", pipeline=pipeline)
 
 print(result.selection.k_points.grid)

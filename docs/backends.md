@@ -84,7 +84,7 @@ from goldilocks_core.kmesh import resolve_kpoints_from_advice
 ```python
 from goldilocks_core.advisors import ml_kmesh_advisor
 
-pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 ```
 
 `ml_kmesh_advisor(spec)` returns a Kmesh backend. It checks hints first. If no k-point hint is set, it calls `advise_kpoints(structure, spec)` and returns a model-backed `KPointSelection`.
@@ -126,9 +126,8 @@ def generate_custom_input(structure, intent, advice, selection):
 Use it:
 
 ```python
-from dataclasses import replace
 
-pipeline = replace(default_pipeline(), generate=generate_custom_input)
+pipeline = Pipeline(generate=generate_custom_input)
 result = run_core_job(
     CoreJobRequest(structure="Si.cif", mode="generate"),
     pipeline=pipeline,
@@ -198,7 +197,7 @@ Use a custom Analyze backend when a project needs additional facts or different 
 Signature:
 
 ```python
-BundleStage = Callable[[CoreRecommendation, str | Path], JsonDict]
+BundleStage = Callable[[CoreResult, str | Path], JsonDict]
 ```
 
 A Bundle backend writes generated files and a manifest. It should be deterministic and reject path traversal. It should not run calculations, submit jobs, download pseudopotentials, or inspect completed outputs.
@@ -208,18 +207,17 @@ A Bundle backend writes generated files and a manifest. It should be determinist
 Preferred test shape:
 
 ```python
-from dataclasses import replace
 
 
 def test_custom_kmesh_backend_is_used():
-    pipeline = replace(default_pipeline(), kmesh=custom_kmesh)
+    pipeline = Pipeline(kmesh=custom_kmesh)
 
     result = run_core_job(
         CoreJobRequest(structure=make_structure()),
         pipeline=pipeline,
     )
 
-    assert result.recommendation.selection.k_points.grid == expected_grid
+    assert result.selection.k_points.grid == expected_grid
 ```
 
 Test both the backend itself and the integration point through `run_core_job()`.

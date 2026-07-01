@@ -7,7 +7,7 @@ from goldilocks_core.advice import advise_parameters
 from goldilocks_core.bundle import build_bundle_manifest, write_bundle_directory
 from goldilocks_core.contracts import (
     CalculationIntent,
-    CoreRecommendation,
+    CoreResult,
     GeneratedFile,
     KPointSelection,
     Provenance,
@@ -16,8 +16,8 @@ from goldilocks_core.contracts import (
 )
 
 
-def make_recommendation() -> CoreRecommendation:
-    """Build a minimal recommendation with one generated file."""
+def make_result() -> CoreResult:
+    """Build a minimal Core result with one generated file."""
     analysis = StructureAnalysisRecord(
         formula="Si1",
         reduced_formula="Si",
@@ -40,7 +40,7 @@ def make_recommendation() -> CoreRecommendation:
         ),
         pseudopotentials=(),
     )
-    return CoreRecommendation(
+    return CoreResult(
         intent=CalculationIntent(),
         analysis=analysis,
         advice=advice,
@@ -52,7 +52,7 @@ def make_recommendation() -> CoreRecommendation:
 
 def test_build_bundle_manifest_records_file_metadata_without_content() -> None:
     """Build a manifest containing stage outputs and generated file metadata."""
-    manifest = build_bundle_manifest(make_recommendation())
+    manifest = build_bundle_manifest(make_result())
 
     assert manifest["manifest_version"] == 1
     assert manifest["intent"]["code"] == "quantum_espresso"
@@ -67,28 +67,29 @@ def test_build_bundle_manifest_records_file_metadata_without_content() -> None:
 
 def test_write_bundle_directory_writes_manifest_and_files(tmp_path: Path) -> None:
     """Write a deterministic bundle layout to disk."""
-    recommendation = make_recommendation()
+    result = make_result()
 
-    manifest = write_bundle_directory(recommendation, tmp_path)
+    bundle_record = write_bundle_directory(result, tmp_path)
 
     assert (tmp_path / "inputs" / "qe.in").read_text(
         encoding="utf-8"
     ) == "&CONTROL\n/\n"
     manifest_data = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest_data == manifest
+    assert manifest_data == bundle_record.manifest
     assert manifest_data["generated_files"][0]["path"] == "inputs/qe.in"
+    assert bundle_record.path == str(tmp_path)
 
 
 def test_write_bundle_directory_rejects_path_traversal(tmp_path: Path) -> None:
     """Reject generated file paths that escape the bundle directory."""
-    recommendation = make_recommendation()
-    recommendation = CoreRecommendation(
-        intent=recommendation.intent,
-        analysis=recommendation.analysis,
-        advice=recommendation.advice,
-        selection=recommendation.selection,
+    result = make_result()
+    result = CoreResult(
+        intent=result.intent,
+        analysis=result.analysis,
+        advice=result.advice,
+        selection=result.selection,
         generated_files=(GeneratedFile(path="../qe.in", content="bad"),),
     )
 
     with pytest.raises(ValueError, match="escapes bundle directory"):
-        write_bundle_directory(recommendation, tmp_path)
+        write_bundle_directory(result, tmp_path)

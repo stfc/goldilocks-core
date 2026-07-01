@@ -133,7 +133,7 @@ result = write_bundle(
     pseudo_metadata=tuple(load_pseudo_metadata('pseudos')),
 )
 
-print(result.bundle_path)
+print(result.bundle.path)
 print(result.manifest)
 ```
 
@@ -184,9 +184,8 @@ print(result.to_dict())
 The request stays data-only. Swap the Kmesh stage through `Pipeline`:
 
 ```python
-from dataclasses import replace
 
-from goldilocks_core import CoreJobRequest, default_pipeline, run_core_job
+from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
 from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.contracts import ModelSpec
 
@@ -200,9 +199,9 @@ spec = ModelSpec(
     location='models/kmesh.joblib',
 )
 
-pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 result = run_core_job(CoreJobRequest(structure='structure.cif'), pipeline=pipeline)
-print(result.recommendation.selection.k_points.grid)
+print(result.selection.k_points.grid)
 ```
 
 ## Manual QE writing checklist

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, fields, is_dataclass
+from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
 from typing import Any, Callable, Literal, Sequence
 
@@ -359,6 +359,15 @@ class KPointAdvice:
     mesh_type: str
     provenance: Provenance
 
+    def __post_init__(self) -> None:
+        """Enforce exactly one of spacing or explicit_grid."""
+        has_spacing = self.spacing is not None
+        has_grid = self.explicit_grid is not None
+        if has_spacing == has_grid:
+            raise ValueError(
+                "KPointAdvice must have exactly one of spacing or an explicit grid set"
+            )
+
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
@@ -624,12 +633,34 @@ class GeneratedFile:
 
 
 @dataclass(frozen=True, slots=True)
-class CoreRecommendation:
-    """Structured output from the staged Core pipeline.
+class BundleRecord:
+    """Terminal Bundle-stage output: where files were written and the manifest.
 
-    Contains the full provenance chain: intent, analysis, advice,
-    selection, and any generated files. ``warnings`` aggregates
-    warnings from analysis and selection stages.
+    This is a stage record like every other: one stage produces one record.
+    It is only populated in bundle mode.
+
+    Attributes:
+        path: bundle root directory path.
+        manifest: bundle manifest dictionary.
+    """
+
+    path: str
+    manifest: JsonDict
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class CoreResult:
+    """Composed accumulator of every stage record the fixed graph produces.
+
+    Scientific records are populated as their stages run. ``generated_files``
+    is populated in generate/bundle modes. ``bundle`` is set only in bundle
+    mode. ``stages`` is the execution trace, always populated. The request is
+    not echoed here — the caller already has it; CLI/HTTP layers echo it
+    themselves in their serialized output.
 
     Attributes:
         intent: what the operator asked for.
@@ -639,8 +670,11 @@ class CoreRecommendation:
         selection: concrete values from the Select stage.
         generated_files: generated input files, populated by
             Generate or Bundle modes.
-        warnings: aggregated warnings from analysis and
+        warnings: aggregated warnings from analysis, Kmesh, and
             selection.
+        bundle: terminal Bundle-stage record, set only in bundle
+            mode.
+        stages: execution record for each completed stage.
     """
 
     intent: CalculationIntent
@@ -649,6 +683,8 @@ class CoreRecommendation:
     selection: SelectionRecord
     generated_files: tuple[GeneratedFile, ...] = ()
     warnings: tuple[str, ...] = ()
+    bundle: BundleRecord | None = None
+    stages: tuple[StageRecord, ...] = ()
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -681,6 +717,14 @@ class CoreJobRequest:
     pseudo_metadata: tuple[PseudoMetadata, ...] = ()
     output_dir: str | None = None
 
+    def __post_init__(self) -> None:
+        """Validate request invariants at construction."""
+        if self.mode not in {"recommend", "generate", "bundle"}:
+            raise ValueError(f"Unsupported Core job mode: {self.mode}")
+
+        if self.mode == "bundle" and self.output_dir is None:
+            raise ValueError("output_dir is required for bundle mode")
+
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
@@ -690,7 +734,7 @@ class CoreJobRequest:
 class StageRecord:
     """Observable execution record for one fixed Core pipeline stage.
 
-    Used in ``CoreJobResult.stages`` to report which stages ran and
+    Used in ``CoreResult.stages`` to report which stages ran and
     what warnings they produced.
 
     Attributes:
@@ -701,39 +745,6 @@ class StageRecord:
 
     name: StageName
     status: StageStatus = "completed"
-    warnings: tuple[str, ...] = ()
-
-    def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary."""
-        return to_jsonable(self)
-
-
-@dataclass(frozen=True, slots=True)
-class CoreJobResult:
-    """Result from running a Core job request through the fixed stage graph.
-
-    Contains the recommendation, stage execution records, and optional
-    bundle output. This is the shared result model for Python, CLI, and
-    future HTTP wrappers.
-
-    Attributes:
-        request: the original job request.
-        recommendation: structured recommendation output.
-        stages: execution record for each completed stage.
-        generated_files: generated input files, populated in
-            generate/bundle modes.
-        bundle_path: output directory path, set in bundle mode.
-        manifest: bundle manifest dictionary, set in bundle mode.
-        warnings: aggregated warnings from analysis and
-            selection.
-    """
-
-    request: CoreJobRequest
-    recommendation: CoreRecommendation
-    stages: tuple[StageRecord, ...]
-    generated_files: tuple[GeneratedFile, ...] = ()
-    bundle_path: str | None = None
-    manifest: JsonDict | None = None
     warnings: tuple[str, ...] = ()
 
     def to_dict(self) -> JsonDict:
@@ -765,33 +776,8 @@ GenerateStage = Callable[
 ]
 """Generate-stage backend signature."""
 
-BundleStage = Callable[[CoreRecommendation, str | Path], JsonDict]
+BundleStage = Callable[[CoreResult, str | Path], BundleRecord]
 """Bundle-stage backend signature."""
-
-
-@dataclass(slots=True)
-class Pipeline:
-    """Composable stage backends for the Core pipeline.
-
-    Each field is a callable with a typed signature. Replace any field
-    to customize that stage. The request remains data-only; this record
-    describes how the request is computed.
-
-    Attributes:
-        analyze: Analyze-stage backend.
-        advise: Advise-stage backend.
-        kmesh: Kmesh-stage backend that resolves concrete k-points.
-        select: Select-stage backend that resolves concrete selections.
-        generate: Generate-stage backend that writes target-code text.
-        bundle: Bundle-stage backend that writes portable outputs.
-    """
-
-    analyze: AnalyzeStage
-    advise: AdviseStage
-    kmesh: KMeshAdvisor
-    select: SelectStage
-    generate: GenerateStage
-    bundle: BundleStage
 
 
 def to_jsonable(value: Any) -> Any:
@@ -809,8 +795,6 @@ def to_jsonable(value: Any) -> Any:
     - None, str, int, float, bool → passed through unchanged
     """
     if is_dataclass(value):
-        if not hasattr(value, "__dataclass_fields__"):
-            return asdict(value)
         return {
             field.name: to_jsonable(getattr(value, field.name))
             for field in fields(value)

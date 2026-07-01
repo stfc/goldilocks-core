@@ -43,7 +43,7 @@ Responsibilities:
 | Module | Owns |
 | --- | --- |
 | `contracts.py` | Public records, type aliases, stage callable contracts, JSON-safe serialization. |
-| `jobs.py` | `run_core_job()` and `default_pipeline()`. |
+| `jobs.py` | `run_core_job()` and `Pipeline()`. |
 | `pipeline.py` | Ergonomic Python API: `recommend`, `generate`, `write_bundle`, stage wrappers. |
 | `analysis.py` | Structure facts only. No recommendations. |
 | `advice.py` | Provenance-backed scientific and numerical advice. |
@@ -64,7 +64,7 @@ Responsibilities:
 `jobs.py` composes stage implementations through `Pipeline`. The built-in composition is:
 
 ```python
-def default_pipeline() -> Pipeline:
+def Pipeline() -> Pipeline:
     return Pipeline(
         analyze=analyze_structure,
         advise=advise_parameters,
@@ -121,9 +121,8 @@ CoreJobRequest(
 `Pipeline` is executable composition:
 
 ```python
-from dataclasses import replace
 
-pipeline = replace(default_pipeline(), kmesh=ml_kmesh_advisor(spec))
+pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 result = run_core_job(request, pipeline=pipeline)
 ```
 
@@ -151,9 +150,8 @@ The separation means:
 Replace a `Pipeline` field to change one stage backend:
 
 ```python
-from dataclasses import replace
 
-pipeline = replace(default_pipeline(), generate=my_generator)
+pipeline = Pipeline(generate=my_generator)
 ```
 
 Current fields:
@@ -175,4 +173,4 @@ See [pipeline](pipeline.md) and [backends](backends.md) for signatures and examp
 
 The Python API and CLI both call `run_core_job()`.
 
-A future HTTP API should do the same: deserialize request JSON into `CoreJobRequest`, resolve any service-level backend choices outside Core, call `run_core_job()`, and serialize `CoreJobResult.to_dict()`. HTTP concerns such as auth, uploads, workspaces, and response transport stay outside Core.
+A future HTTP API should do the same: deserialize request JSON into `CoreJobRequest`, resolve any service-level backend choices outside Core, call `run_core_job()`, and serialize `CoreResult.to_dict()`. HTTP concerns such as auth, uploads, workspaces, and response transport stay outside Core.

@@ -3,30 +3,27 @@
 from __future__ import annotations
 
 from goldilocks_core.contracts import (
+    BundleRecord,
     CalculationHints,
     CalculationIntent,
     CoreJobRequest,
-    CoreJobResult,
-    CoreRecommendation,
-    Pipeline,
+    CoreResult,
 )
-from goldilocks_core.jobs import default_pipeline, run_core_job
-from goldilocks_core.pipeline import (
-    bundle_recommendation,
+from goldilocks_core.jobs import (
+    Pipeline,
     generate,
     recommend,
+    run_core_job,
     write_bundle,
 )
 
 __all__ = [
+    "BundleRecord",
     "CalculationHints",
     "CalculationIntent",
     "CoreJobRequest",
-    "CoreJobResult",
-    "CoreRecommendation",
+    "CoreResult",
     "Pipeline",
-    "bundle_recommendation",
-    "default_pipeline",
     "generate",
     "recommend",
     "run_core_job",

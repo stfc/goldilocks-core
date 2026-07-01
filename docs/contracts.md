@@ -16,10 +16,10 @@ These objects are safe to serialize with `to_dict()`:
 - `KPointSelection`
 - `SelectionRecord`
 - `GeneratedFile`
-- `CoreRecommendation`
+- `CoreResult`
 - `CoreJobRequest`
 - `StageRecord`
-- `CoreJobResult`
+- `CoreResult`
 - model and k-mesh records such as `ModelSpec`, `StructureFeatureVector`, and `KMeshEntry`
 
 `CoreJobRequest` is the request boundary. It contains only serializable job data:
@@ -106,7 +106,7 @@ Generates target-code files from completed Core records.
 ### `BundleStage`
 
 ```python
-Callable[[CoreRecommendation, str | Path], JsonDict]
+Callable[[CoreResult, str | Path], JsonDict]
 ```
 
 Writes generated files and manifest output.

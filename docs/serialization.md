@@ -2,7 +2,7 @@
 
 All staged pipeline data records support JSON-safe serialization via `to_dict()`. This is the contract for CLI `--json` output, future HTTP API responses, and [manifest](manifest.md) content.
 
-`Pipeline` is intentionally not serialized. It contains Python callables that configure how stages run. `CoreJobRequest` and `CoreJobResult` remain the serializable request/response boundary.
+`Pipeline` is intentionally not serialized. It contains Python callables that configure how stages run. `CoreJobRequest` and `CoreResult` remain the serializable request/response boundary.
 
 ## Type conversions
 

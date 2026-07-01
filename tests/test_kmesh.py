@@ -89,21 +89,14 @@ def test_resolve_kpoints_from_advice_converts_advised_spacing() -> None:
 
 
 def test_resolve_kpoints_from_advice_rejects_empty_advice() -> None:
-    """Require either explicit grid or spacing when no hint is set."""
-    structure = Structure(
-        lattice=Lattice.cubic(4.0),
-        species=["Si"],
-        coords=[[0.0, 0.0, 0.0]],
-    )
-    advice = KPointAdvice(
-        spacing=None,
-        explicit_grid=None,
-        mesh_type="monkhorst-pack",
-        provenance=Provenance(source="default", reason="default"),
-    )
-
+    """Require either explicit grid or spacing when constructing k-point advice."""
     with pytest.raises(ValueError, match="spacing or an explicit grid"):
-        resolve_kpoints_from_advice(structure, CalculationHints(), advice)
+        KPointAdvice(
+            spacing=None,
+            explicit_grid=None,
+            mesh_type="monkhorst-pack",
+            provenance=Provenance(source="default", reason="default"),
+        )
 
 
 def test_k_distance_to_mesh_matches_vasp_kspacing_for_cubic_cell() -> None:

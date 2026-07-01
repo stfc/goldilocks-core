@@ -197,7 +197,7 @@ Use a custom Analyze backend when a project needs additional facts or different 
 Signature:
 
 ```python
-BundleStage = Callable[[CoreResult, str | Path], JsonDict]
+BundleStage = Callable[[CoreResult, str | Path], BundleRecord]
 ```
 
 A Bundle backend writes generated files and a manifest. It should be deterministic and reject path traversal. It should not run calculations, submit jobs, download pseudopotentials, or inspect completed outputs.

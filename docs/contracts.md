@@ -106,7 +106,7 @@ Generates target-code files from completed Core records.
 ### `BundleStage`
 
 ```python
-Callable[[CoreResult, str | Path], JsonDict]
+Callable[[CoreResult, str | Path], BundleRecord]
 ```
 
 Writes generated files and manifest output.

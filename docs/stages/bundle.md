@@ -11,9 +11,9 @@ The Bundle stage writes a portable output directory containing generated input f
 
 ## Output
 
+- `BundleRecord` with the output directory path and manifest dictionary
 - `manifest.json` file
 - Generated input files under `inputs/`
-- JSON-safe manifest dictionary (returned to the caller)
 
 ## Directory layout
 

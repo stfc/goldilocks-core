@@ -30,7 +30,7 @@ The staged Core refactor removes several pre-existing import paths and changes s
 
 ## Removed top-level aliases
 
-The `CoreResult` class used to re-export several attributes at the top level (`grid`, `contains_*`, etc.). These shortcuts are gone. Access fields through the nested structure:
+The `CoreRecommendation` class used to re-export several attributes at the top level (`grid`, `contains_*`, etc.). These shortcuts are gone. Access fields through the nested structure:
 
 ```python
 # Old
@@ -42,20 +42,23 @@ result.selection.k_points.grid
 result.analysis.contains_heavy_elements
 ```
 
-## Changed Select signature
+## Changed stage-by-stage API
 
-`select_parameters()` no longer resolves k-points internally. Call the Kmesh backend first and pass the resulting `KPointSelection` into Select:
+The `pipeline.py` wrapper module has been removed. For stage-by-stage use, import `load_structure` from `io.structures` and use `Pipeline` fields directly:
 
 ```python
 from goldilocks_core import CalculationHints, Pipeline
-from goldilocks_core.pipeline import analyze, advise, load, select
+from goldilocks_core.analysis import analyze_structure
+from goldilocks_core.advice import advise_parameters
+from goldilocks_core.io.structures import load_structure
+from goldilocks_core.selection import select_parameters
 
 hints = CalculationHints()
-structure = load("structure.cif")
-analysis = analyze(structure)
-advice = advise(analysis, hints=hints)
+structure = load_structure("structure.cif")
+analysis = analyze_structure(structure)
+advice = advise_parameters(analysis, hints=hints)
 k_points = Pipeline().kmesh(structure, hints, advice.k_points)
-selection = select(structure, advice, k_points)
+selection = select_parameters(structure, advice, k_points)
 ```
 
 ## Changed ML advisor integration

@@ -183,7 +183,7 @@ Use this for a different deterministic output layout.
 Signature:
 
 ```python
-BundleStage = Callable[[CoreResult, str | Path], JsonDict]
+BundleStage = Callable[[CoreResult, str | Path], BundleRecord]
 ```
 
 Bundle may write files and return a manifest dictionary. It should not submit jobs, copy private pseudo libraries, or inspect completed outputs.

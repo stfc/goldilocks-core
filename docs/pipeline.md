@@ -25,20 +25,19 @@ This split keeps HTTP/JSON boundaries clean while making Python callers able to 
 
 ```python
 from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
-from goldilocks_core.contracts import Pipeline
 ```
 
-`Pipeline` is a dataclass with one callable per stage:
+`Pipeline` is a frozen dataclass with one callable per stage:
 
 ```python
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class Pipeline:
-    analyze: AnalyzeStage
-    advise: AdviseStage
-    kmesh: KMeshAdvisor
-    select: SelectStage
-    generate: GenerateStage
-    bundle: BundleStage
+    analyze: AnalyzeStage = analyze_structure
+    advise: AdviseStage = advise_parameters
+    kmesh: KMeshAdvisor = resolve_kpoints_from_advice
+    select: SelectStage = select_parameters
+    generate: GenerateStage = generate_inputs
+    bundle: BundleStage = write_bundle_directory
 ```
 
 The built-in composition is returned by `Pipeline()`:
@@ -184,7 +183,7 @@ Responsibility:
 ### Bundle
 
 ```python
-BundleStage = Callable[[CoreResult, str | Path], JsonDict]
+BundleStage = Callable[[CoreResult, str | Path], BundleRecord]
 ```
 
 Inputs:
@@ -265,8 +264,7 @@ The request contains no model field. The request says what to compute. The pipel
 
 ```python
 
-pipeline = replace(
-    Pipeline(),
+pipeline = Pipeline(
     kmesh=ml_kmesh_advisor(spec),
     generate=generate_vasp_inputs,
 )

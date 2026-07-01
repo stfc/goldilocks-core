@@ -43,8 +43,8 @@ Responsibilities:
 | Module | Owns |
 | --- | --- |
 | `contracts.py` | Public records, type aliases, stage callable contracts, JSON-safe serialization. |
-| `jobs.py` | `run_core_job()` and `Pipeline()`. |
-| `pipeline.py` | Ergonomic Python API: `recommend`, `generate`, `write_bundle`, stage wrappers. |
+| `jobs.py` | `run_core_job()`, `Pipeline`, and public convenience functions `recommend`, `generate`, `write_bundle`. |
+| `pipeline.py` | Removed. `recommend`, `generate`, `write_bundle` moved to `jobs.py`. |
 | `analysis.py` | Structure facts only. No recommendations. |
 | `advice.py` | Provenance-backed scientific and numerical advice. |
 | `kmesh.py` | Concrete k-point grid resolution from advice or hints. |
@@ -61,21 +61,20 @@ Responsibilities:
 
 `contracts.py` defines boundary records and callable signatures. Stage modules import contracts; contracts do not import stage modules.
 
-`jobs.py` composes stage implementations through `Pipeline`. The built-in composition is:
+`jobs.py` composes stage implementations through the `Pipeline` dataclass. The built-in composition uses default field values:
 
 ```python
-def Pipeline() -> Pipeline:
-    return Pipeline(
-        analyze=analyze_structure,
-        advise=advise_parameters,
-        kmesh=resolve_kpoints_from_advice,
-        select=select_parameters,
-        generate=generate_inputs,
-        bundle=write_bundle_directory,
-    )
+@dataclass(frozen=True, slots=True)
+class Pipeline:
+    analyze: AnalyzeStage = analyze_structure
+    advise: AdviseStage = advise_parameters
+    kmesh: KMeshAdvisor = resolve_kpoints_from_advice
+    select: SelectStage = select_parameters
+    generate: GenerateStage = generate_inputs
+    bundle: BundleStage = write_bundle_directory
 ```
 
-`pipeline.py` provides convenience wrappers around the same job runner. It does not carry a second implementation of the recommendation logic.
+`pipeline.py` was removed. `recommend`, `generate`, and `write_bundle` now live in `jobs.py` as thin wrappers around `run_core_job()`.
 
 ## Fixed graph
 
@@ -143,7 +142,7 @@ The separation means:
 | Kmesh | `kmesh.py`, `advisors/` | `KPointSelection` | Operator k-point hints win. |
 | Select | `selection.py` | `SelectionRecord` | Pseudos and cutoffs; no k-point recalculation. |
 | Generate | `generation.py` | `tuple[GeneratedFile, ...]` | Mechanical target-code translation. |
-| Bundle | `bundle.py` | manifest dict and files | Deterministic, path-safe directory output. |
+| Bundle | `bundle.py` | `BundleRecord` | Deterministic, path-safe directory output. |
 
 ## Extension points
 

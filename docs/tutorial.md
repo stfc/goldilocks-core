@@ -45,22 +45,25 @@ For notebooks or interactive exploration, use the stage-by-stage API:
 
 ```python
 from goldilocks_core import CalculationHints, Pipeline
-from goldilocks_core.pipeline import load, analyze, advise, select
+from goldilocks_core.analysis import analyze_structure
+from goldilocks_core.advice import advise_parameters
+from goldilocks_core.io.structures import load_structure
+from goldilocks_core.selection import select_parameters
 
 hints = CalculationHints()
-structure = load("structure.cif")
-analysis = analyze(structure)
+structure = load_structure("structure.cif")
+analysis = analyze_structure(structure)
 print(analysis.elements)                   # ("Fe", "O")
 print(analysis.electronic_character)       # "unknown"
 print(analysis.heavy_elements)             # ()
 
-advice = advise(analysis, hints=hints)
+advice = advise_parameters(analysis, hints=hints)
 print(advice.spin_orbit.consider)          # False
 print(advice.k_points.spacing)             # 0.2
 
 pipeline = Pipeline()
 k_points = pipeline.kmesh(structure, hints, advice.k_points)
-selection = select(structure, advice, k_points)
+selection = select_parameters(structure, advice, k_points)
 print(selection.k_points.grid)             # (8, 8, 8)
 ```
 

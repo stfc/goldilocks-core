@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from goldilocks_core.advice import advise_parameters
 from goldilocks_core.analysis import analyze_structure
@@ -123,19 +124,17 @@ def run_core_job(
         stages.append(StageRecord(name="generate"))
 
     if request.mode == "bundle":
-        if request.output_dir is None:
-            raise ValueError("output_dir is required for bundle mode")
-        bundle = active_pipeline.bundle(
-            CoreResult(
-                intent=request.intent,
-                analysis=analysis,
-                advice=advice,
-                selection=selection,
-                generated_files=generated_files,
-                warnings=warnings,
-            ),
-            request.output_dir,
+        # output_dir is guaranteed non-None for bundle mode by
+        # CoreJobRequest.__post_init__.
+        in_progress = CoreResult(
+            intent=request.intent,
+            analysis=analysis,
+            advice=advice,
+            selection=selection,
+            generated_files=generated_files,
+            warnings=warnings,
         )
+        bundle = active_pipeline.bundle(in_progress, request.output_dir)
         stages.append(StageRecord(name="bundle"))
 
     return CoreResult(
@@ -220,7 +219,7 @@ def generate(
 
 def write_bundle(
     structure: StructureInput,
-    output_dir: str,
+    output_dir: str | Path,
     *,
     intent: CalculationIntent | None = None,
     hints: CalculationHints | None = None,
@@ -250,7 +249,7 @@ def write_bundle(
             hints=hints or CalculationHints(),
             mode="bundle",
             pseudo_metadata=tuple(pseudo_metadata or ()),
-            output_dir=output_dir,
+            output_dir=str(output_dir),
         ),
         pipeline=pipeline,
     )

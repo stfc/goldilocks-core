@@ -5,11 +5,21 @@ Bundle mode writes `manifest.json` next to generated input files. The manifest i
 ## Producer
 
 ```python
+from pathlib import Path
 from goldilocks_core.bundle import build_bundle_manifest, write_bundle_directory
+from goldilocks_core.contracts import CoreResult
 ```
 
-- `build_bundle_manifest(recommendation)` returns the manifest dictionary without writing files.
-- `write_bundle_directory(recommendation, output_dir)` writes generated files and `manifest.json`, then returns the manifest dictionary.
+- `build_bundle_manifest(result: CoreResult)` returns the manifest dictionary without writing files.
+- `write_bundle_directory(result: CoreResult, output_dir: str | Path)` writes generated files and `manifest.json`, then returns a `BundleRecord` with the bundle path and the manifest dictionary.
+
+Access the manifest after writing through the returned record:
+
+```python
+bundle_record = write_bundle_directory(result, "run/")
+print(bundle_record.path)      # "run/"
+print(bundle_record.manifest)  # dict with manifest content
+```
 
 ## Layout
 

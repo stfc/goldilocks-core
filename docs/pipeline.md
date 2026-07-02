@@ -193,7 +193,7 @@ Inputs:
 
 Output:
 
-- JSON-safe manifest dictionary
+- `BundleRecord` with the bundle path and manifest dictionary
 
 Responsibility:
 

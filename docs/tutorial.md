@@ -122,7 +122,7 @@ result = write_bundle(
 )
 
 print(result.bundle.path)          # "run/"
-print(result.manifest)            # dict with manifest content
+print(result.bundle.manifest)      # dict with manifest content
 # run/manifest.json and run/inputs/qe.in are now on disk
 ```
 

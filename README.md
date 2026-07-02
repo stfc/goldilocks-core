@@ -80,7 +80,7 @@ result = write_bundle(
 )
 
 print(result.bundle.path)
-print(result.manifest)
+print(result.bundle.manifest)
 ```
 
 Bundle layout:

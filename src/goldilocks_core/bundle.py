@@ -15,13 +15,13 @@ def build_bundle_manifest(result: CoreResult) -> JsonDict:
     """Return a JSON-safe manifest for a Core output bundle.
 
     Args:
-        result: Completed Core result, usually including generated files
-            from Generate mode.
+        result: Completed Core result, usually including generated files from
+            Generate mode.
 
     Returns:
         Manifest dictionary with schema version, serialized intent, analysis,
-        advice, selection, generated-file metadata, and warnings. Generated
-        file content is not embedded.
+        advice, selection, generated-file metadata, and warnings. Generated file
+        content is not embedded.
     """
     files = [
         {
@@ -54,8 +54,7 @@ def write_bundle_directory(
         output_dir: Bundle root directory. It is created if needed.
 
     Returns:
-        ``BundleRecord`` carrying the bundle path and the manifest dictionary
-        also written to ``manifest.json``.
+        ``BundleRecord`` with the output directory path and manifest.
 
     Raises:
         ValueError: If a generated file path would escape ``output_dir``.

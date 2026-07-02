@@ -1,5 +1,4 @@
 import json
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -7,7 +6,6 @@ import pytest
 from goldilocks_core.advice import advise_parameters
 from goldilocks_core.bundle import build_bundle_manifest, write_bundle_directory
 from goldilocks_core.contracts import (
-    BundleRecord,
     CalculationIntent,
     CoreResult,
     GeneratedFile,
@@ -67,26 +65,29 @@ def test_build_bundle_manifest_records_file_metadata_without_content() -> None:
     assert manifest["warnings"] == ["test warning"]
 
 
-def test_write_bundle_directory_returns_bundle_record_and_writes_files(
-    tmp_path: Path,
-) -> None:
-    """Write a deterministic bundle layout and return a BundleRecord."""
-    bundle = write_bundle_directory(make_result(), tmp_path)
+def test_write_bundle_directory_writes_manifest_and_files(tmp_path: Path) -> None:
+    """Write a deterministic bundle layout to disk."""
+    result = make_result()
 
-    assert isinstance(bundle, BundleRecord)
-    assert bundle.path == str(tmp_path)
+    bundle_record = write_bundle_directory(result, tmp_path)
+
     assert (tmp_path / "inputs" / "qe.in").read_text(
         encoding="utf-8"
     ) == "&CONTROL\n/\n"
     manifest_data = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest_data == bundle.manifest
+    assert manifest_data == bundle_record.manifest
     assert manifest_data["generated_files"][0]["path"] == "inputs/qe.in"
+    assert bundle_record.path == str(tmp_path)
 
 
 def test_write_bundle_directory_rejects_path_traversal(tmp_path: Path) -> None:
     """Reject generated file paths that escape the bundle directory."""
-    result = replace(
-        make_result(),
+    result = make_result()
+    result = CoreResult(
+        intent=result.intent,
+        analysis=result.analysis,
+        advice=result.advice,
+        selection=result.selection,
         generated_files=(GeneratedFile(path="../qe.in", content="bad"),),
     )
 

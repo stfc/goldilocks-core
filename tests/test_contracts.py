@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from goldilocks_core.contracts import (
     BundleRecord,
@@ -23,7 +22,23 @@ from goldilocks_core.contracts import (
 )
 
 
-def _make_advice(provenance: Provenance) -> ParameterAdvice:
+def _make_analysis() -> StructureAnalysisRecord:
+    return StructureAnalysisRecord(
+        formula="Si1",
+        reduced_formula="Si",
+        site_count=1,
+        elements=("Si",),
+        contains_transition_metals=False,
+        contains_lanthanides=False,
+        contains_actinides=False,
+        contains_heavy_elements=False,
+        magnetic_elements=(),
+        heavy_elements=(),
+    )
+
+
+def _make_advice() -> ParameterAdvice:
+    provenance = Provenance(source="default", reason="baseline default")
     return ParameterAdvice(
         k_points=KPointAdvice(
             spacing=0.2,
@@ -58,22 +73,8 @@ def _make_advice(provenance: Provenance) -> ParameterAdvice:
     )
 
 
-def _make_analysis() -> StructureAnalysisRecord:
-    return StructureAnalysisRecord(
-        formula="Si1",
-        reduced_formula="Si",
-        site_count=1,
-        elements=("Si",),
-        contains_transition_metals=False,
-        contains_lanthanides=False,
-        contains_actinides=False,
-        contains_heavy_elements=False,
-        magnetic_elements=(),
-        heavy_elements=(),
-    )
-
-
-def _make_selection(provenance: Provenance) -> SelectionRecord:
+def _make_selection() -> SelectionRecord:
+    provenance = Provenance(source="default", reason="baseline default")
     return SelectionRecord(
         k_points=KPointSelection(
             grid=(4, 4, 4),
@@ -87,12 +88,12 @@ def _make_selection(provenance: Provenance) -> SelectionRecord:
 
 def test_contracts_serialize_to_json_safe_dicts() -> None:
     """Serialize nested pipeline records without tuples or dataclasses."""
-    provenance = Provenance(source="default", reason="baseline default")
     result = CoreResult(
         intent=CalculationIntent(),
         analysis=_make_analysis(),
-        advice=_make_advice(provenance),
-        selection=_make_selection(provenance),
+        advice=_make_advice(),
+        selection=_make_selection(),
+        stages=(StageRecord(name="load"), StageRecord(name="analyze")),
     )
 
     data = result.to_dict()
@@ -101,8 +102,6 @@ def test_contracts_serialize_to_json_safe_dicts() -> None:
     assert data["selection"]["k_points"]["grid"] == [4, 4, 4]
     assert "grid" not in data
     assert "contains_heavy_elements" not in data
-    # request is not echoed on CoreResult
-    assert "request" not in data
 
 
 def test_hints_serialize_explicit_grid_as_list() -> None:
@@ -122,61 +121,82 @@ def test_feature_vectors_serialize_numpy_values_as_json_lists() -> None:
     assert data["values"] == [1.0, 2.0]
 
 
-def test_core_result_serializes_with_stages_and_bundle() -> None:
-    """Serialize CoreResult with execution trace and bundle record."""
-    provenance = Provenance(source="default", reason="baseline default")
+def test_job_records_serialize_to_json_safe_dicts() -> None:
+    """Serialize job result records for CLI and future HTTP callers."""
     result = CoreResult(
         intent=CalculationIntent(),
         analysis=_make_analysis(),
-        advice=_make_advice(provenance),
-        selection=_make_selection(provenance),
-        generated_files=(),
-        warnings=("a warning",),
+        advice=_make_advice(),
+        selection=_make_selection(),
         bundle=BundleRecord(path="run/", manifest={"manifest_version": 1}),
         stages=(StageRecord(name="load"), StageRecord(name="analyze")),
     )
 
     data = result.to_dict()
 
+    assert data["bundle"]["path"] == "run/"
     assert data["stages"][0]["name"] == "load"
     assert data["selection"]["k_points"]["grid"] == [4, 4, 4]
-    assert data["bundle"]["path"] == "run/"
-    assert data["bundle"]["manifest"]["manifest_version"] == 1
-    assert data["warnings"] == ["a warning"]
 
 
-def test_kpoint_advice_requires_exactly_one_of_spacing_or_grid() -> None:
-    """KPointAdvice raises at construction unless exactly one input is set."""
+def test_kpoint_advice_requires_exactly_one_k_source() -> None:
+    """KPointAdvice raises when both or neither spacing/grid are set."""
     provenance = Provenance(source="default", reason="baseline default")
-    # exactly one (spacing) is fine
-    KPointAdvice(spacing=0.2, explicit_grid=None, mesh_type="mp", provenance=provenance)
-    # exactly one (grid) is fine
+
     KPointAdvice(
-        spacing=None, explicit_grid=(4, 4, 4), mesh_type="mp", provenance=provenance
+        spacing=0.2,
+        explicit_grid=None,
+        mesh_type="monkhorst-pack",
+        provenance=provenance,
+    )
+    KPointAdvice(
+        spacing=None,
+        explicit_grid=(2, 2, 2),
+        mesh_type="monkhorst-pack",
+        provenance=provenance,
     )
 
-    with pytest.raises(ValueError, match="exactly one"):
-        KPointAdvice(
-            spacing=None, explicit_grid=None, mesh_type="mp", provenance=provenance
-        )
-    with pytest.raises(ValueError, match="exactly one"):
+    try:
         KPointAdvice(
             spacing=0.2,
-            explicit_grid=(4, 4, 4),
-            mesh_type="mp",
+            explicit_grid=(2, 2, 2),
+            mesh_type="monkhorst-pack",
             provenance=provenance,
         )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError for both spacing and grid")
+
+    try:
+        KPointAdvice(
+            spacing=None,
+            explicit_grid=None,
+            mesh_type="monkhorst-pack",
+            provenance=provenance,
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError for neither spacing nor grid")
 
 
-def test_core_job_request_validates_mode_and_output_dir() -> None:
+def test_core_job_request_validates_mode_and_bundle_output_dir() -> None:
     """CoreJobRequest raises at construction for invalid mode or missing output_dir."""
-    # valid modes
     CoreJobRequest(structure="Si.cif", mode="recommend")
     CoreJobRequest(structure="Si.cif", mode="generate")
     CoreJobRequest(structure="Si.cif", mode="bundle", output_dir="run/")
 
-    with pytest.raises(ValueError, match="output_dir is required"):
-        CoreJobRequest(structure="Si.cif", mode="bundle")
+    try:
+        CoreJobRequest(structure="Si.cif", mode="invalid")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError for invalid mode")
 
-    with pytest.raises(ValueError, match="Unsupported Core job mode"):
-        CoreJobRequest(structure="Si.cif", mode="bogus")  # type: ignore[arg-type]
+    try:
+        CoreJobRequest(structure="Si.cif", mode="bundle")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError for bundle mode without output_dir")

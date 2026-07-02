@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from goldilocks_core.contracts import (
+    BundleRecord,
     CalculationHints,
     CalculationIntent,
     CoreJobRequest,
@@ -17,6 +18,7 @@ from goldilocks_core.jobs import (
 )
 
 __all__ = [
+    "BundleRecord",
     "CalculationHints",
     "CalculationIntent",
     "CoreJobRequest",

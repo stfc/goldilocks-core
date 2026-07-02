@@ -184,6 +184,7 @@ print(result.to_dict())
 The request stays data-only. Swap the Kmesh stage through `Pipeline`:
 
 ```python
+
 from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
 from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.contracts import ModelSpec

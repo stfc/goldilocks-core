@@ -11,9 +11,9 @@ The Bundle stage writes a portable output directory containing generated input f
 
 ## Output
 
+- `BundleRecord` with the output directory path and manifest dictionary
 - `manifest.json` file
 - Generated input files under `inputs/`
-- `BundleRecord` (bundle path + JSON-safe manifest dictionary) returned to the caller
 
 ## Directory layout
 
@@ -34,7 +34,7 @@ The manifest is written with `json.dumps(indent=2, sort_keys=True)` for determin
 
 ## Path traversal protection
 
-`_resolve_bundle_path()` resolves each generated file path relative to the output directory and rejects paths that escape the bundle root. A `GeneratedFile(path="../outside.in")` will raise `ValueError`.
+`_resolve_bundle.path()` resolves each generated file path relative to the output directory and rejects paths that escape the bundle root. A `GeneratedFile(path="../outside.in")` will raise `ValueError`.
 
 ## What the bundle does not do
 

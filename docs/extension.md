@@ -9,6 +9,7 @@ See [backends](backends.md) for detailed backend authoring examples.
 ## Pipeline extension model
 
 ```python
+
 from goldilocks_core import Pipeline, run_core_job
 
 pipeline = Pipeline(kmesh=my_kmesh_backend)

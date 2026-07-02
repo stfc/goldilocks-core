@@ -41,30 +41,29 @@ print(result.advice.convergence.provenance.source)    # "default"
 
 ## Inspecting intermediate stages
 
-For notebooks or interactive exploration, run the stages individually through
-`Pipeline` fields. Swappable stages live on `Pipeline`; Load is stable
-request-boundary I/O handled by `load_structure`:
+For notebooks or interactive exploration, use the stage-by-stage API:
 
 ```python
-from goldilocks_core import CalculationIntent, CalculationHints, Pipeline
+from goldilocks_core import CalculationHints, Pipeline
+from goldilocks_core.analysis import analyze_structure
+from goldilocks_core.advice import advise_parameters
 from goldilocks_core.io.structures import load_structure
+from goldilocks_core.selection import select_parameters
 
-intent = CalculationIntent()
 hints = CalculationHints()
-pipeline = Pipeline()
-
 structure = load_structure("structure.cif")
-analysis = pipeline.analyze(structure)
+analysis = analyze_structure(structure)
 print(analysis.elements)                   # ("Fe", "O")
 print(analysis.electronic_character)       # "unknown"
 print(analysis.heavy_elements)             # ()
 
-advice = pipeline.advise(analysis, intent, hints)
+advice = advise_parameters(analysis, hints=hints)
 print(advice.spin_orbit.consider)          # False
 print(advice.k_points.spacing)             # 0.2
 
+pipeline = Pipeline()
 k_points = pipeline.kmesh(structure, hints, advice.k_points)
-selection = pipeline.select(structure, advice, k_points, ())
+selection = select_parameters(structure, advice, k_points)
 print(selection.k_points.grid)             # (8, 8, 8)
 ```
 
@@ -123,7 +122,7 @@ result = write_bundle(
 )
 
 print(result.bundle.path)          # "run/"
-print(result.bundle.manifest)     # dict with manifest content
+print(result.bundle.manifest)      # dict with manifest content
 # run/manifest.json and run/inputs/qe.in are now on disk
 ```
 
@@ -158,6 +157,7 @@ print(result.to_dict())           # full JSON-safe output
 Use `ml_kmesh_advisor(spec)` to plug model-backed k-point selection into the staged pipeline:
 
 ```python
+
 from goldilocks_core import Pipeline, recommend
 from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.contracts import ModelSpec

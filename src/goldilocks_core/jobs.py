@@ -1,4 +1,4 @@
-"""Fixed Core job runner and entry points shared by Python, CLI, and HTTP surfaces."""
+"""Fixed Core job runner shared by Python, CLI, and future HTTP surfaces."""
 
 from __future__ import annotations
 
@@ -22,10 +22,12 @@ from goldilocks_core.contracts import (
     KMeshAdvisor,
     SelectStage,
     StageRecord,
+    StructureInput,
 )
 from goldilocks_core.generation import generate_inputs
 from goldilocks_core.io.structures import load_structure
 from goldilocks_core.kmesh import resolve_kpoints_from_advice
+from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.selection import select_parameters
 
 
@@ -33,13 +35,9 @@ from goldilocks_core.selection import select_parameters
 class Pipeline:
     """Composable stage backends for the Core pipeline.
 
-    Each field is a callable with a typed stage signature. Construct with no
-    arguments for the default pipeline; override any field to swap that
-    stage's backend. Backends are plain callables — no base class, no
-    registry, no plugin loader.
-
-    The request remains data-only and serializable; this record carries
-    executable behavior describing how a request is computed.
+    Construct with no arguments for the default pipeline; override any
+    field to swap that stage's backend. Backends are plain callables with
+    the stage signature — no base class, no registry.
 
     Attributes:
         analyze: Analyze-stage backend.
@@ -68,20 +66,16 @@ def run_core_job(
     Args:
         request: Serializable job data: structure input, intent, hints,
             pseudopotential metadata, mode, and optional output directory.
-        pipeline: Optional executable stage composition. When omitted, the
-            default ``Pipeline()`` is used.
+        pipeline: Optional executable stage composition. When omitted,
+            ``Pipeline()`` is used.
 
     Returns:
-        A ``CoreResult`` accumulator carrying intent, analysis, advice,
-        selection, generated files (in generate/bundle modes), the bundle
-        record (in bundle mode), the stage execution trace, and aggregated
-        warnings. The request is not echoed on the result; the caller already
-        has it.
+        A ``CoreResult`` containing the stage records, scientific records,
+        generated files when requested, and bundle record for bundle mode.
 
     Raises:
-        ValueError: Only via ``CoreJobRequest.__post_init__`` (invalid mode or
-            bundle mode without ``output_dir``) or when a downstream stage
-            rejects its inputs.
+        ValueError: If the job mode is unsupported, bundle mode lacks
+            ``output_dir``, or a downstream stage rejects its inputs.
     """
     active_pipeline = pipeline or Pipeline()
 
@@ -156,11 +150,11 @@ def run_core_job(
 
 
 def recommend(
-    structure,
+    structure: StructureInput,
     *,
     intent: CalculationIntent | None = None,
     hints: CalculationHints | None = None,
-    pseudo_metadata=None,
+    pseudo_metadata: list[PseudoMetadata] | None = None,
     pipeline: Pipeline | None = None,
 ) -> CoreResult:
     """Run Load → Analyze → Advise → Kmesh → Select.
@@ -173,8 +167,7 @@ def recommend(
         pipeline: Optional stage backend composition.
 
     Returns:
-        ``CoreResult`` with analysis, advice, selection, warnings, and the
-        stage execution trace.
+        ``CoreResult`` containing analysis, advice, selection, and warnings.
     """
     return run_core_job(
         CoreJobRequest(
@@ -189,11 +182,11 @@ def recommend(
 
 
 def generate(
-    structure,
+    structure: StructureInput,
     *,
     intent: CalculationIntent | None = None,
     hints: CalculationHints | None = None,
-    pseudo_metadata=None,
+    pseudo_metadata: list[PseudoMetadata] | None = None,
     pipeline: Pipeline | None = None,
 ) -> CoreResult:
     """Run Load → Analyze → Advise → Kmesh → Select → Generate.
@@ -206,11 +199,11 @@ def generate(
         pipeline: Optional stage backend composition.
 
     Returns:
-        ``CoreResult`` with generated input files attached.
+        ``CoreResult`` with generated files attached.
 
     Raises:
-        ValueError: If generation rejects its inputs (unsupported intent,
-            incomplete selections, or disordered structures).
+        ValueError: If generation is requested with unsupported intent or
+            incomplete selections.
     """
     return run_core_job(
         CoreJobRequest(
@@ -225,12 +218,12 @@ def generate(
 
 
 def write_bundle(
-    structure,
+    structure: StructureInput,
     output_dir: str | Path,
     *,
     intent: CalculationIntent | None = None,
     hints: CalculationHints | None = None,
-    pseudo_metadata=None,
+    pseudo_metadata: list[PseudoMetadata] | None = None,
     pipeline: Pipeline | None = None,
 ) -> CoreResult:
     """Run the full Core pipeline and write a portable bundle directory.
@@ -244,8 +237,7 @@ def write_bundle(
         pipeline: Optional stage backend composition.
 
     Returns:
-        ``CoreResult`` with generated files, the bundle record (path +
-        manifest), the stage execution trace, and warnings.
+        ``CoreResult`` with generated files, bundle record, stages, and warnings.
 
     Raises:
         ValueError: If generation or bundle writing rejects its inputs.

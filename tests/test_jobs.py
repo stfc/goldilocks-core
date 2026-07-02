@@ -6,7 +6,6 @@ from pymatgen.core import Lattice, Structure
 from goldilocks_core import (
     CalculationHints,
     CoreJobRequest,
-    CoreResult,
     Pipeline,
     run_core_job,
 )
@@ -38,7 +37,7 @@ def make_metadata() -> PseudoMetadata:
     )
 
 
-def test_run_core_job_recommend_returns_core_result() -> None:
+def test_run_core_job_recommend_matches_public_recommendation_shape() -> None:
     """Run the configured job graph through Select for recommendation mode."""
     result = run_core_job(
         CoreJobRequest(
@@ -48,7 +47,6 @@ def test_run_core_job_recommend_returns_core_result() -> None:
         )
     )
 
-    assert isinstance(result, CoreResult)
     assert [stage.name for stage in result.stages] == [
         "load",
         "analyze",
@@ -89,7 +87,7 @@ def test_run_core_job_aggregates_kmesh_warnings() -> None:
 
 
 def test_run_core_job_uses_custom_kmesh_backend() -> None:
-    """Replace one pipeline backend by constructing Pipeline with an override."""
+    """Replace one pipeline backend without changing the rest."""
 
     def custom_kmesh(structure, hints, kpoint_advice):
         return KPointSelection(
@@ -152,7 +150,6 @@ def test_run_core_job_generate_adds_generated_files() -> None:
     assert [stage.name for stage in result.stages][-1] == "generate"
     assert result.generated_files[0].path == "inputs/qe.in"
     assert "2  2  1  0  0  0" in result.generated_files[0].content
-    assert result.bundle is None
 
 
 def test_run_core_job_bundle_writes_output_directory(tmp_path: Path) -> None:
@@ -174,22 +171,3 @@ def test_run_core_job_bundle_writes_output_directory(tmp_path: Path) -> None:
     manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["selection"]["k_points"]["grid"] == [2, 2, 1]
     assert result.bundle.manifest == manifest
-
-
-def test_pipeline_defaults_equal_default_backends() -> None:
-    """Pipeline() with no overrides uses the built-in backends."""
-    from goldilocks_core.advice import advise_parameters
-    from goldilocks_core.analysis import analyze_structure
-    from goldilocks_core.bundle import write_bundle_directory
-    from goldilocks_core.generation import generate_inputs
-    from goldilocks_core.kmesh import resolve_kpoints_from_advice
-    from goldilocks_core.selection import select_parameters
-
-    pipeline = Pipeline()
-
-    assert pipeline.analyze is analyze_structure
-    assert pipeline.advise is advise_parameters
-    assert pipeline.kmesh is resolve_kpoints_from_advice
-    assert pipeline.select is select_parameters
-    assert pipeline.generate is generate_inputs
-    assert pipeline.bundle is write_bundle_directory

@@ -120,9 +120,8 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
     assert request.hints.pseudo_type == "NC"
     assert captured["pipeline"] is None
     output = json.loads(capsys.readouterr().out)
-    # CLI echoes the request itself alongside the CoreResult fields
-    assert output["request"]["structure"] == "Si.cif"
     assert output["selection"]["k_points"]["grid"] == [2, 2, 1]
+    assert output["request"]["structure"] == "Si.cif"
 
 
 def test_main_builds_pipeline_for_model_backend(monkeypatch, capsys) -> None:
@@ -181,10 +180,8 @@ def test_main_builds_bundle_request_with_output_dir(monkeypatch, capsys) -> None
             analysis=result.analysis,
             advice=result.advice,
             selection=result.selection,
+            bundle=BundleRecord(path=request.output_dir, manifest={}),
             stages=result.stages,
-            bundle=BundleRecord(
-                path=request.output_dir, manifest={"manifest_version": 1}
-            ),
         )
 
     monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)

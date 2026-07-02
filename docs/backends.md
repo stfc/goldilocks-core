@@ -126,6 +126,7 @@ def generate_custom_input(structure, intent, advice, selection):
 Use it:
 
 ```python
+
 pipeline = Pipeline(generate=generate_custom_input)
 result = run_core_job(
     CoreJobRequest(structure="Si.cif", mode="generate"),
@@ -199,13 +200,15 @@ Signature:
 BundleStage = Callable[[CoreResult, str | Path], BundleRecord]
 ```
 
-A Bundle backend writes generated files and a manifest and returns a `BundleRecord`. It should be deterministic and reject path traversal. It should not run calculations, submit jobs, download pseudopotentials, or inspect completed outputs.
+A Bundle backend writes generated files and a manifest. It should be deterministic and reject path traversal. It should not run calculations, submit jobs, download pseudopotentials, or inspect completed outputs.
 
 ## Testing a backend
 
 Preferred test shape:
 
 ```python
+
+
 def test_custom_kmesh_backend_is_used():
     pipeline = Pipeline(kmesh=custom_kmesh)
 

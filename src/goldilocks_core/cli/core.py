@@ -11,6 +11,7 @@ from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
     CoreJobRequest,
+    CoreResult,
     ModelSpec,
 )
 from goldilocks_core.jobs import Pipeline, run_core_job
@@ -47,13 +48,8 @@ def main() -> None:
     result = run_core_job(request, pipeline=_pipeline_from_args(args))
 
     if args.json:
-        print(
-            json.dumps(
-                {"request": request.to_dict(), **result.to_dict()},
-                indent=2,
-                sort_keys=True,
-            )
-        )
+        output = {"request": request.to_dict(), **result.to_dict()}
+        print(json.dumps(output, indent=2, sort_keys=True))
         return
 
     _print_human_summary(result)
@@ -187,7 +183,7 @@ def _parse_optional_bool(value: str | None) -> bool | None:
     return value == "true"
 
 
-def _print_human_summary(result) -> None:
+def _print_human_summary(result: CoreResult) -> None:
     """Print a small human-readable summary from the Core result."""
     grid = result.selection.k_points.grid
     print(f"formula: {result.analysis.reduced_formula}")

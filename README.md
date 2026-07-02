@@ -126,6 +126,7 @@ bundle    -> Load → Analyze → Advise → Kmesh → Select → Generate → B
 `Pipeline` holds Python callables for stage backends. `CoreJobRequest` remains data-only.
 
 ```python
+
 from goldilocks_core import Pipeline, recommend
 from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.contracts import ModelSpec
@@ -168,7 +169,7 @@ See [CLI reference](docs/cli.md).
 ```text
 src/goldilocks_core/
 ├── contracts.py   # public records, type aliases, serialization
-├── jobs.py        # Pipeline composition, job runner, and entry points
+├── jobs.py        # fixed job runner, Pipeline, and public convenience API
 ├── analysis.py    # structure facts
 ├── advice.py      # provenance-backed parameter advice
 ├── kmesh.py       # k-point grid resolution

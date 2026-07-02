@@ -13,3 +13,5 @@ design.md
 
 notebooks/
 local_data/
+# Pi harness state
+.pi/

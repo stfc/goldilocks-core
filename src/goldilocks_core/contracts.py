@@ -206,8 +206,7 @@ class CalculationIntent:
             (e.g. ``PBE``, ``PBEsol``, ``LDA``).
         accuracy_level: desired accuracy/cost tradeoff.
         pseudo_mode: pseudopotential family preference
-            (e.g. ``efficiency``, ``precision``). Override via
-            ``CalculationHints.pseudo_mode``.
+            (e.g. ``efficiency``, ``precision``).
     """
 
     code: CodeName = "quantum_espresso"
@@ -244,8 +243,7 @@ class CalculationHints:
         spin_orbit_coupling: force SOC on (``True``) or off
             (``False``).
         pseudo_mode: override pseudo family preference (e.g.
-            ``efficiency``, ``precision``). Overrides
-            ``CalculationIntent.pseudo_mode`` when set.
+            ``efficiency``, ``precision``).
         pseudo_type: override pseudo type (e.g. ``NC``,
             ``USPP``, ``PAW``).
         relativistic_mode: override relativistic treatment
@@ -362,10 +360,12 @@ class KPointAdvice:
     provenance: Provenance
 
     def __post_init__(self) -> None:
-        """Validate that exactly one of spacing or explicit_grid is set."""
-        if (self.spacing is None) == (self.explicit_grid is None):
+        """Enforce exactly one of spacing or explicit_grid."""
+        has_spacing = self.spacing is not None
+        has_grid = self.explicit_grid is not None
+        if has_spacing == has_grid:
             raise ValueError(
-                "KPointAdvice requires exactly one of spacing or explicit_grid"
+                "KPointAdvice must have exactly one of spacing or an explicit grid set"
             )
 
     def to_dict(self) -> JsonDict:
@@ -633,6 +633,65 @@ class GeneratedFile:
 
 
 @dataclass(frozen=True, slots=True)
+class BundleRecord:
+    """Terminal Bundle-stage output: where files were written and the manifest.
+
+    This is a stage record like every other: one stage produces one record.
+    It is only populated in bundle mode.
+
+    Attributes:
+        path: bundle root directory path.
+        manifest: bundle manifest dictionary.
+    """
+
+    path: str
+    manifest: JsonDict
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class CoreResult:
+    """Composed accumulator of every stage record the fixed graph produces.
+
+    Scientific records are populated as their stages run. ``generated_files``
+    is populated in generate/bundle modes. ``bundle`` is set only in bundle
+    mode. ``stages`` is the execution trace, always populated. The request is
+    not echoed here — the caller already has it; CLI/HTTP layers echo it
+    themselves in their serialized output.
+
+    Attributes:
+        intent: what the operator asked for.
+        analysis: structure facts from the Analyze stage.
+        advice: provenance-backed recommendations from the Advise
+            stage.
+        selection: concrete values from the Select stage.
+        generated_files: generated input files, populated by
+            Generate or Bundle modes.
+        warnings: aggregated warnings from analysis, Kmesh, and
+            selection.
+        bundle: terminal Bundle-stage record, set only in bundle
+            mode.
+        stages: execution record for each completed stage.
+    """
+
+    intent: CalculationIntent
+    analysis: StructureAnalysisRecord
+    advice: ParameterAdvice
+    selection: SelectionRecord
+    generated_files: tuple[GeneratedFile, ...] = ()
+    warnings: tuple[str, ...] = ()
+    bundle: BundleRecord | None = None
+    stages: tuple[StageRecord, ...] = ()
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
 class CoreJobRequest:
     """Request for running the fixed Core stage graph.
 
@@ -659,9 +718,10 @@ class CoreJobRequest:
     output_dir: str | None = None
 
     def __post_init__(self) -> None:
-        """Validate mode and output_dir consistency at construction."""
+        """Validate request invariants at construction."""
         if self.mode not in {"recommend", "generate", "bundle"}:
             raise ValueError(f"Unsupported Core job mode: {self.mode}")
+
         if self.mode == "bundle" and self.output_dir is None:
             raise ValueError("output_dir is required for bundle mode")
 
@@ -674,8 +734,8 @@ class CoreJobRequest:
 class StageRecord:
     """Observable execution record for one fixed Core pipeline stage.
 
-    Used in ``CoreResult.stages`` to report which stages ran and what
-    warnings they produced.
+    Used in ``CoreResult.stages`` to report which stages ran and
+    what warnings they produced.
 
     Attributes:
         name: which stage this record is for.
@@ -686,60 +746,6 @@ class StageRecord:
     name: StageName
     status: StageStatus = "completed"
     warnings: tuple[str, ...] = ()
-
-    def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary."""
-        return to_jsonable(self)
-
-
-@dataclass(frozen=True, slots=True)
-class BundleRecord:
-    """Terminal Bundle-stage output: where files were written and the manifest.
-
-    Attributes:
-        path: bundle root directory the stage wrote to.
-        manifest: JSON-safe manifest dictionary also written to
-            ``manifest.json``.
-    """
-
-    path: str
-    manifest: JsonDict
-
-    def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary."""
-        return to_jsonable(self)
-
-
-@dataclass(frozen=True, slots=True)
-class CoreResult:
-    """Composed accumulator of every stage record the fixed Core graph produces.
-
-    Scientific records are populated as their stages run. ``generated_files``
-    is populated in generate/bundle modes. ``bundle`` is set only in bundle
-    mode. ``stages`` is the execution trace, always populated. The request is
-    not echoed here — the caller already has it; CLI/HTTP layers echo it
-    themselves in their serialized output.
-
-    Attributes:
-        intent: what the operator asked for.
-        analysis: structure facts from the Analyze stage.
-        advice: provenance-backed recommendations from the Advise stage.
-        selection: concrete values from the Select stage.
-        generated_files: generated input files, populated by Generate or
-            Bundle modes.
-        warnings: aggregated warnings from analysis, k-points, and selection.
-        bundle: terminal Bundle-stage record, set in bundle mode.
-        stages: execution record for each completed stage.
-    """
-
-    intent: CalculationIntent
-    analysis: StructureAnalysisRecord
-    advice: ParameterAdvice
-    selection: SelectionRecord
-    generated_files: tuple[GeneratedFile, ...] = ()
-    warnings: tuple[str, ...] = ()
-    bundle: BundleRecord | None = None
-    stages: tuple[StageRecord, ...] = ()
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""

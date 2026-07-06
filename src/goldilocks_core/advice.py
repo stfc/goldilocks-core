@@ -14,6 +14,7 @@ from goldilocks_core.contracts import (
     SmearingAdvice,
     SpinOrbitAdvice,
     StructureAnalysisRecord,
+    VdwAdvice,
 )
 
 DEFAULT_K_SPACING = 0.2
@@ -21,6 +22,7 @@ DEFAULT_CONV_THR = 1e-6
 DEFAULT_MIXING_BETA = 0.4
 DEFAULT_ELECTRON_MAXSTEP = 80
 METALLIC_SMEARING_WIDTH_RY = 0.01
+_VALID_VDW_METHODS = frozenset({"d3", "d3bj", "ts", "mbd"})
 
 
 def advise_parameters(
@@ -35,11 +37,11 @@ def advise_parameters(
         intent: Calculation intent such as target code, task, functional, and
             pseudopotential mode. Defaults to ``CalculationIntent()``.
         hints: Optional operator overrides for k-points, smearing, magnetism,
-            SOC, pseudopotentials, and convergence.
+            SOC, pseudopotentials, convergence, and van der Waals.
 
     Returns:
         A ``ParameterAdvice`` record containing k-point, smearing, magnetism,
-        SOC, pseudopotential, and convergence advice.
+        SOC, pseudopotential, convergence, and van der Waals advice.
 
     Raises:
         ValueError: If numeric hints are invalid.
@@ -57,6 +59,7 @@ def advise_parameters(
         spin_orbit=spin_orbit,
         pseudopotentials=_advise_pseudopotentials(intent, hints, spin_orbit),
         convergence=_advise_convergence(hints),
+        vdw=_advise_vdw(hints),
     )
 
 
@@ -269,6 +272,47 @@ def _advise_convergence(hints: CalculationHints) -> ConvergenceAdvice:
     )
 
 
+def _advise_vdw(hints: CalculationHints) -> VdwAdvice:
+    """Return vdW dispersion advice.
+
+    Hint-only for now: the structure heuristic (non-3D / vacuum → D3BJ) is
+    deferred until dimensionality/vacuum detection lands in the Analyze stage.
+    """
+    if hints.use_vdw is not None:
+        method = (hints.vdw_method or "d3bj") if hints.use_vdw else None
+        return VdwAdvice(
+            use_vdw=hints.use_vdw,
+            method=method,
+            provenance=Provenance(
+                source="user_hint",
+                reason="Use the operator-provided vdW dispersion setting.",
+            ),
+        )
+
+    warnings = (
+        "Dimensionality/vacuum detection is not yet available, so the "
+        "vdW heuristic is deferred; enable vdW via hints when needed.",
+    )
+    if hints.vdw_method is not None:
+        warnings += (
+            f"vdw_method={hints.vdw_method!r} was ignored because use_vdw was "
+            "not set; pass use_vdw=True to enable the correction.",
+        )
+
+    return VdwAdvice(
+        use_vdw=False,
+        method=None,
+        provenance=Provenance(
+            source="default",
+            reason=(
+                "No vdW correction by default; set use_vdw=True for layered "
+                "or low-dimensional systems."
+            ),
+            warnings=warnings,
+        ),
+    )
+
+
 def _has_convergence_hint(hints: CalculationHints) -> bool:
     """Return whether any convergence-specific hint was provided."""
     return any(
@@ -304,3 +348,9 @@ def _validate_hints(hints: CalculationHints) -> None:
 
     if hints.electron_maxstep is not None and hints.electron_maxstep < 1:
         raise ValueError("electron_maxstep must be positive when provided")
+
+    if hints.vdw_method is not None and hints.vdw_method not in _VALID_VDW_METHODS:
+        raise ValueError(
+            f"Unknown vdw_method {hints.vdw_method!r}. "
+            f"Valid options: {', '.join(sorted(_VALID_VDW_METHODS))}"
+        )

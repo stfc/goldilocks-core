@@ -19,6 +19,7 @@ from goldilocks_core.contracts import (
     StageRecord,
     StructureAnalysisRecord,
     StructureFeatureVector,
+    VdwAdvice,
 )
 
 
@@ -70,6 +71,7 @@ def _make_advice() -> ParameterAdvice:
             provenance=provenance,
         ),
         convergence=ConvergenceAdvice(conv_thr=1e-6, provenance=provenance),
+        vdw=VdwAdvice(use_vdw=False, method=None, provenance=provenance),
     )
 
 

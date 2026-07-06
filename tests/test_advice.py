@@ -101,3 +101,45 @@ def test_advise_parameters_validates_invalid_hints() -> None:
 
     with pytest.raises(ValueError, match="conv_thr must be positive"):
         advise_parameters(make_analysis(), hints=CalculationHints(conv_thr=0.0))
+
+
+def test_advise_parameters_vdw_defaults_off() -> None:
+    """Leave vdW off by default until dimensionality detection lands."""
+    advice = advise_parameters(make_analysis())
+
+    assert advice.vdw.use_vdw is False
+    assert advice.vdw.method is None
+    assert advice.vdw.provenance.source == "default"
+
+
+def test_advise_parameters_vdw_hint_enables_default_method() -> None:
+    """Enable vdW from a hint and default the method to D3BJ."""
+    advice = advise_parameters(make_analysis(), hints=CalculationHints(use_vdw=True))
+
+    assert advice.vdw.use_vdw is True
+    assert advice.vdw.method == "d3bj"
+    assert advice.vdw.provenance.source == "user_hint"
+
+
+def test_advise_parameters_vdw_hint_honors_explicit_method() -> None:
+    """Honor an explicit vdW method from hints."""
+    advice = advise_parameters(
+        make_analysis(), hints=CalculationHints(use_vdw=True, vdw_method="ts")
+    )
+
+    assert advice.vdw.method == "ts"
+
+
+def test_advise_parameters_warns_when_vdw_method_set_without_use_vdw() -> None:
+    """Warn instead of silently ignoring a vdw_method with no use_vdw flag."""
+    advice = advise_parameters(make_analysis(), hints=CalculationHints(vdw_method="ts"))
+
+    assert advice.vdw.use_vdw is False
+    assert advice.vdw.method is None
+    assert any("was ignored" in w for w in advice.vdw.provenance.warnings)
+
+
+def test_advise_parameters_rejects_unknown_vdw_method() -> None:
+    """Reject an unknown vdW method before recording it as advice."""
+    with pytest.raises(ValueError, match="Unknown vdw_method"):
+        advise_parameters(make_analysis(), hints=CalculationHints(vdw_method="xyz"))

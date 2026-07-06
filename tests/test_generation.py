@@ -122,6 +122,62 @@ def test_generate_inputs_uses_noncollinear_soc_without_nspin() -> None:
     assert "nspin = 2" not in content
 
 
+def test_generate_inputs_writes_vdw_corr_when_enabled() -> None:
+    """Emit the QE vdw_corr keyword when vdW is enabled via hints."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC", use_vdw=True)
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+
+    content = generate_inputs(structure, advice_context(), advice, selection)[0].content
+
+    # D3BJ is the default method: QE uses grimme-d3 with BJ damping (version 4).
+    assert "vdw_corr = 'grimme-d3'" in content
+    assert "dftd3_version = 4" in content
+
+
+def test_generate_inputs_writes_d3_zero_damping_version() -> None:
+    """Select D3 zero damping (version 3) for the plain d3 method."""
+    structure = make_structure()
+    hints = CalculationHints(
+        k_grid=(2, 2, 2), pseudo_type="NC", use_vdw=True, vdw_method="d3"
+    )
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+
+    content = generate_inputs(structure, advice_context(), advice, selection)[0].content
+
+    assert "vdw_corr = 'grimme-d3'" in content
+    assert "dftd3_version = 3" in content
+
+
+def test_generate_inputs_omits_vdw_corr_by_default() -> None:
+    """Do not write vdw_corr when vdW advice is off."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+
+    content = generate_inputs(structure, advice_context(), advice, selection)[0].content
+
+    assert "vdw_corr" not in content
+
+
 def test_generate_inputs_rejects_missing_pseudopotential_selection() -> None:
     """Do not let generators invent missing pseudopotentials or cutoffs."""
     structure = make_structure()

@@ -12,6 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
+goldilocks-core = "goldilocks_core.cli.core:main"
 goldilocks-kmesh = "goldilocks_core.cli.cli_kmesh:main"
 
 [dependency-groups]

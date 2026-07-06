@@ -6,7 +6,7 @@ from pathlib import Path
 
 import joblib
 
-from goldilocks_core.shared.types import ModelSpec
+from goldilocks_core.contracts import ModelSpec
 
 
 def load_model(spec: ModelSpec) -> object:

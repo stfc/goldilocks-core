@@ -7,7 +7,72 @@ import math
 from pymatgen.core import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
-from goldilocks_core.shared.types import KMeshEntry
+from goldilocks_core.contracts import (
+    CalculationHints,
+    KMeshEntry,
+    KPointAdvice,
+    KPointSelection,
+    Provenance,
+)
+
+
+def resolve_kpoints_from_advice(
+    structure: Structure,
+    hints: CalculationHints,
+    advice: KPointAdvice,
+) -> KPointSelection:
+    """Resolve k-point advice and hints into a concrete unshifted mesh."""
+    if hints.k_grid is not None:
+        return KPointSelection(
+            grid=hints.k_grid,
+            shift=(0, 0, 0),
+            mesh_type=advice.mesh_type,
+            provenance=Provenance(
+                source="user_hint",
+                reason="Use the operator-provided explicit k-point grid.",
+                warnings=advice.provenance.warnings,
+            ),
+        )
+
+    if hints.k_spacing is not None:
+        return KPointSelection(
+            grid=k_distance_to_mesh(structure, hints.k_spacing),
+            shift=(0, 0, 0),
+            mesh_type=advice.mesh_type,
+            provenance=Provenance(
+                source="user_hint",
+                reason="Use the operator-provided VASP-style k-point spacing.",
+                data_source="pymatgen solid-state reciprocal lattice",
+                warnings=advice.provenance.warnings,
+            ),
+        )
+
+    if advice.explicit_grid is not None:
+        return KPointSelection(
+            grid=advice.explicit_grid,
+            shift=(0, 0, 0),
+            mesh_type=advice.mesh_type,
+            provenance=Provenance(
+                source=advice.provenance.source,
+                reason="Use the explicit grid from k-point advice.",
+                data_source=advice.provenance.data_source,
+                confidence=advice.provenance.confidence,
+                warnings=advice.provenance.warnings,
+            ),
+        )
+
+    # With KPointAdvice's exactly-one invariant, reaching here means spacing is set.
+    return KPointSelection(
+        grid=k_distance_to_mesh(structure, advice.spacing),
+        shift=(0, 0, 0),
+        mesh_type=advice.mesh_type,
+        provenance=Provenance(
+            source=advice.provenance.source,
+            reason="Convert advised VASP-style k-point spacing into a mesh.",
+            data_source="pymatgen solid-state reciprocal lattice",
+            warnings=advice.provenance.warnings,
+        ),
+    )
 
 
 def k_distance_to_mesh(
@@ -18,8 +83,9 @@ def k_distance_to_mesh(
 ) -> tuple[int, int, int]:
     """Convert a reciprocal-space k-point distance into a uniform mesh.
 
-    The distance is interpreted as the maximum spacing between adjacent
-    k-points along a reciprocal lattice direction, in units of 1/Angstrom.
+    The distance is interpreted like VASP ``KSPACING``: the maximum spacing
+    between adjacent k-points in units of 1/Angstrom. Mesh sizes are computed
+    from solid-state reciprocal lattice lengths that include the 2π factor.
 
     Notes
     -----
@@ -45,7 +111,7 @@ def generate_candidate_k_distances(
     structure: Structure,
     max_index: int = 30,
 ) -> list[float]:
-    """Generate candidate k-distance values from reciprocal lattice lengths."""
+    """Generate VASP-style k-distance candidates from reciprocal lengths."""
     reciprocal_lattice = structure.lattice.reciprocal_lattice
     reciprocal_lengths = (
         reciprocal_lattice.a,

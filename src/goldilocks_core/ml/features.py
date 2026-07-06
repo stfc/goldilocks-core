@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 from pymatgen.core import Structure
 
-from goldilocks_core.shared.types import StructureFeatureVector
+from goldilocks_core.contracts import StructureFeatureVector
 
 
 def extract_c_features(structure: Structure) -> StructureFeatureVector:

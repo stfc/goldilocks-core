@@ -1,20 +1,39 @@
+from pathlib import Path
+
 import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.io.structures import load_structure
 
 
-def test_load_structure_returns_structure_input() -> None:
-    """Return the input unchanged when it is already a Structure."""
-    structure = Structure(
+def make_si_structure() -> Structure:
+    """Build a minimal silicon structure for tests."""
+    return Structure(
         lattice=Lattice.cubic(3.5),
         species=["Si"],
         coords=[[0.0, 0.0, 0.0]],
     )
 
+
+def test_load_structure_returns_structure_input() -> None:
+    """Return the input unchanged when it is already a Structure."""
+    structure = make_si_structure()
+
     loaded = load_structure(structure)
 
     assert loaded is structure
+
+
+def test_load_structure_loads_structure_file(tmp_path: Path) -> None:
+    """Load a structure from a portable temporary CIF file."""
+    structure = make_si_structure()
+    structure_path = tmp_path / "Si.cif"
+    structure.to(filename=structure_path)
+
+    loaded = load_structure(structure_path)
+
+    assert loaded.composition.reduced_formula == "Si"
+    assert len(loaded) == 1
 
 
 def test_load_structure_raises_for_missing_file() -> None:
@@ -23,7 +42,7 @@ def test_load_structure_raises_for_missing_file() -> None:
         load_structure("missing_structure.cif")
 
 
-def test_load_structure_raises_for_unsupported_xyz(tmp_path) -> None:
+def test_load_structure_raises_for_unsupported_xyz(tmp_path: Path) -> None:
     """Raise ValueError for unsupported XYZ structure files."""
     xyz_file = tmp_path / "test.xyz"
     xyz_file.write_text("1\ncomment\nH 0.0 0.0 0.0\n", encoding="utf-8")

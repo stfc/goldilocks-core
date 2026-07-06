@@ -1,8 +1,8 @@
 import joblib
 import pytest
 
+from goldilocks_core.contracts import ModelSpec
 from goldilocks_core.ml.models import load_model
-from goldilocks_core.shared.types import ModelSpec
 
 
 def test_load_model_loads_local_random_forest(tmp_path) -> None:

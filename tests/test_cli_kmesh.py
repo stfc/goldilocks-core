@@ -4,7 +4,7 @@ from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.cli import cli_kmesh
 from goldilocks_core.cli.cli_kmesh import build_parser
-from goldilocks_core.shared.types import KPointsAdvice
+from goldilocks_core.contracts import KPointSelection, Provenance
 
 
 def test_build_parser_parses_required_arguments() -> None:
@@ -35,18 +35,18 @@ def test_main_loads_structure_and_prints_recommended_mesh(
     def fake_advise_kpoints(
         loaded_structure: Structure,
         spec,
-    ) -> KPointsAdvice:
+    ) -> KPointSelection:
         calls["loaded_structure"] = loaded_structure
         calls["model_location"] = spec.location
-        return KPointsAdvice(
-            code="quantum_espresso",
-            task="scf_single_point",
+        return KPointSelection(
             mesh_type="monkhorst-pack",
             grid=(3, 3, 3),
             shift=(0, 0, 0),
-            accuracy_level="standard",
-            advisor_kind="ml",
-            advisor_name=spec.name,
+            provenance=Provenance(
+                source="model",
+                reason="test model",
+                data_source=spec.name,
+            ),
         )
 
     monkeypatch.setattr(

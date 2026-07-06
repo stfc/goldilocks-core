@@ -36,24 +36,26 @@ Primary docs:
 
    Required distinctions:
 
-   - Python staged pipeline is implemented.
-   - Current CLI is only `goldilocks-kmesh`.
-   - Generate and bundle-directory output are not implemented.
+   - Python staged pipeline is implemented (`recommend`, `generate`, `write_bundle`).
+   - CLI `goldilocks-core` with `recommend`, `generate`, and `bundle` subcommands is implemented.
+   - CLI `goldilocks-kmesh` for standalone ML k-point prediction is implemented.
+   - Generate and bundle-directory output are implemented.
    - Runner, AiiDA, frontend, auth, and workspace concerns are out of scope.
 
 3. Keep stage language consistent.
 
    ```text
-   Load -> Analyze -> Advise -> Select -> Generate -> Bundle
+   Load -> Analyze -> Advise -> Kmesh -> Select -> Generate -> Bundle
    ```
 
 4. Keep package ownership consistent.
 
    ```text
    contracts.py  -> boundary dataclasses
-   pipeline.py   -> orchestration
+   jobs.py       -> orchestration and public convenience API
    analysis.py   -> facts only
    advice.py     -> provenance-backed recommendations
+   kmesh.py      -> k-point grid resolution
    selection.py  -> concrete choices
    io/           -> loading only
    cli/          -> thin wrappers

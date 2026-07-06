@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 
 from goldilocks_core.advisors import advise_kpoints
+from goldilocks_core.contracts import ModelSpec
 from goldilocks_core.io.structures import load_structure
-from goldilocks_core.shared.types import ModelSpec
 
 
 def build_parser() -> argparse.ArgumentParser:

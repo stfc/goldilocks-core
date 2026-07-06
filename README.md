@@ -1,72 +1,135 @@
 # goldilocks-core
 
-`goldilocks-core` is a research-grade Python package for organizing and recommending DFT calculation inputs from structures, machine-learning models, and parsed pseudopotentials.
+`goldilocks-core` recommends and generates DFT calculation inputs from crystal structures, calculation intent, operator hints, and pseudopotential metadata.
 
-The project is designed around domain-focused modules such as k-mesh construction, pseudopotential parsing, recommendation advisors, and thin CLI entry points.
+The public API is Python-first. The staged CLI calls the same internal job runner. Core does not own Runner/AiiDA workflows, frontend state, auth, scheduling, structure database search, or completed-output analysis.
 
-## What It Does
+## What is implemented
 
-`goldilocks-core` currently focuses on two main workflows:
+- Structure loading from `pymatgen.Structure` or files readable by pymatgen.
+- Structure analysis facts: formula, elements, symmetry, heavy elements, magnetic candidates, conservative electronic character, and disorder warnings.
+- Provenance-backed advice for k-points, smearing, magnetism, SOC, pseudopotential intent, and convergence.
+- Kmesh-stage resolution of concrete k-point grids, including an ML-backed backend.
+- Deterministic pseudopotential ranking and cutoff extraction from provided metadata.
+- Quantum ESPRESSO SCF input generation.
+- Bundle directory output with `manifest.json`.
+- JSON-safe `CoreJobRequest` and `CoreResult` records.
 
-- recommending k-mesh settings from structure-aware logic and ML-predicted `k_index`
-- parsing UPF pseudopotential files and building local pseudopotential registries
-
-The package is intended to grow toward code- and task-aware input recommendation, where structure, pseudopotential choice, and calculation settings can be coordinated in a clean and testable way.
-
-## Current Capabilities
-
-### K-mesh stack
-
-- generate candidate k-distance values from reciprocal lattice geometry
-- interpret `k_distance` as a VASP-style `KSPACING` value in Å⁻¹
-- convert k-distance values into Monkhorst-Pack-style meshes using solid-state reciprocal lengths with the `2π` factor
-- build indexed `KMeshEntry` objects
-- compute mesh-related metadata such as k-point density intervals and reduced-k-point counts
-- map ML-predicted `k_index` values onto concrete k-mesh recommendations
-- expose a minimal CLI entry point for k-mesh recommendation
-
-### Pseudopotential stack
-
-- parse UPF files into structured metadata
-- support both attribute-style and text-style `PP_HEADER`
-- supplement header parsing with `PP_INFO` when needed
-- normalize key fields such as:
-  - `element`
-  - `pseudo_type`
-  - `functional`
-  - `relativistic`
-  - `z_valence`
-- scan a local pseudo library into a list of `PseudoMetadata`
-- filter registry entries by element
-
-## Installation
-
-This project uses `uv` for environment and dependency management.
-
-Clone the repository and sync the environment:
+## Install
 
 ```bash
 uv sync
 ```
 
-If you want development tools as well:
+For development:
 
 ```bash
 uv sync --group dev
 ```
 
-## Quick Start
-
-### Load a structure and get k-mesh advice
+## Quick start: Python recommendation
 
 ```python
-from pathlib import Path
+from goldilocks_core import CalculationHints, CalculationIntent, recommend
+from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
-from goldilocks_core.advisors import advise_kpoints
-from goldilocks_core.io.structures import load_structure
-from goldilocks_core.shared.types import ModelSpec
+pseudo_metadata = load_pseudo_metadata("path/to/pseudopotentials")
 
-structure = load_structure("path/to/structure.cif")
+result = recommend(
+    "path/to/structure.cif",
+    intent=CalculationIntent(functional="PBE"),
+    hints=CalculationHints(k_spacing=0.2, pseudo_type="NC"),
+    pseudo_metadata=pseudo_metadata,
+)
+
+print(result.analysis.reduced_formula)
+print(result.selection.k_points.grid)
+print(result.to_dict())
+```
+
+See [tutorial](docs/tutorial.md), [pipeline](docs/pipeline.md), and [contract reference](docs/contracts.md) for the full API.
+
+## Quick start: generate files
+
+```python
+from goldilocks_core import CalculationHints, generate
+from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
+
+result = generate(
+    "path/to/structure.cif",
+    hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
+    pseudo_metadata=load_pseudo_metadata("path/to/pseudopotentials"),
+)
+
+for generated_file in result.generated_files:
+    print(generated_file.path)
+    print(generated_file.content)
+```
+
+## Quick start: write a bundle
+
+```python
+from goldilocks_core import CalculationHints, write_bundle
+from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
+
+result = write_bundle(
+    "path/to/structure.cif",
+    "run/",
+    hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
+    pseudo_metadata=load_pseudo_metadata("path/to/pseudopotentials"),
+)
+
+print(result.bundle.path)
+print(result.bundle.manifest)
+```
+
+Bundle layout:
+
+```text
+run/
+├── manifest.json
+└── inputs/
+    └── qe.in
+```
+
+See [bundle stage](docs/stages/bundle.md) and [manifest](docs/manifest.md).
+
+## Job runner
+
+Use `CoreJobRequest` and `run_core_job()` when a caller needs one request/result model for Python, CLI, or a future HTTP wrapper.
+
+```python
+from goldilocks_core import CoreJobRequest, run_core_job
+from goldilocks_core.contracts import CalculationHints
+
+result = run_core_job(
+    CoreJobRequest(
+        structure="path/to/structure.cif",
+        hints=CalculationHints(k_spacing=0.2),
+        mode="recommend",
+    )
+)
+
+print(result.to_dict())
+```
+
+Modes:
+
+```text
+recommend -> Load → Analyze → Advise → Kmesh → Select
+generate  -> Load → Analyze → Advise → Kmesh → Select → Generate
+bundle    -> Load → Analyze → Advise → Kmesh → Select → Generate → Bundle
+```
+
+## Custom backends
+
+`Pipeline` holds Python callables for stage backends. `CoreJobRequest` remains data-only.
+
+```python
+
+from goldilocks_core import Pipeline, recommend
+from goldilocks_core.advisors import ml_kmesh_advisor
+from goldilocks_core.contracts import ModelSpec
 
 spec = ModelSpec(
     name="local-kmesh-model",
@@ -76,161 +139,76 @@ spec = ModelSpec(
     feature_set="cslr",
     source="local",
     location="path/to/model.joblib",
-    revision=None,
 )
 
-advice = advise_kpoints(structure, spec)
-print(advice.grid)
+pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
+result = recommend("path/to/structure.cif", pipeline=pipeline)
 ```
 
-### Parse one UPF file
-
-```python
-from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
-
-metadata = parse_upf_metadata("path/to/pseudo.UPF")
-print(metadata)
-```
-
-### Build a local pseudo registry
-
-```python
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata, filter_by_element
-
-metadata_list = load_pseudo_metadata("path/to/pseudopotentials")
-si_pseudos = filter_by_element(metadata_list, "Si")
-
-print(len(metadata_list))
-print(len(si_pseudos))
-```
-
-## Python API
-
-The current Python-facing entry points are:
-
-### K-mesh and advice
-
-- `goldilocks_core.advisors.advise_kpoints`
-- `goldilocks_core.kmesh`
-- `goldilocks_core.io.structures.load_structure`
-
-### Pseudopotentials
-
-- `goldilocks_core.pseudo.parse_upf.parse_upf_metadata`
-- `goldilocks_core.pseudo.pp_registry.load_pseudo_metadata`
-- `goldilocks_core.pseudo.pp_registry.filter_by_element`
-
-### Shared models
-
-- `goldilocks_core.shared.types`
-
-This package is intended to be notebook-friendly, but the package modules and tests should remain the source of truth rather than notebook-only logic.
+See [backends](docs/backends.md) for backend contracts and examples.
 
 ## CLI
 
-A minimal k-mesh CLI entry point is available.
-
-Show help:
-
 ```bash
-uv run goldilocks-kmesh --help
+uv run goldilocks-core recommend path/to/structure.cif --json
+uv run goldilocks-core recommend path/to/structure.cif --model path/to/model.joblib --json
+uv run goldilocks-core generate path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --json
+uv run goldilocks-core bundle path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
 ```
 
-Current usage pattern:
+The legacy kmesh-focused entry point is still available:
 
 ```bash
 uv run goldilocks-kmesh path/to/structure.cif --model path/to/model.joblib
 ```
 
-At this stage, the CLI is intentionally small and thin. The main logic lives in the Python package APIs.
+See [CLI reference](docs/cli.md).
 
-## Project Structure
+## Package layout
 
 ```text
 src/goldilocks_core/
-├── advisors/
-├── cli/
-├── io/
-├── kmesh.py
-├── ml/
-├── pseudo/
-└── shared/
+├── contracts.py   # public records, type aliases, serialization
+├── jobs.py        # fixed job runner, Pipeline, and public convenience API
+├── analysis.py    # structure facts
+├── advice.py      # provenance-backed parameter advice
+├── kmesh.py       # k-point grid resolution
+├── selection.py   # pseudos, cutoffs, concrete selections
+├── generation.py  # target-code input text
+├── bundle.py      # bundle directory and manifest writing
+├── advisors/      # model-backed stage backends
+├── cli/           # thin command wrappers
+├── io/            # loading only
+├── ml/            # feature extraction, model loading, prediction
+└── pseudo/        # UPF parsing, registry, filtering, policy
 ```
 
-### High-level responsibilities
+See [architecture](docs/architecture.md) for boundaries and dependency direction.
 
-- `advisors/`
-  Coordinates recommendation workflows and policy decisions.
+## Documentation
 
-- `cli/`
-  Exposes thin command-line entry points.
-
-- `io/`
-  Handles structure loading and normalization.
-
-- `kmesh.py`
-  Contains k-mesh construction and interval logic.
-
-- `ml/`
-  Contains feature extraction, model loading, and inference utilities.
-
-- `pseudo/`
-  Contains UPF parsing and local pseudopotential registry logic.
-
-- `shared/`
-  Contains reusable shared data models and type definitions.
-
-For a fuller explanation, see [docs/architecture.md](docs/architecture.md).
+- [Architecture](docs/architecture.md)
+- [Pipeline](docs/pipeline.md)
+- [Backends](docs/backends.md)
+- [Contracts](docs/contracts.md)
+- [Serialization](docs/serialization.md)
+- [Manifest](docs/manifest.md)
+- [Conventions](docs/conventions.md)
+- [Provenance](docs/provenance.md)
+- [CLI](docs/cli.md)
+- [Tutorial](docs/tutorial.md)
+- [Extension guide](docs/extension.md)
+- [Migration guide](docs/migration.md)
+- [Design decisions](docs/decisions.md)
+- [Changelog](docs/changelog.md)
 
 ## Development
 
-Run the test suite:
-
 ```bash
 uv run pytest
-```
-
-Run formatting and checks:
-
-```bash
+uv run ruff check src tests
+uv run ruff format --check src tests
 uv run pre-commit run --all-files
 ```
 
-A typical development loop is:
-
-```bash
-uv run pytest
-uv run pre-commit run --all-files
-```
-
-## Testing Philosophy
-
-The committed test suite must pass from a clean checkout with only the declared dependencies. Tests should not depend on `local_data/`, private pseudopotential libraries, notebooks, or machine-specific paths.
-
-Use portable fixtures:
-
-- synthetic pymatgen structures
-- temporary files under `tmp_path`
-- small UPF snippets written inside tests
-- constructed dataclass instances for selector and policy tests
-
-Local exploratory validation against real pseudopotential libraries is still useful, but once a behavior is understood it should be converted into a focused portable regression test.
-
-## Current Status
-
-This project is under active design and development.
-
-The current codebase already has:
-
-- a working ML-driven k-mesh recommendation path
-- real UPF parsing across multiple pseudo-library styles
-- a local pseudo registry foundation
-- an evolving domain-oriented package structure
-
-The next major steps are expected to include:
-
-- keeping baseline tests green while refactoring internals
-- introducing explicit Core pipeline stages: Load → Analyse → Advise → Select → Generate → Bundle
-- defining contracts for analysis, hints, advice, selection, and provenance
-- expanding pseudopotential selection logic based on structure, code, and task
-- clearer user-facing workflows for local pseudo management
+Committed tests must not depend on `local_data/`, private pseudopotential libraries, notebooks, or machine-specific paths. Use synthetic structures, temporary files, small UPF snippets, constructed dataclasses, and fake models.

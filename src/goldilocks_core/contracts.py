@@ -309,8 +309,11 @@ class StructureAnalysisRecord:
             (1–230), or None.
         crystal_system: crystal system name (e.g. ``cubic``), or
             None.
-        dimensionality: structure dimensionality. Currently
-            always ``unknown``.
+        dimensionality: structure dimensionality from a bonded-cluster
+            analysis (``3d``, ``2d``, ``1d``, ``molecule``), or
+            ``unknown`` when detection fails.
+        has_vacuum: whether the cell has vacuum in at least one
+            direction (dimensionality below 3D).
         electronic_character: conservative electronic-character
             heuristic.
         analysis_warnings: warnings about heuristic limitations
@@ -333,6 +336,7 @@ class StructureAnalysisRecord:
     space_group_number: int | None = None
     crystal_system: str | None = None
     dimensionality: Dimensionality = "unknown"
+    has_vacuum: bool = False
     electronic_character: ElectronicCharacter = "unknown"
     analysis_warnings: tuple[str, ...] = ()
 

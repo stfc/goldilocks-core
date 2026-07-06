@@ -53,3 +53,45 @@ def test_analyze_structure_marks_all_metal_compositions_as_likely_metal() -> Non
 
     assert analysis.electronic_character == "likely_metal"
     assert "likely" in analysis.analysis_warnings[0]
+
+
+def test_analyze_structure_reports_3d_bulk_without_vacuum() -> None:
+    """Classify a fully bonded bulk crystal as 3D with no vacuum."""
+    structure = Structure(
+        lattice=Lattice.cubic(3.61),
+        species=["Cu", "Cu", "Cu", "Cu"],
+        coords=[[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5]],
+    )
+
+    analysis = analyze_structure(structure)
+
+    assert analysis.dimensionality == "3d"
+    assert analysis.has_vacuum is False
+
+
+def test_analyze_structure_reports_2d_slab_with_vacuum() -> None:
+    """Classify a graphene sheet with vacuum as 2D with vacuum."""
+    structure = Structure(
+        lattice=Lattice.from_parameters(2.46, 2.46, 15.0, 90, 90, 120),
+        species=["C", "C"],
+        coords=[[0, 0, 0.5], [1 / 3, 2 / 3, 0.5]],
+    )
+
+    analysis = analyze_structure(structure)
+
+    assert analysis.dimensionality == "2d"
+    assert analysis.has_vacuum is True
+
+
+def test_analyze_structure_reports_molecule_with_vacuum() -> None:
+    """Classify an isolated molecule in a large box as molecular with vacuum."""
+    structure = Structure(
+        lattice=Lattice.cubic(15.0),
+        species=["H", "H"],
+        coords=[[0.45, 0.5, 0.5], [0.55, 0.5, 0.5]],
+    )
+
+    analysis = analyze_structure(structure)
+
+    assert analysis.dimensionality == "molecule"
+    assert analysis.has_vacuum is True

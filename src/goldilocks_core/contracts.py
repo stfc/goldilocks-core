@@ -91,6 +91,13 @@ ElectronicCharacter = Literal["metal", "insulator", "likely_metal", "unknown"]
 - ``unknown``: cannot determine from structure alone; verify manually.
 """
 
+VdwMethod = Literal["d3", "d3bj", "ts", "mbd"]
+"""Code-agnostic van der Waals dispersion method label.
+
+Translated to code-specific keywords in the Generate stage (e.g. ``d3bj`` →
+QE ``vdw_corr='grimme-d3'`` with ``dftd3_version=4``).
+"""
+
 
 @dataclass(slots=True)
 class StructureFeatureVector:
@@ -521,7 +528,7 @@ class VdwAdvice:
     """
 
     use_vdw: bool
-    method: Literal["d3", "d3bj", "ts", "mbd"] | None
+    method: VdwMethod | None
     provenance: Provenance
 
     def to_dict(self) -> JsonDict:

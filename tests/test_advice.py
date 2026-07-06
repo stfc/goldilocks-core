@@ -13,6 +13,8 @@ def make_analysis(
     magnetic_elements: tuple[str, ...] = (),
     heavy_elements: tuple[str, ...] = (),
     electronic_character: str = "unknown",
+    dimensionality: str = "unknown",
+    has_vacuum: bool = False,
 ) -> StructureAnalysisRecord:
     """Build an analysis record for advice tests."""
     return StructureAnalysisRecord(
@@ -27,6 +29,8 @@ def make_analysis(
         magnetic_elements=magnetic_elements,
         heavy_elements=heavy_elements,
         electronic_character=electronic_character,
+        dimensionality=dimensionality,
+        has_vacuum=has_vacuum,
     )
 
 
@@ -143,3 +147,46 @@ def test_advise_parameters_rejects_unknown_vdw_method() -> None:
     """Reject an unknown vdW method before recording it as advice."""
     with pytest.raises(ValueError, match="Unknown vdw_method"):
         advise_parameters(make_analysis(), hints=CalculationHints(vdw_method="xyz"))
+
+
+def test_advise_parameters_enables_vdw_for_low_dimensional_system() -> None:
+    """Auto-enable D3BJ from analysis for vacuum-containing systems."""
+    advice = advise_parameters(make_analysis(dimensionality="2d", has_vacuum=True))
+
+    assert advice.vdw.use_vdw is True
+    assert advice.vdw.method == "d3bj"
+    assert advice.vdw.provenance.source == "analysis"
+
+
+def test_advise_parameters_heuristic_honors_explicit_vdw_method() -> None:
+    """Respect an operator vdw_method when the heuristic enables vdW."""
+    advice = advise_parameters(
+        make_analysis(dimensionality="molecule", has_vacuum=True),
+        hints=CalculationHints(vdw_method="ts"),
+    )
+
+    assert advice.vdw.use_vdw is True
+    assert advice.vdw.method == "ts"
+    assert advice.vdw.provenance.source == "analysis"
+    # Provenance must name the actual method, not a hard-coded D3BJ.
+    assert "ts" in advice.vdw.provenance.reason
+    assert "D3BJ" not in advice.vdw.provenance.reason
+
+
+def test_advise_parameters_leaves_vdw_off_for_3d_bulk() -> None:
+    """Keep vdW off for fully bonded 3D bulk without an explicit hint."""
+    advice = advise_parameters(make_analysis(dimensionality="3d", has_vacuum=False))
+
+    assert advice.vdw.use_vdw is False
+    assert advice.vdw.provenance.source == "default"
+
+
+def test_advise_parameters_hint_overrides_low_dimensional_heuristic() -> None:
+    """Let an explicit use_vdw=False override the low-dimensional heuristic."""
+    advice = advise_parameters(
+        make_analysis(dimensionality="2d", has_vacuum=True),
+        hints=CalculationHints(use_vdw=False),
+    )
+
+    assert advice.vdw.use_vdw is False
+    assert advice.vdw.provenance.source == "user_hint"

@@ -23,6 +23,16 @@ def make_structure() -> Structure:
     )
 
 
+def make_bulk_structure() -> Structure:
+    """Build a fully bonded 3D diamond-silicon cell (no vacuum)."""
+    a = 5.43
+    return Structure(
+        lattice=Lattice([[0, a / 2, a / 2], [a / 2, 0, a / 2], [a / 2, a / 2, 0]]),
+        species=["Si", "Si"],
+        coords=[[0.0, 0.0, 0.0], [0.25, 0.25, 0.25]],
+    )
+
+
 def make_metadata() -> PseudoMetadata:
     """Build synthetic pseudopotential metadata with cutoffs."""
     return PseudoMetadata(
@@ -162,8 +172,8 @@ def test_generate_inputs_writes_d3_zero_damping_version() -> None:
 
 
 def test_generate_inputs_omits_vdw_corr_by_default() -> None:
-    """Do not write vdw_corr when vdW advice is off."""
-    structure = make_structure()
+    """Do not write vdw_corr for 3D bulk without an explicit vdW hint."""
+    structure = make_bulk_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
     selection = select_from_advice(

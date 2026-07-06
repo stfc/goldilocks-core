@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
@@ -15,6 +17,7 @@ from goldilocks_core.contracts import (
     SpinOrbitAdvice,
     StructureAnalysisRecord,
     VdwAdvice,
+    VdwMethod,
 )
 
 DEFAULT_K_SPACING = 0.2
@@ -59,7 +62,7 @@ def advise_parameters(
         spin_orbit=spin_orbit,
         pseudopotentials=_advise_pseudopotentials(intent, hints, spin_orbit),
         convergence=_advise_convergence(hints),
-        vdw=_advise_vdw(hints),
+        vdw=_advise_vdw(analysis, hints),
     )
 
 
@@ -272,14 +275,19 @@ def _advise_convergence(hints: CalculationHints) -> ConvergenceAdvice:
     )
 
 
-def _advise_vdw(hints: CalculationHints) -> VdwAdvice:
+def _advise_vdw(
+    analysis: StructureAnalysisRecord,
+    hints: CalculationHints,
+) -> VdwAdvice:
     """Return vdW dispersion advice.
 
-    Hint-only for now: the structure heuristic (non-3D / vacuum → D3BJ) is
-    deferred until dimensionality/vacuum detection lands in the Analyze stage.
+    User hints win. Otherwise a structure heuristic enables D3BJ for
+    low-dimensional or vacuum-containing systems (slabs, wires, molecules),
+    where dispersion dominates interlayer/surface binding; 3D bulk (or
+    undetermined dimensionality) gets no correction by default.
     """
     if hints.use_vdw is not None:
-        method = (hints.vdw_method or "d3bj") if hints.use_vdw else None
+        method = _resolve_vdw_method(hints) if hints.use_vdw else None
         return VdwAdvice(
             use_vdw=hints.use_vdw,
             method=method,
@@ -289,14 +297,25 @@ def _advise_vdw(hints: CalculationHints) -> VdwAdvice:
             ),
         )
 
-    warnings = (
-        "Dimensionality/vacuum detection is not yet available, so the "
-        "vdW heuristic is deferred; enable vdW via hints when needed.",
-    )
+    if analysis.has_vacuum:
+        method = _resolve_vdw_method(hints)
+        return VdwAdvice(
+            use_vdw=True,
+            method=method,
+            provenance=Provenance(
+                source="analysis",
+                reason=(
+                    f"{analysis.dimensionality} system with vacuum; dispersion "
+                    f"dominates interlayer/surface binding, so {method} is applied."
+                ),
+            ),
+        )
+
+    warnings: tuple[str, ...] = ()
     if hints.vdw_method is not None:
-        warnings += (
-            f"vdw_method={hints.vdw_method!r} was ignored because use_vdw was "
-            "not set; pass use_vdw=True to enable the correction.",
+        warnings = (
+            f"vdw_method={hints.vdw_method!r} was ignored because vdW is off for "
+            "this 3D/undetermined system; pass use_vdw=True to force it.",
         )
 
     return VdwAdvice(
@@ -305,12 +324,21 @@ def _advise_vdw(hints: CalculationHints) -> VdwAdvice:
         provenance=Provenance(
             source="default",
             reason=(
-                "No vdW correction by default; set use_vdw=True for layered "
-                "or low-dimensional systems."
+                "3D bulk or undetermined dimensionality; no vdW correction by "
+                "default. Set use_vdw=True for layered or molecular systems."
             ),
             warnings=warnings,
         ),
     )
+
+
+def _resolve_vdw_method(hints: CalculationHints) -> VdwMethod:
+    """Return the validated vdW method, defaulting to D3BJ.
+
+    ``_validate_hints`` guarantees ``vdw_method`` is a valid label or None, so
+    the cast is safe.
+    """
+    return cast(VdwMethod, hints.vdw_method or "d3bj")
 
 
 def _has_convergence_hint(hints: CalculationHints) -> bool:

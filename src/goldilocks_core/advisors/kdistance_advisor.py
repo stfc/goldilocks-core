@@ -13,6 +13,7 @@ import numpy as np
 from pymatgen.core import Structure
 
 from goldilocks_core.contracts import (
+    KMeshAdvisor,
     KPointSelection,
     ModelSpec,
     Provenance,
@@ -96,3 +97,42 @@ def kdistance_to_selection(
             confidence=confidence,
         ),
     )
+
+
+def qrf_kdistance_advisor(
+    metallicity_checkpoint: str,
+    metallicity_atom_init: str,
+    *,
+    spec: ModelSpec = DEFAULT_KPOINTS_MODEL,
+    correction: float = DEFAULT_KPOINTS_CORRECTION,
+    confidence: float = DEFAULT_KPOINTS_CONFIDENCE,
+) -> KMeshAdvisor:
+    """Return a Kmesh-stage backend that predicts k-distance with the QRF.
+
+    Loads the QRF and the CGCNN metallicity model once; the returned advisor
+    reuses them. An explicit ``k_grid`` or ``k_spacing`` hint bypasses the model
+    and resolves from advice instead.
+    """
+    from goldilocks_core.kmesh import resolve_kpoints_from_advice
+    from goldilocks_core.ml.kdistance_features import extract_qrf_features
+    from goldilocks_core.ml.metallicity import load_metallicity_model
+    from goldilocks_core.ml.models import load_model
+
+    qrf = load_model(spec)
+    metal_model = load_metallicity_model(metallicity_checkpoint)
+
+    def advisor(structure, hints, kpoint_advice):
+        if hints.k_grid is not None or hints.k_spacing is not None:
+            return resolve_kpoints_from_advice(structure, hints, kpoint_advice)
+        features = extract_qrf_features(structure, metal_model, metallicity_atom_init)
+        median, lower, upper = predict_kdistance_quantiles(qrf, features, correction)
+        return kdistance_to_selection(
+            structure,
+            median,
+            lower,
+            upper,
+            data_source=spec.name,
+            confidence=confidence,
+        )
+
+    return advisor

@@ -14,6 +14,8 @@ from __future__ import annotations
 import numpy as np
 from pymatgen.core import Structure
 
+from goldilocks_core.contracts import StructureFeatureVector
+
 _COMPOSITION_FEATURES = ("ElementProperty", "Stoichiometry", "ValenceOrbital")
 _STRUCTURE_FEATURES = ("GlobalSymmetryFeatures", "DensityFeatures")
 _SOAP_PARAMS = {"r_cut": 10.0, "n_max": 8, "l_max": 6, "sigma": 1.0}
@@ -67,6 +69,27 @@ def extract_structure_features(structure: Structure) -> np.ndarray:
             _soap_features(structure),
             _lattice_features(structure),
         ]
+    )
+
+
+def extract_qrf_features(
+    structure: Structure,
+    metal_model: object,
+    atom_init_path: str,
+) -> StructureFeatureVector:
+    """Assemble the full 483-dim QRF feature vector for one structure.
+
+    Concatenates the composition+structure+SOAP+lattice block (419) with the
+    CGCNN metallicity crystal representation (64), in the trained order.
+    """
+    from goldilocks_core.ml.metallicity import metal_features
+
+    structure_block = extract_structure_features(structure)
+    metal_block = metal_features(structure, metal_model, atom_init_path)
+    values = np.concatenate([structure_block, metal_block])
+    return StructureFeatureVector(
+        values=values,
+        feature_names=[f"qrf_{index}" for index in range(values.size)],
     )
 
 

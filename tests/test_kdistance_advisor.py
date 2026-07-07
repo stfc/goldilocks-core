@@ -134,3 +134,61 @@ def test_qrf_kdistance_advisor_respects_grid_hint(monkeypatch) -> None:
 
     assert selection.grid == (2, 2, 2)
     assert selection.provenance.source == "user_hint"
+
+
+def test_qrf_kdistance_advisor_falls_back_when_model_load_fails(monkeypatch) -> None:
+    """Missing deps/checkpoint: degrade to heuristic advice, warn, never crash."""
+
+    def boom(spec):
+        raise ModuleNotFoundError("No module named 'torch'")
+
+    monkeypatch.setattr("goldilocks_core.ml.models.load_model", boom)
+    advisor = qrf_kdistance_advisor("ckpt.pkl", "atom.json")
+
+    structure = make_structure()
+    selection = advisor(structure, CalculationHints(), _make_advice())
+
+    # Mesh comes from the heuristic advice (spacing 0.2), not the model.
+    assert selection.grid == k_distance_to_mesh(structure, 0.2)
+    assert selection.provenance.source != "model"
+    assert any("torch" in warning for warning in selection.provenance.warnings)
+
+
+def test_qrf_kdistance_advisor_falls_back_when_prediction_fails(monkeypatch) -> None:
+    """Model loads but per-structure inference raises: fall back with a warning."""
+    _patch_models(monkeypatch, FakeQRF(lower=0.20, median=0.25, upper=0.30))
+    monkeypatch.setattr(
+        "goldilocks_core.ml.kdistance_features.extract_qrf_features",
+        lambda structure, model, atom_init: (_ for _ in ()).throw(
+            RuntimeError("feature extraction failed")
+        ),
+    )
+    advisor = qrf_kdistance_advisor("ckpt.pkl", "atom.json")
+
+    structure = make_structure()
+    selection = advisor(structure, CalculationHints(), _make_advice())
+
+    assert selection.grid == k_distance_to_mesh(structure, 0.2)
+    assert selection.provenance.source != "model"
+    assert any(
+        "feature extraction failed" in warning
+        for warning in selection.provenance.warnings
+    )
+
+
+def test_qrf_kdistance_advisor_load_failure_still_honors_grid_hint(monkeypatch) -> None:
+    """Even with the model unavailable, an explicit grid hint wins cleanly."""
+
+    def boom(spec):
+        raise ModuleNotFoundError("No module named 'torch'")
+
+    monkeypatch.setattr("goldilocks_core.ml.models.load_model", boom)
+    advisor = qrf_kdistance_advisor("ckpt.pkl", "atom.json")
+
+    selection = advisor(
+        make_structure(), CalculationHints(k_grid=(2, 2, 2)), _make_advice()
+    )
+
+    assert selection.grid == (2, 2, 2)
+    assert selection.provenance.source == "user_hint"
+    assert selection.provenance.warnings == ()

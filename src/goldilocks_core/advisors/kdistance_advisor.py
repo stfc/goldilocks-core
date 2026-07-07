@@ -9,17 +9,21 @@ dependencies) is supplied separately.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 from pymatgen.core import Structure
 
 from goldilocks_core.contracts import (
+    CalculationHints,
     KMeshAdvisor,
+    KPointAdvice,
     KPointSelection,
     ModelSpec,
     Provenance,
     StructureFeatureVector,
 )
-from goldilocks_core.kmesh import k_distance_to_mesh
+from goldilocks_core.kmesh import k_distance_to_mesh, resolve_kpoints_from_advice
 
 # Built-in default k-point model: the STFC QRF at 95% confidence, resolved from
 # the Hugging Face Hub. Feature set names the extractor the model was trained on.
@@ -99,6 +103,32 @@ def kdistance_to_selection(
     )
 
 
+def _heuristic_fallback(
+    structure: Structure,
+    hints: CalculationHints,
+    advice: KPointAdvice,
+    error: Exception,
+) -> KPointSelection:
+    """Resolve k-points from heuristic advice, flagging that the QRF was skipped.
+
+    The mesh comes from the Advise stage, so its provenance source stays honest
+    (``default``/``analysis``, never ``model``); a warning records that the ML
+    model was attempted and could not be used.
+    """
+    detail = str(error) or error.__class__.__name__
+    selection = resolve_kpoints_from_advice(structure, hints, advice)
+    warning = (
+        f"ML k-point model unavailable; used heuristic k-point advice ({detail})."
+    )
+    return replace(
+        selection,
+        provenance=replace(
+            selection.provenance,
+            warnings=(*selection.provenance.warnings, warning),
+        ),
+    )
+
+
 def qrf_kdistance_advisor(
     metallicity_checkpoint: str,
     metallicity_atom_init: str,
@@ -112,20 +142,42 @@ def qrf_kdistance_advisor(
     Loads the QRF and the CGCNN metallicity model once; the returned advisor
     reuses them. An explicit ``k_grid`` or ``k_spacing`` hint bypasses the model
     and resolves from advice instead.
+
+    Never hard-fails: if the models or their dependencies cannot be loaded, or a
+    per-structure prediction raises, the advisor degrades to the heuristic advice
+    and records the reason in provenance warnings.
     """
-    from goldilocks_core.kmesh import resolve_kpoints_from_advice
     from goldilocks_core.ml.kdistance_features import extract_qrf_features
     from goldilocks_core.ml.metallicity import load_metallicity_model
     from goldilocks_core.ml.models import load_model
 
-    qrf = load_model(spec)
-    metal_model = load_metallicity_model(metallicity_checkpoint)
+    try:
+        qrf = load_model(spec)
+        metal_model = load_metallicity_model(metallicity_checkpoint)
+    except Exception as error:  # deps missing, download fails, bad checkpoint
+        load_error = error  # bind outside the except scope for the closure
+
+        def unavailable_advisor(structure, hints, kpoint_advice):
+            if hints.k_grid is not None or hints.k_spacing is not None:
+                return resolve_kpoints_from_advice(structure, hints, kpoint_advice)
+            return _heuristic_fallback(structure, hints, kpoint_advice, load_error)
+
+        return unavailable_advisor
 
     def advisor(structure, hints, kpoint_advice):
         if hints.k_grid is not None or hints.k_spacing is not None:
             return resolve_kpoints_from_advice(structure, hints, kpoint_advice)
-        features = extract_qrf_features(structure, metal_model, metallicity_atom_init)
-        median, lower, upper = predict_kdistance_quantiles(qrf, features, correction)
+        try:
+            features = extract_qrf_features(
+                structure, metal_model, metallicity_atom_init
+            )
+            median, lower, upper = predict_kdistance_quantiles(
+                qrf, features, correction
+            )
+        except Exception as predict_error:
+            return _heuristic_fallback(
+                structure, hints, kpoint_advice, predict_error
+            )
         return kdistance_to_selection(
             structure,
             median,

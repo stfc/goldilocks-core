@@ -1,10 +1,10 @@
 import numpy as np
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.advisors.kspacing_advisor import (
+from goldilocks_core.advisors.kdistance_advisor import (
     DEFAULT_KPOINTS_MODEL,
-    kspacing_to_selection,
-    predict_kspacing_quantiles,
+    kdistance_to_selection,
+    predict_kdistance_quantiles,
 )
 from goldilocks_core.contracts import StructureFeatureVector
 
@@ -29,11 +29,11 @@ def make_structure() -> Structure:
     return Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
 
 
-def test_predict_kspacing_quantiles_returns_median_and_corrected_interval() -> None:
+def test_predict_kdistance_quantiles_returns_median_and_corrected_interval() -> None:
     """Median passes through; correction widens the interval bounds."""
     model = FakeQRF(lower=0.20, median=0.25, upper=0.30)
 
-    median, lower, upper = predict_kspacing_quantiles(
+    median, lower, upper = predict_kdistance_quantiles(
         model, make_features(), correction=0.01
     )
 
@@ -42,7 +42,7 @@ def test_predict_kspacing_quantiles_returns_median_and_corrected_interval() -> N
     assert upper == 0.30 + 0.01
 
 
-def test_predict_kspacing_quantiles_rejects_wrong_quantile_count() -> None:
+def test_predict_kdistance_quantiles_rejects_wrong_quantile_count() -> None:
     """Reject a prediction that is not three quantiles."""
 
     class TwoQuantiles:
@@ -50,16 +50,16 @@ def test_predict_kspacing_quantiles_rejects_wrong_quantile_count() -> None:
             return np.array([[0.2], [0.3]])
 
     try:
-        predict_kspacing_quantiles(TwoQuantiles(), make_features())
+        predict_kdistance_quantiles(TwoQuantiles(), make_features())
     except ValueError as error:
         assert "3 quantiles" in str(error)
     else:
         raise AssertionError("expected ValueError for wrong quantile count")
 
 
-def test_kspacing_to_selection_builds_grid_with_model_provenance() -> None:
-    """Median spacing sets the mesh; provenance records model + confidence."""
-    selection = kspacing_to_selection(
+def test_kdistance_to_selection_builds_grid_with_model_provenance() -> None:
+    """Median distance sets the mesh; provenance records model + confidence."""
+    selection = kdistance_to_selection(
         make_structure(),
         median=0.25,
         lower=0.19,
@@ -78,4 +78,4 @@ def test_default_kpoints_model_targets_hf_qrf95() -> None:
     """The built-in default resolves the QRF95 artifact from Hugging Face."""
     assert DEFAULT_KPOINTS_MODEL.source == "huggingface"
     assert DEFAULT_KPOINTS_MODEL.location.endswith("::QRF95.pkl")
-    assert DEFAULT_KPOINTS_MODEL.target == "k_spacing"
+    assert DEFAULT_KPOINTS_MODEL.target == "k_distance"

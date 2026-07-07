@@ -1,6 +1,6 @@
-"""Quantile Random Forest (QRF) k-spacing advisor.
+"""Quantile Random Forest (QRF) k-distance advisor.
 
-The QRF model predicts a VASP-style k-point spacing (Å⁻¹) as three quantiles
+The QRF model predicts a VASP-style k-point distance (Å⁻¹) as three quantiles
 (lower, median, upper). The median drives the concrete mesh; the interval and
 the model's confidence level are recorded in provenance. This module holds the
 model-agnostic post-prediction logic; feature extraction (which pulls heavy ML
@@ -26,7 +26,7 @@ DEFAULT_KPOINTS_MODEL = ModelSpec(
     name="kpoints-goldilocks-QRF",
     version="QRF95",
     model_type="random_forest",
-    target="k_spacing",
+    target="k_distance",
     feature_set="qrf_comp_struct_soap_lattice_metal",
     source="huggingface",
     location="STFC-SCD/kpoints-goldilocks-QRF::QRF95.pkl",
@@ -35,17 +35,17 @@ DEFAULT_KPOINTS_MODEL = ModelSpec(
 
 # Confidence level of the default model and the calibrated interval correction
 # (widens the interval), from the trained QRF at 0.95. See the goldilocks
-# k-spacing reference implementation.
+# k-distance reference implementation.
 DEFAULT_KPOINTS_CONFIDENCE = 0.95
 DEFAULT_KPOINTS_CORRECTION = -0.0016
 
 
-def predict_kspacing_quantiles(
+def predict_kdistance_quantiles(
     model: object,
     features: StructureFeatureVector,
     correction: float = DEFAULT_KPOINTS_CORRECTION,
 ) -> tuple[float, float, float]:
-    """Return (median, lower, upper) k-spacing in Å⁻¹ from a QRF prediction.
+    """Return (median, lower, upper) k-distance in Å⁻¹ from a QRF prediction.
 
     The QRF returns three quantiles ``[lower, median, upper]`` for the single
     input row. ``correction`` calibrates (widens) the interval bounds.
@@ -67,7 +67,7 @@ def predict_kspacing_quantiles(
     return float(median), float(lower) - correction, float(upper) + correction
 
 
-def kspacing_to_selection(
+def kdistance_to_selection(
     structure: Structure,
     median: float,
     lower: float,
@@ -77,9 +77,9 @@ def kspacing_to_selection(
     confidence: float = DEFAULT_KPOINTS_CONFIDENCE,
     mesh_type: str = "monkhorst-pack",
 ) -> KPointSelection:
-    """Build a concrete k-point selection from a predicted k-spacing interval.
+    """Build a concrete k-point selection from a predicted k-distance interval.
 
-    The median spacing sets the mesh; the interval and confidence level are
+    The median distance sets the mesh; the interval and confidence level are
     recorded in provenance so callers can judge the prediction.
     """
     return KPointSelection(
@@ -89,7 +89,7 @@ def kspacing_to_selection(
         provenance=Provenance(
             source="model",
             reason=(
-                f"ML-predicted k-point spacing {median:.4f} Å⁻¹ "
+                f"ML-predicted k-point distance {median:.4f} Å⁻¹ "
                 f"(interval {lower:.4f}-{upper:.4f} Å⁻¹)."
             ),
             data_source=data_source,

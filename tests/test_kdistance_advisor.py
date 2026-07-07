@@ -3,6 +3,7 @@ from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.advisors.kdistance_advisor import (
     DEFAULT_KPOINTS_MODEL,
+    default_kmesh_advisor,
     kdistance_to_selection,
     predict_kdistance_quantiles,
     qrf_kdistance_advisor,
@@ -192,3 +193,43 @@ def test_qrf_kdistance_advisor_load_failure_still_honors_grid_hint(monkeypatch) 
     assert selection.grid == (2, 2, 2)
     assert selection.provenance.source == "user_hint"
     assert selection.provenance.warnings == ()
+
+
+def test_default_kmesh_advisor_falls_back_without_checkpoint(
+    monkeypatch, tmp_path
+) -> None:
+    """The built-in default degrades to heuristic advice when nothing resolves."""
+    monkeypatch.setenv(
+        "GOLDILOCKS_METALLICITY_CHECKPOINT", str(tmp_path / "missing.ckpt")
+    )
+    monkeypatch.setenv(
+        "GOLDILOCKS_METALLICITY_ATOM_INIT", str(tmp_path / "missing.json")
+    )
+    monkeypatch.setattr(
+        "goldilocks_core.ml.models.load_model",
+        lambda spec: (_ for _ in ()).throw(RuntimeError("offline")),
+    )
+
+    advisor = default_kmesh_advisor()
+    structure = make_structure()
+    selection = advisor(structure, CalculationHints(), _make_advice())
+
+    assert selection.grid == k_distance_to_mesh(structure, 0.2)
+    assert selection.provenance.source != "model"
+    assert selection.provenance.warnings
+
+
+def test_default_kmesh_advisor_honors_explicit_grid_hint(monkeypatch) -> None:
+    """An explicit grid hint wins even for the built-in default backend."""
+    monkeypatch.setattr(
+        "goldilocks_core.ml.models.load_model",
+        lambda spec: (_ for _ in ()).throw(RuntimeError("offline")),
+    )
+
+    advisor = default_kmesh_advisor()
+    selection = advisor(
+        make_structure(), CalculationHints(k_grid=(4, 4, 4)), _make_advice()
+    )
+
+    assert selection.grid == (4, 4, 4)
+    assert selection.provenance.source == "user_hint"

@@ -56,6 +56,20 @@ class Pipeline:
     bundle: BundleStage = write_bundle_directory
 
 
+def default_pipeline() -> Pipeline:
+    """Return a Pipeline whose Kmesh stage uses the built-in default ML model.
+
+    Unlike the bare ``Pipeline()`` (whose Kmesh stage is the spacing heuristic),
+    this resolves the default QRF k-point model and predicts k-points out of the
+    box, degrading to heuristic advice when the model or its dependencies are
+    unavailable. This is the pipeline the CLI uses when no ``--model`` and no
+    explicit k-point hint are given.
+    """
+    from goldilocks_core.advisors import default_kmesh_advisor
+
+    return Pipeline(kmesh=default_kmesh_advisor())
+
+
 def run_core_job(
     request: CoreJobRequest,
     *,

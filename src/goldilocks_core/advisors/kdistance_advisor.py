@@ -9,6 +9,7 @@ dependencies) is supplied separately.
 
 from __future__ import annotations
 
+import os
 from dataclasses import replace
 
 import numpy as np
@@ -43,6 +44,14 @@ DEFAULT_KPOINTS_MODEL = ModelSpec(
 # k-distance reference implementation.
 DEFAULT_KPOINTS_CONFIDENCE = 0.95
 DEFAULT_KPOINTS_CORRECTION = -0.0016
+
+# The QRF k-distance features include a CGCNN metallicity block, whose checkpoint
+# is not yet published to Hugging Face (stfc/goldilocks-core#36). Until then the
+# default resolves it from a local path (env-overridable); when absent, the
+# advisor falls back to heuristic advice. Paths are read at call time so the
+# environment can be configured after import.
+_DEFAULT_METALLICITY_CHECKPOINT = "local_data/models/metallicity/1.0/is_metal.ckpt"
+_DEFAULT_METALLICITY_ATOM_INIT = "local_data/models/metallicity/1.0/atom_init.json"
 
 
 def predict_kdistance_quantiles(
@@ -188,3 +197,26 @@ def qrf_kdistance_advisor(
         )
 
     return advisor
+
+
+def default_kmesh_advisor(
+    *,
+    metallicity_checkpoint: str | None = None,
+    metallicity_atom_init: str | None = None,
+) -> KMeshAdvisor:
+    """Return the built-in default Kmesh backend: the QRF model with fallback.
+
+    Resolves the QRF from Hugging Face (``DEFAULT_KPOINTS_MODEL``) and the CGCNN
+    metallicity checkpoint from a local path, overridable via the
+    ``GOLDILOCKS_METALLICITY_CHECKPOINT`` / ``GOLDILOCKS_METALLICITY_ATOM_INIT``
+    environment variables. This never hard-fails: if the models or their
+    dependencies are unavailable, the advisor degrades to heuristic advice (see
+    ``qrf_kdistance_advisor``).
+    """
+    checkpoint = metallicity_checkpoint or os.environ.get(
+        "GOLDILOCKS_METALLICITY_CHECKPOINT", _DEFAULT_METALLICITY_CHECKPOINT
+    )
+    atom_init = metallicity_atom_init or os.environ.get(
+        "GOLDILOCKS_METALLICITY_ATOM_INIT", _DEFAULT_METALLICITY_ATOM_INIT
+    )
+    return qrf_kdistance_advisor(checkpoint, atom_init)

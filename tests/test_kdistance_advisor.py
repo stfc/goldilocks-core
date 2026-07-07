@@ -233,3 +233,29 @@ def test_default_kmesh_advisor_honors_explicit_grid_hint(monkeypatch) -> None:
 
     assert selection.grid == (4, 4, 4)
     assert selection.provenance.source == "user_hint"
+
+
+def test_default_kmesh_advisor_downloads_metallicity_from_hf(monkeypatch) -> None:
+    """With no local override, the default resolves the checkpoint from HF."""
+    monkeypatch.delenv("GOLDILOCKS_METALLICITY_CHECKPOINT", raising=False)
+    monkeypatch.delenv("GOLDILOCKS_METALLICITY_ATOM_INIT", raising=False)
+    monkeypatch.delenv("GOLDILOCKS_METALLICITY_REPO", raising=False)
+
+    downloads: list[tuple[str, str]] = []
+
+    def fake_download(repo_id, filename, revision=None):
+        downloads.append((repo_id, filename))
+        return f"/cache/{repo_id}/{filename}"
+
+    monkeypatch.setattr("huggingface_hub.hf_hub_download", fake_download)
+    _patch_models(monkeypatch, FakeQRF(lower=0.20, median=0.25, upper=0.30))
+
+    advisor = default_kmesh_advisor()
+    structure = make_structure()
+    selection = advisor(structure, CalculationHints(), _make_advice())
+
+    assert selection.provenance.source == "model"
+    downloaded_files = {filename for _, filename in downloads}
+    assert downloaded_files == {"is_metal.ckpt", "atom_init.json"}
+    repos = {repo for repo, _ in downloads}
+    assert repos == {"JunwenYin/metallicity-goldilocks-CGCNN"}

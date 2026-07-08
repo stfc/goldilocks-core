@@ -14,7 +14,7 @@ from goldilocks_core.contracts import (
     CoreResult,
     ModelSpec,
 )
-from goldilocks_core.jobs import Pipeline, run_core_job
+from goldilocks_core.jobs import Pipeline, default_pipeline, run_core_job
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 
@@ -160,20 +160,29 @@ def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
 
 
 def _pipeline_from_args(args: argparse.Namespace) -> Pipeline | None:
-    """Build a custom pipeline from CLI backend options."""
-    if args.model is None:
+    """Build the pipeline for the requested k-point backend.
+
+    Precedence: an explicit ``--model`` (local CSLR k-index model) wins; an
+    explicit k-point hint (``--k-grid``/``--k-spacing``) resolves from advice
+    without loading any model; otherwise the built-in default QRF pipeline runs
+    (with heuristic fallback).
+    """
+    if args.model is not None:
+        spec = ModelSpec(
+            name=args.model_name,
+            version=args.model_version,
+            model_type="random_forest",
+            target="k_index",
+            feature_set="cslr",
+            source="local",
+            location=args.model,
+        )
+        return Pipeline(kmesh=ml_kmesh_advisor(spec))
+
+    if args.k_grid is not None or args.k_spacing is not None:
         return None
 
-    spec = ModelSpec(
-        name=args.model_name,
-        version=args.model_version,
-        model_type="random_forest",
-        target="k_index",
-        feature_set="cslr",
-        source="local",
-        location=args.model,
-    )
-    return Pipeline(kmesh=ml_kmesh_advisor(spec))
+    return default_pipeline()
 
 
 def _parse_optional_bool(value: str | None) -> bool | None:

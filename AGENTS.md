@@ -12,7 +12,7 @@ uv run ruff format src tests             # format
 uv run pre-commit run --all-files        # lint + test in one shot
 ```
 
-No CI yet. Run `pre-commit` before committing.
+CI runs on push to `main` and on PRs (`.github/workflows/ci.yml`): ruff check, ruff format check, pytest, all via `uv`. Third-party Actions are SHA-pinned; Dependabot bumps them weekly. Still run `pre-commit` before committing locally.
 
 ## Code style
 

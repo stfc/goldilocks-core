@@ -15,3 +15,15 @@ notebooks/
 local_data/
 # Pi harness state
 .pi/
+
+# macOS
+.DS_Store
+
+# Built docs site (mkdocs output)
+site/
+
+# Pipeline run outputs
+goldilocks_output/
+
+# Stray planning scratch files
+plan-*.md

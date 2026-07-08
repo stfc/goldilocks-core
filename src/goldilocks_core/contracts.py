@@ -91,6 +91,13 @@ ElectronicCharacter = Literal["metal", "insulator", "likely_metal", "unknown"]
 - ``unknown``: cannot determine from structure alone; verify manually.
 """
 
+VdwMethod = Literal["d3", "d3bj", "ts", "mbd"]
+"""Code-agnostic van der Waals dispersion method label.
+
+Translated to code-specific keywords in the Generate stage (e.g. ``d3bj`` →
+QE ``vdw_corr='grimme-d3'`` with ``dftd3_version=4``).
+"""
+
 
 @dataclass(slots=True)
 class StructureFeatureVector:
@@ -268,6 +275,8 @@ class CalculationHints:
     conv_thr: float | None = None
     mixing_beta: float | None = None
     electron_maxstep: int | None = None
+    use_vdw: bool | None = None
+    vdw_method: str | None = None
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -307,8 +316,11 @@ class StructureAnalysisRecord:
             (1–230), or None.
         crystal_system: crystal system name (e.g. ``cubic``), or
             None.
-        dimensionality: structure dimensionality. Currently
-            always ``unknown``.
+        dimensionality: structure dimensionality from a bonded-cluster
+            analysis (``3d``, ``2d``, ``1d``, ``molecule``), or
+            ``unknown`` when detection fails.
+        has_vacuum: whether the cell has vacuum in at least one
+            direction (dimensionality below 3D).
         electronic_character: conservative electronic-character
             heuristic.
         analysis_warnings: warnings about heuristic limitations
@@ -331,6 +343,7 @@ class StructureAnalysisRecord:
     space_group_number: int | None = None
     crystal_system: str | None = None
     dimensionality: Dimensionality = "unknown"
+    has_vacuum: bool = False
     electronic_character: ElectronicCharacter = "unknown"
     analysis_warnings: tuple[str, ...] = ()
 
@@ -501,6 +514,29 @@ class ConvergenceAdvice:
 
 
 @dataclass(frozen=True, slots=True)
+class VdwAdvice:
+    """Advised van der Waals dispersion correction.
+
+    Method labels are code-agnostic physics names; the generator maps them
+    to code-specific strings (e.g. ``d3bj`` → QE ``grimme-d3bj``).
+
+    Attributes:
+        use_vdw: whether a dispersion correction is applied.
+        method: dispersion method (``d3``, ``d3bj``, ``ts``, ``mbd``), or
+            None when ``use_vdw`` is False.
+        provenance: why this advice was chosen.
+    """
+
+    use_vdw: bool
+    method: VdwMethod | None
+    provenance: Provenance
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
 class ParameterAdvice:
     """Complete Advise-stage output.
 
@@ -514,6 +550,7 @@ class ParameterAdvice:
         spin_orbit: SOC relevance and setting.
         pseudopotentials: pseudo family and treatment intent.
         convergence: SCF convergence parameters.
+        vdw: VdwAdvice.
     """
 
     k_points: KPointAdvice
@@ -522,6 +559,7 @@ class ParameterAdvice:
     spin_orbit: SpinOrbitAdvice
     pseudopotentials: PseudopotentialAdvice
     convergence: ConvergenceAdvice
+    vdw: VdwAdvice
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""

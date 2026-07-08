@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+from pymatgen.analysis.dimensionality import get_dimensionality_larsen
+from pymatgen.analysis.local_env import CrystalNN
 from pymatgen.core import Structure
+from pymatgen.core.graphs import StructureGraph
 from pymatgen.core.periodic_table import Element
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
-from goldilocks_core.contracts import StructureAnalysisRecord
+from goldilocks_core.contracts import Dimensionality, StructureAnalysisRecord
+
+_DIMENSIONALITY_BY_VALUE: dict[int, Dimensionality] = {
+    3: "3d",
+    2: "2d",
+    1: "1d",
+    0: "molecule",
+}
 
 
 def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
@@ -43,6 +53,7 @@ def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
     )
     magnetic_elements = tuple(sorted({*transition_metals, *lanthanides, *actinides}))
     disorder_warnings = _find_disorder_warnings(structure)
+    dimensionality, has_vacuum = _analyze_dimensionality(structure)
     symmetry = _analyze_symmetry(structure)
     electronic_character, electronic_warnings = _classify_electronic_character(
         periodic_elements
@@ -64,6 +75,8 @@ def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
         space_group_symbol=symmetry["space_group_symbol"],
         space_group_number=symmetry["space_group_number"],
         crystal_system=symmetry["crystal_system"],
+        dimensionality=dimensionality,
+        has_vacuum=has_vacuum,
         electronic_character=electronic_character,
         analysis_warnings=electronic_warnings,
     )
@@ -84,6 +97,24 @@ def _find_disorder_warnings(structure: Structure) -> tuple[str, ...]:
         warnings.append(f"Site {index} has partial occupancies: {species}.")
 
     return tuple(warnings)
+
+
+def _analyze_dimensionality(structure: Structure) -> tuple[Dimensionality, bool]:
+    """Return (dimensionality, has_vacuum) from a bonded-cluster analysis.
+
+    Uses pymatgen's Larsen dimensionality algorithm. Falls back to
+    ``("unknown", False)`` when the analysis cannot run so downstream advice
+    stays conservative.
+    """
+    try:
+        bonded = StructureGraph.from_local_env_strategy(structure, CrystalNN())
+        dim_value = get_dimensionality_larsen(bonded)
+    except Exception:
+        return "unknown", False
+
+    dimensionality = _DIMENSIONALITY_BY_VALUE.get(dim_value, "unknown")
+    has_vacuum = bool(dimensionality != "unknown" and dim_value < 3)
+    return dimensionality, has_vacuum
 
 
 def _analyze_symmetry(structure: Structure) -> dict[str, str | int | None]:

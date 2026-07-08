@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
@@ -14,6 +16,8 @@ from goldilocks_core.contracts import (
     SmearingAdvice,
     SpinOrbitAdvice,
     StructureAnalysisRecord,
+    VdwAdvice,
+    VdwMethod,
 )
 
 DEFAULT_K_SPACING = 0.2
@@ -21,6 +25,7 @@ DEFAULT_CONV_THR = 1e-6
 DEFAULT_MIXING_BETA = 0.4
 DEFAULT_ELECTRON_MAXSTEP = 80
 METALLIC_SMEARING_WIDTH_RY = 0.01
+_VALID_VDW_METHODS = frozenset({"d3", "d3bj", "ts", "mbd"})
 
 
 def advise_parameters(
@@ -35,11 +40,11 @@ def advise_parameters(
         intent: Calculation intent such as target code, task, functional, and
             pseudopotential mode. Defaults to ``CalculationIntent()``.
         hints: Optional operator overrides for k-points, smearing, magnetism,
-            SOC, pseudopotentials, and convergence.
+            SOC, pseudopotentials, convergence, and van der Waals.
 
     Returns:
         A ``ParameterAdvice`` record containing k-point, smearing, magnetism,
-        SOC, pseudopotential, and convergence advice.
+        SOC, pseudopotential, convergence, and van der Waals advice.
 
     Raises:
         ValueError: If numeric hints are invalid.
@@ -57,6 +62,7 @@ def advise_parameters(
         spin_orbit=spin_orbit,
         pseudopotentials=_advise_pseudopotentials(intent, hints, spin_orbit),
         convergence=_advise_convergence(hints),
+        vdw=_advise_vdw(analysis, hints),
     )
 
 
@@ -269,6 +275,72 @@ def _advise_convergence(hints: CalculationHints) -> ConvergenceAdvice:
     )
 
 
+def _advise_vdw(
+    analysis: StructureAnalysisRecord,
+    hints: CalculationHints,
+) -> VdwAdvice:
+    """Return vdW dispersion advice.
+
+    User hints win. Otherwise a structure heuristic enables D3BJ for
+    low-dimensional or vacuum-containing systems (slabs, wires, molecules),
+    where dispersion dominates interlayer/surface binding; 3D bulk (or
+    undetermined dimensionality) gets no correction by default.
+    """
+    if hints.use_vdw is not None:
+        method = _resolve_vdw_method(hints) if hints.use_vdw else None
+        return VdwAdvice(
+            use_vdw=hints.use_vdw,
+            method=method,
+            provenance=Provenance(
+                source="user_hint",
+                reason="Use the operator-provided vdW dispersion setting.",
+            ),
+        )
+
+    if analysis.has_vacuum:
+        method = _resolve_vdw_method(hints)
+        return VdwAdvice(
+            use_vdw=True,
+            method=method,
+            provenance=Provenance(
+                source="analysis",
+                reason=(
+                    f"{analysis.dimensionality} system with vacuum; dispersion "
+                    f"dominates interlayer/surface binding, so {method} is applied."
+                ),
+            ),
+        )
+
+    warnings: tuple[str, ...] = ()
+    if hints.vdw_method is not None:
+        warnings = (
+            f"vdw_method={hints.vdw_method!r} was ignored because vdW is off for "
+            "this 3D/undetermined system; pass use_vdw=True to force it.",
+        )
+
+    return VdwAdvice(
+        use_vdw=False,
+        method=None,
+        provenance=Provenance(
+            source="default",
+            reason=(
+                "3D bulk or undetermined dimensionality; no vdW correction by "
+                "default. Set use_vdw=True for layered or molecular systems."
+            ),
+            warnings=warnings,
+        ),
+    )
+
+
+def _resolve_vdw_method(hints: CalculationHints) -> VdwMethod:
+    """Return the validated vdW method, defaulting to D3BJ.
+
+    ``_validate_hints`` guarantees ``vdw_method`` is a valid label or None, so
+    the cast is safe.
+    """
+    return cast(VdwMethod, hints.vdw_method or "d3bj")
+
+
 def _has_convergence_hint(hints: CalculationHints) -> bool:
     """Return whether any convergence-specific hint was provided."""
     return any(
@@ -304,3 +376,9 @@ def _validate_hints(hints: CalculationHints) -> None:
 
     if hints.electron_maxstep is not None and hints.electron_maxstep < 1:
         raise ValueError("electron_maxstep must be positive when provided")
+
+    if hints.vdw_method is not None and hints.vdw_method not in _VALID_VDW_METHODS:
+        raise ValueError(
+            f"Unknown vdw_method {hints.vdw_method!r}. "
+            f"Valid options: {', '.join(sorted(_VALID_VDW_METHODS))}"
+        )

@@ -12,6 +12,16 @@ from goldilocks_core.contracts import (
     SelectionRecord,
 )
 
+# Code-agnostic vdW method labels → (QE ``vdw_corr`` value, ``dftd3_version``).
+# QE has no separate D3-BJ keyword: both D3 variants use ``vdw_corr='grimme-d3'``
+# and select the damping via ``dftd3_version`` (3 = zero damping, 4 = Becke-Johnson).
+_QE_VDW_CORR = {
+    "d3": ("grimme-d3", 3),
+    "d3bj": ("grimme-d3", 4),
+    "ts": ("ts-vdw", None),
+    "mbd": ("many-body-dispersion", None),
+}
+
 
 def generate_inputs(
     structure: Structure,
@@ -182,6 +192,12 @@ def _system_section(
         lines.extend(["  noncolin = .true.", "  lspinorb = .true."])
     elif advice.magnetism.spin_polarized:
         lines.append("  nspin = 2")
+
+    if advice.vdw.use_vdw and advice.vdw.method is not None:
+        vdw_corr, dftd3_version = _QE_VDW_CORR[advice.vdw.method]
+        lines.append(f"  vdw_corr = '{vdw_corr}'")
+        if dftd3_version is not None:
+            lines.append(f"  dftd3_version = {dftd3_version}")
 
     lines.extend(["/", ""])
     return lines

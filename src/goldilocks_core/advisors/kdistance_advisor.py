@@ -126,9 +126,7 @@ def _heuristic_fallback(
     """
     detail = str(error) or error.__class__.__name__
     selection = resolve_kpoints_from_advice(structure, hints, advice)
-    warning = (
-        f"ML k-point model unavailable; used heuristic k-point advice ({detail})."
-    )
+    warning = f"ML k-point model unavailable; used heuristic k-point advice ({detail})."
     return replace(
         selection,
         provenance=replace(
@@ -221,9 +219,7 @@ def qrf_kdistance_advisor(
                 qrf, features, correction
             )
         except Exception as predict_error:
-            return _heuristic_fallback(
-                structure, hints, kpoint_advice, predict_error
-            )
+            return _heuristic_fallback(structure, hints, kpoint_advice, predict_error)
         return kdistance_to_selection(
             structure,
             median,
@@ -261,6 +257,4 @@ def default_kmesh_advisor(
     repo = metallicity_repo or os.environ.get(
         "GOLDILOCKS_METALLICITY_REPO", DEFAULT_METALLICITY_REPO
     )
-    return qrf_kdistance_advisor(
-        checkpoint, atom_init, metallicity_repo=repo
-    )
+    return qrf_kdistance_advisor(checkpoint, atom_init, metallicity_repo=repo)

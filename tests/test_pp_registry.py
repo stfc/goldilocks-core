@@ -119,6 +119,38 @@ def test_filter_by_functional_returns_matching_pseudos_only(
     assert filtered[0].filename == "Hg.pbe-n-rrkjus_psl.1.0.0.UPF"
 
 
+def test_filter_by_functional_excludes_malformed_recognized_aliases(
+    tmp_path: Path,
+) -> None:
+    """Filter only exact recognized aliases, never labels with extra tokens."""
+    pseudo_root = tmp_path / "pseudopotentials" / "pslibrary"
+    pseudo_root.mkdir(parents=True)
+    for filename, functional in (
+        ("Hg.pbesol.UPF", "SLA PW PSX PSC"),
+        ("Hg.rpbe-psx-psc.UPF", "RPBE PSX PSC"),
+        ("Hg.pbx-pbc-experimental.UPF", "PBX PBC experimental"),
+        ("Hg.pz-experimental.UPF", "PZ experimental"),
+        ("Hg.pbesol-experimental.UPF", "SLA PW PSX PSC experimental"),
+    ):
+        (pseudo_root / filename).write_text(
+            make_upf(
+                element="Hg",
+                pseudo_type="USPP",
+                functional=functional,
+                relativistic="scalar",
+                z_valence="12.0",
+            )
+        )
+
+    metadata_list = load_pseudo_metadata(tmp_path / "pseudopotentials")
+
+    assert [
+        metadata.filename for metadata in filter_by_functional(metadata_list, "PBE-sol")
+    ] == ["Hg.pbesol.UPF"]
+    assert filter_by_functional(metadata_list, "PBE") == []
+    assert filter_by_functional(metadata_list, "LDA") == []
+
+
 def test_filter_by_pseudo_type_returns_matching_pseudos_only(
     tmp_path: Path,
 ) -> None:

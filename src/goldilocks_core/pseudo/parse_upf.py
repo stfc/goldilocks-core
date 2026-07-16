@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from goldilocks_core.functionals import normalize_functional_label
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 _TRUE_VALUES = {"T", "TRUE", "Y", "YES", "1"}
@@ -156,30 +157,6 @@ def _normalize_pseudo_type(value: object) -> str | None:
         return "PAW"
 
     return upper
-
-
-def _normalize_functional(value: object) -> str | None:
-    """Normalize functional labels from UPF metadata."""
-    text = _clean_string(value)
-    if text is None:
-        return None
-
-    lower = text.lower()
-
-    if "pbesol" in lower:
-        return "PBESOL"
-    if "psx" in lower and "psc" in lower:
-        return "PBESOL"
-    if "pbx" in lower and "pbc" in lower:
-        return "PBE"
-    if "pbe" in lower:
-        return "PBE"
-    if "pz" in lower and "pbx" not in lower and "pbc" not in lower:
-        return "LDA"
-    if "sla" in lower and "pbx" not in lower and "pbc" not in lower:
-        return "LDA"
-
-    return text
 
 
 def _detect_header_format(text: str) -> str:
@@ -436,7 +413,7 @@ def parse_upf_metadata(path: str | Path) -> PseudoMetadata:
         element=_normalize_element(header_data.get("element"))
         or _extract_element_from_filename(path.name),
         pseudo_type=_normalize_pseudo_type(header_data.get("pseudo_type")),
-        functional=_normalize_functional(header_data.get("functional")),
+        functional=normalize_functional_label(header_data.get("functional")),
         relativistic=_normalize_relativistic(header_data.get("relativistic")),
         z_valence=_to_float(header_data.get("z_valence")),
         pseudo_info=header_data,
@@ -474,7 +451,7 @@ def metadata_to_row(metadata: PseudoMetadata) -> dict[str, Any]:
         "source_set": source_set,
         "element": element,
         "pseudo_type": _normalize_pseudo_type(info.get("pseudo_type")),
-        "functional": _normalize_functional(info.get("functional")),
+        "functional": normalize_functional_label(info.get("functional")),
         "relativistic": _normalize_relativistic(info.get("relativistic")),
         "has_so": _to_bool(info.get("has_so")),
         "version": _extract_version(filename) if filename else None,

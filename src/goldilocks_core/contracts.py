@@ -12,6 +12,7 @@ from typing import Any, Callable, Literal, Sequence
 import numpy as np
 from pymatgen.core import Structure
 
+from goldilocks_core.functionals import normalize_functional_label
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 ProvenanceSource = Literal[
@@ -396,6 +397,16 @@ class CalculationIntent:
     accuracy_level: AccuracyLevel = "standard"
     pseudo_mode: str = "efficiency"
 
+    def __post_init__(self) -> None:
+        """Normalize the functional at the operator-intent boundary."""
+        functional = normalize_functional_label(self.functional)
+        if functional is None:
+            raise ValueError(
+                "CalculationIntent.functional must be a non-empty string; "
+                f"got {self.functional!r}"
+            )
+        object.__setattr__(self, "functional", functional)
+
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
@@ -723,6 +734,16 @@ class PseudopotentialAdvice:
     pseudo_type: str | None
     relativistic_mode: str
     provenance: Provenance
+
+    def __post_init__(self) -> None:
+        """Normalize the functional at the advice-record boundary."""
+        functional = normalize_functional_label(self.functional)
+        if functional is None:
+            raise ValueError(
+                "PseudopotentialAdvice.functional must be a non-empty string; "
+                f"got {self.functional!r}"
+            )
+        object.__setattr__(self, "functional", functional)
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""

@@ -76,6 +76,28 @@ def test_advise_parameters_uses_analysis_without_silently_enabling_soc() -> None
     assert advice.pseudopotentials.provenance.warnings
 
 
+@pytest.mark.parametrize(
+    "functional",
+    ["PBEsol", "PBESOL", "pbe-sol", "PBE_SOL", "PBE sol"],
+)
+def test_calculation_intent_canonicalizes_supported_pbesol_spellings(
+    functional: str,
+) -> None:
+    """Expose one PBEsol label through Python intent and advice records."""
+    intent = CalculationIntent(functional=functional)
+    advice = advise_parameters(make_analysis(), intent=intent)
+
+    assert intent.functional == "PBEsol"
+    assert advice.pseudopotentials.functional == "PBEsol"
+
+
+def test_calculation_intent_preserves_unknown_functional_labels() -> None:
+    """Do not reinterpret an unknown intent label as PBE."""
+    intent = CalculationIntent(functional="RPBE")
+
+    assert intent.functional == "RPBE"
+
+
 def test_advise_parameters_uses_likely_metal_smearing_from_analysis() -> None:
     """Use analysis-backed smearing only when metallicity is supported."""
     advice = advise_parameters(make_analysis(electronic_character="likely_metal"))

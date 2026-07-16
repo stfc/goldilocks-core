@@ -62,6 +62,7 @@ The generator raises `ValueError` if:
 - The structure is disordered (`structure.is_ordered` is False). Disordered structures require manual resolution of occupancies.
 - Any element lacks a pseudopotential selection (no `PseudopotentialSelection` for that element).
 - Any pseudopotential selection has `filename=None` or missing cutoffs (`ecutwfc_ry` or `ecutrho_ry` is None). The generator will not invent values.
+- Any selected cutoff is non-numeric, non-finite, zero, negative, or boolean. Record constructors normally reject these values; Generate repeats the finite, strictly positive check defensively before rendering.
 
 ## What the generator does not do
 

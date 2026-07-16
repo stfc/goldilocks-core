@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from goldilocks_core.functionals import normalize_functional_label
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 
@@ -30,6 +31,17 @@ class PseudoPolicy:
     allowed_sources: tuple[str, ...] = ()
     allowed_pseudo_types: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        """Normalize an optional functional filter at policy construction."""
+        if self.preferred_functional is None:
+            return
+        functional = normalize_functional_label(self.preferred_functional)
+        if functional is None:
+            raise ValueError(
+                "PseudoPolicy.preferred_functional must be a non-empty string"
+            )
+        object.__setattr__(self, "preferred_functional", functional)
+
 
 def apply_pseudo_policy(
     metadata_list: list[PseudoMetadata],
@@ -42,7 +54,8 @@ def apply_pseudo_policy(
         selected = [
             metadata
             for metadata in selected
-            if metadata.functional == policy.preferred_functional
+            if normalize_functional_label(metadata.functional)
+            == policy.preferred_functional
         ]
 
     if policy.allowed_sources:

@@ -1,3 +1,5 @@
+import numpy as np
+import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.advice import advise_parameters
@@ -25,6 +27,7 @@ def make_metadata(
     *,
     filename: str = "Si.UPF",
     source_set: str | None = None,
+    functional: str = "PBE",
     cutoffs: dict | None = None,
 ) -> PseudoMetadata:
     """Build synthetic pseudopotential metadata for selection tests."""
@@ -36,10 +39,12 @@ def make_metadata(
         source_set=source_set,
         element="Si",
         pseudo_type="NC",
-        functional="PBE",
+        functional=functional,
         relativistic="scalar",
         is_sssp=True,
-        sssp_recommended_cutoff=cutoffs or {"ecutwfc_ry": "30", "ecutrho_ry": 120},
+        sssp_recommended_cutoff=(
+            {"ecutwfc_ry": "30", "ecutrho_ry": 120} if cutoffs is None else cutoffs
+        ),
     )
 
 
@@ -79,6 +84,25 @@ def test_select_parameters_resolves_pseudos_with_kmesh_selection() -> None:
     assert selection.pseudopotentials[0].ecutwfc_ry == 30.0
     assert selection.pseudopotentials[0].ecutrho_ry == 120.0
     assert selection.warnings == ()
+
+
+def test_select_parameters_matches_canonical_functional_labels() -> None:
+    """Match Python PBEsol intent to equivalent metadata labels."""
+    structure = make_structure()
+    advice = advise_parameters(
+        analyze_structure(structure),
+        intent=CalculationIntent(functional="PBE_SOL"),
+        hints=CalculationHints(pseudo_type="NC"),
+    )
+
+    selection = select_from_advice(
+        structure,
+        advice,
+        metadata_list=[make_metadata(functional="PBESOL")],
+    )
+
+    assert advice.pseudopotentials.functional == "PBEsol"
+    assert selection.pseudopotentials[0].filename == "Si.UPF"
 
 
 def test_select_parameters_prefers_matching_pseudo_mode_and_cutoffs() -> None:
@@ -137,6 +161,157 @@ def test_select_parameters_prefers_complete_cutoff_metadata() -> None:
 
     assert selection.pseudopotentials[0].filename == "Z-complete.UPF"
     assert selection.warnings == ()
+
+
+@pytest.mark.parametrize(
+    "invalid_value",
+    [
+        "not-a-number",
+        float("nan"),
+        float("inf"),
+        -float("inf"),
+        0,
+        -1,
+        True,
+        False,
+        np.bool_(True),
+        np.bool_(False),
+    ],
+)
+def test_select_parameters_ranks_invalid_cutoffs_as_incomplete(
+    invalid_value: object,
+) -> None:
+    """Prefer complete metadata over every class of invalid cutoff."""
+    structure = make_structure()
+    advice = advise_parameters(
+        analyze_structure(structure),
+        hints=CalculationHints(pseudo_type="NC"),
+    )
+    invalid = make_metadata(
+        filename="A-invalid.UPF",
+        source_set="SSSP_efficiency",
+        cutoffs={"ecutwfc_ry": invalid_value, "ecutrho_ry": 120},
+    )
+    complete = make_metadata(
+        filename="Z-complete.UPF",
+        source_set="SSSP_efficiency",
+        cutoffs={"ecutwfc_ry": 35, "ecutrho_ry": 140},
+    )
+
+    selection = select_from_advice(
+        structure,
+        advice,
+        metadata_list=[invalid, complete],
+    )
+
+    assert selection.pseudopotentials[0].filename == "Z-complete.UPF"
+
+
+@pytest.mark.parametrize(
+    ("ecutwfc", "ecutrho"),
+    [(np.int64(30), np.float32(120)), (np.float64(35), np.int32(140))],
+)
+def test_select_parameters_accepts_finite_numpy_numeric_cutoffs(
+    ecutwfc: object,
+    ecutrho: object,
+) -> None:
+    """Accept finite NumPy numeric scalars while rejecting NumPy booleans."""
+    structure = make_structure()
+    advice = advise_parameters(analyze_structure(structure))
+
+    selection = select_from_advice(
+        structure,
+        advice,
+        metadata_list=[
+            make_metadata(cutoffs={"ecutwfc_ry": ecutwfc, "ecutrho_ry": ecutrho})
+        ],
+    )
+
+    pseudo = selection.pseudopotentials[0]
+    assert pseudo.ecutwfc_ry == float(ecutwfc)
+    assert pseudo.ecutrho_ry == float(ecutrho)
+    assert not any("cutoff metadata" in warning for warning in pseudo.warnings)
+
+
+def test_select_parameters_ranks_missing_cutoffs_as_incomplete() -> None:
+    """Prefer complete metadata over lexically earlier missing metadata."""
+    structure = make_structure()
+    advice = advise_parameters(
+        analyze_structure(structure),
+        hints=CalculationHints(pseudo_type="NC"),
+    )
+    missing = make_metadata(
+        filename="A-missing.UPF",
+        source_set="SSSP_efficiency",
+        cutoffs={"ecutwfc_ry": 30},
+    )
+    complete = make_metadata(
+        filename="Z-complete.UPF",
+        source_set="SSSP_efficiency",
+        cutoffs={"ecutwfc_ry": 35, "ecutrho_ry": 140},
+    )
+
+    selection = select_from_advice(
+        structure,
+        advice,
+        metadata_list=[missing, complete],
+    )
+
+    assert selection.pseudopotentials[0].filename == "Z-complete.UPF"
+
+
+@pytest.mark.parametrize(
+    "invalid_value",
+    [
+        "not-a-number",
+        float("nan"),
+        float("inf"),
+        -float("inf"),
+        0,
+        -1,
+        True,
+        False,
+        np.bool_(True),
+        np.bool_(False),
+    ],
+)
+def test_select_parameters_warns_about_present_invalid_cutoffs(
+    invalid_value: object,
+) -> None:
+    """Sanitize invalid metadata and explain that it must be replaced."""
+    structure = make_structure()
+    advice = advise_parameters(analyze_structure(structure))
+
+    selection = select_from_advice(
+        structure,
+        advice,
+        metadata_list=[
+            make_metadata(cutoffs={"ecutwfc_ry": invalid_value, "ecutrho_ry": 120})
+        ],
+    )
+
+    pseudo = selection.pseudopotentials[0]
+    assert pseudo.ecutwfc_ry is None
+    assert pseudo.ecutrho_ry == 120.0
+    assert any("invalid cutoff metadata" in warning for warning in pseudo.warnings)
+    assert any("finite positive" in warning for warning in pseudo.warnings)
+    assert pseudo.provenance.warnings == pseudo.warnings
+
+
+def test_select_parameters_distinguishes_missing_cutoff_warning() -> None:
+    """Report absent cutoff metadata separately from malformed values."""
+    structure = make_structure()
+    advice = advise_parameters(analyze_structure(structure))
+
+    selection = select_from_advice(
+        structure,
+        advice,
+        metadata_list=[make_metadata(cutoffs={"ecutwfc_ry": 30})],
+    )
+
+    warnings = selection.pseudopotentials[0].warnings
+    assert any("missing cutoff metadata" in warning for warning in warnings)
+    assert not any("invalid cutoff metadata" in warning for warning in warnings)
 
 
 def test_select_parameters_keeps_explicit_grid_hint() -> None:

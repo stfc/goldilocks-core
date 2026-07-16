@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, Sequence
 
+import numpy as np
 from pymatgen.core import Structure
 
 from goldilocks_core.contracts import (
@@ -15,6 +19,17 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.pseudo.pp_selector import select_pseudos
+
+_CUTOFF_FIELDS = ("ecutwfc_ry", "ecutrho_ry")
+
+
+@dataclass(frozen=True, slots=True)
+class _CutoffAssessment:
+    """A validated cutoff value and its metadata trust status."""
+
+    value: float | None
+    status: str
+    raw_value: Any = None
 
 
 def select_parameters(
@@ -111,23 +126,22 @@ def _select_pseudopotential_for_element(
         )
 
     selected = candidates[0]
-    cutoffs = selected.sssp_recommended_cutoff or {}
-    ecutwfc = _to_float(cutoffs.get("ecutwfc_ry"))
-    ecutrho = _to_float(cutoffs.get("ecutrho_ry"))
+    cutoff_assessments = {
+        field: _assess_cutoff(selected, field) for field in _CUTOFF_FIELDS
+    }
     warnings = _selection_warnings(
         element=element,
         selected=selected,
         pseudo_mode=pseudo_advice.pseudo_mode,
-        ecutwfc=ecutwfc,
-        ecutrho=ecutrho,
+        cutoff_assessments=cutoff_assessments,
     )
 
     return PseudopotentialSelection(
         element=element,
         filename=selected.filename,
         filepath=selected.filepath,
-        ecutwfc_ry=ecutwfc,
-        ecutrho_ry=ecutrho,
+        ecutwfc_ry=cutoff_assessments["ecutwfc_ry"].value,
+        ecutrho_ry=cutoff_assessments["ecutrho_ry"].value,
         provenance=Provenance(
             source="lookup",
             reason="Select the highest-ranked deterministic pseudo matching advice.",
@@ -173,12 +187,47 @@ def _metadata_matches_mode(metadata: PseudoMetadata, pseudo_mode: str) -> bool:
 
 
 def _has_complete_cutoffs(metadata: PseudoMetadata) -> bool:
-    """Return whether metadata contains both required QE cutoff values."""
-    cutoffs = metadata.sssp_recommended_cutoff or {}
-    return (
-        _to_float(cutoffs.get("ecutwfc_ry")) is not None
-        and _to_float(cutoffs.get("ecutrho_ry")) is not None
+    """Return whether metadata contains two finite, strictly positive cutoffs."""
+    return all(
+        _assess_cutoff(metadata, field).status == "valid" for field in _CUTOFF_FIELDS
     )
+
+
+def _assess_cutoff(metadata: PseudoMetadata, field: str) -> _CutoffAssessment:
+    """Validate one untrusted metadata cutoff without constructing a record."""
+    cutoffs = metadata.sssp_recommended_cutoff
+    if cutoffs is None:
+        return _CutoffAssessment(value=None, status="missing")
+    if not isinstance(cutoffs, Mapping):
+        return _CutoffAssessment(value=None, status="invalid", raw_value=cutoffs)
+    if field not in cutoffs or cutoffs[field] is None:
+        return _CutoffAssessment(value=None, status="missing")
+
+    raw_value = cutoffs[field]
+    if isinstance(raw_value, (bool, np.bool_)):
+        return _CutoffAssessment(
+            value=None,
+            status="invalid",
+            raw_value=raw_value,
+        )
+
+    try:
+        value = float(raw_value)
+    except (OverflowError, TypeError, ValueError):
+        return _CutoffAssessment(
+            value=None,
+            status="invalid",
+            raw_value=raw_value,
+        )
+
+    if not math.isfinite(value) or value <= 0:
+        return _CutoffAssessment(
+            value=None,
+            status="invalid",
+            raw_value=raw_value,
+        )
+
+    return _CutoffAssessment(value=value, status="valid", raw_value=raw_value)
 
 
 def _selection_warnings(
@@ -186,10 +235,9 @@ def _selection_warnings(
     element: str,
     selected: PseudoMetadata,
     pseudo_mode: str,
-    ecutwfc: float | None,
-    ecutrho: float | None,
+    cutoff_assessments: dict[str, _CutoffAssessment],
 ) -> tuple[str, ...]:
-    """Return structured warnings about the selected pseudo metadata."""
+    """Return actionable warnings about the selected pseudo metadata."""
     warnings: list[str] = []
 
     if not _metadata_matches_mode(selected, pseudo_mode):
@@ -198,20 +246,28 @@ def _selection_warnings(
             f"pseudo mode '{pseudo_mode}'."
         )
 
-    if ecutwfc is None or ecutrho is None:
+    missing = [
+        field
+        for field, assessment in cutoff_assessments.items()
+        if assessment.status == "missing"
+    ]
+    if missing:
         warnings.append(
-            f"Selected pseudopotential for {element} lacks complete cutoff metadata."
+            f"Selected pseudopotential for {element} is missing cutoff metadata "
+            f"for {', '.join(missing)}; provide finite positive values before "
+            "generation."
+        )
+
+    invalid = [
+        f"{field}={assessment.raw_value!r}"
+        for field, assessment in cutoff_assessments.items()
+        if assessment.status == "invalid"
+    ]
+    if invalid:
+        warnings.append(
+            f"Selected pseudopotential for {element} has invalid cutoff metadata "
+            f"({', '.join(invalid)}); replace it with finite positive values before "
+            "generation."
         )
 
     return tuple(warnings)
-
-
-def _to_float(value: Any) -> float | None:
-    """Convert cutoff metadata values to floats when possible."""
-    if value is None:
-        return None
-
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None

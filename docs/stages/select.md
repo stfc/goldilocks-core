@@ -53,10 +53,10 @@ This keeps Select focused on pseudopotentials and makes k-point resolution hot-s
 
 For each element in the structure:
 
-1. Filter `metadata_list` by element, functional, pseudo_type, and relativistic mode using `select_pseudos()`.
+1. Filter `metadata_list` by element, canonical functional label, pseudo_type, and relativistic mode using `select_pseudos()`. Supported spellings such as `PBEsol`, `PBESOL`, and `PBE-sol` share the canonical label `PBEsol`; unknown labels are preserved rather than guessed.
 2. Rank remaining candidates by the deterministic 5-tuple key.
 3. Take the highest-ranked candidate (first after sort).
-4. Extract `ecutwfc_ry` and `ecutrho_ry` from `sssp_recommended_cutoff`. Any present cutoff must be finite and positive; `PseudopotentialSelection` rejects invalid metadata-derived or custom-backend values at construction.
+4. Treat `sssp_recommended_cutoff` as untrusted metadata. Only finite, strictly positive `ecutwfc_ry` and `ecutrho_ry` values are copied into `PseudopotentialSelection`; invalid values are sanitized to `None` with an actionable warning. The inherited record validators enforce the same invariant for custom Select backends.
 5. If no candidate matches, return a `PseudopotentialSelection` with `filename=None`, absent cutoffs, and a warning.
 
 ## Ranking key
@@ -66,7 +66,7 @@ Candidates are sorted by the tuple `(mode_rank, cutoff_rank, sssp_rank, source, 
 | Key component | 0 (better) | 1 (worse) |
 | --- | --- | --- |
 | `mode_rank` | metadata matches requested pseudo_mode | does not match |
-| `cutoff_rank` | both ecutwfc and ecutrho are available | at least one is missing |
+| `cutoff_rank` | both ecutwfc and ecutrho are finite and strictly positive | at least one is missing or invalid |
 | `sssp_rank` | `is_sssp=True` | `is_sssp=False` |
 | `source` | `source_set` or `library` string (lexicographic) | |
 | `filename` | filename string (lexicographic, tiebreaker) | |
@@ -84,7 +84,8 @@ Common warnings:
 
 - `No pseudopotential metadata matched {element} / {functional} / {relativistic_mode}.`
 - `Selected pseudopotential for {element} does not explicitly match pseudo mode '{mode}'.`
-- `Selected pseudopotential for {element} lacks complete cutoff metadata.`
+- `Selected pseudopotential for {element} is missing cutoff metadata for {fields}; provide finite positive values before generation.`
+- `Selected pseudopotential for {element} has invalid cutoff metadata ({field=value}); replace it with finite positive values before generation.`
 
 ## Backend contract
 

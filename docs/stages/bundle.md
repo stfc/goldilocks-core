@@ -34,7 +34,7 @@ The manifest is written with `json.dumps(indent=2, sort_keys=True)` for determin
 
 ## Path traversal protection
 
-`_resolve_bundle.path()` resolves each generated file path relative to the output directory and rejects paths that escape the bundle root. A `GeneratedFile(path="../outside.in")` will raise `ValueError`.
+`GeneratedFile` rejects empty, absolute, or `..`-traversing paths at construction. `CoreResult` rejects duplicate normalized generated paths, so a custom Generate backend cannot pass either condition to Bundle. Bundle also resolves each path beneath the output directory as a defensive filesystem check.
 
 ## What the bundle does not do
 

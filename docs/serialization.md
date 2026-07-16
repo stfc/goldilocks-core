@@ -13,13 +13,20 @@ The `to_jsonable()` function converts pipeline values to JSON-safe Python object
 | dataclass | dict | Field names map to converted values |
 | tuple | list | All items converted recursively |
 | list | list | All items converted recursively |
-| dict | dict | Keys converted to strings, values converted |
+| dict | dict | Supported scalar, enum, and path keys become strings; values are converted recursively; stringification collisions raise `ValueError` |
+| `Enum` | converted enum value | The value is validated recursively |
 | `Path` | str | `str(path)` |
-| `pymatgen Structure` | dict | `structure.as_dict()` — full pymatgen serialization |
-| `numpy.ndarray` | list | `array.tolist()` |
-| `numpy scalar` | Python scalar | `scalar.item()` |
+| `pymatgen Structure` | dict | `structure.as_dict()` converted recursively |
+| `numpy.ndarray` | list | `array.tolist()` converted recursively |
+| `numpy scalar` | Python scalar | `scalar.item()` converted recursively |
 | `None` | None | Passed through |
-| `str`, `int`, `float`, `bool` | unchanged | Passed through |
+| `str`, `int`, finite `float`, `bool` | unchanged | Passed through |
+
+`to_jsonable()` raises `ValueError` for NaN or infinity at any nesting depth. It raises `TypeError` for unsupported values or dictionary-key types instead of returning an object that `json.dumps()` cannot encode. Sets, complex numbers, callables, and arbitrary objects are not supported JSON values.
+
+## Open-ended intervals
+
+`KMeshEntry.k_distance_interval` represents an upper bound that is unbounded above as `null` (`None` in Python), rather than as `Infinity`. For example, `[0.2, null]` preserves the interval's unbounded upper endpoint while remaining RFC-compliant JSON. `to_jsonable()` continues to reject every non-finite JSON number at any nesting depth.
 
 ## None handling
 
@@ -96,5 +103,6 @@ For a silicon structure with default settings:
 
 - `pymatgen Structure` serialization produces a large nested dict. Callers that don't need the full structure may want to strip it.
 - NumPy arrays are converted to nested lists. Very large feature vectors may produce large JSON output.
+- NaN and infinity are deliberately rejected because RFC-compliant JSON has no representation for them.
 - Circular references are not handled. Core records are acyclic, so this should not occur in practice.
 - `Pipeline` callables are not JSON values. A CLI or HTTP layer that exposes backend names must resolve those names to callables outside Core.

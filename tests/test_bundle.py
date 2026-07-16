@@ -80,16 +80,7 @@ def test_write_bundle_directory_writes_manifest_and_files(tmp_path: Path) -> Non
     assert bundle_record.path == str(tmp_path)
 
 
-def test_write_bundle_directory_rejects_path_traversal(tmp_path: Path) -> None:
-    """Reject generated file paths that escape the bundle directory."""
-    result = make_result()
-    result = CoreResult(
-        intent=result.intent,
-        analysis=result.analysis,
-        advice=result.advice,
-        selection=result.selection,
-        generated_files=(GeneratedFile(path="../qe.in", content="bad"),),
-    )
-
-    with pytest.raises(ValueError, match="escapes bundle directory"):
-        write_bundle_directory(result, tmp_path)
+def test_generated_file_rejects_path_traversal_at_construction() -> None:
+    """Reject generated paths before they can reach bundle writing."""
+    with pytest.raises(ValueError, match="must not contain '..' traversal"):
+        GeneratedFile(path="../qe.in", content="bad")

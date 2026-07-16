@@ -56,8 +56,8 @@ For each element in the structure:
 1. Filter `metadata_list` by element, functional, pseudo_type, and relativistic mode using `select_pseudos()`.
 2. Rank remaining candidates by the deterministic 5-tuple key.
 3. Take the highest-ranked candidate (first after sort).
-4. Extract `ecutwfc_ry` and `ecutrho_ry` from `sssp_recommended_cutoff`.
-5. If no candidate matches, return a `PseudopotentialSelection` with `filename=None` and a warning.
+4. Extract `ecutwfc_ry` and `ecutrho_ry` from `sssp_recommended_cutoff`. Any present cutoff must be finite and positive; `PseudopotentialSelection` rejects invalid metadata-derived or custom-backend values at construction.
+5. If no candidate matches, return a `PseudopotentialSelection` with `filename=None`, absent cutoffs, and a warning.
 
 ## Ranking key
 

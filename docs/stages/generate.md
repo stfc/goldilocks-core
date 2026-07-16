@@ -15,7 +15,7 @@ The Generate stage validates and renders completed advice and selection records.
 
 - `tuple[GeneratedFile, ...]`
 
-Currently only Quantum ESPRESSO SCF single-point input is supported, producing one file at `inputs/qe.in`.
+Currently only Quantum ESPRESSO SCF single-point input is supported, producing one file at `inputs/qe.in`. Every `GeneratedFile.path` must be non-empty, relative to the bundle root, and free of `..` traversal. The containing `CoreResult` rejects duplicate generated paths before Bundle runs.
 
 ## Quantum ESPRESSO SCF input
 

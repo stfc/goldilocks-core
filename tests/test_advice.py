@@ -98,13 +98,13 @@ def test_advise_parameters_records_convergence_hints() -> None:
     assert advice.convergence.provenance.source == "user_hint"
 
 
-def test_advise_parameters_validates_invalid_hints() -> None:
-    """Reject invalid hint values before recording them as advice."""
-    with pytest.raises(ValueError, match="k_spacing must be positive"):
-        advise_parameters(make_analysis(), hints=CalculationHints(k_spacing=0.0))
+def test_calculation_hints_validate_before_advice() -> None:
+    """Reject invalid hint values at the request contract boundary."""
+    with pytest.raises(ValueError, match="CalculationHints.k_spacing"):
+        CalculationHints(k_spacing=0.0)
 
-    with pytest.raises(ValueError, match="conv_thr must be positive"):
-        advise_parameters(make_analysis(), hints=CalculationHints(conv_thr=0.0))
+    with pytest.raises(ValueError, match="CalculationHints.conv_thr"):
+        CalculationHints(conv_thr=0.0)
 
 
 def test_advise_parameters_vdw_defaults_off() -> None:
@@ -143,10 +143,10 @@ def test_advise_parameters_warns_when_vdw_method_set_without_use_vdw() -> None:
     assert any("was ignored" in w for w in advice.vdw.provenance.warnings)
 
 
-def test_advise_parameters_rejects_unknown_vdw_method() -> None:
-    """Reject an unknown vdW method before recording it as advice."""
-    with pytest.raises(ValueError, match="Unknown vdw_method"):
-        advise_parameters(make_analysis(), hints=CalculationHints(vdw_method="xyz"))
+def test_calculation_hints_reject_unknown_vdw_method() -> None:
+    """Reject an unknown vdW method at hint construction."""
+    with pytest.raises(ValueError, match="CalculationHints.vdw_method"):
+        CalculationHints(vdw_method="xyz")
 
 
 def test_advise_parameters_enables_vdw_for_low_dimensional_system() -> None:

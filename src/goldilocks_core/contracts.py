@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field, fields, is_dataclass
-from pathlib import Path
+from enum import Enum
+from numbers import Integral, Real
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Callable, Literal, Sequence
 
 import numpy as np
@@ -54,10 +57,10 @@ ModelType = Literal["random_forest", "cgcnn", "xgboost"]
 """ML model architecture. Only ``random_forest`` is currently supported."""
 
 KPointGrid = tuple[int, int, int]
-"""Uniform k-point mesh as (nk1, nk2, nk3)."""
+"""Uniform immutable k-point mesh as (nk1, nk2, nk3)."""
 
 KPointShift = tuple[int, int, int]
-"""Monkhorst-Pack grid shift as (s1, s2, s3) with values 0 or 1."""
+"""Immutable Monkhorst-Pack shift as (s1, s2, s3) with values 0 or 1."""
 
 StageName = Literal[
     "load",
@@ -98,6 +101,122 @@ Translated to code-specific keywords in the Generate stage (e.g. ``d3bj`` →
 QE ``vdw_corr='grimme-d3'`` with ``dftd3_version=4``).
 """
 
+_VALID_VDW_METHODS = frozenset({"d3", "d3bj", "ts", "mbd"})
+
+
+def _validate_finite_positive(value: Real, field_name: str) -> None:
+    """Require a finite number greater than zero."""
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, Real)
+        or not math.isfinite(value)
+        or value <= 0
+    ):
+        raise ValueError(
+            f"{field_name} must be a finite positive number; got {value!r}"
+        )
+
+
+def _validate_positive_integer(value: int, field_name: str) -> None:
+    """Require a positive integer without accepting booleans."""
+    if isinstance(value, bool) or not isinstance(value, Integral) or value < 1:
+        raise ValueError(f"{field_name} must be a positive integer; got {value!r}")
+
+
+def _validate_kpoint_grid(grid: object, field_name: str) -> KPointGrid:
+    """Return an immutable grid of exactly three positive integer dimensions."""
+    if not isinstance(grid, tuple | list) or len(grid) != 3:
+        raise ValueError(
+            f"{field_name} must contain exactly three positive integers; got {grid!r}"
+        )
+
+    for index, value in enumerate(grid):
+        _validate_positive_integer(value, f"{field_name}[{index}]")
+
+    return tuple(int(value) for value in grid)
+
+
+def _validate_kpoint_shift(shift: object, field_name: str) -> KPointShift:
+    """Return an immutable sequence of exactly three zero-or-one shift flags."""
+    if not isinstance(shift, tuple | list) or len(shift) != 3:
+        raise ValueError(
+            f"{field_name} must contain exactly three shift flags; got {shift!r}"
+        )
+
+    for index, value in enumerate(shift):
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, Integral)
+            or value not in {0, 1}
+        ):
+            raise ValueError(f"{field_name}[{index}] must be 0 or 1; got {value!r}")
+
+    return tuple(int(value) for value in shift)
+
+
+def _validate_boolean(value: object, field_name: str) -> None:
+    """Require a built-in boolean rather than a truthy value."""
+    if not isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a boolean; got {value!r}")
+
+
+def _validate_optional_boolean(value: object, field_name: str) -> None:
+    """Require None or a built-in boolean."""
+    if value is not None:
+        _validate_boolean(value, field_name)
+
+
+def _validate_smearing(
+    smearing_type: str | None,
+    width: float | None,
+    *,
+    type_field: str,
+    width_field: str,
+) -> None:
+    """Require fixed occupations without width or smearing with positive width."""
+    if smearing_type is not None and (
+        not isinstance(smearing_type, str) or not smearing_type.strip()
+    ):
+        raise ValueError(
+            f"{type_field} must be a non-empty string or None; got {smearing_type!r}"
+        )
+
+    fixed_occupations = smearing_type in {None, "fixed"}
+    if fixed_occupations and width is not None:
+        raise ValueError(
+            f"{width_field} must be None when {type_field} is {smearing_type!r}"
+        )
+    if not fixed_occupations and width is None:
+        raise ValueError(
+            f"{width_field} is required when {type_field} is {smearing_type!r}"
+        )
+    if width is not None:
+        _validate_finite_positive(width, width_field)
+
+
+def _validate_vdw_method(method: object, field_name: str) -> None:
+    """Require a supported code-agnostic vdW method label."""
+    if not isinstance(method, str) or method not in _VALID_VDW_METHODS:
+        valid = ", ".join(sorted(_VALID_VDW_METHODS))
+        raise ValueError(f"{field_name} must be one of {valid}; got {method!r}")
+
+
+def _validate_generated_path(path: str, field_name: str) -> str:
+    """Require a non-empty portable relative path without traversal."""
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError(f"{field_name} must be a non-empty relative path")
+
+    posix_path = PurePosixPath(path)
+    windows_path = PureWindowsPath(path)
+    if posix_path.is_absolute() or windows_path.is_absolute() or windows_path.drive:
+        raise ValueError(f"{field_name} must be relative; got {path!r}")
+    if not posix_path.parts or posix_path == PurePosixPath("."):
+        raise ValueError(f"{field_name} must identify a file; got {path!r}")
+    if ".." in posix_path.parts or ".." in windows_path.parts:
+        raise ValueError(f"{field_name} must not contain '..' traversal; got {path!r}")
+
+    return str(posix_path)
+
 
 @dataclass(slots=True)
 class StructureFeatureVector:
@@ -112,6 +231,39 @@ class StructureFeatureVector:
 
     values: np.ndarray
     feature_names: list[str]
+
+    def __post_init__(self) -> None:
+        """Validate feature shape and numerical values."""
+        if not isinstance(self.values, np.ndarray):
+            raise ValueError(
+                "StructureFeatureVector.values must be a NumPy array; "
+                f"got {type(self.values).__name__}"
+            )
+        if self.values.ndim != 1:
+            raise ValueError(
+                "StructureFeatureVector.values must be one-dimensional; "
+                f"got shape {self.values.shape}"
+            )
+        if len(self.values) != len(self.feature_names):
+            raise ValueError(
+                "StructureFeatureVector.values and feature_names must have the "
+                f"same length; got {len(self.values)} values and "
+                f"{len(self.feature_names)} names"
+            )
+        if np.iscomplexobj(self.values):
+            raise ValueError(
+                "StructureFeatureVector.values must contain finite real numbers"
+            )
+        try:
+            values_are_finite = bool(np.isfinite(self.values).all())
+        except TypeError as error:
+            raise ValueError(
+                "StructureFeatureVector.values must contain finite numbers"
+            ) from error
+        if not values_are_finite:
+            raise ValueError(
+                "StructureFeatureVector.values must contain only finite numbers"
+            )
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -154,7 +306,8 @@ class KMeshEntry:
         k_index: 1-based index into the ordered k-mesh table.
         mesh: uniform k-point grid for this entry.
         k_distance_interval: VASP-style k-distance range (Å⁻¹)
-            that maps to this mesh.
+            that maps to this mesh. ``None`` as the upper endpoint means
+            the interval is unbounded above.
         k_line_density_interval: k-line-density range, or None if
             mesh is invalid for a scalar density.
         k_pra: k-points-per-reciprocal-atom for this mesh.
@@ -163,10 +316,18 @@ class KMeshEntry:
 
     k_index: int
     mesh: KPointGrid
-    k_distance_interval: tuple[float, float]
+    k_distance_interval: tuple[float, float | None]
     k_line_density_interval: tuple[float, float] | None
     k_pra: float
     n_reduced_kpoints: int
+
+    def __post_init__(self) -> None:
+        """Validate and normalize the concrete mesh dimensions."""
+        object.__setattr__(
+            self,
+            "mesh",
+            _validate_kpoint_grid(self.mesh, "KMeshEntry.mesh"),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,6 +354,19 @@ class Provenance:
     data_source: str | None = None
     confidence: float | None = None
     warnings: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Validate the optional confidence score."""
+        if self.confidence is not None and (
+            isinstance(self.confidence, bool)
+            or not isinstance(self.confidence, Real)
+            or not math.isfinite(self.confidence)
+            or not 0 <= self.confidence <= 1
+        ):
+            raise ValueError(
+                "Provenance.confidence must be a finite number in [0, 1]; "
+                f"got {self.confidence!r}"
+            )
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -244,7 +418,7 @@ class CalculationHints:
         smearing_type: smearing method (e.g. ``cold``,
             ``gaussian``, ``mp``, ``fixed``).
         smearing_width_ry: smearing width in Rydberg. Must be
-            non-negative.
+            finite and positive when smearing is enabled.
         spin_polarized: force spin-polarized (``True``) or
             non-magnetic (``False``) calculation.
         spin_orbit_coupling: force SOC on (``True``) or off
@@ -277,6 +451,42 @@ class CalculationHints:
     electron_maxstep: int | None = None
     use_vdw: bool | None = None
     vdw_method: str | None = None
+
+    def __post_init__(self) -> None:
+        """Validate numerical and coupled hint fields at the request boundary."""
+        if self.k_spacing is not None:
+            _validate_finite_positive(self.k_spacing, "CalculationHints.k_spacing")
+        if self.k_grid is not None:
+            object.__setattr__(
+                self,
+                "k_grid",
+                _validate_kpoint_grid(self.k_grid, "CalculationHints.k_grid"),
+            )
+        _validate_optional_boolean(
+            self.spin_polarized, "CalculationHints.spin_polarized"
+        )
+        _validate_optional_boolean(
+            self.spin_orbit_coupling, "CalculationHints.spin_orbit_coupling"
+        )
+        _validate_optional_boolean(self.use_vdw, "CalculationHints.use_vdw")
+
+        _validate_smearing(
+            self.smearing_type,
+            self.smearing_width_ry,
+            type_field="CalculationHints.smearing_type",
+            width_field="CalculationHints.smearing_width_ry",
+        )
+
+        if self.conv_thr is not None:
+            _validate_finite_positive(self.conv_thr, "CalculationHints.conv_thr")
+        if self.mixing_beta is not None:
+            _validate_finite_positive(self.mixing_beta, "CalculationHints.mixing_beta")
+        if self.electron_maxstep is not None:
+            _validate_positive_integer(
+                self.electron_maxstep, "CalculationHints.electron_maxstep"
+            )
+        if self.vdw_method is not None:
+            _validate_vdw_method(self.vdw_method, "CalculationHints.vdw_method")
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -380,6 +590,17 @@ class KPointAdvice:
             raise ValueError(
                 "KPointAdvice must have exactly one of spacing or an explicit grid set"
             )
+        if self.spacing is not None:
+            _validate_finite_positive(self.spacing, "KPointAdvice.spacing")
+        if self.explicit_grid is not None:
+            object.__setattr__(
+                self,
+                "explicit_grid",
+                _validate_kpoint_grid(
+                    self.explicit_grid,
+                    "KPointAdvice.explicit_grid",
+                ),
+            )
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -406,6 +627,15 @@ class SmearingAdvice:
     width_ry: float | None
     provenance: Provenance
 
+    def __post_init__(self) -> None:
+        """Validate the occupation type and width combination."""
+        _validate_smearing(
+            self.smearing_type,
+            self.width_ry,
+            type_field="SmearingAdvice.smearing_type",
+            width_field="SmearingAdvice.width_ry",
+        )
+
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
@@ -428,6 +658,10 @@ class MagnetismAdvice:
     spin_polarized: bool
     magnetic_elements: tuple[str, ...]
     provenance: Provenance
+
+    def __post_init__(self) -> None:
+        """Require an explicit spin-polarization control value."""
+        _validate_boolean(self.spin_polarized, "MagnetismAdvice.spin_polarized")
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -455,6 +689,11 @@ class SpinOrbitAdvice:
     consider: bool
     heavy_elements: tuple[str, ...]
     provenance: Provenance
+
+    def __post_init__(self) -> None:
+        """Require explicit SOC control and consideration values."""
+        _validate_boolean(self.enabled, "SpinOrbitAdvice.enabled")
+        _validate_boolean(self.consider, "SpinOrbitAdvice.consider")
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -508,6 +747,14 @@ class ConvergenceAdvice:
     mixing_beta: float = 0.4
     electron_maxstep: int = 80
 
+    def __post_init__(self) -> None:
+        """Validate finite positive convergence controls."""
+        _validate_finite_positive(self.conv_thr, "ConvergenceAdvice.conv_thr")
+        _validate_finite_positive(self.mixing_beta, "ConvergenceAdvice.mixing_beta")
+        _validate_positive_integer(
+            self.electron_maxstep, "ConvergenceAdvice.electron_maxstep"
+        )
+
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
@@ -530,6 +777,16 @@ class VdwAdvice:
     use_vdw: bool
     method: VdwMethod | None
     provenance: Provenance
+
+    def __post_init__(self) -> None:
+        """Validate that enabled vdW advice has exactly one supported method."""
+        _validate_boolean(self.use_vdw, "VdwAdvice.use_vdw")
+        if self.use_vdw and self.method is None:
+            raise ValueError("VdwAdvice.method is required when use_vdw is True")
+        if not self.use_vdw and self.method is not None:
+            raise ValueError("VdwAdvice.method must be None when use_vdw is False")
+        if self.method is not None:
+            _validate_vdw_method(self.method, "VdwAdvice.method")
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -586,6 +843,19 @@ class KPointSelection:
     mesh_type: str
     provenance: Provenance
 
+    def __post_init__(self) -> None:
+        """Validate and normalize the concrete grid and target shift flags."""
+        object.__setattr__(
+            self,
+            "grid",
+            _validate_kpoint_grid(self.grid, "KPointSelection.grid"),
+        )
+        object.__setattr__(
+            self,
+            "shift",
+            _validate_kpoint_shift(self.shift, "KPointSelection.shift"),
+        )
+
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
@@ -619,6 +889,17 @@ class PseudopotentialSelection:
     provenance: Provenance
     warnings: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        """Validate any available pseudopotential cutoff values."""
+        if self.ecutwfc_ry is not None:
+            _validate_finite_positive(
+                self.ecutwfc_ry, "PseudopotentialSelection.ecutwfc_ry"
+            )
+        if self.ecutrho_ry is not None:
+            _validate_finite_positive(
+                self.ecutrho_ry, "PseudopotentialSelection.ecutrho_ry"
+            )
+
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
@@ -651,7 +932,8 @@ class SelectionRecord:
 class GeneratedFile:
     """Generated text file content for a target DFT code.
 
-    ``path`` is relative to the bundle root directory.
+    ``path`` is non-empty, relative to the bundle root directory, and cannot
+    contain ``..`` traversal components.
 
     Attributes:
         path: relative file path within the bundle (e.g.
@@ -664,6 +946,10 @@ class GeneratedFile:
     path: str
     content: str
     role: str = "input"
+
+    def __post_init__(self) -> None:
+        """Validate the bundle-relative generated path."""
+        _validate_generated_path(self.path, "GeneratedFile.path")
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -723,6 +1009,20 @@ class CoreResult:
     warnings: tuple[str, ...] = ()
     bundle: BundleRecord | None = None
     stages: tuple[StageRecord, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Reject duplicate generated paths at their containing boundary."""
+        seen_paths: set[str] = set()
+        for generated_file in self.generated_files:
+            normalized_path = _validate_generated_path(
+                generated_file.path, "CoreResult.generated_files[].path"
+            )
+            if normalized_path in seen_paths:
+                raise ValueError(
+                    "CoreResult.generated_files contains duplicate path "
+                    f"{generated_file.path!r}"
+                )
+            seen_paths.add(normalized_path)
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -818,21 +1118,31 @@ BundleStage = Callable[[CoreResult, str | Path], BundleRecord]
 """Bundle-stage backend signature."""
 
 
+def _numpy_scalar_to_python(value: np.generic) -> Any:
+    """Convert NumPy scalars, including extended precision values."""
+    converted = value.item()
+    if not isinstance(converted, np.generic):
+        return converted
+    if np.issubdtype(value.dtype, np.bool_):
+        return bool(value)
+    if np.issubdtype(value.dtype, np.integer):
+        return int(value)
+    if np.issubdtype(value.dtype, np.floating):
+        return float(value)
+    raise TypeError(f"Unsupported NumPy scalar for JSON serialization: {value.dtype}")
+
+
 def to_jsonable(value: Any) -> Any:
-    """Convert staged pipeline values into JSON-safe Python objects.
+    """Convert supported pipeline values into JSON-safe Python objects.
 
-    Type conversions:
-
-    - dataclass → dict of field names to converted values
-    - tuple, list → list of converted items
-    - dict → dict with string keys and converted values
-    - Path → str
-    - pymatgen Structure → dict (via ``Structure.as_dict()``)
-    - numpy ndarray → list
-    - numpy scalar → Python scalar
-    - None, str, int, float, bool → passed through unchanged
+    Raises:
+        TypeError: If a value or dictionary key has no supported JSON mapping.
+        ValueError: If a floating-point value is NaN or infinite.
     """
-    if is_dataclass(value):
+    if isinstance(value, Enum):
+        return to_jsonable(value.value)
+
+    if is_dataclass(value) and not isinstance(value, type):
         return {
             field.name: to_jsonable(getattr(value, field.name))
             for field in fields(value)
@@ -842,18 +1152,53 @@ def to_jsonable(value: Any) -> Any:
         return [to_jsonable(item) for item in value]
 
     if isinstance(value, dict):
-        return {str(key): to_jsonable(item) for key, item in value.items()}
+        converted: dict[str, Any] = {}
+        for key, item in value.items():
+            json_key = _to_json_key(key)
+            if json_key in converted:
+                raise ValueError(
+                    f"JSON dictionary keys stringify to the same key: {json_key!r}"
+                )
+            converted[json_key] = to_jsonable(item)
+        return converted
 
     if isinstance(value, Path):
         return str(value)
 
     if isinstance(value, Structure):
-        return value.as_dict()
+        return to_jsonable(value.as_dict())
 
     if isinstance(value, np.ndarray):
-        return value.tolist()
+        return to_jsonable(value.tolist())
 
     if isinstance(value, np.generic):
-        return value.item()
+        return to_jsonable(_numpy_scalar_to_python(value))
 
-    return value
+    if value is None or isinstance(value, str | bool | int):
+        return value
+
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"JSON numbers must be finite; got {value!r}")
+        return value
+
+    raise TypeError(f"Unsupported value for JSON serialization: {type(value).__name__}")
+
+
+def _to_json_key(value: Any) -> str:
+    """Return a string key for supported JSON scalar key values."""
+    if isinstance(value, Enum):
+        return _to_json_key(value.value)
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, np.generic):
+        return _to_json_key(_numpy_scalar_to_python(value))
+    if value is None or isinstance(value, str | bool | int):
+        return str(value)
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"JSON dictionary keys must be finite; got {value!r}")
+        return str(value)
+    raise TypeError(
+        f"Unsupported dictionary key for JSON serialization: {type(value).__name__}"
+    )

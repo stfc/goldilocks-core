@@ -28,6 +28,29 @@ def test_load_model_loads_local_random_forest(tmp_path) -> None:
     assert loaded_model == model
 
 
+def test_model_spec_remains_mutable_before_load_time_validation(tmp_path) -> None:
+    """Permit metadata updates; validate a local location only when loading."""
+    model = {"kind": "dummy-rf"}
+    model_path = tmp_path / "model.joblib"
+    joblib.dump(model, model_path)
+    spec = ModelSpec(
+        name="test-model",
+        version="v0",
+        model_type="random_forest",
+        target="k_index",
+        feature_set="cslr",
+        source="local",
+        location=str(tmp_path / "missing.joblib"),
+    )
+
+    with pytest.raises(FileNotFoundError, match="Model file not found"):
+        load_model(spec)
+
+    spec.location = str(model_path)
+
+    assert load_model(spec) == model
+
+
 def test_load_model_downloads_huggingface_artifact(tmp_path, monkeypatch) -> None:
     """Download a huggingface artifact via hf_hub_download and load it."""
     model = {"kind": "hf-rf"}

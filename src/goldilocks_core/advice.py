@@ -44,9 +44,6 @@ def advise_parameters(
     Returns:
         A ``ParameterAdvice`` record containing k-point, smearing, magnetism,
         SOC, pseudopotential, convergence, and van der Waals advice.
-
-    Raises:
-        ValueError: If numeric hints are invalid.
     """
     intent = intent or CalculationIntent()
     hints = hints or CalculationHints()
@@ -345,8 +342,8 @@ def _advise_vdw(
 def _resolve_vdw_method(hints: CalculationHints) -> VdwMethod:
     """Return the validated vdW method, defaulting to D3BJ.
 
-    ``_validate_hints`` guarantees ``vdw_method`` is a valid label or None, so
-    the cast is safe.
+    ``CalculationHints`` validates ``vdw_method`` at construction, so the cast
+    is safe.
     """
     return cast(VdwMethod, hints.vdw_method or "d3bj")
 

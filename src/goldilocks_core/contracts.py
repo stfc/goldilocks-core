@@ -268,7 +268,7 @@ class StructureFeatureVector:
         return to_jsonable(self)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class ModelSpec:
     """Metadata describing a trained model used by the package.
 

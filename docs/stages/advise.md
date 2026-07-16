@@ -50,9 +50,12 @@ SOC is never auto-enabled. See [conventions](../conventions.md) for the rational
 
 ### van der Waals dispersion
 
-1. If `hints.use_vdw` is set → use that setting with `provenance.source="user_hint"`. Enabling vdW uses `hints.vdw_method`, or `d3bj` when no method is supplied.
-2. Otherwise, if Analyze reports `has_vacuum=True` from its connectivity-derived low-dimensional/vacuum heuristic → enable vdW with `provenance.source="analysis"`. Use `hints.vdw_method`, or `d3bj` by default.
-3. Otherwise → leave vdW off with `provenance.source="default"`. A method supplied without an enabling hint or low-dimensional analysis result is ignored with a provenance warning.
+1. If `hints.use_vdw` is `True` → enable vdW with `hints.vdw_method`, or `d3bj` when no method is supplied. Record `provenance.source="user_hint"`.
+2. If `hints.use_vdw` is `False` → disable vdW. A simultaneous method is rejected as contradictory when `CalculationHints` is constructed.
+3. If `hints.use_vdw` is `None` and Analyze reports `has_vacuum=True` from its connectivity-derived low-dimensional/vacuum heuristic → enable vdW with `hints.vdw_method`, or `d3bj` by default. Record `provenance.source="analysis"`.
+4. Otherwise → leave vdW off with `provenance.source="default"`. A method supplied without an enabling hint or low-dimensional analysis result is ignored with a provenance warning.
+
+Supported code-agnostic method labels are `d3`, `d3bj`, `ts`, and `mbd`.
 
 A dimensionality-analysis failure therefore remains transparent and conservative: Analyze reports `unknown` with a warning, and Advise does not infer low dimensionality or enable vdW.
 
@@ -67,15 +70,6 @@ The vdW/SOC asymmetry is intentional. A detected low-dimensional classification 
 3. `pseudo_type`: `hints.pseudo_type` if set, otherwise `None` (accept any).
 4. Provenance source is `"user_hint"` if any pseudo-related hint was provided, `"analysis"` if SOC changed the relativistic mode, otherwise `"default"`.
 5. Warning emitted when heavy elements are present but SOC is not enabled (fully-relativistic pseudos may be needed later).
-
-### van der Waals dispersion
-
-1. If `hints.use_vdw` is `True` → enable vdW with `hints.vdw_method`, or D3BJ when no method is supplied. Record `provenance.source="user_hint"`.
-2. If `hints.use_vdw` is `False` → disable vdW. A simultaneous method is rejected as contradictory when `CalculationHints` is constructed.
-3. If `hints.use_vdw` is `None` and analysis reports vacuum → enable vdW with the preferred method, or D3BJ by default. Record `provenance.source="analysis"`.
-4. Otherwise → leave vdW off. A preferred method supplied without `use_vdw` is not applied to 3D or undetermined systems, and the advice records an explicit warning.
-
-Supported code-agnostic method labels are `d3`, `d3bj`, `ts`, and `mbd`.
 
 ### Convergence
 

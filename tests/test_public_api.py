@@ -61,17 +61,18 @@ def test_generate_runs_pipeline_through_generated_files() -> None:
 
 def test_write_bundle_runs_pipeline_and_writes_directory(tmp_path) -> None:
     """Write a portable bundle through the public Python API."""
+    output_dir = tmp_path / "bundle"
     result = write_bundle(
         _make_si_structure(),
-        str(tmp_path),
+        str(output_dir),
         hints=CalculationHints(k_grid=(3, 3, 3), pseudo_type="NC"),
         pseudo_metadata=[_make_si_metadata()],
     )
 
     assert result.bundle is not None
-    assert result.bundle.path == str(tmp_path)
-    assert (tmp_path / "manifest.json").exists()
-    assert (tmp_path / "inputs" / "qe.in").exists()
+    assert result.bundle.path == str(output_dir)
+    assert (output_dir / "manifest.json").exists()
+    assert (output_dir / "inputs" / "qe.in").exists()
 
 
 def test_core_result_serializes_to_manifest_style_dict() -> None:

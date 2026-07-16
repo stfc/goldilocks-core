@@ -83,6 +83,8 @@ print(result.bundle.path)
 print(result.bundle.manifest)
 ```
 
+`run/` must not already exist. Bundle publication stages the complete directory on the destination filesystem, refuses all existing destinations, and does not provide an overwrite mode. Manifest entries include the UTF-8 byte count and SHA-256 hash of each generated file.
+
 Bundle layout:
 
 ```text

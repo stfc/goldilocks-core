@@ -26,7 +26,7 @@ Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a re
 goldilocks-core bundle structure.cif --out run/ [options]
 ```
 
-Runs the full pipeline and writes a portable bundle directory. `--out` is required for bundle mode.
+Runs the full pipeline and publishes a portable bundle directory. `--out` is required and must not already exist; bundle mode has no overwrite option.
 
 ## Common options
 

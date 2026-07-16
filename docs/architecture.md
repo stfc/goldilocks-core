@@ -146,7 +146,7 @@ The separation means:
 | Kmesh | `kmesh.py`, `advisors/` | `KPointSelection` | Operator k-point hints win. |
 | Select | `selection.py` | `SelectionRecord` | Currently QE UPF resources and Ry cutoffs; no k-point recalculation. |
 | Generate | `generation.py` | `tuple[GeneratedFile, ...]` | Currently QE SCF validation and rendering. |
-| Bundle | `bundle.py` | `BundleRecord` | Deterministic, path-safe directory output. |
+| Bundle | `bundle.py` | `BundleRecord` | Atomic no-replace publication of a fully staged directory on supported platforms. |
 
 ## Extension points
 

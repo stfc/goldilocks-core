@@ -248,20 +248,21 @@ def test_duplicate_custom_generate_paths_cannot_reach_bundle(tmp_path: Path) -> 
 
 def test_run_core_job_bundle_writes_output_directory(tmp_path: Path) -> None:
     """Run the configured job graph through Bundle and write files."""
+    output_dir = tmp_path / "bundle"
     result = run_core_job(
         CoreJobRequest(
             structure=make_structure(),
             hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
             pseudo_metadata=(make_metadata(),),
             mode="bundle",
-            output_dir=str(tmp_path),
+            output_dir=str(output_dir),
         )
     )
 
     assert [stage.name for stage in result.stages][-1] == "bundle"
     assert result.bundle is not None
-    assert result.bundle.path == str(tmp_path)
-    assert (tmp_path / "inputs" / "qe.in").exists()
-    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert result.bundle.path == str(output_dir)
+    assert (output_dir / "inputs" / "qe.in").exists()
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["selection"]["k_points"]["grid"] == [2, 2, 1]
     assert result.bundle.manifest == manifest

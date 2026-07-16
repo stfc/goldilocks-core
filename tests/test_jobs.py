@@ -93,15 +93,19 @@ def test_run_core_job_aggregates_kmesh_warnings() -> None:
     assert result.stages[3].warnings == (warning,)
 
 
-def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch) -> None:
+def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> None:
     """The Python job runner uses the same configured default as the CLI."""
 
     class FakeQRF:
         def predict(self, features):
             return [[0.2], [0.25], [0.3]]
 
-    monkeypatch.setenv("GOLDILOCKS_METALLICITY_CHECKPOINT", "checkpoint.ckpt")
-    monkeypatch.setenv("GOLDILOCKS_METALLICITY_ATOM_INIT", "atom-init.json")
+    checkpoint = tmp_path / "checkpoint.ckpt"
+    atom_table = tmp_path / "atom-init.json"
+    checkpoint.write_bytes(b"checkpoint")
+    atom_table.write_bytes(b"atom table")
+    monkeypatch.setenv("GOLDILOCKS_METALLICITY_CHECKPOINT", str(checkpoint))
+    monkeypatch.setenv("GOLDILOCKS_METALLICITY_ATOM_INIT", str(atom_table))
     monkeypatch.setattr("goldilocks_core.ml.models.load_model", lambda spec: FakeQRF())
     monkeypatch.setattr(
         "goldilocks_core.ml.metallicity.load_metallicity_model",
@@ -109,7 +113,7 @@ def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "goldilocks_core.ml.kdistance_features.extract_qrf_features",
-        lambda structure, model, atom_init: StructureFeatureVector(
+        lambda structure, model, atom_init, settings: StructureFeatureVector(
             values=np.zeros(483),
             feature_names=[f"feature_{index}" for index in range(483)],
         ),

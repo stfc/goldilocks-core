@@ -134,11 +134,18 @@ to heuristic advice when its artifacts or dependencies are unavailable. Model
 loading is lazy: constructing a pipeline and resolving explicit `k_grid` or
 `k_spacing` hints performs no registry read, model download, or inference.
 
-Default model locations, supporting artifacts, immutable revisions, compatible
-serialization-library versions, confidence, and calibration live in
-`goldilocks_core/model_registry.toml`, not in advisor code.
-Set `GOLDILOCKS_MODEL_REGISTRY=/path/to/models.toml` to replace the complete
-default configuration without changing the package source.
+The extractor owns the explicit 483-value feature schema. Model and supporting
+artifact identities, exact inference-stack versions, feature settings, interval
+confidence, quantiles, and calibration live in
+`goldilocks_core/model_registry.toml`. The advisor checks the declared schema
+and runtime before loading artifacts. Set
+`GOLDILOCKS_MODEL_REGISTRY=/path/to/models.toml` to replace the complete default
+configuration without changing package source.
+
+Successful QRF selections serialize the deterministic registry digest, full
+configuration, Core/extractor identity, required and installed runtime versions,
+and artifact identities in `provenance.details.qrf_inference`. Local model,
+checkpoint, and atom-table files are identified by SHA-256 content hashes.
 
 Hugging Face artifacts are cached by `huggingface_hub`; alternate remote
 registries must specify full 40-character commit revisions rather than branches
@@ -152,6 +159,13 @@ from goldilocks_core import Pipeline
 from goldilocks_core.kmesh import resolve_kpoints_from_advice
 
 pipeline = Pipeline(kmesh=resolve_kpoints_from_advice)
+```
+
+Normal tests never resolve real remote artifacts. Run the explicit compatibility
+check only when network access is intended:
+
+```bash
+uv run python scripts/validate_qrf_artifacts.py --allow-network
 ```
 
 ## Custom backends

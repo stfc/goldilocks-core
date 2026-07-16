@@ -1,15 +1,17 @@
 """Quantile Random Forest (QRF) k-distance advisor.
 
-The QRF model predicts a VASP-style k-point distance (Å⁻¹) as three quantiles
-(lower, median, upper). The median drives the concrete mesh; the interval and
-the model's confidence level are recorded in provenance. Default model and
-artifact locations are supplied by the configurable model registry.
+The registry defines the complete inference configuration. Successful model
+selections carry a structured, content-addressed reconstruction record in
+provenance; unavailable or incompatible inference falls back to advice.
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
 from dataclasses import replace
+from importlib.metadata import version
+from pathlib import Path
 from threading import Lock
 
 import numpy as np
@@ -17,6 +19,7 @@ from pymatgen.core import Structure
 
 from goldilocks_core.contracts import (
     CalculationHints,
+    JsonDict,
     KMeshAdvisor,
     KPointAdvice,
     KPointSelection,
@@ -26,6 +29,7 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.kmesh import k_distance_to_mesh, resolve_kpoints_from_advice
 from goldilocks_core.ml.model_registry import (
+    MODEL_REGISTRY_ENV,
     QrfKpointsConfig,
     is_immutable_huggingface_revision,
     load_default_qrf_config,
@@ -56,19 +60,17 @@ def predict_kdistance_quantiles(
 ) -> tuple[float, float, float]:
     """Return (median, lower, upper) k-distance in Å⁻¹ from a QRF prediction.
 
-    The QRF returns three quantiles ``[lower, median, upper]`` for the single
-    input row. ``correction`` adjusts the interval bounds using the calibrated
-    reference formula.
-
-    Raises:
-        AttributeError: If the model has no ``predict`` method.
-        ValueError: If the prediction does not yield three finite, positive,
-            ordered quantiles.
+    Feature values are checked immediately before ``predict`` so mutation of a
+    previously validated feature vector cannot send NaN or infinity to a model.
     """
     if not hasattr(model, "predict"):
         raise AttributeError("QRF model does not provide a 'predict' method.")
 
-    raw = np.asarray(model.predict(features.values.reshape(1, -1)), dtype=float)
+    feature_values = np.asarray(features.values, dtype=float)
+    if not np.isfinite(feature_values).all():
+        raise ValueError("QRF features must contain only finite values.")
+
+    raw = np.asarray(model.predict(feature_values.reshape(1, -1)), dtype=float)
     if raw.size != 3:
         raise ValueError(
             f"Expected 3 quantiles from the QRF prediction; got {raw.size}."
@@ -90,16 +92,10 @@ def kdistance_to_selection(
     *,
     data_source: str,
     confidence: float,
+    details: JsonDict | None = None,
     mesh_type: str = "monkhorst-pack",
 ) -> KPointSelection:
-    """Build a concrete k-point selection from a predicted k-distance interval.
-
-    The median distance sets the mesh; the interval and confidence level are
-    recorded in provenance so callers can judge the prediction.
-
-    Raises:
-        ValueError: If the distances are non-finite, non-positive, or misordered.
-    """
+    """Build a concrete k-point selection from a predicted interval."""
     _validate_kdistance_interval(median, lower, upper)
     return KPointSelection(
         grid=k_distance_to_mesh(structure, median),
@@ -113,6 +109,7 @@ def kdistance_to_selection(
             ),
             data_source=data_source,
             confidence=confidence,
+            details=details,
         ),
     )
 
@@ -122,27 +119,73 @@ def _heuristic_fallback(
     hints: CalculationHints,
     advice: KPointAdvice,
     error: Exception,
+    *,
+    inference_details: JsonDict,
+    failure_stage: str,
 ) -> KPointSelection:
-    """Resolve k-points from heuristic advice and record the model failure."""
-    detail = str(error) or error.__class__.__name__
+    """Resolve heuristic k-points and record an attempted QRF inference."""
+    error_message = str(error) or error.__class__.__name__
+    details = _fallback_provenance_details(
+        inference_details,
+        failure_stage,
+        error,
+        error_message,
+    )
     selection = resolve_kpoints_from_advice(structure, hints, advice)
-    warning = f"ML k-point model unavailable; used heuristic k-point advice ({detail})."
+    warning = (
+        "ML k-point model unavailable; used heuristic k-point advice "
+        f"({error_message})."
+    )
     return replace(
         selection,
         provenance=replace(
             selection.provenance,
+            source="fallback",
+            reason="Use heuristic k-point advice because QRF inference failed.",
+            details=details,
             warnings=(*selection.provenance.warnings, warning),
         ),
     )
+
+
+def _fallback_provenance_details(
+    inference_details: JsonDict,
+    failure_stage: str,
+    error: Exception,
+    error_message: str,
+) -> JsonDict:
+    """Attach structured QRF identity and failure context to a fallback."""
+    return {
+        "qrf_inference": {
+            **inference_details["qrf_inference"],
+            "failure": {
+                "stage": failure_stage,
+                "type": error.__class__.__name__,
+                "message": error_message,
+            },
+        }
+    }
+
+
+def _unparsed_registry_details(registry_path: PathLike | None) -> JsonDict:
+    """Describe a registry failure before a canonical QRF configuration exists."""
+    registry: JsonDict = {"status": "unparsed"}
+    if registry_path is not None:
+        registry["path"] = str(registry_path)
+    return {"qrf_inference": {"registry": registry}}
 
 
 def _resolve_metallicity_artifacts(
     config: QrfKpointsConfig,
     checkpoint: str | None,
     atom_init: str | None,
+    *,
+    resolved_artifacts: dict[str, str],
 ) -> tuple[str, str]:
     """Resolve configured metallicity artifacts to local paths."""
     if checkpoint is not None and atom_init is not None:
+        resolved_artifacts["metallicity_checkpoint"] = checkpoint
+        resolved_artifacts["metallicity_atom_table"] = atom_init
         return checkpoint, atom_init
 
     from goldilocks_core.ml.models import resolve_artifact
@@ -151,18 +194,22 @@ def _resolve_metallicity_artifacts(
         config.metallicity,
         config.metallicity_checkpoint_file,
     )
+    resolved_artifacts["metallicity_checkpoint"] = checkpoint
     atom_init = atom_init or resolve_artifact(
         config.metallicity,
         config.metallicity_atom_init_file,
     )
+    resolved_artifacts["metallicity_atom_table"] = atom_init
     return checkpoint, atom_init
 
 
-def _validate_qrf_config(config: QrfKpointsConfig) -> None:
-    """Ensure a hot-swapped model matches this advisor's inference contract."""
-    from importlib.metadata import version
-
-    from goldilocks_core.ml.kdistance_features import QRF_FEATURE_SET
+def _validate_qrf_contract(config: QrfKpointsConfig) -> None:
+    """Validate QRF schema, immutable artifacts, and calibration semantics."""
+    from goldilocks_core.ml.kdistance_features import (
+        QRF_FEATURE_COUNT,
+        QRF_FEATURE_SCHEMA,
+        QRF_FEATURE_SET,
+    )
 
     if config.model.source == "huggingface" and not (
         is_immutable_huggingface_revision(config.model.revision)
@@ -186,44 +233,213 @@ def _validate_qrf_config(config: QrfKpointsConfig) -> None:
             f"QRF advisor requires feature_set={QRF_FEATURE_SET!r}; "
             f"got {config.model.feature_set!r}."
         )
-    required_runtime = {
-        "scikit-learn": config.scikit_learn_version,
-        "sklearn-quantile": config.sklearn_quantile_version,
-        "joblib": config.joblib_version,
-    }
-    for package, required_version in required_runtime.items():
-        installed_version = version(package)
-        if installed_version != required_version:
+    if config.feature_schema != QRF_FEATURE_SCHEMA:
+        raise ValueError(
+            f"QRF extractor requires feature_schema={QRF_FEATURE_SCHEMA!r}; "
+            f"got {config.feature_schema!r}."
+        )
+    if config.feature_count != QRF_FEATURE_COUNT:
+        raise ValueError(
+            f"QRF extractor requires feature_count={QRF_FEATURE_COUNT}; "
+            f"got {config.feature_count}."
+        )
+    if config.calibration.method != "symmetric_additive_bounds-v1":
+        raise ValueError(
+            "QRF advisor requires calibration method 'symmetric_additive_bounds-v1'."
+        )
+
+
+def _validate_qrf_runtime(
+    config: QrfKpointsConfig,
+    runtime_versions: dict[str, str],
+) -> None:
+    """Validate exact runtime versions, retaining every observed version."""
+    for requirement in config.runtime_requirements:
+        installed_version = version(requirement.distribution)
+        runtime_versions[requirement.distribution] = installed_version
+        if installed_version != requirement.version:
             raise ValueError(
-                f"QRF model requires {package} {required_version}; "
-                f"found {installed_version}."
+                f"QRF model requires {requirement.distribution} "
+                f"{requirement.version}; found {installed_version}."
             )
 
 
-def _model_data_source(
+def _sha256_file(path: str) -> str:
+    """Return the SHA-256 content identity of one local inference artifact."""
+    artifact_path = Path(path)
+    if not artifact_path.is_file():
+        raise FileNotFoundError(f"Inference artifact file not found: {artifact_path}")
+    digest = hashlib.sha256()
+    with artifact_path.open("rb") as artifact_file:
+        for chunk in iter(lambda: artifact_file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _model_artifact_identity(config: QrfKpointsConfig) -> JsonDict:
+    """Return the remote commit or local content identity of the QRF artifact."""
+    if config.model.source == "local":
+        return {
+            "role": "qrf_model",
+            "source": "local",
+            "path": config.model.location,
+            "sha256": _sha256_file(config.model.location),
+        }
+
+    repository, separator, filename = config.model.location.partition("::")
+    if not separator or not repository or not filename:
+        raise ValueError(
+            "HuggingFace model location must be '<repo_id>::<filename>'; "
+            f"got {config.model.location!r}"
+        )
+    return {
+        "role": "qrf_model",
+        "source": "huggingface",
+        "repository": repository,
+        "filename": filename,
+        "revision": config.model.revision,
+    }
+
+
+def _supporting_artifact_identity(
+    *,
+    role: str,
     config: QrfKpointsConfig,
-    checkpoint_override: str | None,
-    atom_init_override: str | None,
-) -> str:
-    """Identify every configured or overridden artifact used for inference."""
-    model_revision = config.model.revision or "unversioned"
-    artifact_revision = config.metallicity.revision or "unversioned"
-    checkpoint_source = checkpoint_override or (
-        f"{config.metallicity.source}:{config.metallicity.location}::"
-        f"{config.metallicity_checkpoint_file}@{artifact_revision}"
+    configured_filename: str,
+    resolved_path: str,
+    overridden: bool,
+) -> JsonDict:
+    """Return a remote commit identity or SHA-256 local content identity."""
+    if overridden or config.metallicity.source == "local":
+        return {
+            "role": role,
+            "source": "local",
+            "path": resolved_path,
+            "sha256": _sha256_file(resolved_path),
+        }
+    return {
+        "role": role,
+        "source": "huggingface",
+        "repository": config.metallicity.location,
+        "filename": configured_filename,
+        "revision": config.metallicity.revision,
+    }
+
+
+def _qrf_contract_details(config: QrfKpointsConfig) -> JsonDict:
+    """Build the configuration and extractor record available before loading."""
+    from goldilocks_core.ml.kdistance_features import (
+        QRF_EXTRACTOR_ID,
+        QRF_FEATURE_COUNT,
+        QRF_FEATURE_SCHEMA,
     )
-    atom_init_source = atom_init_override or (
-        f"{config.metallicity.source}:{config.metallicity.location}::"
-        f"{config.metallicity_atom_init_file}@{artifact_revision}"
+
+    return {
+        "qrf_inference": {
+            "config_digest": {"algorithm": "sha256", "value": config.digest},
+            "configuration": config.to_dict(),
+            "extractor": {
+                "identity": QRF_EXTRACTOR_ID,
+                "feature_schema": QRF_FEATURE_SCHEMA,
+                "feature_count": QRF_FEATURE_COUNT,
+            },
+        }
+    }
+
+
+def _with_runtime_details(
+    details: JsonDict,
+    config: QrfKpointsConfig,
+    runtime_versions: dict[str, str],
+) -> JsonDict:
+    """Add required and observed runtime versions to QRF details."""
+    inference = {
+        **details["qrf_inference"],
+        "runtime": [
+            {
+                "distribution": requirement.distribution,
+                "required_version": requirement.version,
+                **(
+                    {"installed_version": runtime_versions[requirement.distribution]}
+                    if requirement.distribution in runtime_versions
+                    else {}
+                ),
+            }
+            for requirement in config.runtime_requirements
+        ],
+    }
+    if "goldilocks-core" in runtime_versions:
+        inference["core"] = {
+            "distribution": "goldilocks-core",
+            "version": runtime_versions["goldilocks-core"],
+        }
+    return {"qrf_inference": inference}
+
+
+def _with_resolved_artifact_details(
+    details: JsonDict,
+    resolved_artifacts: dict[str, str],
+) -> JsonDict:
+    """Add supporting artifact paths resolved before a later load failure."""
+    if not resolved_artifacts:
+        return details
+    return {
+        "qrf_inference": {
+            **details["qrf_inference"],
+            "resolved_artifacts": [
+                {"role": role, "path": path}
+                for role, path in resolved_artifacts.items()
+            ],
+        }
+    }
+
+
+def _qrf_provenance_details(
+    config: QrfKpointsConfig,
+    runtime_versions: dict[str, str],
+    checkpoint_path: str,
+    atom_init_path: str,
+    checkpoint_overridden: bool,
+    atom_init_overridden: bool,
+) -> JsonDict:
+    """Build the complete structured QRF inference reconstruction record."""
+    details = _with_runtime_details(
+        _qrf_contract_details(config), config, runtime_versions
     )
-    return (
-        f"model={config.model.source}:{config.model.location}@{model_revision}; "
-        f"metallicity_checkpoint={checkpoint_source}; "
-        f"metallicity_atom_init={atom_init_source}; "
-        f"runtime=scikit-learn=={config.scikit_learn_version},"
-        f"sklearn-quantile=={config.sklearn_quantile_version},"
-        f"joblib=={config.joblib_version}"
+    details["qrf_inference"]["artifacts"] = [
+        _model_artifact_identity(config),
+        _supporting_artifact_identity(
+            role="metallicity_checkpoint",
+            config=config,
+            configured_filename=config.metallicity_checkpoint_file,
+            resolved_path=checkpoint_path,
+            overridden=checkpoint_overridden,
+        ),
+        _supporting_artifact_identity(
+            role="metallicity_atom_table",
+            config=config,
+            configured_filename=config.metallicity_atom_init_file,
+            resolved_path=atom_init_path,
+            overridden=atom_init_overridden,
+        ),
+    ]
+    return details
+
+
+def _validate_atom_table_identity(details: JsonDict, atom_init_path: str) -> None:
+    """Reject mutation of a local atom table between hashing and extraction."""
+    artifacts = details["qrf_inference"]["artifacts"]
+    atom_table = next(
+        artifact
+        for artifact in artifacts
+        if artifact["role"] == "metallicity_atom_table"
     )
+    if atom_table["source"] == "local":
+        current_hash = _sha256_file(atom_init_path)
+        if current_hash != atom_table["sha256"]:
+            raise ValueError(
+                "Local metallicity atom table changed after QRF initialization."
+            )
 
 
 def qrf_kdistance_advisor(
@@ -231,22 +447,19 @@ def qrf_kdistance_advisor(
     metallicity_checkpoint: str | None = None,
     metallicity_atom_init: str | None = None,
 ) -> KMeshAdvisor:
-    """Return a lazy Kmesh backend configured for one QRF model.
+    """Return a lazy Kmesh backend configured for one complete QRF contract.
 
-    Construction performs no model loading, remote access, or heavyweight ML
-    imports. The first call without a k-point hint resolves and loads configured
-    artifacts, then caches either the models or the load failure. Explicit
-    ``k_grid`` and ``k_spacing`` hints always bypass loading and inference.
-
-    Model loading and per-structure inference failures degrade to heuristic
-    advice and are recorded in provenance warnings.
+    Construction performs no model loading, hashing, remote access, or heavy ML
+    imports. The first call without a k-point hint loads and validates once.
     """
-    loaded: tuple[object, object, str, str] | None = None
+    loaded: tuple[object, object, str, str, JsonDict] | None = None
     load_error: Exception | None = None
+    load_details: JsonDict | None = None
+    load_failure_stage = "schema"
     load_lock = Lock()
 
     def advisor(structure, hints, kpoint_advice):
-        nonlocal loaded, load_error
+        nonlocal loaded, load_error, load_details, load_failure_stage
 
         if hints.k_grid is not None or hints.k_spacing is not None:
             return resolve_kpoints_from_advice(structure, hints, kpoint_advice)
@@ -260,20 +473,64 @@ def qrf_kdistance_advisor(
                         )
                         from goldilocks_core.ml.models import load_model
 
-                        _validate_qrf_config(config)
+                        load_failure_stage = "schema"
+                        load_details = _qrf_contract_details(config)
+                        _validate_qrf_contract(config)
+
+                        runtime_versions: dict[str, str] = {}
+                        load_failure_stage = "runtime"
+                        try:
+                            _validate_qrf_runtime(config, runtime_versions)
+                        finally:
+                            load_details = _with_runtime_details(
+                                load_details,
+                                config,
+                                runtime_versions,
+                            )
+
+                        resolved_artifacts: dict[str, str] = {}
+                        load_failure_stage = "artifact_resolution"
+                        try:
+                            checkpoint, atom_init = _resolve_metallicity_artifacts(
+                                config,
+                                metallicity_checkpoint,
+                                metallicity_atom_init,
+                                resolved_artifacts=resolved_artifacts,
+                            )
+                        finally:
+                            load_details = _with_resolved_artifact_details(
+                                load_details,
+                                resolved_artifacts,
+                            )
+                        details = _qrf_provenance_details(
+                            config,
+                            runtime_versions,
+                            checkpoint,
+                            atom_init,
+                            metallicity_checkpoint is not None,
+                            metallicity_atom_init is not None,
+                        )
+                        load_details = details
+                        load_failure_stage = "model_load"
                         qrf = load_model(config.model)
-                        checkpoint, atom_init = _resolve_metallicity_artifacts(
-                            config,
-                            metallicity_checkpoint,
-                            metallicity_atom_init,
-                        )
                         metal_model = load_metallicity_model(checkpoint)
-                        data_source = _model_data_source(
+                        if details != _qrf_provenance_details(
                             config,
-                            metallicity_checkpoint,
-                            metallicity_atom_init,
+                            runtime_versions,
+                            checkpoint,
+                            atom_init,
+                            metallicity_checkpoint is not None,
+                            metallicity_atom_init is not None,
+                        ):
+                            raise ValueError(
+                                "Local QRF inference artifact changed while loading."
+                            )
+                        data_source = (
+                            f"{config.model.name}@"
+                            f"{config.model.revision or config.model.version}; "
+                            f"qrf_config_sha256={config.digest}"
                         )
-                        loaded = (qrf, metal_model, atom_init, data_source)
+                        loaded = (qrf, metal_model, atom_init, data_source, details)
                     except Exception as error:
                         load_error = error
 
@@ -283,20 +540,29 @@ def qrf_kdistance_advisor(
                 hints,
                 kpoint_advice,
                 load_error,
+                inference_details=load_details or _qrf_contract_details(config),
+                failure_stage=load_failure_stage,
             )
 
         if loaded is None:  # pragma: no cover - defensive closure invariant
             raise RuntimeError("QRF advisor reached an invalid unloaded state.")
 
-        qrf, metal_model, atom_init, data_source = loaded
+        qrf, metal_model, atom_init, data_source, details = loaded
         try:
             from goldilocks_core.ml.kdistance_features import extract_qrf_features
 
-            features = extract_qrf_features(structure, metal_model, atom_init)
+            _validate_atom_table_identity(details, atom_init)
+            features = extract_qrf_features(
+                structure,
+                metal_model,
+                atom_init,
+                config.feature_settings,
+            )
+            _validate_atom_table_identity(details, atom_init)
             median, lower, upper = predict_kdistance_quantiles(
                 qrf,
                 features,
-                config.correction,
+                config.calibration.correction,
             )
         except Exception as predict_error:
             return _heuristic_fallback(
@@ -304,6 +570,8 @@ def qrf_kdistance_advisor(
                 hints,
                 kpoint_advice,
                 predict_error,
+                inference_details=details,
+                failure_stage="prediction",
             )
 
         return kdistance_to_selection(
@@ -312,7 +580,8 @@ def qrf_kdistance_advisor(
             lower,
             upper,
             data_source=data_source,
-            confidence=config.confidence,
+            confidence=config.interval_confidence,
+            details=details,
         )
 
     return advisor
@@ -325,14 +594,7 @@ def default_kmesh_advisor(
     metallicity_checkpoint: str | None = None,
     metallicity_atom_init: str | None = None,
 ) -> KMeshAdvisor:
-    """Return the configured default QRF Kmesh backend with fallback.
-
-    The packaged model registry is used unless ``registry_path`` or
-    ``GOLDILOCKS_MODEL_REGISTRY`` selects another registry. Explicit local
-    metallicity paths can be supplied through arguments or the
-    ``GOLDILOCKS_METALLICITY_CHECKPOINT`` and
-    ``GOLDILOCKS_METALLICITY_ATOM_INIT`` environment variables.
-    """
+    """Return the configured default QRF Kmesh backend with fallback."""
     if config is not None and registry_path is not None:
         raise ValueError("Pass config or registry_path, not both.")
 
@@ -344,10 +606,11 @@ def default_kmesh_advisor(
     )
     configured_advisor: KMeshAdvisor | None = None
     config_error: Exception | None = None
+    config_details: JsonDict | None = None
     config_lock = Lock()
 
     def advisor(structure, hints, kpoint_advice):
-        nonlocal configured_advisor, config_error
+        nonlocal configured_advisor, config_error, config_details
 
         if hints.k_grid is not None or hints.k_spacing is not None:
             return resolve_kpoints_from_advice(structure, hints, kpoint_advice)
@@ -364,6 +627,9 @@ def default_kmesh_advisor(
                         )
                     except Exception as error:
                         config_error = error
+                        config_details = _unparsed_registry_details(
+                            registry_path or os.environ.get(MODEL_REGISTRY_ENV)
+                        )
 
         if config_error is not None:
             return _heuristic_fallback(
@@ -371,6 +637,9 @@ def default_kmesh_advisor(
                 hints,
                 kpoint_advice,
                 config_error,
+                inference_details=config_details
+                or _unparsed_registry_details(registry_path),
+                failure_stage="registry",
             )
         if configured_advisor is None:  # pragma: no cover - closure invariant
             raise RuntimeError("Default Kmesh advisor failed to configure.")

@@ -24,6 +24,14 @@ The `to_jsonable()` function converts pipeline values to JSON-safe Python object
 
 `to_jsonable()` raises `ValueError` for NaN or infinity at any nesting depth. It raises `TypeError` for unsupported values or dictionary-key types instead of returning an object that `json.dumps()` cannot encode. Sets, complex numbers, callables, and arbitrary objects are not supported JSON values.
 
+## Structured model provenance
+
+`Provenance.details` is `null` for decisions without additional structured
+metadata. Successful default QRF inference stores a JSON-safe reconstruction
+record under `details.qrf_inference`, including the complete registry
+configuration and digest, extractor/Core identity, runtime versions, and remote
+commit or local SHA-256 artifact identities.
+
 ## Open-ended intervals
 
 `KMeshEntry.k_distance_interval` represents an upper bound that is unbounded above as `null` (`None` in Python), rather than as `Infinity`. For example, `[0.2, null]` preserves the interval's unbounded upper endpoint while remaining RFC-compliant JSON. `to_jsonable()` continues to reject every non-finite JSON number at any nesting depth.
@@ -74,6 +82,7 @@ For a silicon structure with default settings:
         "reason": "Use the default VASP-style k-point spacing.",
         "data_source": null,
         "confidence": null,
+        "details": null,
         "warnings": []
       }
     },

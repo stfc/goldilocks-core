@@ -73,8 +73,11 @@ registry. Loading or inference failures use `resolve_kpoints_from_advice()` and
 append an actionable provenance warning.
 
 Constructing the pipeline does not load models or access the network. The first
-call without a k-point hint loads and caches either the configured models or the
-load failure.
+call without a k-point hint validates the extractor schema and exact configured
+runtime, then loads and caches either the configured models or the load failure.
+Successful selections carry the complete configuration digest and structured
+runtime/artifact identities in `provenance.details.qrf_inference`; local
+artifacts use SHA-256 content identities.
 
 ### Explicit heuristic backend
 

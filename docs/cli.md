@@ -36,33 +36,51 @@ Runs the full pipeline and publishes a portable bundle directory. `--out` is req
 | `--code` | choice | `quantum_espresso` | `CalculationIntent.code` |
 | `--task` | choice | `scf_single_point` | `CalculationIntent.task` |
 | `--functional` | str | `PBE` | `CalculationIntent.functional` (canonicalized; e.g. `PBESOL` → `PBEsol`) |
-| `--accuracy-level` | choice | `standard` | `CalculationIntent.accuracy_level` |
 | `--pseudo-mode` | str | `efficiency` | `CalculationIntent.pseudo_mode` |
 | `--pseudo-type` | str | None | `CalculationHints.pseudo_type` |
 | `--relativistic-mode` | str | None | `CalculationHints.relativistic_mode` |
 | `--pseudo-root` | path | None | Loads UPF files recursively into `pseudo_metadata` |
 | `--model` | path | None | Replaces the default with a local ML Kmesh backend |
 | `--heuristic-kpoints` | flag | False | Disables ML and resolves k-points from advice |
-| `--model-name` | str | `cli-kmesh-model` | Model name recorded in Kmesh provenance |
-| `--model-version` | str | `unknown` | Model version recorded in `ModelSpec` |
+| `--model-name` | str | `cli-kmesh-model` with `--model` | Model name recorded in Kmesh provenance; requires `--model` |
+| `--model-version` | str | `unknown` with `--model` | Model version recorded in `ModelSpec`; requires `--model` |
 | `--k-spacing` | float | None | `CalculationHints.k_spacing` |
 | `--k-grid` | 3 ints | None | `CalculationHints.k_grid` |
 | `--smearing-type` | str | None | `CalculationHints.smearing_type` |
 | `--smearing-width-ry` | float | None | `CalculationHints.smearing_width_ry` |
 | `--spin-polarized` | `true`/`false` | None | `CalculationHints.spin_polarized` |
 | `--spin-orbit-coupling` | `true`/`false` | None | `CalculationHints.spin_orbit_coupling` |
+| `--use-vdw` | `true`/`false` | None | `CalculationHints.use_vdw` |
+| `--vdw-method` | str | None | `CalculationHints.vdw_method` (`d3`, `d3bj`, `ts`, or `mbd`) |
 | `--conv-thr` | float | None | `CalculationHints.conv_thr` |
 | `--mixing-beta` | float | None | `CalculationHints.mixing_beta` |
 | `--electron-maxstep` | int | None | `CalculationHints.electron_maxstep` |
 | `--json` | flag | False | Print full JSON output |
 
+## Python/CLI control parity
+
+Every `CalculationIntent` field maps directly to a CLI option. Every
+`CalculationHints` field also maps directly except `CalculationHints.pseudo_mode`:
+the CLI sets `CalculationIntent.pseudo_mode` with `--pseudo-mode` instead of
+exposing a second override for the same effective pseudopotential-family choice.
+
+`accuracy_level` and `--accuracy-level` were intentionally removed because no
+stage implemented different scientific behavior for the advertised levels.
+
 ## Boolean options
 
-`--spin-polarized` and `--spin-orbit-coupling` accept `true` or `false` as strings, not as bare flags. This is because the underlying hint field is `bool | None`:
+`--spin-polarized`, `--spin-orbit-coupling`, and `--use-vdw` accept `true` or
+`false` as strings, not as bare flags. Their underlying hint fields are
+`bool | None`:
 
 - **Omitted**: let Core decide (value is `None`).
-- `--spin-polarized true`: force spin-polarized (value is `True`).
-- `--spin-polarized false`: force non-magnetic (value is `False`).
+- `--use-vdw true`: force dispersion correction on (value is `True`).
+- `--use-vdw false`: force dispersion correction off (value is `False`).
+
+`--vdw-method` selects a preferred code-agnostic method. It can be supplied with
+`--use-vdw true`, or without `--use-vdw` so structure analysis still decides
+whether vdW applies. Combining a method with `--use-vdw false` is contradictory
+and is rejected by the shared `CalculationHints` contract before job execution.
 
 ## Output formats
 
@@ -115,7 +133,7 @@ The CLI builds a `ModelSpec`, creates `ml_kmesh_advisor(spec)`, replaces the def
 run_core_job(request, pipeline=pipeline)
 ```
 
-The model path is not added to `CoreJobRequest`. Backend selection is executable configuration, not request data.
+The model path is not added to `CoreJobRequest`. Backend selection is executable configuration, not request data. `--model-name` and `--model-version` are local-model metadata and are rejected unless `--model` selects that backend.
 
 Hint precedence still applies:
 

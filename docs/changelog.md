@@ -2,6 +2,20 @@
 
 All notable changes to goldilocks-core are documented here.
 
+## Unreleased
+
+### Added
+
+- CLI `--use-vdw` and `--vdw-method` options matching the Python hint controls.
+
+### Changed
+
+- CLI model name/version metadata now requires the local `--model` backend.
+
+### Removed
+
+- `CalculationIntent.accuracy_level` and CLI `--accuracy-level`; the advertised levels had no implemented scientific effect. This is an intentional API and serialized-schema change with no compatibility alias.
+
 ## [0.1.0] - 2026-06-10
 
 ### Added

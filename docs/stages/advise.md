@@ -58,6 +58,15 @@ SOC is never auto-enabled. See [conventions](../conventions.md) for the rational
 4. Provenance source is `"user_hint"` if any pseudo-related hint was provided, `"analysis"` if SOC changed the relativistic mode, otherwise `"default"`.
 5. Warning emitted when heavy elements are present but SOC is not enabled (fully-relativistic pseudos may be needed later).
 
+### van der Waals dispersion
+
+1. If `hints.use_vdw` is `True` → enable vdW with `hints.vdw_method`, or D3BJ when no method is supplied. Record `provenance.source="user_hint"`.
+2. If `hints.use_vdw` is `False` → disable vdW. A simultaneous method is rejected as contradictory when `CalculationHints` is constructed.
+3. If `hints.use_vdw` is `None` and analysis reports vacuum → enable vdW with the preferred method, or D3BJ by default. Record `provenance.source="analysis"`.
+4. Otherwise → leave vdW off. A preferred method supplied without `use_vdw` is not applied to 3D or undetermined systems, and the advice records an explicit warning.
+
+Supported code-agnostic method labels are `d3`, `d3bj`, `ts`, and `mbd`.
+
 ### Convergence
 
 1. If any convergence hint is set (`conv_thr`, `mixing_beta`, `electron_maxstep`) → use provided values, fill gaps with defaults. `provenance.source="user_hint"`.
@@ -85,7 +94,8 @@ SOC is never auto-enabled. See [conventions](../conventions.md) for the rational
 - smearing type and width are inconsistent, or an enabled width is non-finite or non-positive;
 - `conv_thr` or `mixing_beta` is non-finite or non-positive;
 - `electron_maxstep` is not a positive integer;
-- `vdw_method` is not a supported label.
+- `vdw_method` is not a supported label;
+- `vdw_method` is supplied while `use_vdw=False`.
 
 The advice records repeat the relevant output checks in their own constructors. This prevents invalid custom Advise backends from passing malformed values to Kmesh, Select, or Generate.
 

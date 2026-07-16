@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from goldilocks_core.contracts import (
     BundleRecord,
@@ -104,6 +105,14 @@ def test_contracts_serialize_to_json_safe_dicts() -> None:
     assert data["selection"]["k_points"]["grid"] == [4, 4, 4]
     assert "grid" not in data
     assert "contains_heavy_elements" not in data
+
+
+def test_calculation_intent_omits_removed_accuracy_control() -> None:
+    """Keep unsupported accuracy semantics out of construction and serialization."""
+    with pytest.raises(TypeError, match="accuracy_level"):
+        CalculationIntent(accuracy_level="high")
+
+    assert "accuracy_level" not in CalculationIntent().to_dict()
 
 
 def test_hints_serialize_explicit_grid_as_list() -> None:

@@ -48,9 +48,6 @@ CodeName = Literal["quantum_espresso"]
 CalcTask = Literal["scf_single_point"]
 """Calculation task. Only SCF single-point is currently supported."""
 
-AccuracyLevel = Literal["low", "standard", "high"]
-"""Desired accuracy/cost tradeoff for the recommendation."""
-
 ModelSource = Literal["huggingface", "local"]
 """Where a trained model or supporting artifact is resolved from."""
 
@@ -386,7 +383,6 @@ class CalculationIntent:
         task: type of calculation to prepare.
         functional: exchange-correlation functional label
             (e.g. ``PBE``, ``PBEsol``, ``LDA``).
-        accuracy_level: desired accuracy/cost tradeoff.
         pseudo_mode: pseudopotential family preference
             (e.g. ``efficiency``, ``precision``).
     """
@@ -394,7 +390,6 @@ class CalculationIntent:
     code: CodeName = "quantum_espresso"
     task: CalcTask = "scf_single_point"
     functional: str = "PBE"
-    accuracy_level: AccuracyLevel = "standard"
     pseudo_mode: str = "efficiency"
 
     def __post_init__(self) -> None:
@@ -446,6 +441,11 @@ class CalculationHints:
             positive.
         electron_maxstep: maximum number of SCF iterations. Must
             be ≥ 1.
+        use_vdw: force dispersion correction on (``True``), force it off
+            (``False``), or let Core decide (``None``).
+        vdw_method: preferred dispersion method. Valid without ``use_vdw``
+            so analysis can decide whether to apply it, but incompatible with
+            ``use_vdw=False``.
     """
 
     k_spacing: float | None = None
@@ -498,6 +498,10 @@ class CalculationHints:
             )
         if self.vdw_method is not None:
             _validate_vdw_method(self.vdw_method, "CalculationHints.vdw_method")
+        if self.use_vdw is False and self.vdw_method is not None:
+            raise ValueError(
+                "CalculationHints.vdw_method must be None when use_vdw is False"
+            )
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""

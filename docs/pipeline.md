@@ -367,9 +367,11 @@ The one-shot CLI resolves its options to a `Pipeline`, creates one `CoreRuntime`
 for the command process, runs the request, and closes the runtime. The HTTP
 server transport (`goldilocks-core serve`, optional `[http]` extra) does the
 same for a long-lived process: it creates one `CoreRuntime` during application
-startup and reuses it for every request, closing it on shutdown. An MCP process
-is a sibling concern, not implemented here yet, but would follow the same
-lifetime — create one runtime at startup and reuse it for every tool call:
+startup and reuses it for every request, closing it on shutdown. The MCP server
+transport (`goldilocks-core mcp`, optional `[mcp]` extra) is a sibling concern,
+implemented over stdio in v1. It shares the HTTP request parser and contracts
+and remains a thin process-owned-runtime transport — it creates one runtime at
+startup and reuses it for every tool call:
 
 ```python
 pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))

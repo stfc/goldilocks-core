@@ -34,6 +34,15 @@ http = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
 ]
+# MCP server transport. Optional so the core library stays light: `import
+# goldilocks_core` does not require or import these. Install with
+# `uv sync --extra mcp` or `pip install goldilocks-core[mcp]`. Uses the
+# maintained `mcp` Python SDK's public low-level `Server` + `stdio_server`
+# primitives and `mcp.types` protocol types (no FastMCP internals). stdio only
+# in v1.
+mcp = [
+    "mcp>=1.28",
+]
 
 [dependency-groups]
 dev = [
@@ -41,6 +50,10 @@ dev = [
     # here so CI installs them and the server tests run instead of skipping.
     "fastapi>=0.115",
     "httpx>=0.27",
+    # MCP transport SDK (low-level `mcp.server.Server` + `mcp.server.stdio`
+    # primitives) and its in-memory test client. Listed here so CI installs them
+    # and the server tests run instead of skipping.
+    "mcp>=1.28",
     "pre-commit>=4.5.1",
     "pytest>=9.0.3",
     "ruff>=0.15.11",

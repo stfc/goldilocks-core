@@ -25,7 +25,7 @@ contain it, and the CLI does not expose `--accuracy-level`.
 uv sync
 ```
 
-The HTTP server transport is an optional extra (`uv sync --extra http`); `import goldilocks_core` does not require it.
+The HTTP server transport is an optional extra (`uv sync --extra http`); the MCP server transport is an optional extra (`uv sync --extra mcp`). `import goldilocks_core` does not require either.
 
 For development:
 
@@ -247,6 +247,7 @@ uv run goldilocks-core recommend path/to/structure.cif --heuristic-kpoints --jso
 uv run goldilocks-core generate path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --use-vdw true --vdw-method d3bj --json
 uv run goldilocks-core bundle path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
 uv run goldilocks-core serve --heuristic-kpoints --port 8000   # requires `uv sync --extra http`
+uv run goldilocks-core mcp --heuristic-kpoints                # requires `uv sync --extra mcp` (stdio default)
 ```
 
 The legacy kmesh-focused entry point is still available:
@@ -267,6 +268,13 @@ Run it with `goldilocks-core serve` (loopback by default); it owns one
 `CoreRuntime` for the process lifetime, reuses it for every request, and closes
 it on shutdown. See [HTTP server](docs/server/http.md).
 
+The MCP server transport is implemented behind the optional `[mcp]` extra. Run
+it with `goldilocks-core mcp` (stdio only in v1); it exposes the full Core
+pipeline (`recommend`, `generate`, `bundle`, `analyze`) as constrained MCP
+tools, owns one `CoreRuntime` for the process lifetime, reuses it for every tool
+call, and closes it on shutdown. See [MCP server](docs/server/mcp.md). It is
+distinct from the model-only `goldilocks-mcp` repository.
+
 ```python
 runtime = CoreRuntime()
 
@@ -277,7 +285,7 @@ runtime = CoreRuntime()
 
 Do not construct `CoreRuntime` or `Pipeline()` inside each handler. Transport,
 auth, persistence, queues, and service-level backend-name resolution remain
-outside Core. An MCP transport is a sibling concern, not implemented here yet.
+outside Core.
 
 ## Package layout
 
@@ -314,6 +322,7 @@ See [architecture](docs/architecture.md) for boundaries and dependency direction
 - [Provenance](docs/provenance.md)
 - [CLI](docs/cli.md)
 - [HTTP server](docs/server/http.md)
+- [MCP server](docs/server/mcp.md)
 - [Tutorial](docs/tutorial.md)
 - [Extension guide](docs/extension.md)
 - [Migration guide](docs/migration.md)

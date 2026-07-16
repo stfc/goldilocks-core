@@ -50,6 +50,30 @@ Runs the HTTP server transport (requires the optional `[http]` extra; `uv sync -
 
 `--model` and `--heuristic-kpoints` are mutually exclusive. Backend composition is process configuration, not request data. If the `[http]` extra is missing, `serve` raises a clear install hint before binding.
 
+### mcp
+
+```bash
+goldilocks-core mcp [options]
+```
+
+Runs the MCP server transport (requires the optional `[mcp]` extra; `uv sync --extra mcp`). Exposes the fixed Core pipeline as constrained MCP tools (`recommend`, `generate`, `bundle`, `analyze`) returning strict `CoreResult` JSON. One runtime for the process lifetime, reused across tool calls, closed on shutdown. No auth, sessions, persistence, arbitrary execution, or job management. See [MCP server](server/mcp.md).
+
+v1 runs over **stdio only** — the agent-native path used by LLM-agent hosts (Claude Desktop and similar). HTTP-style transports (`sse` / `streamable-http`) are deliberately not exposed: the MCP Python SDK only offers those through the FastMCP high-level wrapper, whose raw-argument extension points are internal/unsupported. There are no `--transport`, `--host`, or `--port` options. Operators needing network exposure should front stdio with a TLS-terminating adapter in the application layer.
+
+| Flag | Type | Default | Purpose |
+| --- | --- | --- | --- |
+| `--pseudo-root` | path | None | Directory of UPF files loaded once at startup as default pseudo metadata. |
+| `--structure-root` | path | None | Allowlist root for server-side structure paths. |
+| `--bundle-root` | path | `goldilocks_output` | Root for bundle output directories. |
+| `--model` | path | None | Local ML Kmesh model path. Replaces the default QRF backend. |
+| `--heuristic-kpoints` | flag | False | Use advice-based k-point resolution instead of the default QRF model. |
+| `--model-name` | str | `server-kmesh-model` with `--model` | Model name recorded in Kmesh provenance; requires `--model`. |
+| `--model-version` | str | `unknown` with `--model` | Model version recorded in metadata; requires `--model`. |
+
+Backend composition mirrors `serve` and the recommend commands; `--model` and `--heuristic-kpoints` are mutually exclusive. If the `[mcp]` extra is missing, `mcp` raises a clear install hint before running.
+
+This Core-level MCP exposes the full Core pipeline and is distinct from the model-only `goldilocks-mcp` repository.
+
 ## Common options
 
 | Flag | Type | Default | Maps to |

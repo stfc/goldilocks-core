@@ -15,7 +15,7 @@ Core does not own Runner/AiiDA workflows, schedulers, frontend/workspace state, 
 - Keep loaded resources and lifecycle state in `CoreRuntime`, not requests or globals hidden from callers.
 - Prefer composition over inheritance. Backends are plain functions.
 - Keep CLIs thin: parse arguments, build request/pipeline objects, call Core.
-- Keep transport handlers thin: map JSON to `CoreJobRequest` via the shared `from_dict` constructors, resolve service-level backend names outside Core, call Core. See [HTTP server](server/http.md).
+- Keep transport handlers thin: map JSON to `CoreJobRequest` via the shared `from_dict` constructors, resolve service-level backend names outside Core, call Core. See [HTTP server](server/http.md) and [MCP server](server/mcp.md).
 - Keep generators mechanical. Scientific defaults belong in advice, Kmesh, or selection.
 - Treat a target-code integration as one adapter spanning validation, target resource selection, target-specific data, and generation.
 - Keep tests portable. Do not require `local_data/` or private pseudo libraries.
@@ -58,7 +58,7 @@ Responsibilities:
 | `io/` | Structure loading only. |
 | `ml/` | Feature extraction, model loading, prediction helpers. |
 | `pseudo/` | QE-oriented UPF/SSSP parsing, metadata registry, filtering, policies. |
-| `server/` | HTTP/MCP transport surfaces and shared request/structure deserialization. Optional `[http]` extra; not imported by core. |
+| `server/` | HTTP/MCP transport surfaces and shared request/structure deserialization. Optional `[http]` and `[mcp]` extras; not imported by core. |
 
 ## Dependency direction
 
@@ -211,10 +211,11 @@ true only after shutdown completes; ownership releases only then. Reset or close
 from the runtime's own active run raises rather than waiting for itself.
 
 The one-shot CLI creates and closes one runtime inside `main()`. The HTTP server
-(`goldilocks-core serve`; see [HTTP server](server/http.md)) owns one runtime
-for the process lifetime: it is created at startup, reused across requests, and
-closed on shutdown. Handlers map transport data to `CoreJobRequest`, resolve
-service-level backend names outside Core, call `runtime.run(request)`, and
-serialize `CoreResult.to_dict()`. They must not construct a runtime per request.
-HTTP/MCP transport, auth, uploads, workspaces, persistence, and queues stay
-outside Core.
+(`goldilocks-core serve`; see [HTTP server](server/http.md)) and the MCP server
+(`goldilocks-core mcp`; see [MCP server](server/mcp.md)) each own one runtime
+for the process lifetime: it is created at startup, reused across requests or
+tool calls, and closed on shutdown. Handlers map transport data to
+`CoreJobRequest`, resolve service-level backend names outside Core, call
+`runtime.run(request)`, and serialize `CoreResult.to_dict()`. They must not
+construct a runtime per request or tool call. HTTP/MCP transport, auth, uploads,
+workspaces, persistence, and queues stay outside Core.

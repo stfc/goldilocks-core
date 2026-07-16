@@ -251,8 +251,10 @@ runtime.close()  # application shutdown
 ```
 
 The HTTP server transport is implemented behind the optional `[http]` extra
-(`goldilocks-core serve`). An MCP transport is a sibling concern, not
-implemented here yet. In either case, do not construct a runtime in each request
+(`goldilocks-core serve`). The MCP server transport is implemented behind the
+optional `[mcp]` extra (`goldilocks-core mcp`, stdio only in v1); it shares the
+HTTP request parser and contracts and remains a thin process-owned-runtime
+transport. In either case, do not construct a runtime in each request
 handler.
 
 **I want SOC on for a heavy-element compound:**

@@ -38,6 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
             )
 
     _add_serve_subparser(subparsers)
+    _add_mcp_subparser(subparsers)
 
     return parser
 
@@ -50,6 +51,15 @@ def main() -> None:
     if args.command == "serve":
         try:
             _run_serve(args)
+        except ValueError as error:
+            parser.error(str(error))
+        except ImportError as error:
+            raise SystemExit(str(error)) from error
+        return
+
+    if args.command == "mcp":
+        try:
+            _run_mcp(args)
         except ValueError as error:
             parser.error(str(error))
         except ImportError as error:
@@ -308,6 +318,62 @@ def _run_serve(args: argparse.Namespace) -> None:
     serve_app(
         host=args.host,
         port=args.port,
+        pseudo_root=args.pseudo_root,
+        structure_root=args.structure_root,
+        bundle_root=args.bundle_root,
+        model=args.model,
+        model_name=args.model_name,
+        model_version=args.model_version,
+        heuristic_kpoints=args.heuristic_kpoints,
+    )
+
+
+def _add_mcp_subparser(subparsers: argparse._SubParsersAction) -> None:
+    """Add the MCP server subcommand (requires the optional [mcp] extra).
+
+    v1 exposes stdio only (the agent-native path). HTTP-style transports are
+    not exposed here; see ``goldilocks_core.server.mcp`` for the rationale.
+    """
+    mcp_parser = subparsers.add_parser(
+        "mcp",
+        help="Run the MCP server over stdio (requires the [mcp] extra).",
+    )
+    mcp_parser.add_argument(
+        "--pseudo-root", help="Directory of UPF files for default pseudo metadata."
+    )
+    mcp_parser.add_argument(
+        "--structure-root",
+        help="Allowlist root for server-side structure paths.",
+    )
+    mcp_parser.add_argument(
+        "--bundle-root",
+        help="Root for bundle output directories (default: goldilocks_output).",
+    )
+    kpoint_backend = mcp_parser.add_mutually_exclusive_group()
+    kpoint_backend.add_argument(
+        "--model",
+        help="Local ML Kmesh model path. Replaces the default QRF backend.",
+    )
+    kpoint_backend.add_argument(
+        "--heuristic-kpoints",
+        action="store_true",
+        help="Use heuristic k-point advice instead of the default QRF model.",
+    )
+    mcp_parser.add_argument(
+        "--model-name",
+        help="Model name recorded in Kmesh provenance; requires --model.",
+    )
+    mcp_parser.add_argument(
+        "--model-version",
+        help="Model version recorded in metadata; requires --model.",
+    )
+
+
+def _run_mcp(args: argparse.Namespace) -> None:
+    """Delegate to the MCP transport server, guarding the optional extra."""
+    from goldilocks_core.server.mcp import serve as serve_mcp
+
+    serve_mcp(
         pseudo_root=args.pseudo_root,
         structure_root=args.structure_root,
         bundle_root=args.bundle_root,

@@ -10,7 +10,7 @@ from goldilocks_core.jobs import CoreRuntime, Pipeline
 from goldilocks_core.kmesh import resolve_kpoints_from_advice
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Awaitable, Callable, Iterator
 
 # Explicit k-grid hint on every request keeps the QRF/metallicity model path
 # off, so these tests never load a real model or touch the network.
@@ -94,3 +94,50 @@ def client(
     )
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def mcp_server(
+    heuristic_runtime: CoreRuntime,
+    bundle_root: Path,
+    structure_root: Path,
+) -> object:
+    """Return an MCP server with a heuristic runtime and tmp roots.
+
+    The runtime is caller-provided, so the server does not close it; tests that
+    check app-owned lifecycle build their own server.
+    """
+    from goldilocks_core.server.mcp import create_server
+
+    return create_server(
+        runtime=heuristic_runtime,
+        bundle_root=bundle_root,
+        structure_root=structure_root,
+    )
+
+
+@pytest.fixture
+def call_mcp() -> Callable[[object, Callable[[object], Awaitable[object]]], object]:
+    """Return a helper that runs an async body against one in-process MCP session.
+
+    The body receives a connected ``ClientSession`` (already initialized) and may
+    make multiple tool calls. Everything runs inside one ``anyio.run`` so a single
+    lifespan (one runtime) spans the whole body — this is what the runtime-reuse
+    tests rely on. Network-free and model-free (every request uses an explicit
+    k-grid hint and a heuristic-kpoints runtime).
+    """
+    import anyio
+    from mcp.shared.memory import create_connected_server_and_client_session
+
+    def _call(
+        server: object,
+        body: Callable[[object], Awaitable[object]],
+    ) -> object:
+        async def _run() -> object:
+            async with create_connected_server_and_client_session(server) as session:
+                await session.initialize()
+                return await body(session)
+
+        return anyio.run(_run)
+
+    return _call

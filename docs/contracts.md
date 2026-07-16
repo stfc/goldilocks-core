@@ -109,7 +109,7 @@ Generates files from completed Core records. The current input contract is QE-sh
 Callable[[CoreResult, str | Path], BundleRecord]
 ```
 
-Writes generated files and manifest output.
+Publishes generated files and manifest output to a new destination. The default backend refuses existing destinations and does not provide destructive overwrite behavior.
 
 ## Pipeline stage names
 

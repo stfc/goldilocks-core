@@ -232,7 +232,8 @@ def write_bundle(
 
     Args:
         structure: Structure object or structure file path.
-        output_dir: Bundle output directory.
+        output_dir: New bundle output directory. Existing destinations are
+            refused.
         intent: Optional calculation intent.
         hints: Optional operator hints.
         pseudo_metadata: Available pseudopotential metadata.
@@ -242,6 +243,8 @@ def write_bundle(
         ``CoreResult`` with generated files, bundle record, stages, and warnings.
 
     Raises:
+        FileExistsError: If the bundle output directory already exists.
+        OSError: If bundle staging or publication fails.
         ValueError: If generation or bundle writing rejects its inputs.
     """
     return run_core_job(

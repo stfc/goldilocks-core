@@ -205,8 +205,9 @@ Output:
 
 Responsibility:
 
-- write generated files and manifest
-- reject path traversal
+- preflight generated paths and manifest metadata
+- stage the complete directory and publish to an absent destination
+- refuse overwrite and reject path traversal
 - stay independent of Runner/AiiDA/frontend assumptions
 
 ## Execution by mode

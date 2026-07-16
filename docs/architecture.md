@@ -76,9 +76,13 @@ class Pipeline:
 
 `pipeline.py` was removed. `recommend`, `generate`, and `write_bundle` now live
 in `jobs.py` as thin wrappers around `run_core_job()`. The default Kmesh factory
-returns an advisor that lazily reads replaceable model metadata from
-`model_registry.toml`; upstream artifact locations are not embedded in stage
-code.
+returns an advisor that lazily reads the complete replaceable QRF inference
+configuration from `model_registry.toml`; upstream artifact locations are not
+embedded in stage code. The extractor owns its feature schema/version, while
+the registry owns artifact identities, exact runtime requirements, feature
+settings, interval confidence/quantiles, and calibration. A deterministic
+configuration digest and structured reconstruction record cross the Kmesh
+boundary in provenance.
 
 ## Fixed graph
 

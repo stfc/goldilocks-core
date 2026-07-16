@@ -322,6 +322,21 @@ def test_provenance_confidence_accepts_closed_interval(confidence: float) -> Non
     )
 
 
+def test_provenance_details_are_normalized_to_json_values() -> None:
+    provenance = Provenance(
+        source="model",
+        reason="test",
+        details={"versions": ("1", "2"), "value": np.float64(0.5)},
+    )
+
+    assert provenance.details == {"versions": ["1", "2"], "value": 0.5}
+
+
+def test_provenance_details_reject_non_finite_numbers() -> None:
+    with pytest.raises(ValueError, match="JSON numbers must be finite"):
+        Provenance(source="model", reason="test", details={"value": np.inf})
+
+
 @pytest.mark.parametrize(
     ("smearing_type", "width"),
     [

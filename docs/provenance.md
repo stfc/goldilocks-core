@@ -17,9 +17,24 @@ Every scientific recommendation and selection in goldilocks-core carries a `Prov
 
 - **source**: one of the types above. The primary classification.
 - **reason**: human-readable explanation of the choice. Read this to understand the decision.
-- **data_source**: where the supporting data came from (e.g. model artifacts and revisions, compatible serialization runtime, pseudo library, SSSP version). Populated for `model` and `lookup` sources. QRF selections identify both the QRF and metallicity feature artifacts, including local overrides.
+- **data_source**: concise supporting-data identity (for example, model name/revision and configuration digest, pseudo library, or SSSP version).
 - **confidence**: optional score in [0, 1]. The default QRF Kmesh backend records its configured interval confidence.
+- **details**: optional structured JSON metadata. Successful QRF inference stores its reproducibility record under `details.qrf_inference`.
 - **warnings**: caveats about this choice. Read these even if the source seems authoritative.
+
+## QRF inference details
+
+A model-backed QRF selection records:
+
+- the SHA-256 digest and complete structured registry configuration;
+- goldilocks-core version and extractor identity, feature schema, and feature count;
+- feature settings, interval confidence/quantiles, and calibration method/correction;
+- every required and installed inference runtime version;
+- QRF model, metallicity checkpoint, and atom-table identities.
+
+Remote artifacts are identified by repository, filename, and immutable commit.
+Local QRF, checkpoint, and atom-table files include their path and SHA-256
+content hash. Paths alone are not artifact identities.
 
 ## Warning propagation
 
@@ -56,6 +71,7 @@ print(result.advice.k_points.provenance.reason)   # "Use the default VASP-style 
 # How was the concrete grid selected?
 print(result.selection.k_points.provenance.source)  # "model" or fallback source
 print(result.selection.k_points.provenance.confidence)  # configured QRF confidence
+print(result.selection.k_points.provenance.details["qrf_inference"]["config_digest"])
 
 # Why is SOC considered but not enabled?
 print(result.advice.spin_orbit.provenance.source)  # "analysis"

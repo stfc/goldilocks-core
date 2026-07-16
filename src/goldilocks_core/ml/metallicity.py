@@ -41,12 +41,20 @@ def metal_features(
     structure: Structure,
     model: object,
     atom_init_path: str,
+    *,
+    graph_radius: float,
+    max_neighbors: int,
 ) -> np.ndarray:
-    """Return the CGCNN pooled crystal representation for ``structure`` (1-D)."""
+    """Return the configured CGCNN crystal representation (1-D)."""
     import torch
 
     atom_feats = atom_features_from_structure(structure, atom_init_path)
-    graph = build_radius_cgcnn_graph_from_structure(structure, atom_feats)
+    graph = build_radius_cgcnn_graph_from_structure(
+        structure,
+        atom_feats,
+        radius=graph_radius,
+        max_neighbors=max_neighbors,
+    )
     with torch.no_grad():
         representation = model.extract_crystal_repr(graph)
     return representation.numpy().reshape(-1)

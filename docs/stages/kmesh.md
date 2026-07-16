@@ -46,22 +46,38 @@ Fields:
 - `grid`: `(nk1, nk2, nk3)`, exactly three positive integers; a list input is normalized to an immutable tuple
 - `shift`: exactly three `0`/`1` integer flags; a list input is normalized to an immutable tuple; currently `(0, 0, 0)`
 - `mesh_type`: currently `"monkhorst-pack"`
-- `provenance`: source, reason, optional data source, confidence, warnings; confidence is finite and in `[0, 1]` when present
+- `provenance`: source, reason, optional data source, confidence, structured details, and warnings; confidence is finite and in `[0, 1]` when present
 
 `KPointSelection` enforces these invariants at construction, including for custom Kmesh backends, before Select is called.
 
 ## Default backend
 
-`Pipeline()` uses `default_kmesh_advisor()`. The advisor reads the QRF model,
-supporting metallicity artifacts, immutable revisions, compatible runtime
-versions, confidence, and interval calibration from `model_registry.toml`. Set
-`GOLDILOCKS_MODEL_REGISTRY` to a replacement TOML file to hot-swap that
-configuration.
+`Pipeline()` uses `default_kmesh_advisor()`. The extractor owns the explicit
+feature schema/version. The registry declares that schema and owns the model,
+supporting artifacts, immutable revisions, exact inference runtime, feature
+settings, confidence/quantiles, and calibration. The advisor rejects schema,
+feature-count, calibration-method, or runtime-version mismatch before loading
+artifacts. Set `GOLDILOCKS_MODEL_REGISTRY` to a replacement TOML file to
+hot-swap the complete configuration.
 
 Registry parsing, model imports, artifact resolution, and inference are all
 deferred until the first call without an explicit k-point hint. Loaded models
 or a load failure are cached safely for subsequent or concurrent structures.
 Failures resolve from advice and add the failure reason to provenance warnings.
+Before prediction, extracted values are checked for NaN and both infinities;
+non-finite values are never converted to finite sentinels.
+
+Successful inference records the deterministic configuration SHA-256, complete
+configuration, Core/extractor identity, runtime versions, and all artifact
+identities in `provenance.details.qrf_inference`. Remote identities use immutable
+repository commits. Local model/checkpoint/atom-table identities use SHA-256
+file content.
+
+Normal tests are network-free. Real packaged-artifact validation is explicit:
+
+```bash
+uv run python scripts/validate_qrf_artifacts.py --allow-network
+```
 
 The explicit heuristic backend is:
 

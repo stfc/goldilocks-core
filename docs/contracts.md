@@ -189,7 +189,7 @@ Public records reject invalid boundary values in dataclass `__post_init__` metho
 - K-point grids contain exactly three positive integers. List inputs are accepted for ergonomic Python construction and normalized to immutable tuples. `KPointSelection.shift` likewise normalizes a three-item list of `0`/`1` integer flags.
 - Boolean hint and advice controls accept only `bool` (or `None` for optional hints), never truthy values such as `1`.
 - `KMeshEntry.k_distance_interval` uses `None` for an upper bound that is unbounded above, preserving the scientific interval without an `Infinity` JSON number.
-- `Provenance.confidence`, when present, is finite and in the closed interval `[0, 1]`.
+- `Provenance.confidence`, when present, is finite and in the closed interval `[0, 1]`; `Provenance.details`, when present, is a JSON-safe dictionary.
 - Fixed occupations (`smearing_type=None` or `"fixed"`) have no width. Other smearing types require a finite positive width.
 - Enabled `VdwAdvice` has one supported method; disabled advice has `method=None`.
 - Present pseudopotential cutoffs and convergence controls are finite and positive; SCF step counts are positive integers.

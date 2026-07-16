@@ -270,7 +270,7 @@ class StructureFeatureVector:
         return to_jsonable(self)
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class ModelSpec:
     """Metadata describing a trained model used by the package.
 
@@ -344,8 +344,9 @@ class Provenance:
         reason: human-readable explanation of the choice.
         data_source: origin of supporting data (e.g. model name,
             pseudo library, SSSP version).
-        confidence: optional confidence score in [0, 1]. Not
-            currently populated by Core.
+        confidence: optional confidence score in [0, 1].
+        details: optional structured, JSON-safe decision metadata. Model-backed
+            decisions use this for reproducible inference configuration.
         warnings: caveats the caller should be aware of.
     """
 
@@ -353,10 +354,11 @@ class Provenance:
     reason: str
     data_source: str | None = None
     confidence: float | None = None
+    details: JsonDict | None = None
     warnings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        """Validate the optional confidence score."""
+        """Validate confidence and normalize structured details to JSON values."""
         if self.confidence is not None and (
             isinstance(self.confidence, bool)
             or not isinstance(self.confidence, Real)
@@ -367,6 +369,10 @@ class Provenance:
                 "Provenance.confidence must be a finite number in [0, 1]; "
                 f"got {self.confidence!r}"
             )
+        if self.details is not None:
+            if not isinstance(self.details, dict):
+                raise ValueError("Provenance.details must be a dictionary or None")
+            object.__setattr__(self, "details", to_jsonable(self.details))
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""

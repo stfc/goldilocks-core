@@ -30,7 +30,7 @@ The default Kmesh backend converts the advice to a `KPointSelection`. A model-ba
 
 ### Smearing
 
-1. If `hints.smearing_type` or `hints.smearing_width_ry` is set → `SmearingAdvice` from hints, `provenance.source="user_hint"`.
+1. If coherent `hints.smearing_type` and `hints.smearing_width_ry` values are set → `SmearingAdvice` from hints, `provenance.source="user_hint"`. Fixed occupations use no width; another type requires a finite positive width.
 2. If `analysis.electronic_character` is `metal` or `likely_metal` → `SmearingAdvice(smearing_type="cold", width_ry=0.01, provenance.source="analysis")`. Warning: metallicity is inferred, not confirmed.
 3. Otherwise → `SmearingAdvice(smearing_type=None, width_ry=None, provenance.source="default")`. This means fixed occupations. Warning: verify smearing for metallic systems.
 
@@ -60,7 +60,7 @@ SOC is never auto-enabled. See [conventions](../conventions.md) for the rational
 
 1. If any convergence hint is set (`conv_thr`, `mixing_beta`, `electron_maxstep`) → use provided values, fill gaps with defaults. `provenance.source="user_hint"`.
 
-   **Important**: partial overrides use `or` logic. Setting `conv_thr=1e-8` without setting `mixing_beta` produces `conv_thr=1e-8, mixing_beta=0.4`. A zero value for any field would fall through to the default — this is validated away by `_validate_hints`, which rejects non-positive values.
+   **Important**: partial overrides use `or` logic. Setting `conv_thr=1e-8` without setting `mixing_beta` produces `conv_thr=1e-8, mixing_beta=0.4`. `CalculationHints` rejects zero or other invalid values at construction before this fallback logic runs.
 
 2. Otherwise → all defaults. `provenance.source="default"`.
 
@@ -76,16 +76,16 @@ SOC is never auto-enabled. See [conventions](../conventions.md) for the rational
 
 ## Validation
 
-`_validate_hints` raises `ValueError` before any advice is recorded if:
+`CalculationHints` raises `ValueError` at construction, before any Advise backend can receive invalid request values, when:
 
-- `k_spacing <= 0`
-- Any `k_grid` value < 1
-- `smearing_width_ry < 0`
-- `conv_thr <= 0`
-- `mixing_beta <= 0`
-- `electron_maxstep < 1`
+- `k_spacing` is non-finite or non-positive;
+- `k_grid` does not contain exactly three positive integers;
+- smearing type and width are inconsistent, or an enabled width is non-finite or non-positive;
+- `conv_thr` or `mixing_beta` is non-finite or non-positive;
+- `electron_maxstep` is not a positive integer;
+- `vdw_method` is not a supported label.
 
-This prevents invalid operator inputs from becoming provenance-backed advice.
+The advice records repeat the relevant output checks in their own constructors. This prevents invalid custom Advise backends from passing malformed values to Kmesh, Select, or Generate.
 
 ## Backend contract
 

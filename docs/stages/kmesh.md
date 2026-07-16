@@ -43,10 +43,12 @@ Inputs:
 
 Fields:
 
-- `grid`: `(nk1, nk2, nk3)`
-- `shift`: currently `(0, 0, 0)`
+- `grid`: `(nk1, nk2, nk3)`, exactly three positive integers; a list input is normalized to an immutable tuple
+- `shift`: exactly three `0`/`1` integer flags; a list input is normalized to an immutable tuple; currently `(0, 0, 0)`
 - `mesh_type`: currently `"monkhorst-pack"`
-- `provenance`: source, reason, optional data source, confidence, warnings
+- `provenance`: source, reason, optional data source, confidence, warnings; confidence is finite and in `[0, 1]` when present
+
+`KPointSelection` enforces these invariants at construction, including for custom Kmesh backends, before Select is called.
 
 ## Default backend
 

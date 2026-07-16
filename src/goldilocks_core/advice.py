@@ -25,7 +25,6 @@ DEFAULT_CONV_THR = 1e-6
 DEFAULT_MIXING_BETA = 0.4
 DEFAULT_ELECTRON_MAXSTEP = 80
 METALLIC_SMEARING_WIDTH_RY = 0.01
-_VALID_VDW_METHODS = frozenset({"d3", "d3bj", "ts", "mbd"})
 
 
 def advise_parameters(
@@ -51,7 +50,6 @@ def advise_parameters(
     """
     intent = intent or CalculationIntent()
     hints = hints or CalculationHints()
-    _validate_hints(hints)
 
     spin_orbit = _advise_spin_orbit(analysis, hints)
 
@@ -355,30 +353,3 @@ def _has_pseudo_hint(hints: CalculationHints) -> bool:
         hint is not None
         for hint in (hints.pseudo_mode, hints.pseudo_type, hints.relativistic_mode)
     )
-
-
-def _validate_hints(hints: CalculationHints) -> None:
-    """Validate hints before they become provenance-backed advice."""
-    if hints.k_spacing is not None and hints.k_spacing <= 0:
-        raise ValueError("k_spacing must be positive when provided")
-
-    if hints.k_grid is not None and any(value < 1 for value in hints.k_grid):
-        raise ValueError("k_grid values must be positive integers")
-
-    if hints.smearing_width_ry is not None and hints.smearing_width_ry < 0:
-        raise ValueError("smearing_width_ry must be non-negative when provided")
-
-    if hints.conv_thr is not None and hints.conv_thr <= 0:
-        raise ValueError("conv_thr must be positive when provided")
-
-    if hints.mixing_beta is not None and hints.mixing_beta <= 0:
-        raise ValueError("mixing_beta must be positive when provided")
-
-    if hints.electron_maxstep is not None and hints.electron_maxstep < 1:
-        raise ValueError("electron_maxstep must be positive when provided")
-
-    if hints.vdw_method is not None and hints.vdw_method not in _VALID_VDW_METHODS:
-        raise ValueError(
-            f"Unknown vdw_method {hints.vdw_method!r}. "
-            f"Valid options: {', '.join(sorted(_VALID_VDW_METHODS))}"
-        )

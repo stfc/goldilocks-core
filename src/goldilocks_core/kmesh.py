@@ -225,12 +225,13 @@ def build_kmesh_entries(
         except ValueError:
             k_line_density_interval = None
 
+        lower, upper = k_distance_interval
         entries.append(
             KMeshEntry(
                 k_index=index,
                 mesh=mesh,
                 n_reduced_kpoints=mesh_to_n_reduced_kpoints(structure, mesh),
-                k_distance_interval=k_distance_interval,
+                k_distance_interval=(lower, None if upper == math.inf else upper),
                 k_line_density_interval=k_line_density_interval,
                 k_pra=mesh_to_k_pra(structure, mesh),
             )

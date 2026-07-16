@@ -67,7 +67,8 @@ def _patch_models(monkeypatch, qrf: FakeQRF) -> None:
     monkeypatch.setattr(
         "goldilocks_core.ml.kdistance_features.extract_qrf_features",
         lambda structure, model, atom_init: StructureFeatureVector(
-            values=np.zeros(483), feature_names=[]
+            values=np.zeros(483),
+            feature_names=[f"feature_{index}" for index in range(483)],
         ),
     )
 

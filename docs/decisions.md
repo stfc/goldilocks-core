@@ -74,7 +74,7 @@ The bundle directory contains generated input files and a manifest, but not pseu
 
 `_advise_convergence()` uses `hints.conv_thr or DEFAULT_CONV_THR` to fill gaps when only some convergence hints are provided.
 
-**Why:** this lets operators override one convergence parameter without specifying all three. The alternative (requiring all-or-nothing) would be less convenient. Validation in `_validate_hints` prevents zero values from slipping through as "not set."
+**Why:** this lets operators override one convergence parameter without specifying all three. The alternative (requiring all-or-nothing) would be less convenient. `CalculationHints` construction rejects zero and other invalid numerical values before this fallback logic runs.
 
 ## `PseudoMetadata` is not frozen
 

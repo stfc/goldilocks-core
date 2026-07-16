@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
@@ -11,6 +12,7 @@ from goldilocks_core import (
     run_core_job,
 )
 from goldilocks_core.contracts import (
+    GeneratedFile,
     KPointSelection,
     Provenance,
     StructureFeatureVector,
@@ -109,7 +111,7 @@ def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch) -> None:
         "goldilocks_core.ml.kdistance_features.extract_qrf_features",
         lambda structure, model, atom_init: StructureFeatureVector(
             values=np.zeros(483),
-            feature_names=[],
+            feature_names=[f"feature_{index}" for index in range(483)],
         ),
     )
 
@@ -151,12 +153,35 @@ def test_run_core_job_uses_custom_kmesh_backend() -> None:
     assert result.selection.k_points.provenance.source == "model"
 
 
+def test_invalid_custom_kmesh_record_cannot_reach_select() -> None:
+    """Stop an invalid custom Kmesh result before the Select boundary."""
+    select_called = False
+
+    def invalid_kmesh(structure, hints, kpoint_advice):
+        return KPointSelection(
+            grid=(0, 2, 2),
+            shift=(0, 0, 0),
+            mesh_type=kpoint_advice.mesh_type,
+            provenance=Provenance(source="model", reason="invalid backend"),
+        )
+
+    def custom_select(structure, advice, k_points, metadata):
+        nonlocal select_called
+        select_called = True
+        raise AssertionError("Select must not receive an invalid Kmesh record")
+
+    pipeline = Pipeline(kmesh=invalid_kmesh, select=custom_select)
+
+    with pytest.raises(ValueError, match="KPointSelection.grid"):
+        run_core_job(CoreJobRequest(structure=make_structure()), pipeline=pipeline)
+
+    assert select_called is False
+
+
 def test_run_core_job_uses_custom_generate_backend() -> None:
     """Replace Generate without editing job orchestration."""
 
     def custom_generate(structure, intent, advice, selection):
-        from goldilocks_core.contracts import GeneratedFile
-
         return (GeneratedFile(path="inputs/custom.in", content="custom\n"),)
 
     pipeline = Pipeline(generate=custom_generate)
@@ -189,6 +214,36 @@ def test_run_core_job_generate_adds_generated_files() -> None:
     assert [stage.name for stage in result.stages][-1] == "generate"
     assert result.generated_files[0].path == "inputs/qe.in"
     assert "2  2  1  0  0  0" in result.generated_files[0].content
+
+
+def test_duplicate_custom_generate_paths_cannot_reach_bundle(tmp_path: Path) -> None:
+    """Validate the complete Generate output before calling Bundle."""
+    bundle_called = False
+
+    def duplicate_generate(structure, intent, advice, selection):
+        return (
+            GeneratedFile(path="inputs/custom.in", content="first\n"),
+            GeneratedFile(path="inputs/custom.in", content="second\n"),
+        )
+
+    def custom_bundle(result, output_dir):
+        nonlocal bundle_called
+        bundle_called = True
+        raise AssertionError("Bundle must not receive duplicate generated paths")
+
+    pipeline = Pipeline(generate=duplicate_generate, bundle=custom_bundle)
+    request = CoreJobRequest(
+        structure=make_structure(),
+        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+        pseudo_metadata=(make_metadata(),),
+        mode="bundle",
+        output_dir=str(tmp_path),
+    )
+
+    with pytest.raises(ValueError, match="duplicate path"):
+        run_core_job(request, pipeline=pipeline)
+
+    assert bundle_called is False
 
 
 def test_run_core_job_bundle_writes_output_directory(tmp_path: Path) -> None:

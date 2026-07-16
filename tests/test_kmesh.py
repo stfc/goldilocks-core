@@ -1,9 +1,15 @@
+import json
 import math
 
 import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.contracts import CalculationHints, KPointAdvice, Provenance
+from goldilocks_core.contracts import (
+    CalculationHints,
+    KPointAdvice,
+    Provenance,
+    to_jsonable,
+)
 from goldilocks_core.kmesh import (
     build_k_distance_intervals,
     build_kmesh_entries,
@@ -180,7 +186,27 @@ def test_build_kmesh_entries_returns_indexed_entries() -> None:
     assert len(entries) > 0
     assert entries[0].k_index == 1
     assert entries[0].mesh == (1, 1, 1)
-    assert math.isinf(entries[0].k_distance_interval[1])
+    assert entries[0].k_distance_interval == (candidates[0], None)
+    assert entries[1].k_distance_interval == (candidates[1], candidates[0])
     assert entries[0].k_pra == 1.0
     assert entries[0].n_reduced_kpoints == 1
     assert entries[0].k_line_density_interval is not None
+
+
+def test_kmesh_entries_serialize_open_ended_intervals_as_null() -> None:
+    """Represent the unbounded top interval without a non-finite JSON number."""
+    structure = Structure(
+        lattice=Lattice.cubic(3.5),
+        species=["Si"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+
+    entries = build_kmesh_entries(
+        structure,
+        generate_candidate_k_distances(structure, max_index=4),
+    )
+
+    data = to_jsonable(entries[0])
+
+    assert data["k_distance_interval"][1] is None
+    assert json.dumps(data, allow_nan=False)

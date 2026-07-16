@@ -147,6 +147,23 @@ print(result.stages)              # stage execution records
 print(result.to_dict())           # full JSON-safe output
 ```
 
+Zero-configuration calls share a process-level runtime. Long-lived callers
+should own one explicitly so model resources are loaded once and shutdown is
+deterministic:
+
+```python
+from goldilocks_core import CoreRuntime
+
+with CoreRuntime() as runtime:
+    first = runtime.run(CoreJobRequest(structure="Si.cif"))
+    second = runtime.run(CoreJobRequest(structure="Ge.cif"))
+```
+
+If a transient model or registry initialization fails, fix the underlying
+problem and call `runtime.reset()`. Reset retains the paths captured when the
+runtime was constructed. Construct a replacement runtime to adopt changed
+environment values.
+
 ## Error handling
 
 - **Missing pseudopotentials**: selection records have `filename=None` and carry warnings. Generation raises `ValueError`.
@@ -160,7 +177,7 @@ Use `ml_kmesh_advisor(spec)` to plug model-backed k-point selection into the sta
 
 ```python
 
-from goldilocks_core import Pipeline, recommend
+from goldilocks_core import CoreRuntime, Pipeline, recommend
 from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.contracts import ModelSpec
 
@@ -175,11 +192,12 @@ spec = ModelSpec(
 )
 
 pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
-result = recommend("structure.cif", pipeline=pipeline)
+with CoreRuntime(pipeline=pipeline) as runtime:
+    result = recommend("structure.cif", runtime=runtime)
 
-print(result.selection.k_points.grid)
-print(result.selection.k_points.provenance.source)       # "model"
-print(result.selection.k_points.provenance.data_source)  # spec.name
+    print(result.selection.k_points.grid)
+    print(result.selection.k_points.provenance.source)       # "model"
+    print(result.selection.k_points.provenance.data_source)  # spec.name
 ```
 
 The request remains data-only. The model is not stored on `CoreJobRequest`; it is executable backend configuration carried by `Pipeline`.
@@ -189,11 +207,12 @@ Operator hints still take precedence:
 ```python
 from goldilocks_core import CalculationHints
 
-result = recommend(
-    "structure.cif",
-    hints=CalculationHints(k_grid=(4, 4, 4)),
-    pipeline=pipeline,
-)
+with CoreRuntime(pipeline=Pipeline(kmesh=ml_kmesh_advisor(spec))) as runtime:
+    result = recommend(
+        "structure.cif",
+        hints=CalculationHints(k_grid=(4, 4, 4)),
+        runtime=runtime,
+    )
 
 print(result.selection.k_points.provenance.source)  # "user_hint"
 ```
@@ -217,13 +236,22 @@ result = recommend("structure.cif")
 print(result.selection.k_points.grid)
 ```
 
-**I want JSON for an HTTP service:**
+**I want JSON for a future HTTP or MCP host:**
 
 ```python
-from goldilocks_core import recommend
-result = recommend("structure.cif")
-return result.to_dict()
+from goldilocks_core import CoreRuntime
+
+runtime = CoreRuntime()  # application startup
+
+# Each handler/tool call reuses the same runtime:
+result = runtime.run(core_request)
+response = result.to_dict()
+
+runtime.close()  # application shutdown
 ```
+
+HTTP and MCP transports are not implemented yet. Do not construct a runtime in
+each request handler.
 
 **I want SOC on for a heavy-element compound:**
 

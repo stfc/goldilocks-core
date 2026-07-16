@@ -26,9 +26,34 @@ Stage backends are callables composed into a `Pipeline` dataclass. There are no 
 
 **Why:** SOLID does not require inheritance. `run_core_job()` depends on the `Pipeline` abstraction and receives concrete behavior from outside. New backends extend behavior by supplying a new callable with the correct signature. This keeps the pipeline open for extension without modifying orchestration code.
 
+## Runtime owns resources; Pipeline owns composition
+
+`CoreRuntime` owns lazy model resources, retry/reset state, concurrent leases,
+and deterministic shutdown. `Pipeline` remains immutable executable composition,
+and `CoreJobRequest` remains immutable job data. A stateful backend implements
+the typed `RuntimeResource` contract (`reset()` and `close()`). Pipeline registers
+such a stage directly, or callers provide independent resources with
+`Pipeline(resources=...)`; stateless callables remain unwrapped. Each resource
+identity has one runtime owner. Direct `pipeline=` execution rejects registered
+resources, and a second runtime for one resource raises until close finishes.
+
+**Why:** constructing a model backend per request repeatedly deserializes the
+same model, while hiding an unresettable global makes transient failures and
+configuration changes impossible to control. One explicit lifecycle seam lets
+built-in and custom composition share the same runtime policy without placing
+mutable state in requests.
+
+A runtime captures model-related environment paths at construction. Reset
+reloads files at captured paths, retains ownership, and replacement captures
+changed environment values. Reset waits for active jobs before resetting
+resources. Close sets `is_closing` before it waits for active jobs, so new runs
+fail rather than deadlock. Competing close callers wait for resources and hooks;
+`is_closed` becomes true only after that work, and all callers receive the same
+shutdown error. Reset and close from the runtime's active job raise immediately.
+
 ## Backend selection is not request data
 
-`CoreJobRequest` does not contain fields such as `model`, `generator`, or `backend`. Model-backed k-point selection is configured by passing `pipeline=Pipeline(kmesh=ml_kmesh_advisor(spec))`.
+`CoreJobRequest` does not contain fields such as `model`, `generator`, or `backend`. Model-backed k-point selection is configured by owning `Pipeline(kmesh=ml_kmesh_advisor(spec))` with `CoreRuntime`.
 
 **Why:** `CoreJobRequest` is the JSON/HTTP-safe description of what to compute. A backend callable is executable Python behavior describing how to compute it. Mixing those concerns would make requests non-serializable and force Core to own backend-name resolution.
 

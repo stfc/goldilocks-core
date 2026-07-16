@@ -10,21 +10,46 @@ The graph order is fixed. The implementation behind each stage is configurable t
 
 ## Why this exists
 
-Core has two separate concerns:
+Core separates three concerns:
 
 - **What to compute**: structure, intent, hints, mode, pseudo metadata, output directory.
 - **How to compute it**: stage implementations for analysis, advice, k-point resolution, selection, generation, and bundle writing.
+- **How long resources live**: loaded models, retry/reset state, and deterministic shutdown.
 
 `CoreJobRequest` carries the first concern. It is data-only and JSON-safe.
 
-`Pipeline` carries the second concern. It is a composition of callables and is not serialized as part of the request.
+`Pipeline` carries the second concern. It is immutable composition and is not serialized as part of the request.
 
-This split keeps HTTP/JSON boundaries clean while making Python callers able to swap backends directly.
+`CoreRuntime` carries the third concern. It owns one pipeline's reusable resources across jobs.
+
+This split keeps transport boundaries clean while making Python callers able to swap backends and own process lifetimes directly.
+
+### Lifecycle resources
+
+A stateful backend implements the typed `RuntimeResource` contract:
+
+```python
+class RuntimeResource(Protocol):
+    def reset(self) -> None: ...
+    def close(self) -> None: ...
+```
+
+`Pipeline` automatically registers any stage backend implementing this contract
+and also accepts independent resources through `resources=`. A resource identity
+can belong to one `CoreRuntime` only; a second runtime for it raises.
+`CoreRuntime.reset()` waits for active jobs and calls each resource's `reset()`
+without releasing ownership. `close()` calls each resource's `close()` in reverse
+order and releases ownership only after all close hooks finish. Plain stateless
+callables require no resource methods and continue to work unchanged.
+
+`ml_kmesh_advisor(spec)` returns a callable `RuntimeResource`. Its model loads
+once on first hint-free use, concurrent first calls share that load, and a load
+failure is cached until `runtime.reset()`. `close()` releases its model reference.
 
 ## Core objects
 
 ```python
-from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
+from goldilocks_core import CoreJobRequest, CoreRuntime, Pipeline, run_core_job
 ```
 
 `Pipeline` is a frozen dataclass with one callable per stage:
@@ -38,6 +63,7 @@ class Pipeline:
     select: SelectStage = select_parameters
     generate: GenerateStage = generate_inputs
     bundle: BundleStage = write_bundle_directory
+    resources: tuple[RuntimeResource, ...] = ()
 ```
 
 The built-in composition is returned by `Pipeline()`:
@@ -46,15 +72,21 @@ The built-in composition is returned by `Pipeline()`:
 pipeline = Pipeline()
 ```
 
-`run_core_job()` accepts an optional pipeline:
+`run_core_job()` accepts one-call stateless composition or a long-lived runtime:
 
 ```python
-result = run_core_job(request, pipeline=pipeline)
+stateless_pipeline = Pipeline(kmesh=my_stateless_kmesh)
+result = run_core_job(request, pipeline=stateless_pipeline)
+
+with CoreRuntime(pipeline=pipeline) as runtime:
+    result = run_core_job(request, runtime=runtime)
 ```
 
-If no pipeline is passed, `run_core_job()` calls `Pipeline()` and uses the
-built-in backends. The default Kmesh backend lazily loads the QRF configuration
-from `model_registry.toml`; explicit k-point hints bypass model loading. Use
+A direct `pipeline=` call rejects registered `RuntimeResource` values because it
+would bypass their owner. When neither is passed, `run_core_job()` uses the resettable process-level
+runtime also shared by `recommend()`, `generate()`, and `write_bundle()`. The
+default Kmesh backend lazily loads the QRF configuration and models; explicit
+k-point hints bypass model loading. Use
 `Pipeline(kmesh=resolve_kpoints_from_advice)` for an explicitly heuristic path.
 
 ## Stage contracts
@@ -220,26 +252,56 @@ bundle    -> Load -> Analyze -> Advise -> Kmesh -> Select -> Generate -> Bundle
 
 `Load` is not a field on `Pipeline`. Structure loading is stable I/O at the request boundary. The swappable computational stages start after loading.
 
-## Default behavior
+## Runtime lifecycle
 
-Default recommendation:
+Default recommendation uses a process-level runtime:
 
 ```python
 from goldilocks_core import CoreJobRequest, run_core_job
 
-result = run_core_job(CoreJobRequest(structure="Si.cif"))
+first = run_core_job(CoreJobRequest(structure="Si.cif"))
+second = run_core_job(CoreJobRequest(structure="Ge.cif"))
 ```
 
-This is equivalent to:
+The calls share loaded default models. The process runtime is resettable:
 
 ```python
-from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
+from goldilocks_core import reset_default_runtime
 
-result = run_core_job(
-    CoreJobRequest(structure="Si.cif"),
-    pipeline=Pipeline(),
-)
+reset_default_runtime()  # closes it; the next call creates a replacement
 ```
+
+Long-lived callers should make ownership explicit:
+
+```python
+from goldilocks_core import CoreRuntime
+
+with CoreRuntime() as runtime:
+    first = runtime.run(CoreJobRequest(structure="Si.cif"))
+    second = runtime.run(CoreJobRequest(structure="Ge.cif"))
+```
+
+Concurrent calls through one runtime share race-safe first initialization.
+Initialization failures are cached to avoid retrying on every request. Call
+`runtime.reset()` to wait for active jobs, reset every registered resource, and
+retry lazily. A runtime captures model registry and supporting-artifact
+environment paths at construction. Reset rereads files at those paths; construct
+a replacement runtime to capture changed environment values.
+
+An explicitly composed pipeline can also be runtime-owned:
+
+```python
+runtime = CoreRuntime(pipeline=Pipeline(kmesh=my_kmesh))
+```
+
+Stateless custom callables make reset a no-op. Stateful custom backends implement
+`RuntimeResource` directly or are listed in `Pipeline(resources=(resource,))`.
+`close()` sets `is_closing` and rejects new runs while it waits for active jobs,
+closes resources, and runs hooks once. Other close callers wait for that work;
+all receive the recorded shutdown error, if any. `is_closed` becomes true only
+when it finishes. A hook's worker call to `run()` therefore fails promptly.
+Calling `reset()` or `close()` from that runtime's own active job raises
+`RuntimeError`; it never waits for itself.
 
 ## Replacing one backend
 
@@ -262,7 +324,8 @@ spec = ModelSpec(
 )
 
 pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
-result = run_core_job(CoreJobRequest(structure="Si.cif"), pipeline=pipeline)
+with CoreRuntime(pipeline=pipeline) as runtime:
+    result = runtime.run(CoreJobRequest(structure="Si.cif"))
 
 print(result.selection.k_points.provenance.source)  # "model"
 ```
@@ -296,18 +359,24 @@ Backends must return the standard contract objects with correct provenance:
 
 Provenance is part of the backend contract. A backend that returns a bare tuple or string is not a Core backend.
 
-## HTTP and CLI mapping
+## CLI, HTTP, and MCP mapping
 
 Core does not resolve backend names. It accepts callables.
 
-A CLI or HTTP layer may expose names such as `--model model.joblib` or JSON fields such as `"kmesh_backend": "cslr"`. That layer resolves the name to a callable and passes a `Pipeline` into `run_core_job()`.
-
-Example CLI mapping:
+The one-shot CLI resolves its options to a `Pipeline`, creates one `CoreRuntime`
+for the command process, runs the request, and closes the runtime. A future HTTP
+or MCP process must create one runtime during application startup and reuse it
+for every handler/tool call:
 
 ```python
-
 pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
-result = run_core_job(request, pipeline=pipeline)
+runtime = CoreRuntime(pipeline=pipeline)  # application startup
+
+result = runtime.run(request)             # each request or tool call
+runtime.close()                           # application shutdown
 ```
 
-Core never sees the string `"cslr"`; it sees the function returned by `ml_kmesh_advisor(spec)`.
+Do not create a runtime or default pipeline inside each HTTP/MCP handler. Those
+transports are not implemented yet. They own JSON parsing, error mapping, and
+service-level backend-name resolution; Core sees the callable returned by
+`ml_kmesh_advisor(spec)`, never a string such as `"cslr"`.

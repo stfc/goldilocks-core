@@ -69,10 +69,15 @@ pipeline = Pipeline(kmesh=project_kmesh)
 For ML k-points, use the built-in factory:
 
 ```python
+from goldilocks_core import CoreRuntime
 from goldilocks_core.advisors import ml_kmesh_advisor
 
 pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
+runtime = CoreRuntime(pipeline=pipeline)
 ```
+
+`ml_kmesh_advisor(spec)` is stateful, so this composition must run through its
+runtime. Direct `pipeline=` execution is reserved for stateless backends.
 
 ## Changing the current QE generator
 

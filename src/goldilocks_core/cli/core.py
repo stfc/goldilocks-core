@@ -14,7 +14,7 @@ from goldilocks_core.contracts import (
     CoreResult,
     ModelSpec,
 )
-from goldilocks_core.jobs import Pipeline, run_core_job
+from goldilocks_core.jobs import CoreRuntime, Pipeline
 from goldilocks_core.kmesh import resolve_kpoints_from_advice
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
@@ -52,7 +52,8 @@ def main() -> None:
     except ValueError as error:
         parser.error(str(error))
 
-    result = run_core_job(request, pipeline=pipeline)
+    with CoreRuntime(pipeline=pipeline) as runtime:
+        result = runtime.run(request)
 
     if args.json:
         output = {"request": request.to_dict(), **result.to_dict()}

@@ -119,6 +119,27 @@ result = run_core_job(
 print(result.to_dict())
 ```
 
+For a service, worker, notebook session, or other long-lived caller, own one
+runtime and reuse it across jobs:
+
+```python
+from goldilocks_core import CoreJobRequest, CoreRuntime
+
+with CoreRuntime() as runtime:
+    first = runtime.run(CoreJobRequest(structure="Si.cif"))
+    second = runtime.run(CoreJobRequest(structure="Ge.cif"))
+```
+
+The runtime lazily loads each default model once and supports concurrent calls.
+A stateful `RuntimeResource` has exactly one `CoreRuntime` owner by identity;
+sharing its `Pipeline` with another runtime raises. `runtime.reset()` retains
+that ownership, discards cached initialization failure, and retries on the next
+model-backed job. `close()` first sets `is_closing`, so new runs fail promptly;
+concurrent close callers wait for resource closes and hooks. `is_closed` becomes
+true only when shutdown completes, including a completed shutdown with an error.
+All close callers receive the same shutdown error. Reset or close from that
+runtime's own active job raises instead of waiting for itself.
+
 Modes:
 
 ```text
@@ -129,10 +150,15 @@ bundle    -> Load → Analyze → Advise → Kmesh → Select → Generate → B
 
 ### Default k-point model
 
-`Pipeline()` uses the configured QRF k-distance model by default and falls back
-to heuristic advice when its artifacts or dependencies are unavailable. Model
-loading is lazy: constructing a pipeline and resolving explicit `k_grid` or
-`k_spacing` hints performs no registry read, model download, or inference.
+`CoreRuntime()` owns a `Pipeline()` with the configured QRF k-distance model and
+heuristic fallback. Model loading is lazy: constructing either object and
+resolving explicit `k_grid` or `k_spacing` hints performs no model download or
+inference. Reusing the runtime reuses loaded QRF and metallicity artifacts.
+
+Zero-configuration `recommend()` and `run_core_job()` calls share a resettable
+process-level runtime. Call `reset_default_runtime()` to close and discard it;
+the next convenience call captures current environment configuration and creates
+a replacement. Prefer an explicit `CoreRuntime` when lifetime ownership matters.
 
 The extractor owns the explicit 483-value feature schema. Model and supporting
 artifact identities, exact inference-stack versions, feature settings, interval
@@ -142,7 +168,10 @@ contract are pinned to those versions. The advisor checks the declared schema
 and runtime before loading artifacts, then verifies that the loaded model's own
 quantiles match the declared confidence interval. Set
 `GOLDILOCKS_MODEL_REGISTRY=/path/to/models.toml` to replace the complete default
-configuration without changing package source.
+configuration without changing package source. A runtime captures registry and
+artifact override paths at construction. It does not observe later environment
+changes. `runtime.reset()` reloads files at the captured paths; construct a new
+runtime, or reset the process default, to capture replacement environment values.
 
 Successful QRF selections serialize the deterministic registry digest, full
 configuration, Core/extractor identity, required and installed runtime versions,
@@ -173,10 +202,13 @@ uv run python scripts/validate_qrf_artifacts.py --allow-network
 ## Custom backends
 
 `Pipeline` holds Python callables for stage backends. `CoreJobRequest` remains data-only.
+Pass a stateless pipeline directly for one call. A pipeline containing a
+`RuntimeResource` must be owned by exactly one `CoreRuntime`; direct
+`pipeline=` execution is rejected:
 
 ```python
 
-from goldilocks_core import Pipeline, recommend
+from goldilocks_core import CoreRuntime, Pipeline, recommend
 from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.contracts import ModelSpec
 
@@ -191,8 +223,16 @@ spec = ModelSpec(
 )
 
 pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
-result = recommend("path/to/structure.cif", pipeline=pipeline)
+
+with CoreRuntime(pipeline=pipeline) as runtime:
+    result = recommend("path/to/structure.cif", runtime=runtime)
 ```
+
+`ml_kmesh_advisor(spec)` is a lifecycle-aware backend: its runtime loads it
+once, caches a load failure until `runtime.reset()`, and releases ownership only
+after close hooks finish. Stateless custom callables still work with direct
+`pipeline=` execution. Stateful custom backends implement `RuntimeResource`
+(`reset()` and `close()`); `Pipeline` registers them with the runtime.
 
 See [backends](docs/backends.md) for backend contracts and examples.
 
@@ -212,14 +252,35 @@ The legacy kmesh-focused entry point is still available:
 uv run goldilocks-kmesh path/to/structure.cif --model path/to/model.joblib
 ```
 
+The CLI owns one `CoreRuntime` for its one-shot process and closes it before
+exit. It does not use or persist the Python convenience runtime.
+
 See [CLI reference](docs/cli.md).
+
+## Long-lived HTTP and MCP hosts
+
+HTTP and MCP transports are not implemented here yet. A future host must create
+one runtime during process/application startup, reuse it for every request or
+tool call, and close it during shutdown:
+
+```python
+runtime = CoreRuntime()
+
+# startup: retain runtime
+# request/tool call: runtime.run(core_request)
+# shutdown: runtime.close()
+```
+
+Do not construct `CoreRuntime` or `Pipeline()` inside each handler. Transport,
+auth, persistence, queues, and service-level backend-name resolution remain
+outside Core.
 
 ## Package layout
 
 ```text
 src/goldilocks_core/
 ├── contracts.py   # public records, type aliases, serialization
-├── jobs.py        # fixed job runner, Pipeline, and public convenience API
+├── jobs.py        # fixed runner, Pipeline, CoreRuntime, and convenience API
 ├── analysis.py    # structure facts
 ├── advice.py      # provenance-backed parameter advice
 ├── kmesh.py       # k-point grid resolution

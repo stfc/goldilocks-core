@@ -56,6 +56,26 @@ def make_result(request: CoreJobRequest) -> CoreResult:
     )
 
 
+def patch_runtime(monkeypatch, captured, result_factory=make_result) -> None:
+    """Replace the CLI runtime with a context-managed ownership spy."""
+
+    class FakeRuntime:
+        def __init__(self, pipeline=None):
+            captured["pipeline"] = pipeline
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            captured["closed"] = True
+
+        def run(self, request):
+            captured["request"] = request
+            return result_factory(request)
+
+    monkeypatch.setattr(cli_core, "CoreRuntime", FakeRuntime)
+
+
 def test_build_parser_parses_recommend_arguments() -> None:
     """Parse staged recommendation arguments into a namespace."""
     parser = cli_core.build_parser()
@@ -267,12 +287,12 @@ def test_main_rejects_disabled_vdw_method_before_job_execution(
     monkeypatch,
     capsys,
 ) -> None:
-    """Reject contradictory vdW options before invoking the Core job runner."""
+    """Reject contradictory vdW options before constructing the CLI runtime."""
 
-    def fail_if_run(*args, **kwargs) -> CoreResult:
-        pytest.fail("run_core_job must not be called for invalid CLI options")
+    def fail_if_runtime(*args, **kwargs):
+        pytest.fail("CoreRuntime must not be constructed for invalid CLI options")
 
-    monkeypatch.setattr(cli_core, "run_core_job", fail_if_run)
+    monkeypatch.setattr(cli_core, "CoreRuntime", fail_if_runtime)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -335,12 +355,12 @@ def test_main_rejects_model_metadata_without_model_before_job_execution(
     monkeypatch,
     capsys,
 ) -> None:
-    """Fail on backend-only metadata before invoking the Core job runner."""
+    """Fail on backend-only metadata before constructing the CLI runtime."""
 
-    def fail_if_run(*args, **kwargs) -> CoreResult:
-        pytest.fail("run_core_job must not be called for invalid CLI options")
+    def fail_if_runtime(*args, **kwargs):
+        pytest.fail("CoreRuntime must not be constructed for invalid CLI options")
 
-    monkeypatch.setattr(cli_core, "run_core_job", fail_if_run)
+    monkeypatch.setattr(cli_core, "CoreRuntime", fail_if_runtime)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -366,18 +386,8 @@ def test_cli_rejects_removed_accuracy_control(capsys) -> None:
 
 def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
     """Keep CLI main as parse -> request -> run_core_job -> print."""
-    captured: dict[str, CoreJobRequest | Pipeline | None] = {}
-
-    def fake_run_core_job(
-        request: CoreJobRequest,
-        *,
-        pipeline: Pipeline | None = None,
-    ) -> CoreResult:
-        captured["request"] = request
-        captured["pipeline"] = pipeline
-        return make_result(request)
-
-    monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)
+    captured: dict[str, object] = {}
+    patch_runtime(monkeypatch, captured)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -404,6 +414,7 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
     assert request.hints.k_grid == (2, 2, 1)
     assert request.hints.pseudo_type == "NC"
     assert captured["pipeline"] is None
+    assert captured["closed"] is True
     output = json.loads(capsys.readouterr().out)
     assert output["selection"]["k_points"]["grid"] == [2, 2, 1]
     assert output["request"]["structure"] == "Si.cif"
@@ -411,18 +422,8 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
 
 def test_main_builds_pipeline_for_model_backend(monkeypatch, capsys) -> None:
     """Resolve CLI --model into a custom Core pipeline, not request data."""
-    captured: dict[str, CoreJobRequest | Pipeline | None] = {}
-
-    def fake_run_core_job(
-        request: CoreJobRequest,
-        *,
-        pipeline: Pipeline | None = None,
-    ) -> CoreResult:
-        captured["request"] = request
-        captured["pipeline"] = pipeline
-        return make_result(request)
-
-    monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)
+    captured: dict[str, object] = {}
+    patch_runtime(monkeypatch, captured)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -451,14 +452,9 @@ def test_main_builds_pipeline_for_model_backend(monkeypatch, capsys) -> None:
 
 def test_main_builds_bundle_request_with_output_dir(monkeypatch, capsys) -> None:
     """Pass bundle output path through the shared Core job request."""
-    captured: dict[str, CoreJobRequest] = {}
+    captured: dict[str, object] = {}
 
-    def fake_run_core_job(
-        request: CoreJobRequest,
-        *,
-        pipeline: Pipeline | None = None,
-    ) -> CoreResult:
-        captured["request"] = request
+    def bundle_result(request: CoreJobRequest) -> CoreResult:
         result = make_result(request)
         return CoreResult(
             intent=result.intent,
@@ -469,7 +465,7 @@ def test_main_builds_bundle_request_with_output_dir(monkeypatch, capsys) -> None
             stages=result.stages,
         )
 
-    monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)
+    patch_runtime(monkeypatch, captured, bundle_result)
     monkeypatch.setattr(
         sys,
         "argv",

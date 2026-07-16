@@ -8,7 +8,15 @@ from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum
 from numbers import Integral, Real
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Any, Callable, Literal, Sequence, get_args
+from typing import (
+    Any,
+    Callable,
+    Literal,
+    Protocol,
+    Sequence,
+    get_args,
+    runtime_checkable,
+)
 
 import numpy as np
 from pymatgen.core import Structure
@@ -1192,6 +1200,23 @@ AdviseStage = Callable[
 
 KMeshAdvisor = Callable[[Structure, CalculationHints, KPointAdvice], KPointSelection]
 """Kmesh-stage backend signature."""
+
+
+@runtime_checkable
+class RuntimeResource(Protocol):
+    """Reusable pipeline resource owned by a ``CoreRuntime``.
+
+    Resources discard cached state on ``reset()`` and permanently release it on
+    ``close()``. Pipeline stages may implement this protocol directly; plain
+    stateless callables remain valid stage backends.
+    """
+
+    def reset(self) -> None:
+        """Discard cached state so it is initialized lazily on next use."""
+
+    def close(self) -> None:
+        """Release cached state permanently."""
+
 
 SelectStage = Callable[
     [Structure, ParameterAdvice, KPointSelection, Sequence[PseudoMetadata]],

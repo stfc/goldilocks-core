@@ -18,6 +18,7 @@ from goldilocks_core.contracts import (
     Provenance,
     StructureFeatureVector,
 )
+from goldilocks_core.kmesh import resolve_kpoints_from_advice
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 
@@ -207,7 +208,10 @@ def test_run_core_job_uses_custom_generate_backend() -> None:
     def custom_generate(structure, intent, advice, selection):
         return (GeneratedFile(path="inputs/custom.in", content="custom\n"),)
 
-    pipeline = Pipeline(generate=custom_generate)
+    pipeline = Pipeline(
+        kmesh=resolve_kpoints_from_advice,
+        generate=custom_generate,
+    )
 
     result = run_core_job(
         CoreJobRequest(
@@ -254,7 +258,11 @@ def test_duplicate_custom_generate_paths_cannot_reach_bundle(tmp_path: Path) -> 
         bundle_called = True
         raise AssertionError("Bundle must not receive duplicate generated paths")
 
-    pipeline = Pipeline(generate=duplicate_generate, bundle=custom_bundle)
+    pipeline = Pipeline(
+        kmesh=resolve_kpoints_from_advice,
+        generate=duplicate_generate,
+        bundle=custom_bundle,
+    )
     request = CoreJobRequest(
         structure=make_structure(),
         hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
@@ -288,7 +296,10 @@ def test_bundle_backend_receives_completed_pre_bundle_stage_trace(
             mode="bundle",
             output_dir=str(tmp_path / "bundle"),
         ),
-        pipeline=Pipeline(bundle=inspect_bundle),
+        pipeline=Pipeline(
+            kmesh=resolve_kpoints_from_advice,
+            bundle=inspect_bundle,
+        ),
     )
 
     assert received_stages == (

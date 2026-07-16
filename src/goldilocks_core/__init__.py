@@ -8,11 +8,15 @@ from goldilocks_core.contracts import (
     CalculationIntent,
     CoreJobRequest,
     CoreResult,
+    RuntimeResource,
 )
 from goldilocks_core.jobs import (
+    CoreRuntime,
     Pipeline,
     generate,
+    get_default_runtime,
     recommend,
+    reset_default_runtime,
     run_core_job,
     write_bundle,
 )
@@ -23,9 +27,13 @@ __all__ = [
     "CalculationIntent",
     "CoreJobRequest",
     "CoreResult",
+    "CoreRuntime",
+    "RuntimeResource",
     "Pipeline",
     "generate",
+    "get_default_runtime",
     "recommend",
+    "reset_default_runtime",
     "run_core_job",
     "write_bundle",
 ]

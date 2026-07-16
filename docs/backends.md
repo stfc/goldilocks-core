@@ -79,6 +79,13 @@ Successful selections carry the complete configuration digest and structured
 runtime/artifact identities in `provenance.details.qrf_inference`; local
 artifacts use SHA-256 content identities.
 
+For reuse across jobs, put the composition in one `CoreRuntime`. Direct
+`pipeline=` is the explicit one-call path only for stateless composition. A
+stateful backend implements `RuntimeResource` (`reset()` and `close()`), is
+registered by `Pipeline`, and must be owned by one `CoreRuntime`; direct
+execution is rejected. `CoreRuntime` resets and closes it with the rest of the
+composition.
+
 ### Explicit heuristic backend
 
 ```python
@@ -104,7 +111,12 @@ from goldilocks_core.advisors import ml_kmesh_advisor
 pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 ```
 
-`ml_kmesh_advisor(spec)` returns a Kmesh backend. It checks hints first. If no k-point hint is set, it calls `advise_kpoints(structure, spec)` and returns a model-backed `KPointSelection`.
+`ml_kmesh_advisor(spec)` returns a callable lifecycle resource. It checks hints
+first. On the first hint-free call it loads the model once; concurrent calls
+share that initialization. It caches either the loaded model or a load failure.
+When composed in `CoreRuntime`, `reset()` clears that cache for lazy retry and
+`close()` releases the model reference. It returns a model-backed
+`KPointSelection` when initialization succeeds.
 
 Expected provenance:
 

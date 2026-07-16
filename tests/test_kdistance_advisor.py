@@ -1,5 +1,7 @@
+import gc
 import hashlib
 import json
+import weakref
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from threading import Barrier
@@ -9,6 +11,7 @@ import numpy as np
 import pytest
 from pymatgen.core import Lattice, Structure
 
+from goldilocks_core import CoreJobRequest, CoreRuntime, Pipeline, run_core_job
 from goldilocks_core.advisors.kdistance_advisor import (
     default_kmesh_advisor,
     kdistance_to_selection,
@@ -19,6 +22,7 @@ from goldilocks_core.contracts import (
     CalculationHints,
     KPointAdvice,
     Provenance,
+    RuntimeResource,
     StructureFeatureVector,
 )
 from goldilocks_core.kmesh import k_distance_to_mesh
@@ -210,6 +214,66 @@ def test_qrf_advisor_construction_does_not_load_models(monkeypatch) -> None:
     qrf_kdistance_advisor(make_config(), "ckpt.pkl", "atom.json")
 
     assert calls == 0
+
+
+def test_direct_qrf_pipeline_requires_runtime_ownership() -> None:
+    """Pipeline discovers the stateful QRF stage and rejects one-call execution."""
+    advisor = qrf_kdistance_advisor(make_config(), "ckpt.pkl", "atom.json")
+    pipeline = Pipeline(kmesh=advisor)
+
+    assert isinstance(advisor, RuntimeResource)
+    assert pipeline.resources == (advisor,)
+    with pytest.raises(ValueError, match="requires CoreRuntime ownership"):
+        run_core_job(CoreJobRequest(structure=make_structure()), pipeline=pipeline)
+
+
+def test_custom_qrf_pipeline_runtime_resets_and_closes_models(
+    monkeypatch, tmp_path
+) -> None:
+    """Runtime ownership resets and closes a directly composed QRF backend."""
+    checkpoint = tmp_path / "checkpoint.pkl"
+    atom_table = tmp_path / "atom.json"
+    checkpoint.write_bytes(b"checkpoint")
+    atom_table.write_bytes(b"atom table")
+    loads = 0
+    model_references: list[weakref.ReferenceType[FakeQRF]] = []
+
+    def load_model(spec):
+        nonlocal loads
+        loads += 1
+        model = FakeQRF(0.2, 0.25, 0.3)
+        model_references.append(weakref.ref(model))
+        return model
+
+    monkeypatch.setattr("goldilocks_core.ml.models.load_model", load_model)
+    monkeypatch.setattr(
+        "goldilocks_core.ml.metallicity.load_metallicity_model", lambda path: object()
+    )
+    monkeypatch.setattr(
+        "goldilocks_core.ml.kdistance_features.extract_qrf_features",
+        lambda structure, model, atom_init, settings: StructureFeatureVector(
+            values=np.zeros(483),
+            feature_names=[f"feature_{index}" for index in range(483)],
+        ),
+    )
+    advisor = qrf_kdistance_advisor(make_config(), str(checkpoint), str(atom_table))
+    runtime = CoreRuntime(pipeline=Pipeline(kmesh=advisor))
+    request = CoreJobRequest(structure=make_structure())
+
+    runtime.run(request)
+    runtime.run(request)
+    runtime.reset()
+    gc.collect()
+    assert model_references[0]() is None
+
+    runtime.run(request)
+    runtime.close()
+    gc.collect()
+
+    assert loads == 2
+    assert model_references[1]() is None
+    with pytest.raises(RuntimeError, match="closed"):
+        advisor(make_structure(), CalculationHints(), _make_advice())
 
 
 def test_qrf_kdistance_advisor_predicts_with_model_provenance(

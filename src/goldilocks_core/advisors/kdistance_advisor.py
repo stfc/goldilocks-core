@@ -25,6 +25,7 @@ from goldilocks_core.contracts import (
     KPointSelection,
     PathLike,
     Provenance,
+    RuntimeResource,
     StructureFeatureVector,
 )
 from goldilocks_core.kmesh import k_distance_to_mesh, resolve_kpoints_from_advice
@@ -475,99 +476,49 @@ def _validate_atom_table_identity(details: JsonDict, atom_init_path: str) -> Non
             )
 
 
-def qrf_kdistance_advisor(
-    config: QrfKpointsConfig,
-    metallicity_checkpoint: str | None = None,
-    metallicity_atom_init: str | None = None,
-) -> KMeshAdvisor:
-    """Return a lazy Kmesh backend configured for one complete QRF contract.
+class QrfKdistanceAdvisor(RuntimeResource):
+    """Lazy QRF k-distance backend and runtime lifecycle resource."""
 
-    Construction performs no model loading, hashing, remote access, or heavy ML
-    imports. The first call without a k-point hint loads and validates once.
-    """
-    loaded: tuple[object, object, str, str, JsonDict] | None = None
-    load_error: Exception | None = None
-    load_details: JsonDict | None = None
-    load_failure_stage = "schema"
-    load_lock = Lock()
+    def __init__(
+        self,
+        config: QrfKpointsConfig,
+        metallicity_checkpoint: str | None = None,
+        metallicity_atom_init: str | None = None,
+    ) -> None:
+        """Capture one complete QRF contract without loading its models."""
+        self._config = config
+        self._metallicity_checkpoint = metallicity_checkpoint
+        self._metallicity_atom_init = metallicity_atom_init
+        self._loaded: tuple[object, object, str, str, JsonDict] | None = None
+        self._load_error: Exception | None = None
+        self._load_details: JsonDict | None = None
+        self._load_failure_stage = "schema"
+        self._lock = Lock()
+        self._closed = False
 
-    def advisor(structure, hints, kpoint_advice):
-        nonlocal loaded, load_error, load_details, load_failure_stage
+    def __call__(
+        self,
+        structure: Structure,
+        hints: CalculationHints,
+        kpoint_advice: KPointAdvice,
+    ) -> KPointSelection:
+        """Resolve a hint or predict a k-point mesh from the cached QRF."""
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("QRF k-distance advisor is closed.")
 
         if hints.k_grid is not None or hints.k_spacing is not None:
             return resolve_kpoints_from_advice(structure, hints, kpoint_advice)
 
-        if loaded is None and load_error is None:
-            with load_lock:
-                if loaded is None and load_error is None:
-                    try:
-                        from goldilocks_core.ml.metallicity import (
-                            load_metallicity_model,
-                        )
-                        from goldilocks_core.ml.models import load_model
-
-                        load_failure_stage = "schema"
-                        load_details = _qrf_contract_details(config)
-                        _validate_qrf_contract(config)
-
-                        runtime_versions: dict[str, str] = {}
-                        load_failure_stage = "runtime"
-                        try:
-                            _validate_qrf_runtime(config, runtime_versions)
-                        finally:
-                            load_details = _with_runtime_details(
-                                load_details,
-                                config,
-                                runtime_versions,
-                            )
-
-                        resolved_artifacts: dict[str, str] = {}
-                        load_failure_stage = "artifact_resolution"
-                        try:
-                            checkpoint, atom_init = _resolve_metallicity_artifacts(
-                                config,
-                                metallicity_checkpoint,
-                                metallicity_atom_init,
-                                resolved_artifacts=resolved_artifacts,
-                            )
-                        finally:
-                            load_details = _with_resolved_artifact_details(
-                                load_details,
-                                resolved_artifacts,
-                            )
-                        details = _qrf_provenance_details(
-                            config,
-                            runtime_versions,
-                            checkpoint,
-                            atom_init,
-                            metallicity_checkpoint is not None,
-                            metallicity_atom_init is not None,
-                        )
-                        load_details = details
-                        load_failure_stage = "model_load"
-                        qrf = load_model(config.model)
-                        load_failure_stage = "model_contract"
-                        _validate_loaded_qrf_quantiles(qrf, config)
-                        metal_model = load_metallicity_model(checkpoint)
-                        if details != _qrf_provenance_details(
-                            config,
-                            runtime_versions,
-                            checkpoint,
-                            atom_init,
-                            metallicity_checkpoint is not None,
-                            metallicity_atom_init is not None,
-                        ):
-                            raise ValueError(
-                                "Local QRF inference artifact changed while loading."
-                            )
-                        data_source = (
-                            f"{config.model.name}@"
-                            f"{config.model.revision or config.model.version}; "
-                            f"qrf_config_sha256={config.digest}"
-                        )
-                        loaded = (qrf, metal_model, atom_init, data_source, details)
-                    except Exception as error:
-                        load_error = error
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("QRF k-distance advisor is closed.")
+            if self._loaded is None and self._load_error is None:
+                self._load()
+            loaded = self._loaded
+            load_error = self._load_error
+            load_details = self._load_details
+            load_failure_stage = self._load_failure_stage
 
         if load_error is not None:
             return _heuristic_fallback(
@@ -575,11 +526,11 @@ def qrf_kdistance_advisor(
                 hints,
                 kpoint_advice,
                 load_error,
-                inference_details=load_details or _qrf_contract_details(config),
+                inference_details=load_details or _qrf_contract_details(self._config),
                 failure_stage=load_failure_stage,
             )
 
-        if loaded is None:  # pragma: no cover - defensive closure invariant
+        if loaded is None:  # pragma: no cover - lifecycle invariant
             raise RuntimeError("QRF advisor reached an invalid unloaded state.")
 
         qrf, metal_model, atom_init, data_source, details = loaded
@@ -591,13 +542,13 @@ def qrf_kdistance_advisor(
                 structure,
                 metal_model,
                 atom_init,
-                config.feature_settings,
+                self._config.feature_settings,
             )
             _validate_atom_table_identity(details, atom_init)
             median, lower, upper = predict_kdistance_quantiles(
                 qrf,
                 features,
-                config.calibration.correction,
+                self._config.calibration.correction,
             )
         except Exception as predict_error:
             return _heuristic_fallback(
@@ -615,29 +566,124 @@ def qrf_kdistance_advisor(
             lower,
             upper,
             data_source=data_source,
-            confidence=config.interval_confidence,
+            confidence=self._config.interval_confidence,
             details=details,
         )
 
-    return advisor
+    def reset(self) -> None:
+        """Discard cached models or a cached load failure for lazy retry."""
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("QRF k-distance advisor is closed.")
+            self._loaded = None
+            self._load_error = None
+            self._load_details = None
+            self._load_failure_stage = "schema"
+
+    def close(self) -> None:
+        """Release all cached QRF state permanently."""
+        with self._lock:
+            if self._closed:
+                return
+            self._loaded = None
+            self._load_error = None
+            self._load_details = None
+            self._closed = True
+
+    def _load(self) -> None:
+        """Load and validate QRF artifacts once while holding the lifecycle lock."""
+        try:
+            from goldilocks_core.ml.metallicity import load_metallicity_model
+            from goldilocks_core.ml.models import load_model
+
+            self._load_failure_stage = "schema"
+            self._load_details = _qrf_contract_details(self._config)
+            _validate_qrf_contract(self._config)
+
+            runtime_versions: dict[str, str] = {}
+            self._load_failure_stage = "runtime"
+            try:
+                _validate_qrf_runtime(self._config, runtime_versions)
+            finally:
+                self._load_details = _with_runtime_details(
+                    self._load_details,
+                    self._config,
+                    runtime_versions,
+                )
+
+            resolved_artifacts: dict[str, str] = {}
+            self._load_failure_stage = "artifact_resolution"
+            try:
+                checkpoint, atom_init = _resolve_metallicity_artifacts(
+                    self._config,
+                    self._metallicity_checkpoint,
+                    self._metallicity_atom_init,
+                    resolved_artifacts=resolved_artifacts,
+                )
+            finally:
+                self._load_details = _with_resolved_artifact_details(
+                    self._load_details,
+                    resolved_artifacts,
+                )
+            details = _qrf_provenance_details(
+                self._config,
+                runtime_versions,
+                checkpoint,
+                atom_init,
+                self._metallicity_checkpoint is not None,
+                self._metallicity_atom_init is not None,
+            )
+            self._load_details = details
+            self._load_failure_stage = "model_load"
+            qrf = load_model(self._config.model)
+            self._load_failure_stage = "model_contract"
+            _validate_loaded_qrf_quantiles(qrf, self._config)
+            metal_model = load_metallicity_model(checkpoint)
+            if details != _qrf_provenance_details(
+                self._config,
+                runtime_versions,
+                checkpoint,
+                atom_init,
+                self._metallicity_checkpoint is not None,
+                self._metallicity_atom_init is not None,
+            ):
+                raise ValueError("Local QRF inference artifact changed while loading.")
+            data_source = (
+                f"{self._config.model.name}@"
+                f"{self._config.model.revision or self._config.model.version}; "
+                f"qrf_config_sha256={self._config.digest}"
+            )
+            self._loaded = (qrf, metal_model, atom_init, data_source, details)
+        except Exception as error:
+            self._load_error = error
 
 
-def default_kmesh_advisor(
+def qrf_kdistance_advisor(
+    config: QrfKpointsConfig,
+    metallicity_checkpoint: str | None = None,
+    metallicity_atom_init: str | None = None,
+) -> QrfKdistanceAdvisor:
+    """Return a lifecycle-managed QRF Kmesh backend for one complete contract."""
+    return QrfKdistanceAdvisor(config, metallicity_checkpoint, metallicity_atom_init)
+
+
+def _make_default_kmesh_advisor(
     *,
     registry_path: PathLike | None = None,
     config: QrfKpointsConfig | None = None,
     metallicity_checkpoint: str | None = None,
     metallicity_atom_init: str | None = None,
+    use_environment: bool = True,
 ) -> KMeshAdvisor:
-    """Return the configured default QRF Kmesh backend with fallback."""
+    """Build one lazy configured default QRF Kmesh backend."""
     if config is not None and registry_path is not None:
         raise ValueError("Pass config or registry_path, not both.")
 
-    checkpoint = metallicity_checkpoint or os.environ.get(
-        "GOLDILOCKS_METALLICITY_CHECKPOINT"
+    checkpoint = metallicity_checkpoint or (
+        os.environ.get("GOLDILOCKS_METALLICITY_CHECKPOINT") if use_environment else None
     )
-    atom_init = metallicity_atom_init or os.environ.get(
-        "GOLDILOCKS_METALLICITY_ATOM_INIT"
+    atom_init = metallicity_atom_init or (
+        os.environ.get("GOLDILOCKS_METALLICITY_ATOM_INIT") if use_environment else None
     )
     configured_advisor: KMeshAdvisor | None = None
     config_error: Exception | None = None
@@ -654,7 +700,10 @@ def default_kmesh_advisor(
             with config_lock:
                 if configured_advisor is None and config_error is None:
                     try:
-                        active_config = config or load_default_qrf_config(registry_path)
+                        active_config = config or load_default_qrf_config(
+                            registry_path,
+                            use_environment=use_environment,
+                        )
                         configured_advisor = qrf_kdistance_advisor(
                             active_config,
                             checkpoint,
@@ -663,7 +712,12 @@ def default_kmesh_advisor(
                     except Exception as error:
                         config_error = error
                         config_details = _unparsed_registry_details(
-                            registry_path or os.environ.get(MODEL_REGISTRY_ENV)
+                            registry_path
+                            or (
+                                os.environ.get(MODEL_REGISTRY_ENV)
+                                if use_environment
+                                else None
+                            )
                         )
 
         if config_error is not None:
@@ -681,3 +735,88 @@ def default_kmesh_advisor(
         return configured_advisor(structure, hints, kpoint_advice)
 
     return advisor
+
+
+class _DefaultKmeshAdvisor:
+    """Own the lazy default advisor cache for one runtime lifecycle."""
+
+    def __init__(
+        self,
+        *,
+        registry_path: PathLike | None,
+        config: QrfKpointsConfig | None,
+        metallicity_checkpoint: str | None,
+        metallicity_atom_init: str | None,
+        use_environment: bool,
+    ) -> None:
+        """Capture default advisor configuration without loading a model."""
+        self._registry_path = registry_path
+        self._config = config
+        self._metallicity_checkpoint = metallicity_checkpoint
+        self._metallicity_atom_init = metallicity_atom_init
+        self._use_environment = use_environment
+        self._lock = Lock()
+        self._advisor: KMeshAdvisor | None = self._new_advisor()
+        self._closed = False
+
+    def __call__(
+        self,
+        structure: Structure,
+        hints: CalculationHints,
+        kpoint_advice: KPointAdvice,
+    ) -> KPointSelection:
+        """Delegate to the current lazy default advisor."""
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("Default k-mesh advisor is closed.")
+            advisor = self._advisor
+        if advisor is None:  # pragma: no cover - lifecycle invariant
+            raise RuntimeError("Default k-mesh advisor is unavailable.")
+        return advisor(structure, hints, kpoint_advice)
+
+    def reset(self) -> None:
+        """Discard default configuration and model caches for lazy retry."""
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("Default k-mesh advisor is closed.")
+            self._advisor = self._new_advisor()
+
+    def close(self) -> None:
+        """Release the default advisor and all model references."""
+        with self._lock:
+            if self._closed:
+                return
+            self._advisor = None
+            self._closed = True
+
+    def _new_advisor(self) -> KMeshAdvisor:
+        """Build one fresh lazy default advisor from captured configuration."""
+        return _make_default_kmesh_advisor(
+            registry_path=self._registry_path,
+            config=self._config,
+            metallicity_checkpoint=self._metallicity_checkpoint,
+            metallicity_atom_init=self._metallicity_atom_init,
+            use_environment=self._use_environment,
+        )
+
+
+def default_kmesh_advisor(
+    *,
+    registry_path: PathLike | None = None,
+    config: QrfKpointsConfig | None = None,
+    metallicity_checkpoint: str | None = None,
+    metallicity_atom_init: str | None = None,
+    use_environment: bool = True,
+) -> KMeshAdvisor:
+    """Return a lifecycle-managed configured default QRF Kmesh backend.
+
+    Set ``use_environment=False`` when configuration was captured by a
+    long-lived runtime and must not change during that runtime's lifetime.
+    """
+    return _DefaultKmeshAdvisor(
+        registry_path=registry_path,
+        config=config,
+        metallicity_checkpoint=metallicity_checkpoint,
+        metallicity_atom_init=metallicity_atom_init,
+        use_environment=use_environment,
+    )

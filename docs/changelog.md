@@ -32,6 +32,7 @@ All notable changes to goldilocks-core are documented here.
 - Staged Core pipeline: Load → Analyze → Advise → Kmesh → Select → Generate → Bundle.
 - `CoreJobRequest`, `CoreResult`, `StageRecord` for shared Python/CLI/HTTP job surface. `CoreResult` is a single accumulator that includes the optional `BundleRecord`.
 - `run_core_job()` as the fixed stage runner with `recommend`, `generate`, and `bundle` modes.
+- `CoreRuntime` for reusable, resettable, race-safe model resources and deterministic shutdown; zero-configuration calls share an exposed process runtime.
 - `StructureAnalysisRecord` with composition, element classification, symmetry, disorder warnings, and conservative electronic-character heuristic.
 - `ParameterAdvice` with provenance-backed advice for k-points, smearing, magnetism, SOC, pseudopotentials, and convergence.
 - Kmesh-stage concrete k-point resolution with swappable default and ML backends.

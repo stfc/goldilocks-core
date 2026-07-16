@@ -171,13 +171,20 @@ class QrfKpointsConfig:
         return hashlib.sha256(encoded).hexdigest()
 
 
-def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
+def load_default_qrf_config(
+    path: PathLike | None = None,
+    *,
+    use_environment: bool = True,
+) -> QrfKpointsConfig:
     """Load the default QRF configuration from a package or custom registry.
 
     ``path`` takes precedence over ``GOLDILOCKS_MODEL_REGISTRY``. When neither
-    is set, the registry packaged with goldilocks-core is used.
+    is selected, the registry packaged with goldilocks-core is used. Set
+    ``use_environment=False`` when a runtime has already captured configuration.
     """
-    registry_path = path or os.environ.get(MODEL_REGISTRY_ENV)
+    registry_path = path or (
+        os.environ.get(MODEL_REGISTRY_ENV) if use_environment else None
+    )
     if registry_path is None:
         registry = resources.files("goldilocks_core").joinpath(_REGISTRY_RESOURCE)
         with registry.open("rb") as registry_file:

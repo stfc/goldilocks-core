@@ -118,13 +118,15 @@ This rule lets operators override a model without changing the pipeline object.
 from goldilocks_core.advisors import ml_kmesh_advisor
 ```
 
-`ml_kmesh_advisor(spec)` returns a `KMeshAdvisor` callable.
+`ml_kmesh_advisor(spec)` returns a `KMeshAdvisor` callable that also implements
+`RuntimeResource`. Within a `CoreRuntime`, it loads once on first hint-free use,
+caches load failure until reset, and releases its model on close.
 
 Usage:
 
 ```python
 
-from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
+from goldilocks_core import CoreJobRequest, CoreRuntime, Pipeline
 from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.contracts import ModelSpec
 
@@ -139,7 +141,8 @@ spec = ModelSpec(
 )
 
 pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
-result = run_core_job(CoreJobRequest(structure="Si.cif"), pipeline=pipeline)
+with CoreRuntime(pipeline=pipeline) as runtime:
+    result = runtime.run(CoreJobRequest(structure="Si.cif"))
 ```
 
 If no k-point hint is present, the ML backend calls:

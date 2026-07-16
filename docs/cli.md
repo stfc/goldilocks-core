@@ -1,6 +1,6 @@
 # CLI reference
 
-The `goldilocks-core` command is a thin wrapper around `CoreJobRequest` and `run_core_job()`. It parses arguments, runs the staged pipeline, and prints JSON or a short human-readable summary.
+The `goldilocks-core` command is a thin wrapper around `CoreJobRequest` and `CoreRuntime`. It parses arguments, owns one runtime for the one-shot process, runs the staged pipeline, closes the runtime, and prints JSON or a short human-readable summary.
 
 ## Commands
 
@@ -110,10 +110,12 @@ warnings:
 
 ## Kmesh backend selection
 
-A bare invocation delegates to the same `Pipeline()` default used by the Python
-API. That backend lazily resolves the configured QRF model and falls back to
-heuristic advice with a provenance warning if model loading or inference fails.
-Explicit `--k-grid` and `--k-spacing` hints bypass model resolution entirely.
+A bare invocation constructs a one-shot `CoreRuntime` with the same default
+composition used by the Python API. That backend lazily resolves the configured
+QRF model and falls back to heuristic advice with a provenance warning if model
+loading or inference fails. Explicit `--k-grid` and `--k-spacing` hints bypass
+model resolution entirely. The CLI closes its runtime before exit; long-lived
+HTTP/MCP hosts instead keep one runtime for their full application lifetime.
 
 Use `--heuristic-kpoints` to disable model resolution explicitly:
 
@@ -127,10 +129,11 @@ goldilocks-core recommend structure.cif --heuristic-kpoints --json
 goldilocks-core recommend structure.cif --model model.joblib --json
 ```
 
-The CLI builds a `ModelSpec`, creates `ml_kmesh_advisor(spec)`, replaces the default Kmesh backend in `Pipeline`, and calls:
+The CLI builds a `ModelSpec`, creates `ml_kmesh_advisor(spec)`, replaces the default Kmesh backend in `Pipeline`, and owns that composition with:
 
 ```python
-run_core_job(request, pipeline=pipeline)
+with CoreRuntime(pipeline=pipeline) as runtime:
+    result = runtime.run(request)
 ```
 
 The model path is not added to `CoreJobRequest`. Backend selection is executable configuration, not request data. `--model-name` and `--model-version` are local-model metadata and are rejected unless `--model` selects that backend.

@@ -69,11 +69,12 @@ For staged pipeline integration, use `ml_kmesh_advisor(spec)` as a Kmesh backend
 
 ```python
 
-from goldilocks_core import Pipeline, recommend
+from goldilocks_core import CoreRuntime, Pipeline, recommend
 from goldilocks_core.advisors import ml_kmesh_advisor
 
 pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
-result = recommend("structure.cif", pipeline=pipeline)
+with CoreRuntime(pipeline=pipeline) as runtime:
+    result = recommend("structure.cif", runtime=runtime)
 ```
 
 This preserves `provenance.source="model"` inside the staged pipeline.

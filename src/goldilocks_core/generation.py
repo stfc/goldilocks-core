@@ -88,8 +88,8 @@ def generate_quantum_espresso_scf_input(
 
     Raises:
         ValueError: If the structure is disordered, pseudopotential selections
-            are missing, cutoff metadata is incomplete, or smearing is enabled
-            without a width.
+            are missing, cutoff metadata is incomplete, smearing is enabled
+            without a width, or vdW advice violates its enabled/method invariant.
     """
     if not structure.is_ordered:
         raise ValueError(
@@ -212,11 +212,22 @@ def _system_section(
     elif advice.magnetism.spin_polarized:
         lines.append("  nspin = 2")
 
-    if advice.vdw.use_vdw and advice.vdw.method is not None:
-        vdw_corr, dftd3_version = _QE_VDW_CORR[advice.vdw.method]
+    method = advice.vdw.method
+    if advice.vdw.use_vdw:
+        if not isinstance(method, str) or method not in _QE_VDW_CORR:
+            raise ValueError(
+                "Quantum ESPRESSO vdW advice is invalid: enabled vdW requires "
+                f"a supported method; got {method!r}"
+            )
+        vdw_corr, dftd3_version = _QE_VDW_CORR[method]
         lines.append(f"  vdw_corr = '{vdw_corr}'")
         if dftd3_version is not None:
             lines.append(f"  dftd3_version = {dftd3_version}")
+    elif method is not None:
+        raise ValueError(
+            "Quantum ESPRESSO vdW advice is invalid: disabled vdW requires "
+            f"method=None; got {method!r}"
+        )
 
     lines.extend(["/", ""])
     return lines

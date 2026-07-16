@@ -1,3 +1,5 @@
+from typing import get_args
+
 import pytest
 from pymatgen.core import Lattice, Structure
 
@@ -7,8 +9,9 @@ from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
     ParameterAdvice,
+    VdwMethod,
 )
-from goldilocks_core.generation import generate_inputs
+from goldilocks_core.generation import _QE_VDW_CORR, generate_inputs
 from goldilocks_core.kmesh import resolve_kpoints_from_advice
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.selection import select_parameters
@@ -132,6 +135,11 @@ def test_generate_inputs_uses_noncollinear_soc_without_nspin() -> None:
     assert "nspin = 2" not in content
 
 
+def test_qe_vdw_translation_map_exactly_covers_supported_methods() -> None:
+    """Keep every domain method translated by the supported QE target."""
+    assert set(_QE_VDW_CORR) == set(get_args(VdwMethod))
+
+
 def test_generate_inputs_writes_vdw_corr_when_enabled() -> None:
     """Emit the QE vdw_corr keyword when vdW is enabled via hints."""
     structure = make_structure()
@@ -199,6 +207,39 @@ def test_generate_inputs_writes_non_d3_vdw_methods(
 
     assert f"vdw_corr = '{qe_vdw_corr}'" in content
     assert "dftd3_version" not in content
+
+
+@pytest.mark.parametrize(
+    ("use_vdw", "method"),
+    [
+        (True, None),
+        (True, []),
+        (True, {}),
+        (True, True),
+        (True, "unknown"),
+        (False, "d3"),
+    ],
+    ids=["enabled-none", "list", "mapping", "boolean", "unknown", "disabled"],
+)
+def test_generate_inputs_rejects_malformed_injected_vdw_advice(
+    use_vdw: bool,
+    method: object,
+) -> None:
+    """Report malformed injected vdW advice with a QE-specific error."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC", use_vdw=True)
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+    object.__setattr__(advice.vdw, "use_vdw", use_vdw)
+    object.__setattr__(advice.vdw, "method", method)
+
+    with pytest.raises(ValueError, match="Quantum ESPRESSO vdW advice is invalid"):
+        generate_inputs(structure, advice_context(), advice, selection)
 
 
 def test_generate_inputs_omits_vdw_corr_by_default() -> None:

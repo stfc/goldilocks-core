@@ -45,8 +45,14 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    request = _request_from_args(args)
-    result = run_core_job(request, pipeline=_pipeline_from_args(args))
+    try:
+        _validate_backend_options(args)
+        request = _request_from_args(args)
+        pipeline = _pipeline_from_args(args)
+    except ValueError as error:
+        parser.error(str(error))
+
+    result = run_core_job(request, pipeline=pipeline)
 
     if args.json:
         output = {"request": request.to_dict(), **result.to_dict()}
@@ -72,11 +78,6 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
         help="Calculation task.",
     )
     parser.add_argument("--functional", default="PBE")
-    parser.add_argument(
-        "--accuracy-level",
-        default="standard",
-        choices=["low", "standard", "high"],
-    )
     parser.add_argument("--pseudo-mode", default="efficiency")
     parser.add_argument("--pseudo-type")
     parser.add_argument("--relativistic-mode")
@@ -93,12 +94,10 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--model-name",
-        default="cli-kmesh-model",
         help="Model name recorded in k-point provenance when --model is used.",
     )
     parser.add_argument(
         "--model-version",
-        default="unknown",
         help="Model version recorded in metadata when --model is used.",
     )
     parser.add_argument("--k-spacing", type=float)
@@ -120,6 +119,15 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
         choices=["true", "false"],
         help="Override spin-orbit coupling advice.",
     )
+    parser.add_argument(
+        "--use-vdw",
+        choices=["true", "false"],
+        help="Force vdW on/off; omit to let Core decide.",
+    )
+    parser.add_argument(
+        "--vdw-method",
+        help="Preferred vdW method: d3, d3bj, ts, or mbd.",
+    )
     parser.add_argument("--conv-thr", type=float)
     parser.add_argument("--mixing-beta", type=float)
     parser.add_argument("--electron-maxstep", type=int)
@@ -136,7 +144,6 @@ def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
         code=args.code,
         task=args.task,
         functional=args.functional,
-        accuracy_level=args.accuracy_level,
         pseudo_mode=args.pseudo_mode,
     )
     hints = CalculationHints(
@@ -151,6 +158,8 @@ def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
         conv_thr=args.conv_thr,
         mixing_beta=args.mixing_beta,
         electron_maxstep=args.electron_maxstep,
+        use_vdw=_parse_optional_bool(args.use_vdw),
+        vdw_method=args.vdw_method,
     )
     pseudo_metadata = (
         tuple(load_pseudo_metadata(Path(args.pseudo_root))) if args.pseudo_root else ()
@@ -176,8 +185,8 @@ def _pipeline_from_args(args: argparse.Namespace) -> Pipeline | None:
     """
     if args.model is not None:
         spec = ModelSpec(
-            name=args.model_name,
-            version=args.model_version,
+            name=args.model_name or "cli-kmesh-model",
+            version=args.model_version or "unknown",
             model_type="random_forest",
             target="k_index",
             feature_set="cslr",
@@ -190,6 +199,22 @@ def _pipeline_from_args(args: argparse.Namespace) -> Pipeline | None:
         return Pipeline(kmesh=resolve_kpoints_from_advice)
 
     return None
+
+
+def _validate_backend_options(args: argparse.Namespace) -> None:
+    """Reject local-model metadata when no local model backend is selected."""
+    backend_only_options = [
+        option
+        for option, value in (
+            ("--model-name", args.model_name),
+            ("--model-version", args.model_version),
+        )
+        if value is not None
+    ]
+    if args.model is None and backend_only_options:
+        options = " and ".join(backend_only_options)
+        verb = "requires" if len(backend_only_options) == 1 else "require"
+        raise ValueError(f"{options} {verb} --model")
 
 
 def _parse_optional_bool(value: str | None) -> bool | None:

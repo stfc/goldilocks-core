@@ -42,7 +42,6 @@ For a silicon structure with default settings:
     "code": "quantum_espresso",
     "task": "scf_single_point",
     "functional": "PBE",
-    "accuracy_level": "standard",
     "pseudo_mode": "efficiency"
   },
   "analysis": {

@@ -15,6 +15,10 @@ The public API is Python-first. The staged CLI calls the same internal job runne
 - Bundle directory output with `manifest.json`.
 - JSON-safe `CoreJobRequest` and `CoreResult` records.
 
+`CalculationIntent.accuracy_level` was intentionally removed because no stage
+implemented distinct accuracy/cost semantics. Serialized requests no longer
+contain it, and the CLI does not expose `--accuracy-level`.
+
 ## Install
 
 ```bash
@@ -180,7 +184,7 @@ See [backends](docs/backends.md) for backend contracts and examples.
 uv run goldilocks-core recommend path/to/structure.cif --json
 uv run goldilocks-core recommend path/to/structure.cif --model path/to/model.joblib --json
 uv run goldilocks-core recommend path/to/structure.cif --heuristic-kpoints --json
-uv run goldilocks-core generate path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --json
+uv run goldilocks-core generate path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --use-vdw true --vdw-method d3bj --json
 uv run goldilocks-core bundle path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
 ```
 

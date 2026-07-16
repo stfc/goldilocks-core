@@ -69,7 +69,6 @@ result = recommend(
         code='quantum_espresso',
         task='scf_single_point',
         functional='PBE',
-        accuracy_level='standard',
         pseudo_mode='efficiency',
     ),
     hints=CalculationHints(

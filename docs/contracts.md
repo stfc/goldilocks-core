@@ -35,6 +35,26 @@ output_dir
 
 It does not contain backend functions, model objects, registry keys, generator objects, or future target adapter objects. Target and resource metadata are request data; the executable implementation is Pipeline composition.
 
+### Public request controls
+
+`CalculationIntent` contains only controls with implemented meaning:
+
+```text
+code
+task
+functional
+pseudo_mode
+```
+
+The former `accuracy_level` field was removed rather than assigning unsupported
+scientific semantics to `low`, `standard`, and `high`.
+
+`CalculationHints.use_vdw` is deliberately tri-state: `None` lets analysis
+decide, `True` forces vdW on, and `False` forces it off. `vdw_method` may name
+`d3`, `d3bj`, `ts`, or `mbd`. A method can be preferred while `use_vdw` is
+`None`, but cannot be combined with `use_vdw=False` because that request is
+contradictory.
+
 ## Behavior contracts
 
 `Pipeline` is the behavior boundary. It contains callables:
@@ -191,7 +211,7 @@ Public records reject invalid boundary values in dataclass `__post_init__` metho
 - `KMeshEntry.k_distance_interval` uses `None` for an upper bound that is unbounded above, preserving the scientific interval without an `Infinity` JSON number.
 - `Provenance.confidence`, when present, is finite and in the closed interval `[0, 1]`.
 - Fixed occupations (`smearing_type=None` or `"fixed"`) have no width. Other smearing types require a finite positive width.
-- Enabled `VdwAdvice` has one supported method; disabled advice has `method=None`.
+- `CalculationHints.vdw_method` is a supported label and is not present when `use_vdw=False`; enabled `VdwAdvice` has one supported method, while disabled advice has `method=None`.
 - Present pseudopotential cutoffs and convergence controls are finite and positive; SCF step counts are positive integers.
 - `GeneratedFile.path` is non-empty, relative, and contains no `..` traversal. `CoreResult` rejects duplicate generated paths before Bundle can consume them.
 - `StructureFeatureVector.values` is one-dimensional, finite, and the same length as `feature_names`.

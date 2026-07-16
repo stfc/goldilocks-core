@@ -25,7 +25,7 @@ These records contain structure facts, physical intent, or pipeline results that
 
 - `StructureAnalysisRecord` and the loaded `Structure`;
 - `Provenance` and `StageRecord`;
-- the task, functional, and accuracy concepts in `CalculationIntent` (apart from its QE-only `code` literal and pseudo-family default);
+- the task and functional concepts in `CalculationIntent` (apart from its QE-only `code` literal and pseudo-family default);
 - `KPointAdvice.spacing` and `KPointSelection.grid` as numerical reciprocal-space sampling, with the documented solid-state reciprocal-lattice convention;
 - `MagnetismAdvice`, `SpinOrbitAdvice`, and `VdwAdvice` as physics-level choices;
 - `GeneratedFile`, `BundleRecord`, and the fixed mode/stage trace.

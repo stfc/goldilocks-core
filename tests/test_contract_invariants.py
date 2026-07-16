@@ -400,6 +400,12 @@ def test_vdw_use_and_method_must_be_coherent(
         VdwAdvice(use_vdw=use_vdw, method=method, provenance=_provenance())
 
 
+def test_vdw_hint_method_is_incompatible_with_explicitly_disabled_vdw() -> None:
+    """Reject a method that an explicit off hint would otherwise ignore."""
+    with pytest.raises(ValueError, match="vdw_method must be None"):
+        CalculationHints(use_vdw=False, vdw_method="d3")
+
+
 @pytest.mark.parametrize("field_name", ["ecutwfc_ry", "ecutrho_ry"])
 @pytest.mark.parametrize("value", [0.0, -1.0, np.nan, np.inf, -np.inf])
 def test_pseudopotential_cutoffs_must_be_finite_and_positive(

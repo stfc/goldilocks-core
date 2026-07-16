@@ -2,7 +2,7 @@
 
 Owner: `generation.py`
 
-The Generate stage translates completed advice and selection records into target-code input syntax. It is purely mechanical: every value in the output comes from a record, not from generator-side defaults.
+The Generate stage validates and renders completed advice and selection records. The current implementation supports QE SCF only. Scientific and resource choices come from records; the writer also supplies fixed QE layout values such as namelist/card structure, calculation type, working directories, and output path.
 
 ## Input
 
@@ -23,7 +23,7 @@ Currently only Quantum ESPRESSO SCF single-point input is supported, producing o
 
 | QE section | Values from |
 | --- | --- |
-| `&CONTROL` | hardcoded: `calculation='scf'`, `pseudo_dir='./pseudo'`, `tprnfor=.true.`, `tstress=.true.` |
+| `&CONTROL` | fixed QE layout: `calculation='scf'`, `pseudo_dir='./pseudo'`, `outdir='./out'`, `tprnfor=.true.`, `tstress=.true.` |
 | `&SYSTEM` | intent, advice, selection |
 | `&ELECTRONS` | convergence advice |
 | `CELL_PARAMETERS` | structure lattice |
@@ -65,7 +65,13 @@ The generator raises `ValueError` if:
 
 ## What the generator does not do
 
-- It does not choose k-point grids, pseudopotentials, cutoffs, smearing, spin, SOC, or convergence defaults. All values come from the advice and selection records.
+- It does not choose k-point grids, pseudopotentials, cutoffs, smearing, spin, SOC, or convergence defaults. Those scientific/resource values come from advice and selection records.
 - It does not resolve disordered occupancies.
 - It does not write pseudopotential files.
 - It does not run calculations.
+
+## Multi-code boundary
+
+Replacing this writer can change how the current completed QE selection is rendered. It cannot correctly add another DFT code because target validation, resource metadata/selection, target units/data, CLI choices, and generation must change together. The future boundary is documented in [target-code adapters](../target-code-adapters.md); no executable adapter API exists yet.
+
+Issue #40's ASE rewrite belongs within the QE generation responsibility. It does not replace the QE UPF/SSSP selection boundary.

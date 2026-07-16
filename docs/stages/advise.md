@@ -46,7 +46,7 @@ The default Kmesh backend converts the advice to a `KPointSelection`. A model-ba
 2. If `analysis.heavy_elements` is non-empty → `SpinOrbitAdvice(enabled=False, consider=True, provenance.source="analysis")`. Warning: SOC is not enabled automatically.
 3. Otherwise → `SpinOrbitAdvice(enabled=False, consider=False, provenance.source="default")`.
 
-SOC is never auto-enabled. See [conventions](conventions.md) for the rationale.
+SOC is never auto-enabled. See [conventions](../conventions.md) for the rationale.
 
 ### Pseudopotentials
 
@@ -98,4 +98,6 @@ AdviseStage = Callable[
 ]
 ```
 
-Advice should remain intent-level. Concrete k-point grids belong to Kmesh. Pseudopotential filenames and cutoffs belong to Select. Target-code syntax belongs to Generate.
+Advice should remain intent-level. Concrete k-point grids belong to Kmesh. Concrete target resources and target-specific numerical data belong to Select. Target-code text rendering belongs to Generate.
+
+The current `width_ry`, `conv_thr`, pseudo-family, and SSSP-mode representation is QE-oriented. A target-neutral contract revision must keep shared physics intent and canonical quantities here while moving target-native units, resource fields, and keyword mappings behind the [target-code adapter boundary](../target-code-adapters.md).

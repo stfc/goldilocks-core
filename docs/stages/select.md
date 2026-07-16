@@ -2,7 +2,7 @@
 
 Owner: `selection.py`
 
-The Select stage resolves pseudopotential assignments and cutoffs, then combines them with the concrete k-point grid already produced by Kmesh.
+The current Select stage resolves QE-oriented UPF pseudopotential assignments and SSSP cutoffs in Ry, then combines them with the concrete k-point grid already produced by Kmesh.
 
 ## Input
 
@@ -17,19 +17,19 @@ The Select stage resolves pseudopotential assignments and cutoffs, then combines
 
 ## Responsibility
 
-Select owns:
+The current QE Select implementation owns:
 
-- one pseudopotential selection per element
-- cutoff extraction from selected pseudopotential metadata
+- one UPF pseudopotential selection per element
+- Ry cutoff extraction from selected SSSP metadata
 - pseudo-selection warnings
-- construction of the final `SelectionRecord`
+- construction of the current QE-shaped `SelectionRecord`
 
 Select does **not** own:
 
 - k-point grid resolution — owned by Kmesh
 - structure analysis — owned by Analyze
 - scientific intent — owned by Advise
-- target-code syntax — owned by Generate
+- target-code text rendering — owned by Generate
 - pseudo parsing — owned by `pseudo/` registry and parser modules
 
 ## Kmesh interaction
@@ -97,4 +97,10 @@ SelectStage = Callable[
 ]
 ```
 
-It may implement different pseudo ranking or cutoff policy, but it should not recalculate k-points. If k-point behavior needs to change, replace the Kmesh backend instead.
+It may implement different QE pseudo ranking or cutoff policy, but it should not recalculate k-points. If k-point behavior needs to change, replace the Kmesh backend instead.
+
+## Multi-code boundary
+
+For another DFT target, Select is where the target adapter validates the target and task, resolves concrete target resources, and materializes explicit target-specific numerical data and units. Generate then renders that completed selection. This preserves the fixed graph while keeping target syntax out of Analyze and Advise.
+
+The current `PseudoMetadata` and `PseudopotentialSelection` types cannot represent resources such as coordinated CP2K basis/potential sets or VASP PAW datasets without target-specific contracts. See [target-code adapters](../target-code-adapters.md).

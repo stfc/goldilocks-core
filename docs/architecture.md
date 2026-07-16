@@ -16,6 +16,7 @@ Core does not own Runner/AiiDA workflows, schedulers, frontend/workspace state, 
 - Keep CLIs thin: parse arguments, build request/pipeline objects, call Core.
 - Keep future HTTP handlers thin: map JSON to `CoreJobRequest`, resolve service-level backend names outside Core, call Core.
 - Keep generators mechanical. Scientific defaults belong in advice, Kmesh, or selection.
+- Treat a target-code integration as one adapter spanning validation, target resource selection, target-specific data, and generation.
 - Keep tests portable. Do not require `local_data/` or private pseudo libraries.
 
 ## Package layout
@@ -47,14 +48,14 @@ Responsibilities:
 | `analysis.py` | Structure facts only. No recommendations. |
 | `advice.py` | Provenance-backed scientific and numerical advice. |
 | `kmesh.py` | Concrete k-point grid resolution from advice or hints. |
-| `selection.py` | Pseudopotential selection, cutoff extraction, selection warnings. |
-| `generation.py` | Target-code input text from completed records. |
+| `selection.py` | Current QE UPF/SSSP selection, Ry cutoff extraction, selection warnings. |
+| `generation.py` | Current QE SCF validation and input rendering from completed records. |
 | `bundle.py` | Bundle directory output and manifest writing. |
 | `advisors/` | Model-backed stage backend factories. |
 | `cli/` | Thin command-line wrappers. |
 | `io/` | Structure loading only. |
 | `ml/` | Feature extraction, model loading, prediction helpers. |
-| `pseudo/` | UPF parsing, metadata registry, filtering, policies. |
+| `pseudo/` | QE-oriented UPF/SSSP parsing, metadata registry, filtering, policies. |
 
 ## Dependency direction
 
@@ -141,20 +142,22 @@ The separation means:
 | --- | --- | --- | --- |
 | Load | `io/structures.py` | `Structure` | I/O only. |
 | Analyze | `analysis.py` | `StructureAnalysisRecord` | Facts only. |
-| Advise | `advice.py` | `ParameterAdvice` | Intent and provenance, not final syntax. |
+| Advise | `advice.py` | `ParameterAdvice` | Physics intent and provenance, not target syntax. |
 | Kmesh | `kmesh.py`, `advisors/` | `KPointSelection` | Operator k-point hints win. |
-| Select | `selection.py` | `SelectionRecord` | Pseudos and cutoffs; no k-point recalculation. |
-| Generate | `generation.py` | `tuple[GeneratedFile, ...]` | Mechanical target-code translation. |
+| Select | `selection.py` | `SelectionRecord` | Currently QE UPF resources and Ry cutoffs; no k-point recalculation. |
+| Generate | `generation.py` | `tuple[GeneratedFile, ...]` | Currently QE SCF validation and rendering. |
 | Bundle | `bundle.py` | `BundleRecord` | Deterministic, path-safe directory output. |
 
 ## Extension points
 
-Replace a `Pipeline` field to change one stage backend:
+Replace a `Pipeline` field to change one stage backend. This is suitable for a different implementation of the same stage contract, such as alternate rendering of the current completed QE selection:
 
 ```python
 
-pipeline = Pipeline(generate=my_generator)
+pipeline = Pipeline(generate=my_qe_generator)
 ```
+
+Adding another DFT target is not a Generate-only extension. The current request, units, resource metadata, Select output, and generator are QE-shaped. A target adapter must bind compatible validation, Select, and Generate behavior while leaving the graph fixed. See [target-code adapter boundary](target-code-adapters.md).
 
 Current fields:
 
@@ -169,7 +172,7 @@ Pipeline(
 )
 ```
 
-See [pipeline](pipeline.md) and [backends](backends.md) for signatures and examples.
+See [pipeline](pipeline.md) and [backends](backends.md) for current signatures and examples. See [target-code adapter boundary](target-code-adapters.md) for the multi-code design.
 
 ## External surfaces
 

@@ -33,7 +33,7 @@ pseudo_metadata
 output_dir
 ```
 
-It does not contain backend functions, model objects, registry keys, or generator objects.
+It does not contain backend functions, model objects, registry keys, generator objects, or future target adapter objects. Target and resource metadata are request data; the executable implementation is Pipeline composition.
 
 ## Behavior contracts
 
@@ -90,7 +90,7 @@ Callable[
 ]
 ```
 
-Produces the final concrete selection record. K-points are provided by Kmesh; Select resolves pseudopotentials and cutoffs.
+Produces the final concrete selection record. K-points are provided by Kmesh. The current implementation resolves QE UPF pseudopotentials and SSSP cutoffs in Ry, so `PseudoMetadata`, `PseudopotentialSelection`, and `SelectionRecord.pseudopotentials` are not target-neutral contracts.
 
 ### `GenerateStage`
 
@@ -101,7 +101,7 @@ Callable[
 ]
 ```
 
-Generates target-code files from completed Core records.
+Generates files from completed Core records. The current input contract is QE-shaped; replacing this callable alone does not add another DFT target.
 
 ### `BundleStage`
 
@@ -156,7 +156,13 @@ bundle    -> Load -> Analyze -> Advise -> Kmesh -> Select -> Generate -> Bundle
 - numpy arrays become lists
 - numpy scalars become Python scalars
 
-Callable fields in `Pipeline` are not serialized. If a service needs to expose backend names over HTTP, that service owns name-to-callable resolution outside Core.
+Callable fields in `Pipeline` are not serialized. If a service needs to expose backend or target-adapter names over HTTP, that service owns name-to-callable resolution outside Core.
+
+## Target-code contract direction
+
+The current contracts support QE SCF only. Ry-valued smearing/convergence fields, UPF/SSSP metadata, and pseudopotential/cutoff selections must not be presented as universal target contracts.
+
+The written multi-code design keeps shared physics records separate from typed target resource and selection records, while preserving JSON-safe requests/results and the fixed stage graph. It deliberately does not define an executable adapter API yet. See [target-code adapter boundary](target-code-adapters.md).
 
 ## Provenance contract
 

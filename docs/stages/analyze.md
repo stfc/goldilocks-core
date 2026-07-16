@@ -43,6 +43,13 @@ The Analyze stage reports structure facts without making parameter decisions. It
 
 Symmetry is skipped for disordered structures (returns None for all three fields). If `SpacegroupAnalyzer` raises during analysis, all three fields are set to None rather than propagating the error.
 
+### Dimensionality
+
+- `dimensionality`: bonded-cluster classification from pymatgen's CrystalNN graph and Larsen algorithm: `3d`, `2d`, `1d`, or `molecule`.
+- `has_vacuum`: connectivity-derived low-dimensional/vacuum heuristic. It is `True` for a detected dimensionality below 3D, not a measurement of physical vacuum from cell lengths.
+
+Analyze does not pass disordered structures to CrystalNN because its graph path does not support them. If CrystalNN graph construction or Larsen analysis raises `ValueError` or `RuntimeError`, Analyze also preserves the conservative `dimensionality="unknown", has_vacuum=False` fallback. It adds an `analysis_warnings` entry telling the operator to verify dimensionality and set `CalculationHints(use_vdw=True)` explicitly when needed. Other exceptions propagate.
+
 ### Electronic character
 
 - `electronic_character`: conservative heuristic classification.
@@ -51,17 +58,17 @@ Symmetry is skipped for disordered structures (returns None for all three fields
 
 ### Warnings
 
-- `analysis_warnings`: warnings about heuristic limitations, primarily about electronic character uncertainty.
+- `analysis_warnings`: warnings about heuristic limitations, including electronic-character uncertainty and dimensionality-analysis failures.
 
 ## What it does not do
 
 - It does not recommend k-points, smearing, SOC, pseudopotentials, or convergence settings.
-- It does not classify dimensionality (currently always `unknown`).
 - It does not predict metallicity from electronic-structure data.
 
 ## Edge cases
 
-- **Disordered structures**: symmetry fields are None, disorder_warnings are populated.
+- **Disordered structures**: symmetry fields are None, disorder_warnings are populated, and dimensionality remains `unknown` with `has_vacuum=False`.
 - **Single-element metals**: `electronic_character` is `likely_metal` with a warning.
 - **Mixed metal/non-metal**: `electronic_character` is `unknown` with a warning to verify smearing manually.
 - **spglib failures**: caught and result is None for all symmetry fields.
+- **CrystalNN or Larsen `ValueError`/`RuntimeError` failures**: caught and reported in `analysis_warnings`; dimensionality remains `unknown` and `has_vacuum` remains `False`. Other exceptions propagate.

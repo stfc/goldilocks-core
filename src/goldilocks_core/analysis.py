@@ -53,7 +53,9 @@ def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
     )
     magnetic_elements = tuple(sorted({*transition_metals, *lanthanides, *actinides}))
     disorder_warnings = _find_disorder_warnings(structure)
-    dimensionality, has_vacuum = _analyze_dimensionality(structure)
+    dimensionality, has_vacuum, dimensionality_warnings = _analyze_dimensionality(
+        structure
+    )
     symmetry = _analyze_symmetry(structure)
     electronic_character, electronic_warnings = _classify_electronic_character(
         periodic_elements
@@ -78,7 +80,7 @@ def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
         dimensionality=dimensionality,
         has_vacuum=has_vacuum,
         electronic_character=electronic_character,
-        analysis_warnings=electronic_warnings,
+        analysis_warnings=(*electronic_warnings, *dimensionality_warnings),
     )
 
 
@@ -99,22 +101,40 @@ def _find_disorder_warnings(structure: Structure) -> tuple[str, ...]:
     return tuple(warnings)
 
 
-def _analyze_dimensionality(structure: Structure) -> tuple[Dimensionality, bool]:
-    """Return (dimensionality, has_vacuum) from a bonded-cluster analysis.
+def _analyze_dimensionality(
+    structure: Structure,
+) -> tuple[Dimensionality, bool, tuple[str, ...]]:
+    """Return dimensionality, a low-dimensional/vacuum heuristic, and warnings.
 
-    Uses pymatgen's Larsen dimensionality algorithm. Falls back to
-    ``("unknown", False)`` when the analysis cannot run so downstream advice
-    stays conservative.
+    Uses pymatgen's CrystalNN graph and Larsen dimensionality algorithm. The
+    heuristic is connectivity-derived, not a measurement of cell vacuum.
+    Disordered structures are not passed to CrystalNN because its graph path
+    does not support them. ``ValueError`` or ``RuntimeError`` from the supported
+    operations also fall back to ``("unknown", False)`` so downstream advice
+    stays conservative, and records how the operator can override vdW advice.
     """
+    fallback = (
+        "unknown",
+        False,
+        (
+            "Dimensionality detection failed; defaulted to unknown with the "
+            "low-dimensional/vacuum heuristic disabled. Verify the structure "
+            "dimensionality and set CalculationHints(use_vdw=True) explicitly "
+            "if a vdW correction is needed.",
+        ),
+    )
+    if not structure.is_ordered:
+        return fallback
+
     try:
         bonded = StructureGraph.from_local_env_strategy(structure, CrystalNN())
         dim_value = get_dimensionality_larsen(bonded)
-    except Exception:
-        return "unknown", False
+    except (ValueError, RuntimeError):
+        return fallback
 
     dimensionality = _DIMENSIONALITY_BY_VALUE.get(dim_value, "unknown")
     has_vacuum = bool(dimensionality != "unknown" and dim_value < 3)
-    return dimensionality, has_vacuum
+    return dimensionality, has_vacuum, ()
 
 
 def _analyze_symmetry(structure: Structure) -> dict[str, str | int | None]:

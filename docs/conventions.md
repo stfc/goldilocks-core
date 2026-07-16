@@ -63,6 +63,8 @@ SOC is **never enabled automatically**, even when heavy elements are present. In
 
 Rationale: enabling SOC significantly changes calculation cost, convergence behavior, and pseudopotential requirements. The operator must make an informed decision.
 
+This differs intentionally from the vdW policy: a connectivity-derived low-dimensional classification makes D3BJ a conservative package default because dispersion may be important to weak interlayer, surface, and intermolecular interactions and the correction adds relatively little setup and cost. It does not establish that dispersion dominates; the operator can override the setting or method with `CalculationHints(use_vdw=..., vdw_method=...)`. Heavy elements only trigger SOC consideration because SOC has broader cost and setup consequences.
+
 ## Pseudopotential relativistic modes
 
 | Mode | Meaning |

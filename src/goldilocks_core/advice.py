@@ -279,10 +279,12 @@ def _advise_vdw(
 ) -> VdwAdvice:
     """Return vdW dispersion advice.
 
-    User hints win. Otherwise a structure heuristic enables D3BJ for
-    low-dimensional or vacuum-containing systems (slabs, wires, molecules),
-    where dispersion dominates interlayer/surface binding; 3D bulk (or
-    undetermined dimensionality) gets no correction by default.
+    User hints win. Otherwise, a connectivity-derived low-dimensional/vacuum
+    heuristic makes D3BJ a conservative package default because dispersion may
+    be important for slabs, wires, and molecules. It does not establish that
+    dispersion dominates; the operator can override the setting or method with
+    ``CalculationHints``. Fully connected 3D or unknown structures get no
+    correction by default.
     """
     if hints.use_vdw is not None:
         method = _resolve_vdw_method(hints) if hints.use_vdw else None
@@ -297,15 +299,25 @@ def _advise_vdw(
 
     if analysis.has_vacuum:
         method = _resolve_vdw_method(hints)
+        reason = (
+            f"Connectivity-derived {analysis.dimensionality} classification "
+            "indicates a low-dimensional/vacuum heuristic; D3BJ is the "
+            "conservative package default because dispersion may be important. "
+            "Override with CalculationHints(use_vdw=..., vdw_method=...) as needed."
+            if hints.vdw_method is None
+            else (
+                f"Connectivity-derived {analysis.dimensionality} classification "
+                "indicates a low-dimensional/vacuum heuristic; use the "
+                f"operator-provided {method} vdW method. Override with "
+                "CalculationHints(use_vdw=...) as needed."
+            )
+        )
         return VdwAdvice(
             use_vdw=True,
             method=method,
             provenance=Provenance(
                 source="analysis",
-                reason=(
-                    f"{analysis.dimensionality} system with vacuum; dispersion "
-                    f"dominates interlayer/surface binding, so {method} is applied."
-                ),
+                reason=reason,
             ),
         )
 

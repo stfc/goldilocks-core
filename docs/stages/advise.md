@@ -48,6 +48,16 @@ The default Kmesh backend converts the advice to a `KPointSelection`. A model-ba
 
 SOC is never auto-enabled. See [conventions](../conventions.md) for the rationale.
 
+### van der Waals dispersion
+
+1. If `hints.use_vdw` is set → use that setting with `provenance.source="user_hint"`. Enabling vdW uses `hints.vdw_method`, or `d3bj` when no method is supplied.
+2. Otherwise, if Analyze reports `has_vacuum=True` from its connectivity-derived low-dimensional/vacuum heuristic → enable vdW with `provenance.source="analysis"`. Use `hints.vdw_method`, or `d3bj` by default.
+3. Otherwise → leave vdW off with `provenance.source="default"`. A method supplied without an enabling hint or low-dimensional analysis result is ignored with a provenance warning.
+
+A dimensionality-analysis failure therefore remains transparent and conservative: Analyze reports `unknown` with a warning, and Advise does not infer low dimensionality or enable vdW.
+
+The vdW/SOC asymmetry is intentional. A detected low-dimensional classification makes D3BJ a conservative package default because dispersion may be important for weak interlayer, surface, or intermolecular interactions; it does not establish that dispersion dominates. The operator can override the setting or method with `CalculationHints(use_vdw=..., vdw_method=...)`. Heavy elements only trigger SOC consideration because enabling SOC changes calculation cost, setup, and pseudopotential requirements.
+
 ### Pseudopotentials
 
 `CalculationIntent` canonicalizes supported functional spellings at construction. `PBEsol`, `PBESOL`, `PBE-sol`, `PBE_SOL`, and `PBE sol` become `PBEsol`; unknown labels are preserved and are not treated as another functional.

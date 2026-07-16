@@ -130,7 +130,7 @@ def test_calculation_hints_validate_before_advice() -> None:
 
 
 def test_advise_parameters_vdw_defaults_off() -> None:
-    """Leave vdW off by default until dimensionality detection lands."""
+    """Leave vdW off by default for unknown dimensionality."""
     advice = advise_parameters(make_analysis())
 
     assert advice.vdw.use_vdw is False
@@ -172,16 +172,19 @@ def test_calculation_hints_reject_unknown_vdw_method() -> None:
 
 
 def test_advise_parameters_enables_vdw_for_low_dimensional_system() -> None:
-    """Auto-enable D3BJ from analysis for vacuum-containing systems."""
+    """Use D3BJ as a conservative default for the connectivity heuristic."""
     advice = advise_parameters(make_analysis(dimensionality="2d", has_vacuum=True))
 
     assert advice.vdw.use_vdw is True
     assert advice.vdw.method == "d3bj"
     assert advice.vdw.provenance.source == "analysis"
+    assert "Connectivity-derived 2d classification" in advice.vdw.provenance.reason
+    assert "dispersion may be important" in advice.vdw.provenance.reason
+    assert "Override with CalculationHints" in advice.vdw.provenance.reason
 
 
 def test_advise_parameters_heuristic_honors_explicit_vdw_method() -> None:
-    """Respect an operator vdw_method when the heuristic enables vdW."""
+    """Respect an operator vdW method when the heuristic enables vdW."""
     advice = advise_parameters(
         make_analysis(dimensionality="molecule", has_vacuum=True),
         hints=CalculationHints(vdw_method="ts"),

@@ -85,7 +85,7 @@ StageStatus = Literal["completed"]
 """Execution status of a pipeline stage. Currently always ``completed``."""
 
 Dimensionality = Literal["3d", "2d", "1d", "molecule", "unknown"]
-"""Structure dimensionality classification. Currently always ``unknown``."""
+"""Bonded-structure dimensionality, or ``unknown`` when detection fails."""
 
 ElectronicCharacter = Literal["metal", "insulator", "likely_metal", "unknown"]
 """Conservative electronic-character classification from structure facts.
@@ -529,8 +529,9 @@ class StructureAnalysisRecord:
         dimensionality: structure dimensionality from a bonded-cluster
             analysis (``3d``, ``2d``, ``1d``, ``molecule``), or
             ``unknown`` when detection fails.
-        has_vacuum: whether the cell has vacuum in at least one
-            direction (dimensionality below 3D).
+        has_vacuum: connectivity-derived low-dimensional/vacuum heuristic:
+            True when bonded dimensionality is below 3D. This is not a
+            measured cell-vacuum quantity.
         electronic_character: conservative electronic-character
             heuristic.
         analysis_warnings: warnings about heuristic limitations
@@ -765,7 +766,16 @@ class VdwAdvice:
     """Advised van der Waals dispersion correction.
 
     Method labels are code-agnostic physics names; the generator maps them
-    to code-specific strings (e.g. ``d3bj`` → QE ``grimme-d3bj``).
+    to code-specific settings (e.g. ``d3bj`` → QE
+    ``vdw_corr='grimme-d3'`` with ``dftd3_version=4``).
+
+    The built-in Advise stage treats its connectivity-derived
+    low-dimensional/vacuum heuristic as a conservative D3BJ default because
+    dispersion may be important. It does not establish that dispersion
+    dominates; the operator can override the setting or method with
+    ``CalculationHints``. Heavy elements only mark SOC for consideration
+    because SOC changes calculation cost, setup, and pseudopotential
+    requirements.
 
     Attributes:
         use_vdw: whether a dispersion correction is applied.

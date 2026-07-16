@@ -171,6 +171,36 @@ def test_generate_inputs_writes_d3_zero_damping_version() -> None:
     assert "dftd3_version = 3" in content
 
 
+@pytest.mark.parametrize(
+    ("vdw_method", "qe_vdw_corr"),
+    [("ts", "ts-vdw"), ("mbd", "many-body-dispersion")],
+)
+def test_generate_inputs_writes_non_d3_vdw_methods(
+    vdw_method: str,
+    qe_vdw_corr: str,
+) -> None:
+    """Map TS and MBD advice without emitting a D3 damping version."""
+    structure = make_structure()
+    hints = CalculationHints(
+        k_grid=(2, 2, 2),
+        pseudo_type="NC",
+        use_vdw=True,
+        vdw_method=vdw_method,
+    )
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+
+    content = generate_inputs(structure, advice_context(), advice, selection)[0].content
+
+    assert f"vdw_corr = '{qe_vdw_corr}'" in content
+    assert "dftd3_version" not in content
+
+
 def test_generate_inputs_omits_vdw_corr_by_default() -> None:
     """Do not write vdw_corr for 3D bulk without an explicit vdW hint."""
     structure = make_bulk_structure()

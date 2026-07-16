@@ -41,6 +41,14 @@ Currently only Quantum ESPRESSO SCF single-point input is supported, producing o
 - **Smearing**: `smearing` and `degauss` from `SmearingAdvice` when applicable
 - **Spin**: `nspin = 2` when magnetism is spin-polarized and SOC is not enabled
 - **SOC**: `noncolin = .true.` and `lspinorb = .true.` when SOC is enabled. `nspin = 2` is **not** emitted alongside noncollinear SOC flags.
+- **vdW**: code-agnostic `VdwAdvice.method` values map to QE settings:
+
+| Method | `vdw_corr` | `dftd3_version` |
+| --- | --- | --- |
+| `d3` | `grimme-d3` | `3` |
+| `d3bj` | `grimme-d3` | `4` |
+| `ts` | `ts-vdw` | omitted |
+| `mbd` | `many-body-dispersion` | omitted |
 
 ### &ELECTRONS details
 

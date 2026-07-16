@@ -1,5 +1,8 @@
+import pytest
 from pymatgen.core import Lattice, Structure
 
+import goldilocks_core.analysis as analysis_module
+from goldilocks_core.advice import advise_parameters
 from goldilocks_core.analysis import analyze_structure
 
 
@@ -27,7 +30,7 @@ def test_analyze_structure_reports_composition_and_element_facts() -> None:
 
 
 def test_analyze_structure_reports_partial_occupancy_warnings() -> None:
-    """Surface disordered sites as analysis warnings."""
+    """Report disorder and skip unsupported CrystalNN dimensionality analysis."""
     structure = Structure(
         lattice=Lattice.cubic(4.0),
         species=[{"Fe": 0.5, "Mn": 0.5}],
@@ -39,6 +42,8 @@ def test_analyze_structure_reports_partial_occupancy_warnings() -> None:
     assert analysis.disorder_warnings
     assert analysis.disordered_site_count == 1
     assert "partial occupancies" in analysis.disorder_warnings[0]
+    assert analysis.dimensionality == "unknown"
+    assert analysis.has_vacuum is False
 
 
 def test_analyze_structure_marks_all_metal_compositions_as_likely_metal() -> None:
@@ -55,8 +60,73 @@ def test_analyze_structure_marks_all_metal_compositions_as_likely_metal() -> Non
     assert "likely" in analysis.analysis_warnings[0]
 
 
+def test_analyze_structure_falls_back_for_crystal_nn_value_error(
+    monkeypatch,
+) -> None:
+    """Handle CrystalNN's documented operational ValueError conservatively."""
+
+    def fail_crystal_nn():
+        raise ValueError("No Voronoi neighbors found for site")
+
+    monkeypatch.setattr(analysis_module, "CrystalNN", fail_crystal_nn)
+    structure = Structure(
+        lattice=Lattice.cubic(4.0),
+        species=["Si"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+
+    analysis = analyze_structure(structure)
+    advice = advise_parameters(analysis)
+
+    assert analysis.dimensionality == "unknown"
+    assert analysis.has_vacuum is False
+    assert any(
+        "CalculationHints(use_vdw=True)" in warning
+        for warning in analysis.analysis_warnings
+    )
+    assert advice.vdw.use_vdw is False
+
+
+def test_analyze_structure_falls_back_for_larsen_runtime_error(monkeypatch) -> None:
+    """Handle runtime failures from the CrystalNN/Larsen operations."""
+
+    def fail_larsen(*_args):
+        raise RuntimeError("pathological graph")
+
+    monkeypatch.setattr(analysis_module, "get_dimensionality_larsen", fail_larsen)
+    structure = Structure(
+        lattice=Lattice.cubic(4.0),
+        species=["Si"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+
+    analysis = analyze_structure(structure)
+
+    assert analysis.dimensionality == "unknown"
+    assert analysis.has_vacuum is False
+
+
+def test_analyze_structure_propagates_unexpected_dimensionality_assertion(
+    monkeypatch,
+) -> None:
+    """Do not hide unexpected programming failures in dimensionality analysis."""
+
+    def fail_larsen(*_args):
+        raise AssertionError("invariant violation")
+
+    monkeypatch.setattr(analysis_module, "get_dimensionality_larsen", fail_larsen)
+    structure = Structure(
+        lattice=Lattice.cubic(4.0),
+        species=["Si"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+
+    with pytest.raises(AssertionError, match="invariant violation"):
+        analyze_structure(structure)
+
+
 def test_analyze_structure_reports_3d_bulk_without_vacuum() -> None:
-    """Classify a fully bonded bulk crystal as 3D with no vacuum."""
+    """Classify a fully bonded bulk crystal as 3D without the heuristic flag."""
     structure = Structure(
         lattice=Lattice.cubic(3.61),
         species=["Cu", "Cu", "Cu", "Cu"],
@@ -70,7 +140,7 @@ def test_analyze_structure_reports_3d_bulk_without_vacuum() -> None:
 
 
 def test_analyze_structure_reports_2d_slab_with_vacuum() -> None:
-    """Classify a graphene sheet with vacuum as 2D with vacuum."""
+    """Set the low-dimensional/vacuum heuristic for a graphene sheet."""
     structure = Structure(
         lattice=Lattice.from_parameters(2.46, 2.46, 15.0, 90, 90, 120),
         species=["C", "C"],
@@ -84,7 +154,7 @@ def test_analyze_structure_reports_2d_slab_with_vacuum() -> None:
 
 
 def test_analyze_structure_reports_molecule_with_vacuum() -> None:
-    """Classify an isolated molecule in a large box as molecular with vacuum."""
+    """Set the low-dimensional/vacuum heuristic for an isolated molecule."""
     structure = Structure(
         lattice=Lattice.cubic(15.0),
         species=["H", "H"],

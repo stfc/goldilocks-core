@@ -160,7 +160,7 @@ If the generated QE file uses `pseudo_dir = './pseudo'`, copy or stage selected 
 
 ## Shared job runner
 
-Use the shared runner when you need a single data-only request/result model for Python, CLI, or future HTTP mapping.
+Use the shared runner when you need a single data-only request/result model for Python, CLI, or the HTTP server transport.
 
 ```python
 from goldilocks_core import CalculationHints, CoreJobRequest, run_core_job

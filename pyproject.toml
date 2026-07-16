@@ -26,11 +26,25 @@ dependencies = [
 goldilocks-core = "goldilocks_core.cli.core:main"
 goldilocks-kmesh = "goldilocks_core.cli.cli_kmesh:main"
 
+[project.optional-dependencies]
+# HTTP server transport. Optional so the core library stays light: `import
+# goldilocks_core` does not require or import these. Install with
+# `uv sync --extra http` or `pip install goldilocks-core[http]`.
+http = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
+
 [dependency-groups]
 dev = [
+    # HTTP transport test client (FastAPI TestClient requires httpx). Listed
+    # here so CI installs them and the server tests run instead of skipping.
+    "fastapi>=0.115",
+    "httpx>=0.27",
     "pre-commit>=4.5.1",
     "pytest>=9.0.3",
     "ruff>=0.15.11",
+    "uvicorn>=0.30",
 ]
 
 [tool.uv]

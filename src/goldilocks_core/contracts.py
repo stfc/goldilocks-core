@@ -230,6 +230,24 @@ def _validate_pseudopotential_filename(filename: object, field_name: str) -> Non
         )
 
 
+def _validate_literal_member(value: object, literal: object, field_name: str) -> None:
+    """Reject a value outside a Core ``Literal`` alias at a boundary.
+
+    Uses equality membership against ``get_args(literal)``, so unhashable values
+    like lists raise ``ValueError`` rather than the unhashable-type
+    ``TypeError`` that set membership would raise.
+    """
+    allowed = get_args(literal)  # type: ignore[arg-type]
+    if value not in allowed:
+        raise ValueError(f"{field_name} must be one of {list(allowed)}; got {value!r}")
+
+
+def _validate_optional_str(value: object, field_name: str) -> None:
+    """Require ``None`` or a non-empty string at a boundary."""
+    if value is not None and not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a string or None; got {value!r}")
+
+
 def _validate_generated_path(path: str, field_name: str) -> str:
     """Require a non-empty portable relative path without traversal."""
     if not isinstance(path, str) or not path.strip():
@@ -245,6 +263,42 @@ def _validate_generated_path(path: str, field_name: str) -> str:
         raise ValueError(f"{field_name} must not contain '..' traversal; got {path!r}")
 
     return str(posix_path)
+
+
+def _require_dict(data: object, type_name: str) -> None:
+    """Require a JSON object at a deserialization boundary."""
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"{type_name}.from_dict requires a JSON object; got {type(data).__name__}"
+        )
+
+
+def _reject_unknown_keys(
+    data: JsonDict,
+    type_name: str,
+    known: frozenset[str],
+) -> None:
+    """Reject keys that do not map to a known dataclass field."""
+    unknown = sorted(set(data) - known)
+    if unknown:
+        raise ValueError(f"Unknown {type_name} keys: {', '.join(unknown)}")
+
+
+def _coerce_structure(value: object) -> StructureInput:
+    """Coerce a JSON-serialized structure into a Structure or path string."""
+    if isinstance(value, Structure | str):
+        return value
+    if isinstance(value, dict):
+        try:
+            return Structure.from_dict(value)
+        except Exception as error:
+            raise ValueError(
+                f"CoreJobRequest.structure could not be parsed as a structure: {error}"
+            ) from error
+    raise ValueError(
+        "CoreJobRequest.structure must be a structure dict, a path string, "
+        "or a Structure object"
+    )
 
 
 @dataclass(slots=True)
@@ -454,6 +508,39 @@ class CalculationIntent:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
 
+    @classmethod
+    def from_dict(cls, data: object) -> CalculationIntent:
+        """Construct from a JSON-serializable dictionary.
+
+        Unknown keys are rejected so typos surface at the request boundary.
+        Values flow through ``__post_init__`` validation, so invalid JSON is
+        rejected with ``ValueError`` at the same boundary Python callers hit.
+
+        Raises:
+            ValueError: If ``data`` is not a dict, contains unknown keys, or
+                a value fails the constructor validators.
+        """
+        _require_dict(data, "CalculationIntent")
+        _reject_unknown_keys(data, "CalculationIntent", _INTENT_FIELDS)
+        code = data.get("code", "quantum_espresso")
+        task = data.get("task", "scf_single_point")
+        _validate_literal_member(code, CodeName, "intent.code")
+        _validate_literal_member(task, CalcTask, "intent.task")
+        functional = data.get("functional", "PBE")
+        pseudo_mode = data.get("pseudo_mode", "efficiency")
+        if not isinstance(functional, str):
+            raise ValueError(f"intent.functional must be a string; got {functional!r}")
+        if not isinstance(pseudo_mode, str):
+            raise ValueError(
+                f"intent.pseudo_mode must be a string; got {pseudo_mode!r}"
+            )
+        return cls(
+            code=code,
+            task=task,
+            functional=functional,
+            pseudo_mode=pseudo_mode,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class CalculationHints:
@@ -554,6 +641,51 @@ class CalculationHints:
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
+
+    @classmethod
+    def from_dict(cls, data: object) -> CalculationHints:
+        """Construct from a JSON-serializable dictionary.
+
+        Unknown keys are rejected so typos surface at the request boundary.
+        ``k_grid`` is coerced from a list to a tuple. Values flow through
+        ``__post_init__`` validation.
+
+        Raises:
+            ValueError: If ``data`` is not a dict, contains unknown keys, or
+                a value fails the constructor validators.
+        """
+        _require_dict(data, "CalculationHints")
+        _reject_unknown_keys(data, "CalculationHints", _HINTS_FIELDS)
+        # Pass k_grid through unchanged; __post_init__ validates it is a list or
+        # tuple of three positive integers and normalizes it to a tuple. The
+        # previous ``tuple(k_grid)`` coerced a non-list value (e.g. an int) with
+        # a TypeError instead of the boundary ValueError callers expect.
+        for optional_str_field in (
+            "pseudo_mode",
+            "pseudo_type",
+            "relativistic_mode",
+            "smearing_type",
+            "vdw_method",
+        ):
+            _validate_optional_str(
+                data.get(optional_str_field), f"hints.{optional_str_field}"
+            )
+        return cls(
+            k_spacing=data.get("k_spacing"),
+            k_grid=data.get("k_grid"),
+            smearing_type=data.get("smearing_type"),
+            smearing_width_ry=data.get("smearing_width_ry"),
+            spin_polarized=data.get("spin_polarized"),
+            spin_orbit_coupling=data.get("spin_orbit_coupling"),
+            pseudo_mode=data.get("pseudo_mode"),
+            pseudo_type=data.get("pseudo_type"),
+            relativistic_mode=data.get("relativistic_mode"),
+            conv_thr=data.get("conv_thr"),
+            mixing_beta=data.get("mixing_beta"),
+            electron_maxstep=data.get("electron_maxstep"),
+            use_vdw=data.get("use_vdw"),
+            vdw_method=data.get("vdw_method"),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1132,8 +1264,8 @@ class CoreResult:
 class CoreJobRequest:
     """Request for running the fixed Core stage graph.
 
-    One request model shared by Python API, CLI, and future HTTP
-    wrappers. ``mode`` controls how far the pipeline runs.
+    One request model shared by Python API, CLI, and the HTTP server
+    transport. ``mode`` controls how far the pipeline runs.
 
     Attributes:
         structure: structure input — a pymatgen Structure or a
@@ -1166,6 +1298,59 @@ class CoreJobRequest:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
 
+    @classmethod
+    def from_dict(cls, data: object) -> CoreJobRequest:
+        """Construct from a JSON-serializable dictionary.
+
+        The inverse of ``to_dict()`` for the data-only request model. The
+        ``structure`` field may be a pymatgen ``Structure`` dict (reconstructed
+        via ``Structure.from_dict``), a path string, or a ``Structure`` object.
+        Transports that accept inline structure text or server-side paths parse
+        those into a ``Structure`` or path before calling this method.
+
+        Unknown keys are rejected. ``intent`` and ``hints`` default to their
+        empty constructors when absent. ``pseudo_metadata`` entries are parsed
+        via ``PseudoMetadata.from_dict``.
+
+        Raises:
+            ValueError: If ``data`` is not a dict, lacks ``structure``, contains
+                unknown keys, or a value fails the constructor validators.
+        """
+        _require_dict(data, "CoreJobRequest")
+        _reject_unknown_keys(data, "CoreJobRequest", _REQUEST_FIELDS)
+        if "structure" not in data:
+            raise ValueError("CoreJobRequest requires a 'structure' field")
+        structure = _coerce_structure(data["structure"])
+        intent = (
+            CalculationIntent.from_dict(data["intent"])
+            if "intent" in data
+            else CalculationIntent()
+        )
+        hints = (
+            CalculationHints.from_dict(data["hints"])
+            if "hints" in data
+            else CalculationHints()
+        )
+        mode = data.get("mode", "recommend")
+        _validate_literal_member(mode, JobMode, "mode")
+        output_dir = data.get("output_dir")
+        if output_dir is not None and not isinstance(output_dir, str):
+            raise ValueError(f"output_dir must be a string or None; got {output_dir!r}")
+        pseudo_metadata_raw = data.get("pseudo_metadata", ())
+        if not isinstance(pseudo_metadata_raw, list):
+            raise ValueError("pseudo_metadata must be a list")
+        pseudo_metadata = tuple(
+            PseudoMetadata.from_dict(entry) for entry in pseudo_metadata_raw
+        )
+        return cls(
+            structure=structure,
+            intent=intent,
+            hints=hints,
+            mode=mode,
+            pseudo_metadata=pseudo_metadata,
+            output_dir=output_dir,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class StageRecord:
@@ -1187,6 +1372,14 @@ class StageRecord:
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
+
+
+# Known field names for request-boundary deserialization. Defined after the
+# dataclasses so from_dict classmethods can reject unknown keys without
+# reflecting on the class at call sites.
+_INTENT_FIELDS = frozenset(field.name for field in fields(CalculationIntent))
+_HINTS_FIELDS = frozenset(field.name for field in fields(CalculationHints))
+_REQUEST_FIELDS = frozenset(field.name for field in fields(CoreJobRequest))
 
 
 AnalyzeStage = Callable[[Structure], StructureAnalysisRecord]

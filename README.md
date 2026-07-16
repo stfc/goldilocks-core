@@ -25,6 +25,8 @@ contain it, and the CLI does not expose `--accuracy-level`.
 uv sync
 ```
 
+The HTTP server transport is an optional extra (`uv sync --extra http`); `import goldilocks_core` does not require it.
+
 For development:
 
 ```bash
@@ -102,7 +104,7 @@ See [bundle stage](docs/stages/bundle.md) and [manifest](docs/manifest.md).
 
 ## Job runner
 
-Use `CoreJobRequest` and `run_core_job()` when a caller needs one request/result model for Python, CLI, or a future HTTP wrapper.
+Use `CoreJobRequest` and `run_core_job()` when a caller needs one request/result model for Python, CLI, or HTTP. `CoreJobRequest.from_dict` / `CalculationIntent.from_dict` / `CalculationHints.from_dict` deserialize the JSON form shared with the HTTP transport.
 
 ```python
 from goldilocks_core import CoreJobRequest, run_core_job
@@ -244,6 +246,7 @@ uv run goldilocks-core recommend path/to/structure.cif --model path/to/model.job
 uv run goldilocks-core recommend path/to/structure.cif --heuristic-kpoints --json
 uv run goldilocks-core generate path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --use-vdw true --vdw-method d3bj --json
 uv run goldilocks-core bundle path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
+uv run goldilocks-core serve --heuristic-kpoints --port 8000   # requires `uv sync --extra http`
 ```
 
 The legacy kmesh-focused entry point is still available:
@@ -259,9 +262,10 @@ See [CLI reference](docs/cli.md).
 
 ## Long-lived HTTP and MCP hosts
 
-HTTP and MCP transports are not implemented here yet. A future host must create
-one runtime during process/application startup, reuse it for every request or
-tool call, and close it during shutdown:
+The HTTP server transport is implemented behind the optional `[http]` extra.
+Run it with `goldilocks-core serve` (loopback by default); it owns one
+`CoreRuntime` for the process lifetime, reuses it for every request, and closes
+it on shutdown. See [HTTP server](docs/server/http.md).
 
 ```python
 runtime = CoreRuntime()
@@ -273,7 +277,7 @@ runtime = CoreRuntime()
 
 Do not construct `CoreRuntime` or `Pipeline()` inside each handler. Transport,
 auth, persistence, queues, and service-level backend-name resolution remain
-outside Core.
+outside Core. An MCP transport is a sibling concern, not implemented here yet.
 
 ## Package layout
 
@@ -309,6 +313,7 @@ See [architecture](docs/architecture.md) for boundaries and dependency direction
 - [Conventions](docs/conventions.md)
 - [Provenance](docs/provenance.md)
 - [CLI](docs/cli.md)
+- [HTTP server](docs/server/http.md)
 - [Tutorial](docs/tutorial.md)
 - [Extension guide](docs/extension.md)
 - [Migration guide](docs/migration.md)

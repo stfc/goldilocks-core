@@ -364,9 +364,12 @@ Provenance is part of the backend contract. A backend that returns a bare tuple 
 Core does not resolve backend names. It accepts callables.
 
 The one-shot CLI resolves its options to a `Pipeline`, creates one `CoreRuntime`
-for the command process, runs the request, and closes the runtime. A future HTTP
-or MCP process must create one runtime during application startup and reuse it
-for every handler/tool call:
+for the command process, runs the request, and closes the runtime. The HTTP
+server transport (`goldilocks-core serve`, optional `[http]` extra) does the
+same for a long-lived process: it creates one `CoreRuntime` during application
+startup and reuses it for every request, closing it on shutdown. An MCP process
+is a sibling concern, not implemented here yet, but would follow the same
+lifetime — create one runtime at startup and reuse it for every tool call:
 
 ```python
 pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
@@ -376,7 +379,7 @@ result = runtime.run(request)             # each request or tool call
 runtime.close()                           # application shutdown
 ```
 
-Do not create a runtime or default pipeline inside each HTTP/MCP handler. Those
-transports are not implemented yet. They own JSON parsing, error mapping, and
-service-level backend-name resolution; Core sees the callable returned by
-`ml_kmesh_advisor(spec)`, never a string such as `"cslr"`.
+Do not create a runtime or default pipeline inside each HTTP or MCP handler.
+The transports own JSON parsing, error mapping, and service-level backend-name
+resolution; Core sees the callable returned by `ml_kmesh_advisor(spec)`, never
+a string such as `"cslr"`.

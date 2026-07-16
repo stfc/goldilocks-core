@@ -28,6 +28,28 @@ goldilocks-core bundle structure.cif --out run/ [options]
 
 Runs the full pipeline and publishes a portable bundle directory. `--out` is required and must not already exist; bundle mode has no overwrite option.
 
+### serve
+
+```bash
+goldilocks-core serve [--host 127.0.0.1] [--port 8000] [options]
+```
+
+Runs the HTTP server transport (requires the optional `[http]` extra; `uv sync --extra http`). Sync, stateless: one runtime for the process lifetime, reused across requests, closed on shutdown. No auth, sessions, queues, or persistence. See [HTTP server](server/http.md).
+
+| Flag | Type | Default | Purpose |
+| --- | --- | --- | --- |
+| `--host` | str | `127.0.0.1` | Bind host. Loopback by default; use `0.0.0.0` to expose. |
+| `--port` | int | `8000` | Bind port. |
+| `--pseudo-root` | path | None | Directory of UPF files loaded once at startup as default pseudo metadata. |
+| `--structure-root` | path | None | Allowlist root for server-side structure paths. |
+| `--bundle-root` | path | `goldilocks_output` | Root for bundle output directories. |
+| `--model` | path | None | Local ML Kmesh model path. Replaces the default QRF backend. |
+| `--heuristic-kpoints` | flag | False | Use advice-based k-point resolution instead of the default QRF model. |
+| `--model-name` | str | `server-kmesh-model` with `--model` | Model name recorded in Kmesh provenance; requires `--model`. |
+| `--model-version` | str | `unknown` with `--model` | Model version recorded in metadata; requires `--model`. |
+
+`--model` and `--heuristic-kpoints` are mutually exclusive. Backend composition is process configuration, not request data. If the `[http]` extra is missing, `serve` raises a clear install hint before binding.
+
 ## Common options
 
 | Flag | Type | Default | Maps to |

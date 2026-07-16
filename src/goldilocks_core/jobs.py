@@ -1,4 +1,4 @@
-"""Fixed Core job runner shared by Python, CLI, and future HTTP surfaces."""
+"""Fixed Core job runner shared by Python, CLI, and the HTTP server transport."""
 
 from __future__ import annotations
 

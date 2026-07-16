@@ -133,7 +133,7 @@ def test_feature_vectors_serialize_numpy_values_as_json_lists() -> None:
 
 
 def test_job_records_serialize_to_json_safe_dicts() -> None:
-    """Serialize job result records for CLI and future HTTP callers."""
+    """Serialize job result records for CLI and HTTP server transport callers."""
     result = CoreResult(
         intent=CalculationIntent(),
         analysis=_make_analysis(),

@@ -2,7 +2,7 @@
 
 `contracts.py` defines the public records that cross Core stage boundaries.
 
-Contracts are dataclasses or type aliases. They are intentionally explicit so Python, CLI, and future HTTP callers can share the same request/result shape.
+Contracts are dataclasses or type aliases. They are intentionally explicit so Python, CLI, and the HTTP server transport can share the same request/result shape.
 
 ## Data-only contracts
 
@@ -177,6 +177,8 @@ bundle    -> Load -> Analyze -> Advise -> Kmesh -> Select -> Generate -> Bundle
 - numpy scalars become Python scalars
 
 Callable fields in `Pipeline` are not serialized. If a service needs to expose backend or target-adapter names over HTTP, that service owns name-to-callable resolution outside Core.
+
+`CalculationIntent`, `CalculationHints`, `CoreJobRequest`, and `PseudoMetadata` expose `from_dict` as the inverse of `to_dict()` for the request boundary. See [HTTP server](server/http.md).
 
 ## Target-code contract direction
 

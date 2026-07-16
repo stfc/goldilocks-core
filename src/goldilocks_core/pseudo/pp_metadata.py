@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+import math
+from dataclasses import asdict, dataclass, field, fields
+from numbers import Real
 from typing import Any
 
 from goldilocks_core.functionals import normalize_functional_label
@@ -64,3 +66,101 @@ class PseudoMetadata:
     def to_dict(self) -> dict:
         """Return a dictionary representation of the metadata."""
         return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: object) -> PseudoMetadata:
+        """Construct from a JSON-serializable dictionary.
+
+        ``filepath``, ``filename``, and ``header_format`` are required; the
+        remaining fields default to their constructor defaults when absent.
+        Unknown keys and malformed value types are rejected so transport
+        request errors surface as ``ValueError`` at this boundary rather than
+        as a ``TypeError`` deeper in construction.
+
+        Raises:
+            ValueError: If ``data`` is not a dict, lacks a required field,
+                contains unknown keys, or a value has an unexpected type.
+        """
+        if not isinstance(data, dict):
+            raise ValueError(
+                "PseudoMetadata.from_dict requires a JSON object; "
+                f"got {type(data).__name__}"
+            )
+        known = frozenset(field.name for field in fields(cls))
+        unknown = sorted(set(data) - known)
+        if unknown:
+            raise ValueError(f"Unknown PseudoMetadata keys: {', '.join(unknown)}")
+        missing = [
+            name
+            for name in ("filepath", "filename", "header_format")
+            if name not in data
+        ]
+        if missing:
+            raise ValueError(f"PseudoMetadata requires fields: {', '.join(missing)}")
+        for required in ("filepath", "filename", "header_format"):
+            if not isinstance(data[required], str):
+                raise ValueError(
+                    f"PseudoMetadata.{required} must be a string; "
+                    f"got {data[required]!r}"
+                )
+        for optional_str_field in (
+            "library",
+            "source_set",
+            "element",
+            "pseudo_type",
+            "functional",
+            "relativistic",
+            "source_pseudopotential",
+        ):
+            value = data.get(optional_str_field)
+            if value is not None and not isinstance(value, str):
+                raise ValueError(
+                    f"PseudoMetadata.{optional_str_field} must be a string or None; "
+                    f"got {value!r}"
+                )
+        z_valence = data.get("z_valence")
+        if z_valence is not None and (
+            isinstance(z_valence, bool) or not isinstance(z_valence, Real)
+        ):
+            raise ValueError(
+                f"PseudoMetadata.z_valence must be a number or None; got {z_valence!r}"
+            )
+        if z_valence is not None and not math.isfinite(z_valence):
+            raise ValueError(
+                f"PseudoMetadata.z_valence must be a finite number; got {z_valence!r}"
+            )
+        pseudo_info = data.get("pseudo_info", {})
+        if not isinstance(pseudo_info, dict):
+            raise ValueError(
+                "PseudoMetadata.pseudo_info must be an object or None; "
+                f"got {pseudo_info!r}"
+            )
+        is_sssp = data.get("is_sssp", False)
+        if not isinstance(is_sssp, bool):
+            raise ValueError(
+                f"PseudoMetadata.is_sssp must be a boolean; got {is_sssp!r}"
+            )
+        sssp_recommended_cutoff = data.get("sssp_recommended_cutoff")
+        if sssp_recommended_cutoff is not None and not isinstance(
+            sssp_recommended_cutoff, dict
+        ):
+            raise ValueError(
+                "PseudoMetadata.sssp_recommended_cutoff must be an object or None; "
+                f"got {sssp_recommended_cutoff!r}"
+            )
+        return cls(
+            filepath=data["filepath"],
+            filename=data["filename"],
+            header_format=data["header_format"],
+            library=data.get("library"),
+            source_set=data.get("source_set"),
+            element=data.get("element"),
+            pseudo_type=data.get("pseudo_type"),
+            functional=data.get("functional"),
+            relativistic=data.get("relativistic"),
+            z_valence=z_valence,
+            pseudo_info=dict(pseudo_info),
+            is_sssp=is_sssp,
+            source_pseudopotential=data.get("source_pseudopotential"),
+            sssp_recommended_cutoff=sssp_recommended_cutoff,
+        )

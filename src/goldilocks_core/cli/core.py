@@ -37,6 +37,8 @@ def build_parser() -> argparse.ArgumentParser:
                 help="Output directory for the portable Core bundle.",
             )
 
+    _add_serve_subparser(subparsers)
+
     return parser
 
 
@@ -44,6 +46,15 @@ def main() -> None:
     """Run the staged Core CLI."""
     parser = build_parser()
     args = parser.parse_args()
+
+    if args.command == "serve":
+        try:
+            _run_serve(args)
+        except ValueError as error:
+            parser.error(str(error))
+        except ImportError as error:
+            raise SystemExit(str(error)) from error
+        return
 
     try:
         _validate_backend_options(args)
@@ -245,6 +256,66 @@ def _print_human_summary(result: CoreResult) -> None:
         print("warnings:")
         for warning in result.warnings:
             print(f"  - {warning}")
+
+
+def _add_serve_subparser(subparsers: argparse._SubParsersAction) -> None:
+    """Add the HTTP server subcommand (requires the optional [http] extra)."""
+    serve = subparsers.add_parser(
+        "serve",
+        help="Run the HTTP API server (requires the [http] extra).",
+    )
+    serve.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Bind host. Defaults to loopback; use 0.0.0.0 to expose.",
+    )
+    serve.add_argument("--port", type=int, default=8000, help="Bind port.")
+    serve.add_argument(
+        "--pseudo-root", help="Directory of UPF files for default pseudo metadata."
+    )
+    serve.add_argument(
+        "--structure-root",
+        help="Allowlist root for server-side structure paths.",
+    )
+    serve.add_argument(
+        "--bundle-root",
+        help="Root for bundle output directories (default: goldilocks_output).",
+    )
+    kpoint_backend = serve.add_mutually_exclusive_group()
+    kpoint_backend.add_argument(
+        "--model",
+        help="Local ML Kmesh model path. Replaces the default QRF backend.",
+    )
+    kpoint_backend.add_argument(
+        "--heuristic-kpoints",
+        action="store_true",
+        help="Use heuristic k-point advice instead of the default QRF model.",
+    )
+    serve.add_argument(
+        "--model-name",
+        help="Model name recorded in Kmesh provenance; requires --model.",
+    )
+    serve.add_argument(
+        "--model-version",
+        help="Model version recorded in metadata; requires --model.",
+    )
+
+
+def _run_serve(args: argparse.Namespace) -> None:
+    """Delegate to the HTTP transport server, guarding the optional extra."""
+    from goldilocks_core.server.http import serve as serve_app
+
+    serve_app(
+        host=args.host,
+        port=args.port,
+        pseudo_root=args.pseudo_root,
+        structure_root=args.structure_root,
+        bundle_root=args.bundle_root,
+        model=args.model,
+        model_name=args.model_name,
+        model_version=args.model_version,
+        heuristic_kpoints=args.heuristic_kpoints,
+    )
 
 
 if __name__ == "__main__":

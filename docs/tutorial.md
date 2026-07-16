@@ -236,7 +236,7 @@ result = recommend("structure.cif")
 print(result.selection.k_points.grid)
 ```
 
-**I want JSON for a future HTTP or MCP host:**
+**I want JSON for an HTTP or MCP host:**
 
 ```python
 from goldilocks_core import CoreRuntime
@@ -250,8 +250,10 @@ response = result.to_dict()
 runtime.close()  # application shutdown
 ```
 
-HTTP and MCP transports are not implemented yet. Do not construct a runtime in
-each request handler.
+The HTTP server transport is implemented behind the optional `[http]` extra
+(`goldilocks-core serve`). An MCP transport is a sibling concern, not
+implemented here yet. In either case, do not construct a runtime in each request
+handler.
 
 **I want SOC on for a heavy-element compound:**
 

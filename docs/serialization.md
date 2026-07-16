@@ -1,6 +1,8 @@
 # Serialization
 
-All staged pipeline data records support JSON-safe serialization via `to_dict()`. This is the contract for CLI `--json` output, future HTTP API responses, and [manifest](manifest.md) content.
+All staged pipeline data records support JSON-safe serialization via `to_dict()`. This is the contract for CLI `--json` output, HTTP API responses, and [manifest](manifest.md) content.
+
+The request-boundary records also deserialize from their `to_dict()` form via `from_dict` classmethods: `CalculationIntent.from_dict`, `CalculationHints.from_dict`, `CoreJobRequest.from_dict`, and `PseudoMetadata.from_dict`. They reject non-dicts and unknown keys, run the same `__post_init__` validators as Python construction, and are the shared JSON→domain path used by the HTTP transport (and intended for MCP). `CoreResult` is response-only and has no `from_dict`.
 
 `Pipeline` is intentionally not serialized. It contains Python callables that configure how stages run. `CoreJobRequest` and `CoreResult` remain the serializable request/response boundary.
 

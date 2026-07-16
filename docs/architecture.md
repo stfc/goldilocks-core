@@ -67,13 +67,17 @@ Responsibilities:
 class Pipeline:
     analyze: AnalyzeStage = analyze_structure
     advise: AdviseStage = advise_parameters
-    kmesh: KMeshAdvisor = resolve_kpoints_from_advice
+    kmesh: KMeshAdvisor = field(default_factory=default_kmesh_advisor)
     select: SelectStage = select_parameters
     generate: GenerateStage = generate_inputs
     bundle: BundleStage = write_bundle_directory
 ```
 
-`pipeline.py` was removed. `recommend`, `generate`, and `write_bundle` now live in `jobs.py` as thin wrappers around `run_core_job()`.
+`pipeline.py` was removed. `recommend`, `generate`, and `write_bundle` now live
+in `jobs.py` as thin wrappers around `run_core_job()`. The default Kmesh factory
+returns an advisor that lazily reads replaceable model metadata from
+`model_registry.toml`; upstream artifact locations are not embedded in stage
+code.
 
 ## Fixed graph
 

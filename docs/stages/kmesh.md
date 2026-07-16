@@ -1,6 +1,6 @@
 # Kmesh stage
 
-Owner: `kmesh.py` and `advisors/kmesh_advisor.py`
+Owner: `kmesh.py` and `advisors/`
 
 The Kmesh stage resolves k-point intent into a concrete k-point grid.
 
@@ -19,7 +19,9 @@ K-point selection has two distinct parts:
 
 Before Kmesh existed, concrete grid resolution lived inside Select. That made ML k-point prediction awkward because the ML advisor produces a concrete `KPointSelection`, not a `KPointAdvice`.
 
-Kmesh is the backend seam. The default backend converts advice to a grid. The ML backend predicts a grid when no operator hint is set.
+Kmesh is the backend seam. The configured default lazily predicts a grid with
+the QRF model when no operator hint is set and falls back to advice-based
+resolution when ML is unavailable.
 
 ## Input
 
@@ -48,11 +50,24 @@ Fields:
 
 ## Default backend
 
+`Pipeline()` uses `default_kmesh_advisor()`. The advisor reads the QRF model,
+supporting metallicity artifacts, immutable revisions, compatible runtime
+versions, confidence, and interval calibration from `model_registry.toml`. Set
+`GOLDILOCKS_MODEL_REGISTRY` to a replacement TOML file to hot-swap that
+configuration.
+
+Registry parsing, model imports, artifact resolution, and inference are all
+deferred until the first call without an explicit k-point hint. Loaded models
+or a load failure are cached safely for subsequent or concurrent structures.
+Failures resolve from advice and add the failure reason to provenance warnings.
+
+The explicit heuristic backend is:
+
 ```python
 from goldilocks_core.kmesh import resolve_kpoints_from_advice
 ```
 
-Decision order:
+Its decision order is:
 
 1. If `hints.k_grid` is set, use it directly.
 2. Else if `hints.k_spacing` is set, convert it with `k_distance_to_mesh()`.
@@ -76,7 +91,7 @@ otherwise       -> use backend strategy
 
 This rule lets operators override a model without changing the pipeline object.
 
-## ML backend
+## Custom ML backend
 
 ```python
 from goldilocks_core.advisors import ml_kmesh_advisor
@@ -157,4 +172,7 @@ Select no longer converts k-spacing to grids. It carries the provided `KPointSel
 
 `resolve_kpoints_from_advice()` raises `ValueError` when no hint is set and advice contains neither `explicit_grid` nor `spacing`.
 
-`advise_kpoints()` may also raise through model loading, feature extraction, or inference if the supplied `ModelSpec` cannot be used.
+The default QRF backend catches model loading, feature extraction, invalid
+prediction, and inference errors, then falls back with a provenance warning.
+The custom `ml_kmesh_advisor()` may raise if its supplied `ModelSpec` cannot be
+used.

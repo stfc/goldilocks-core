@@ -121,6 +121,33 @@ generate  -> Load → Analyze → Advise → Kmesh → Select → Generate
 bundle    -> Load → Analyze → Advise → Kmesh → Select → Generate → Bundle
 ```
 
+### Default k-point model
+
+`Pipeline()` uses the configured QRF k-distance model by default and falls back
+to heuristic advice when its artifacts or dependencies are unavailable. Model
+loading is lazy: constructing a pipeline and resolving explicit `k_grid` or
+`k_spacing` hints performs no registry read, model download, or inference.
+
+Default model locations, supporting artifacts, immutable revisions, compatible
+serialization-library versions, confidence, and calibration live in
+`goldilocks_core/model_registry.toml`, not in advisor code.
+Set `GOLDILOCKS_MODEL_REGISTRY=/path/to/models.toml` to replace the complete
+default configuration without changing the package source.
+
+Hugging Face artifacts are cached by `huggingface_hub`; alternate remote
+registries must specify full 40-character commit revisions rather than branches
+or tags. The configured QRF is a
+joblib/pickle artifact, so only use registries and revisions you trust. To avoid
+remote model loading entirely, provide explicit k-point hints or compose the
+heuristic backend:
+
+```python
+from goldilocks_core import Pipeline
+from goldilocks_core.kmesh import resolve_kpoints_from_advice
+
+pipeline = Pipeline(kmesh=resolve_kpoints_from_advice)
+```
+
 ## Custom backends
 
 `Pipeline` holds Python callables for stage backends. `CoreJobRequest` remains data-only.
@@ -152,6 +179,7 @@ See [backends](docs/backends.md) for backend contracts and examples.
 ```bash
 uv run goldilocks-core recommend path/to/structure.cif --json
 uv run goldilocks-core recommend path/to/structure.cif --model path/to/model.joblib --json
+uv run goldilocks-core recommend path/to/structure.cif --heuristic-kpoints --json
 uv run goldilocks-core generate path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --json
 uv run goldilocks-core bundle path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
 ```
@@ -180,6 +208,7 @@ src/goldilocks_core/
 ├── cli/           # thin command wrappers
 ├── io/            # loading only
 ├── ml/            # feature extraction, model loading, prediction
+├── model_registry.toml  # replaceable default model and artifact metadata
 └── pseudo/        # UPF parsing, registry, filtering, policy
 ```
 

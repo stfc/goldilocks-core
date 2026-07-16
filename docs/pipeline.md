@@ -34,7 +34,7 @@ from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
 class Pipeline:
     analyze: AnalyzeStage = analyze_structure
     advise: AdviseStage = advise_parameters
-    kmesh: KMeshAdvisor = resolve_kpoints_from_advice
+    kmesh: KMeshAdvisor = field(default_factory=default_kmesh_advisor)
     select: SelectStage = select_parameters
     generate: GenerateStage = generate_inputs
     bundle: BundleStage = write_bundle_directory
@@ -52,7 +52,10 @@ pipeline = Pipeline()
 result = run_core_job(request, pipeline=pipeline)
 ```
 
-If no pipeline is passed, `run_core_job()` calls `Pipeline()` and uses the built-in backends.
+If no pipeline is passed, `run_core_job()` calls `Pipeline()` and uses the
+built-in backends. The default Kmesh backend lazily loads the QRF configuration
+from `model_registry.toml`; explicit k-point hints bypass model loading. Use
+`Pipeline(kmesh=resolve_kpoints_from_advice)` for an explicitly heuristic path.
 
 ## Stage contracts
 
@@ -125,7 +128,10 @@ Responsibility:
 - preserve hint precedence
 - record whether the grid came from a hint, default/advice path, or model
 
-Kmesh is a separate stage because k-point resolution is the natural backend seam. The default backend converts advice to a grid. The ML backend predicts a grid from a model when no hint is set.
+Kmesh is a separate stage because k-point resolution is the natural backend
+seam. The configured default predicts a grid from a QRF model when no hint is
+set and falls back to advice-based resolution when ML is unavailable. A custom
+backend can replace either strategy.
 
 ### Select
 

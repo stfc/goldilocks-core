@@ -1,6 +1,8 @@
 import json
 import sys
 
+import pytest
+
 from goldilocks_core.advice import advise_parameters
 from goldilocks_core.cli import core as cli_core
 from goldilocks_core.contracts import (
@@ -14,6 +16,7 @@ from goldilocks_core.contracts import (
     StructureAnalysisRecord,
 )
 from goldilocks_core.jobs import Pipeline
+from goldilocks_core.kmesh import resolve_kpoints_from_advice
 
 
 def make_result(request: CoreJobRequest) -> CoreResult:
@@ -77,6 +80,41 @@ def test_build_parser_parses_recommend_arguments() -> None:
     assert args.model == "model.joblib"
     assert args.spin_polarized == "true"
     assert args.json is True
+
+
+def test_cli_uses_shared_default_pipeline_without_an_override() -> None:
+    """A bare CLI request delegates default policy to run_core_job."""
+    args = cli_core.build_parser().parse_args(["recommend", "Si.cif"])
+
+    assert cli_core._pipeline_from_args(args) is None
+
+
+def test_cli_can_select_explicit_heuristic_backend() -> None:
+    """Expose a no-model backend choice without changing request data."""
+    args = cli_core.build_parser().parse_args(
+        ["recommend", "Si.cif", "--heuristic-kpoints"]
+    )
+
+    pipeline = cli_core._pipeline_from_args(args)
+
+    assert isinstance(pipeline, Pipeline)
+    assert pipeline.kmesh is resolve_kpoints_from_advice
+
+
+def test_cli_rejects_model_and_heuristic_backend_together() -> None:
+    """Reject contradictory backend configuration during argument parsing."""
+    parser = cli_core.build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "recommend",
+                "Si.cif",
+                "--model",
+                "model.joblib",
+                "--heuristic-kpoints",
+            ]
+        )
 
 
 def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:

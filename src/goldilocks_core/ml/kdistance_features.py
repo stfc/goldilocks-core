@@ -16,6 +16,9 @@ from pymatgen.core import Structure
 
 from goldilocks_core.contracts import StructureFeatureVector
 
+QRF_FEATURE_SET = "qrf_comp_struct_soap_lattice_metal"
+QRF_FEATURE_COUNT = 483
+
 _COMPOSITION_FEATURES = ("ElementProperty", "Stoichiometry", "ValenceOrbital")
 _STRUCTURE_FEATURES = ("GlobalSymmetryFeatures", "DensityFeatures")
 _SOAP_PARAMS = {"r_cut": 10.0, "n_max": 8, "l_max": 6, "sigma": 1.0}
@@ -87,6 +90,11 @@ def extract_qrf_features(
     structure_block = extract_structure_features(structure)
     metal_block = metal_features(structure, metal_model, atom_init_path)
     values = np.concatenate([structure_block, metal_block])
+    if values.size != QRF_FEATURE_COUNT:
+        raise ValueError(
+            f"QRF feature extractor expected {QRF_FEATURE_COUNT} values; "
+            f"got {values.size}."
+        )
     return StructureFeatureVector(
         values=values,
         feature_names=[f"qrf_{index}" for index in range(values.size)],

@@ -2,8 +2,8 @@
 
 The QRF k-distance feature vector includes a "metal" block: the pooled crystal
 representation from a CGCNN metallicity classifier. The same model is the basis
-for a future Analyze-stage metallicity prediction. torch is a heavy optional
-dependency imported lazily.
+for a future Analyze-stage metallicity prediction. The heavy torch dependency
+is imported lazily.
 """
 
 from __future__ import annotations

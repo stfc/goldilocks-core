@@ -14,7 +14,8 @@ from goldilocks_core.contracts import (
     CoreResult,
     ModelSpec,
 )
-from goldilocks_core.jobs import Pipeline, default_pipeline, run_core_job
+from goldilocks_core.jobs import Pipeline, run_core_job
+from goldilocks_core.kmesh import resolve_kpoints_from_advice
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 
@@ -80,9 +81,15 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--pseudo-type")
     parser.add_argument("--relativistic-mode")
     parser.add_argument("--pseudo-root", help="Directory containing UPF files.")
-    parser.add_argument(
+    kpoint_backend = parser.add_mutually_exclusive_group()
+    kpoint_backend.add_argument(
         "--model",
         help="Local ML model path for Kmesh-stage k-point selection.",
+    )
+    kpoint_backend.add_argument(
+        "--heuristic-kpoints",
+        action="store_true",
+        help="Use heuristic k-point advice instead of the built-in QRF model.",
     )
     parser.add_argument(
         "--model-name",
@@ -162,10 +169,10 @@ def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
 def _pipeline_from_args(args: argparse.Namespace) -> Pipeline | None:
     """Build the pipeline for the requested k-point backend.
 
-    Precedence: an explicit ``--model`` (local CSLR k-index model) wins; an
-    explicit k-point hint (``--k-grid``/``--k-spacing``) resolves from advice
-    without loading any model; otherwise the built-in default QRF pipeline runs
-    (with heuristic fallback).
+    An explicit ``--model`` selects a local CSLR k-index model.
+    ``--heuristic-kpoints`` selects advice-based resolution. Otherwise no
+    override is returned and ``run_core_job`` uses the shared QRF default.
+    Explicit k-point hints bypass model loading inside every built-in backend.
     """
     if args.model is not None:
         spec = ModelSpec(
@@ -179,10 +186,10 @@ def _pipeline_from_args(args: argparse.Namespace) -> Pipeline | None:
         )
         return Pipeline(kmesh=ml_kmesh_advisor(spec))
 
-    if args.k_grid is not None or args.k_spacing is not None:
-        return None
+    if args.heuristic_kpoints:
+        return Pipeline(kmesh=resolve_kpoints_from_advice)
 
-    return default_pipeline()
+    return None
 
 
 def _parse_optional_bool(value: str | None) -> bool | None:

@@ -9,10 +9,11 @@ from goldilocks_core import recommend
 
 result = recommend("path/to/structure.cif")
 
-print(result.analysis.reduced_formula)         # e.g. "Si"
+print(result.analysis.reduced_formula)          # e.g. "Si"
 print(result.advice.k_points.provenance.source) # "default"
-print(result.selection.k_points.grid)          # e.g. (8, 8, 8)
-print(result.to_dict())                        # full JSON-safe dict
+print(result.selection.k_points.provenance.source)  # "model" or fallback source
+print(result.selection.k_points.grid)           # concrete model/fallback grid
+print(result.to_dict())                         # full JSON-safe dict
 ```
 
 ## Overriding defaults with hints
@@ -48,6 +49,7 @@ from goldilocks_core import CalculationHints, Pipeline
 from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.advice import advise_parameters
 from goldilocks_core.io.structures import load_structure
+from goldilocks_core.kmesh import resolve_kpoints_from_advice
 from goldilocks_core.selection import select_parameters
 
 hints = CalculationHints()
@@ -61,7 +63,7 @@ advice = advise_parameters(analysis, hints=hints)
 print(advice.spin_orbit.consider)          # False
 print(advice.k_points.spacing)             # 0.2
 
-pipeline = Pipeline()
+pipeline = Pipeline(kmesh=resolve_kpoints_from_advice)
 k_points = pipeline.kmesh(structure, hints, advice.k_points)
 selection = select_parameters(structure, advice, k_points)
 print(selection.k_points.grid)             # (8, 8, 8)

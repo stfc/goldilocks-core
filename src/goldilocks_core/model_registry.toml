@@ -1,0 +1,22 @@
+[defaults.kpoints]
+advisor = "qrf_kdistance"
+name = "kpoints-goldilocks-QRF"
+version = "QRF95"
+model_type = "random_forest"
+target = "k_distance"
+feature_set = "qrf_comp_struct_soap_lattice_metal"
+source = "huggingface"
+location = "STFC-SCD/kpoints-goldilocks-QRF::QRF95.pkl"
+revision = "75588288f755522e47984b5a31b82824860d6943"
+confidence = 0.95
+correction = -0.0016
+scikit_learn_version = "1.7.2"
+sklearn_quantile_version = "0.1.1"
+joblib_version = "1.5.3"
+
+[defaults.kpoints.metallicity]
+source = "huggingface"
+location = "JunwenYin/metallicity-goldilocks-CGCNN"
+revision = "a95dc7d8902c8088f709e13c602864167838cc17"
+checkpoint_file = "is_metal.ckpt"
+atom_init_file = "atom_init.json"

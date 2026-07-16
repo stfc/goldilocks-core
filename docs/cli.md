@@ -41,7 +41,8 @@ Runs the full pipeline and writes a portable bundle directory. `--out` is requir
 | `--pseudo-type` | str | None | `CalculationHints.pseudo_type` |
 | `--relativistic-mode` | str | None | `CalculationHints.relativistic_mode` |
 | `--pseudo-root` | path | None | Loads UPF files recursively into `pseudo_metadata` |
-| `--model` | path | None | Builds an ML Kmesh backend in `Pipeline` |
+| `--model` | path | None | Replaces the default with a local ML Kmesh backend |
+| `--heuristic-kpoints` | flag | False | Disables ML and resolves k-points from advice |
 | `--model-name` | str | `cli-kmesh-model` | Model name recorded in Kmesh provenance |
 | `--model-version` | str | `unknown` | Model version recorded in `ModelSpec` |
 | `--k-spacing` | float | None | `CalculationHints.k_spacing` |
@@ -89,9 +90,20 @@ warnings:
 
 `--pseudo-root` recursively searches the given directory for `.upf` and `.UPF` files, parses each one with `parse_upf_metadata()`, and passes the resulting `PseudoMetadata` list to the selection stage.
 
-## ML Kmesh backend
+## Kmesh backend selection
 
-`--model` integrates the ML k-mesh advisor into the staged pipeline:
+A bare invocation delegates to the same `Pipeline()` default used by the Python
+API. That backend lazily resolves the configured QRF model and falls back to
+heuristic advice with a provenance warning if model loading or inference fails.
+Explicit `--k-grid` and `--k-spacing` hints bypass model resolution entirely.
+
+Use `--heuristic-kpoints` to disable model resolution explicitly:
+
+```bash
+goldilocks-core recommend structure.cif --heuristic-kpoints --json
+```
+
+`--model` instead replaces the default with a local CSLR model:
 
 ```bash
 goldilocks-core recommend structure.cif --model model.joblib --json
@@ -114,6 +126,12 @@ goldilocks-core recommend structure.cif --model model.joblib --k-grid 4 4 4
 This uses the explicit grid and records `provenance.source="user_hint"`; the model is not consulted for k-points.
 
 When no k-point hint is set, the model supplies the grid and the resulting `KPointSelection` records `provenance.source="model"`.
+
+`--model` and `--heuristic-kpoints` are mutually exclusive. Default remote
+locations and full 40-character commit revisions come from the model registry. Set
+`GOLDILOCKS_MODEL_REGISTRY` to an alternate TOML registry to replace them. Hub
+artifacts use the `huggingface_hub` cache; because joblib artifacts can execute
+code while loading, only select registries and revisions you trust.
 
 ## Standalone kmesh CLI
 

@@ -2,7 +2,8 @@ import joblib
 import pytest
 
 from goldilocks_core.contracts import ModelSpec
-from goldilocks_core.ml.models import load_model
+from goldilocks_core.ml.model_registry import ArtifactSpec
+from goldilocks_core.ml.models import load_model, resolve_artifact
 
 
 def test_load_model_loads_local_random_forest(tmp_path) -> None:
@@ -48,7 +49,7 @@ def test_load_model_downloads_huggingface_artifact(tmp_path, monkeypatch) -> Non
         target="k_index",
         feature_set="cslr",
         source="huggingface",
-        location="STFC-SCD/kpoints-goldilocks-QRF::QRF95.pkl",
+        location="organization/model-repo::model.pkl",
         revision="main",
     )
 
@@ -56,8 +57,8 @@ def test_load_model_downloads_huggingface_artifact(tmp_path, monkeypatch) -> Non
 
     assert loaded_model == model
     assert calls == {
-        "repo_id": "STFC-SCD/kpoints-goldilocks-QRF",
-        "filename": "QRF95.pkl",
+        "repo_id": "organization/model-repo",
+        "filename": "model.pkl",
         "revision": "main",
     }
 
@@ -71,12 +72,50 @@ def test_load_model_rejects_malformed_huggingface_location() -> None:
         target="k_index",
         feature_set="cslr",
         source="huggingface",
-        location="STFC-SCD/kpoints-goldilocks-QRF",
+        location="organization/model-repo",
         revision=None,
     )
 
     with pytest.raises(ValueError, match="repo_id.*filename"):
         load_model(spec)
+
+
+def test_resolve_artifact_uses_configured_local_directory(tmp_path) -> None:
+    """Resolve a supporting artifact without embedding its location in code."""
+    artifact_path = tmp_path / "checkpoint.bin"
+    artifact_path.write_text("fixture", encoding="utf-8")
+    spec = ArtifactSpec(source="local", location=str(tmp_path))
+
+    resolved = resolve_artifact(spec, "checkpoint.bin")
+
+    assert resolved == str(artifact_path)
+
+
+def test_resolve_artifact_uses_configured_huggingface_revision(
+    monkeypatch,
+) -> None:
+    """Pass registry-provided remote metadata to the Hub resolver."""
+    calls = {}
+
+    def fake_download(*, repo_id, filename, revision):
+        calls.update(repo_id=repo_id, filename=filename, revision=revision)
+        return "/cache/checkpoint.bin"
+
+    monkeypatch.setattr("huggingface_hub.hf_hub_download", fake_download)
+    spec = ArtifactSpec(
+        source="huggingface",
+        location="organization/artifacts",
+        revision="revision-id",
+    )
+
+    resolved = resolve_artifact(spec, "checkpoint.bin")
+
+    assert resolved == "/cache/checkpoint.bin"
+    assert calls == {
+        "repo_id": "organization/artifacts",
+        "filename": "checkpoint.bin",
+        "revision": "revision-id",
+    }
 
 
 def test_load_model_raises_for_missing_local_file(tmp_path) -> None:

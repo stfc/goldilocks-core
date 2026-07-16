@@ -2,8 +2,8 @@
 
 Ported from the goldilocks k-points models. Used here to load the pretrained
 metallicity model and extract a per-crystal representation (the "metal
-features" block of the QRF k-distance feature vector). torch / torch_geometric
-are heavy optional dependencies imported at module load.
+features" block of the QRF k-distance feature vector). The heavy torch and
+torch_geometric dependencies are imported at module load.
 """
 
 from __future__ import annotations

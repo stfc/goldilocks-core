@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import numpy as np
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
@@ -9,7 +10,11 @@ from goldilocks_core import (
     Pipeline,
     run_core_job,
 )
-from goldilocks_core.contracts import KPointSelection, Provenance
+from goldilocks_core.contracts import (
+    KPointSelection,
+    Provenance,
+    StructureFeatureVector,
+)
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 
@@ -84,6 +89,40 @@ def test_run_core_job_aggregates_kmesh_warnings() -> None:
         "select",
     ]
     assert result.stages[3].warnings == (warning,)
+
+
+def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch) -> None:
+    """The Python job runner uses the same configured default as the CLI."""
+
+    class FakeQRF:
+        def predict(self, features):
+            return [[0.2], [0.25], [0.3]]
+
+    monkeypatch.setenv("GOLDILOCKS_METALLICITY_CHECKPOINT", "checkpoint.ckpt")
+    monkeypatch.setenv("GOLDILOCKS_METALLICITY_ATOM_INIT", "atom-init.json")
+    monkeypatch.setattr("goldilocks_core.ml.models.load_model", lambda spec: FakeQRF())
+    monkeypatch.setattr(
+        "goldilocks_core.ml.metallicity.load_metallicity_model",
+        lambda path: object(),
+    )
+    monkeypatch.setattr(
+        "goldilocks_core.ml.kdistance_features.extract_qrf_features",
+        lambda structure, model, atom_init: StructureFeatureVector(
+            values=np.zeros(483),
+            feature_names=[],
+        ),
+    )
+
+    result = run_core_job(
+        CoreJobRequest(
+            structure=make_structure(),
+            hints=CalculationHints(pseudo_type="NC"),
+            pseudo_metadata=(make_metadata(),),
+        )
+    )
+
+    assert result.selection.k_points.provenance.source == "model"
+    assert result.selection.k_points.provenance.confidence == 0.95
 
 
 def test_run_core_job_uses_custom_kmesh_backend() -> None:

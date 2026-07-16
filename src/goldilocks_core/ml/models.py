@@ -7,6 +7,7 @@ from pathlib import Path
 import joblib
 
 from goldilocks_core.contracts import ModelSpec
+from goldilocks_core.ml.model_registry import ArtifactSpec
 
 
 def load_model(spec: ModelSpec) -> object:
@@ -17,8 +18,7 @@ def load_model(spec: ModelSpec) -> object:
     ``local``
         ``spec.location`` is a filesystem path to a joblib artifact.
     ``huggingface``
-        ``spec.location`` is ``"<repo_id>::<filename>"`` (e.g.
-        ``"STFC-SCD/kpoints-goldilocks-QRF::QRF95.pkl"``). The file is
+        ``spec.location`` is ``"<repo_id>::<filename>"``. The file is
         downloaded from the Hub and cached locally, honoring ``spec.revision``
         when set.
 
@@ -43,6 +43,28 @@ def load_model(spec: ModelSpec) -> object:
         return _load_huggingface(spec.location, spec.revision)
 
     raise NotImplementedError(f"Model source '{spec.source}' is not implemented yet.")
+
+
+def resolve_artifact(spec: ArtifactSpec, filename: str) -> str:
+    """Resolve one supporting artifact to a local cached path."""
+    if spec.source == "local":
+        artifact_path = Path(spec.location) / filename
+        if not artifact_path.is_file():
+            raise FileNotFoundError(f"Artifact file not found: {artifact_path}")
+        return str(artifact_path)
+
+    if spec.source == "huggingface":
+        from huggingface_hub import hf_hub_download
+
+        return hf_hub_download(
+            repo_id=spec.location,
+            filename=filename,
+            revision=spec.revision,
+        )
+
+    raise NotImplementedError(
+        f"Artifact source '{spec.source}' is not implemented yet."
+    )
 
 
 def _load_local(location: str) -> object:

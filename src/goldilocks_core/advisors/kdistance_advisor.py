@@ -2,15 +2,15 @@
 
 The QRF model predicts a VASP-style k-point distance (Å⁻¹) as three quantiles
 (lower, median, upper). The median drives the concrete mesh; the interval and
-the model's confidence level are recorded in provenance. This module holds the
-model-agnostic post-prediction logic; feature extraction (which pulls heavy ML
-dependencies) is supplied separately.
+the model's confidence level are recorded in provenance. Default model and
+artifact locations are supplied by the configurable model registry.
 """
 
 from __future__ import annotations
 
 import os
 from dataclasses import replace
+from threading import Lock
 
 import numpy as np
 from pymatgen.core import Structure
@@ -20,53 +20,50 @@ from goldilocks_core.contracts import (
     KMeshAdvisor,
     KPointAdvice,
     KPointSelection,
-    ModelSpec,
+    PathLike,
     Provenance,
     StructureFeatureVector,
 )
 from goldilocks_core.kmesh import k_distance_to_mesh, resolve_kpoints_from_advice
-
-# Built-in default k-point model: the STFC QRF at 95% confidence, resolved from
-# the Hugging Face Hub. Feature set names the extractor the model was trained on.
-DEFAULT_KPOINTS_MODEL = ModelSpec(
-    name="kpoints-goldilocks-QRF",
-    version="QRF95",
-    model_type="random_forest",
-    target="k_distance",
-    feature_set="qrf_comp_struct_soap_lattice_metal",
-    source="huggingface",
-    location="STFC-SCD/kpoints-goldilocks-QRF::QRF95.pkl",
-    revision=None,
+from goldilocks_core.ml.model_registry import (
+    QrfKpointsConfig,
+    is_immutable_huggingface_revision,
+    load_default_qrf_config,
 )
 
-# Confidence level of the default model and the calibrated interval correction
-# (widens the interval), from the trained QRF at 0.95. See the goldilocks
-# k-distance reference implementation.
-DEFAULT_KPOINTS_CONFIDENCE = 0.95
-DEFAULT_KPOINTS_CORRECTION = -0.0016
 
-# The QRF k-distance features include a CGCNN metallicity block. Its checkpoint
-# and atom-embedding table are published to Hugging Face and resolved by default
-# from this repo; local paths (env-overridable) take precedence for offline dev.
-# When nothing resolves, the advisor falls back to heuristic advice.
-DEFAULT_METALLICITY_REPO = "JunwenYin/metallicity-goldilocks-CGCNN"
-_METALLICITY_CHECKPOINT_FILE = "is_metal.ckpt"
-_METALLICITY_ATOM_INIT_FILE = "atom_init.json"
+def _validate_kdistance_interval(
+    median: float,
+    lower: float,
+    upper: float,
+) -> None:
+    """Reject non-finite, non-positive, or misordered k-distance values."""
+    values = np.asarray([lower, median, upper], dtype=float)
+    if not np.isfinite(values).all():
+        raise ValueError("QRF k-distance prediction must contain only finite values.")
+    if (values <= 0).any():
+        raise ValueError("QRF k-distance prediction values must be positive.")
+    if not lower <= median <= upper:
+        raise ValueError(
+            "QRF k-distance interval must satisfy lower <= median <= upper."
+        )
 
 
 def predict_kdistance_quantiles(
     model: object,
     features: StructureFeatureVector,
-    correction: float = DEFAULT_KPOINTS_CORRECTION,
+    correction: float = 0.0,
 ) -> tuple[float, float, float]:
     """Return (median, lower, upper) k-distance in Å⁻¹ from a QRF prediction.
 
     The QRF returns three quantiles ``[lower, median, upper]`` for the single
-    input row. ``correction`` calibrates (widens) the interval bounds.
+    input row. ``correction`` adjusts the interval bounds using the calibrated
+    reference formula.
 
     Raises:
         AttributeError: If the model has no ``predict`` method.
-        ValueError: If the prediction does not yield three quantiles.
+        ValueError: If the prediction does not yield three finite, positive,
+            ordered quantiles.
     """
     if not hasattr(model, "predict"):
         raise AttributeError("QRF model does not provide a 'predict' method.")
@@ -77,8 +74,12 @@ def predict_kdistance_quantiles(
             f"Expected 3 quantiles from the QRF prediction; got {raw.size}."
         )
 
-    lower, median, upper = raw.reshape(3, -1)[:, 0]
-    return float(median), float(lower) - correction, float(upper) + correction
+    raw_lower, raw_median, raw_upper = raw.reshape(3, -1)[:, 0]
+    median = float(raw_median)
+    lower = float(raw_lower) - correction
+    upper = float(raw_upper) + correction
+    _validate_kdistance_interval(median, lower, upper)
+    return median, lower, upper
 
 
 def kdistance_to_selection(
@@ -88,14 +89,18 @@ def kdistance_to_selection(
     upper: float,
     *,
     data_source: str,
-    confidence: float = DEFAULT_KPOINTS_CONFIDENCE,
+    confidence: float,
     mesh_type: str = "monkhorst-pack",
 ) -> KPointSelection:
     """Build a concrete k-point selection from a predicted k-distance interval.
 
     The median distance sets the mesh; the interval and confidence level are
     recorded in provenance so callers can judge the prediction.
+
+    Raises:
+        ValueError: If the distances are non-finite, non-positive, or misordered.
     """
+    _validate_kdistance_interval(median, lower, upper)
     return KPointSelection(
         grid=k_distance_to_mesh(structure, median),
         shift=(0, 0, 0),
@@ -118,12 +123,7 @@ def _heuristic_fallback(
     advice: KPointAdvice,
     error: Exception,
 ) -> KPointSelection:
-    """Resolve k-points from heuristic advice, flagging that the QRF was skipped.
-
-    The mesh comes from the Advise stage, so its provenance source stays honest
-    (``default``/``analysis``, never ``model``); a warning records that the ML
-    model was attempted and could not be used.
-    """
+    """Resolve k-points from heuristic advice and record the model failure."""
     detail = str(error) or error.__class__.__name__
     selection = resolve_kpoints_from_advice(structure, hints, advice)
     warning = f"ML k-point model unavailable; used heuristic k-point advice ({detail})."
@@ -137,96 +137,182 @@ def _heuristic_fallback(
 
 
 def _resolve_metallicity_artifacts(
+    config: QrfKpointsConfig,
     checkpoint: str | None,
     atom_init: str | None,
-    repo: str | None,
-    revision: str | None,
 ) -> tuple[str, str]:
-    """Resolve the metallicity checkpoint and atom-embedding table to local paths.
-
-    Explicit local paths win; any path left as ``None`` is downloaded (and cached)
-    from the Hugging Face ``repo``. Raising here is intentional — the caller runs
-    this inside its guarded load so a download failure degrades to the heuristic.
-    """
+    """Resolve configured metallicity artifacts to local paths."""
     if checkpoint is not None and atom_init is not None:
         return checkpoint, atom_init
-    if repo is None:
-        raise ValueError(
-            "Metallicity artifacts unresolved: provide local paths or a HF repo."
-        )
-    from huggingface_hub import hf_hub_download
 
-    checkpoint = checkpoint or hf_hub_download(
-        repo, _METALLICITY_CHECKPOINT_FILE, revision=revision
+    from goldilocks_core.ml.models import resolve_artifact
+
+    checkpoint = checkpoint or resolve_artifact(
+        config.metallicity,
+        config.metallicity_checkpoint_file,
     )
-    atom_init = atom_init or hf_hub_download(
-        repo, _METALLICITY_ATOM_INIT_FILE, revision=revision
+    atom_init = atom_init or resolve_artifact(
+        config.metallicity,
+        config.metallicity_atom_init_file,
     )
     return checkpoint, atom_init
 
 
+def _validate_qrf_config(config: QrfKpointsConfig) -> None:
+    """Ensure a hot-swapped model matches this advisor's inference contract."""
+    from importlib.metadata import version
+
+    from goldilocks_core.ml.kdistance_features import QRF_FEATURE_SET
+
+    if config.model.source == "huggingface" and not (
+        is_immutable_huggingface_revision(config.model.revision)
+    ):
+        raise ValueError(
+            "QRF huggingface model requires a full immutable commit revision."
+        )
+    if config.metallicity.source == "huggingface" and not (
+        is_immutable_huggingface_revision(config.metallicity.revision)
+    ):
+        raise ValueError(
+            "QRF huggingface metallicity artifacts require a full immutable "
+            "commit revision."
+        )
+    if config.model.model_type != "random_forest":
+        raise ValueError("QRF advisor requires model_type='random_forest'.")
+    if config.model.target != "k_distance":
+        raise ValueError("QRF advisor requires target='k_distance'.")
+    if config.model.feature_set != QRF_FEATURE_SET:
+        raise ValueError(
+            f"QRF advisor requires feature_set={QRF_FEATURE_SET!r}; "
+            f"got {config.model.feature_set!r}."
+        )
+    required_runtime = {
+        "scikit-learn": config.scikit_learn_version,
+        "sklearn-quantile": config.sklearn_quantile_version,
+        "joblib": config.joblib_version,
+    }
+    for package, required_version in required_runtime.items():
+        installed_version = version(package)
+        if installed_version != required_version:
+            raise ValueError(
+                f"QRF model requires {package} {required_version}; "
+                f"found {installed_version}."
+            )
+
+
+def _model_data_source(
+    config: QrfKpointsConfig,
+    checkpoint_override: str | None,
+    atom_init_override: str | None,
+) -> str:
+    """Identify every configured or overridden artifact used for inference."""
+    model_revision = config.model.revision or "unversioned"
+    artifact_revision = config.metallicity.revision or "unversioned"
+    checkpoint_source = checkpoint_override or (
+        f"{config.metallicity.source}:{config.metallicity.location}::"
+        f"{config.metallicity_checkpoint_file}@{artifact_revision}"
+    )
+    atom_init_source = atom_init_override or (
+        f"{config.metallicity.source}:{config.metallicity.location}::"
+        f"{config.metallicity_atom_init_file}@{artifact_revision}"
+    )
+    return (
+        f"model={config.model.source}:{config.model.location}@{model_revision}; "
+        f"metallicity_checkpoint={checkpoint_source}; "
+        f"metallicity_atom_init={atom_init_source}; "
+        f"runtime=scikit-learn=={config.scikit_learn_version},"
+        f"sklearn-quantile=={config.sklearn_quantile_version},"
+        f"joblib=={config.joblib_version}"
+    )
+
+
 def qrf_kdistance_advisor(
+    config: QrfKpointsConfig,
     metallicity_checkpoint: str | None = None,
     metallicity_atom_init: str | None = None,
-    *,
-    metallicity_repo: str | None = None,
-    metallicity_revision: str | None = None,
-    spec: ModelSpec = DEFAULT_KPOINTS_MODEL,
-    correction: float = DEFAULT_KPOINTS_CORRECTION,
-    confidence: float = DEFAULT_KPOINTS_CONFIDENCE,
 ) -> KMeshAdvisor:
-    """Return a Kmesh-stage backend that predicts k-distance with the QRF.
+    """Return a lazy Kmesh backend configured for one QRF model.
 
-    Loads the QRF and the CGCNN metallicity model once; the returned advisor
-    reuses them. The metallicity checkpoint and atom-embedding table resolve from
-    explicit local paths when given, otherwise from ``metallicity_repo`` on
-    Hugging Face. An explicit ``k_grid`` or ``k_spacing`` hint bypasses the model
-    and resolves from advice instead.
+    Construction performs no model loading, remote access, or heavyweight ML
+    imports. The first call without a k-point hint resolves and loads configured
+    artifacts, then caches either the models or the load failure. Explicit
+    ``k_grid`` and ``k_spacing`` hints always bypass loading and inference.
 
-    Never hard-fails: if the models or their dependencies cannot be loaded (or
-    downloaded), or a per-structure prediction raises, the advisor degrades to
-    the heuristic advice and records the reason in provenance warnings.
+    Model loading and per-structure inference failures degrade to heuristic
+    advice and are recorded in provenance warnings.
     """
-    from goldilocks_core.ml.kdistance_features import extract_qrf_features
-    from goldilocks_core.ml.metallicity import load_metallicity_model
-    from goldilocks_core.ml.models import load_model
-
-    try:
-        qrf = load_model(spec)
-        checkpoint, atom_init = _resolve_metallicity_artifacts(
-            metallicity_checkpoint,
-            metallicity_atom_init,
-            metallicity_repo,
-            metallicity_revision,
-        )
-        metal_model = load_metallicity_model(checkpoint)
-    except Exception as error:  # deps missing, download fails, bad checkpoint
-        load_error = error  # bind outside the except scope for the closure
-
-        def unavailable_advisor(structure, hints, kpoint_advice):
-            if hints.k_grid is not None or hints.k_spacing is not None:
-                return resolve_kpoints_from_advice(structure, hints, kpoint_advice)
-            return _heuristic_fallback(structure, hints, kpoint_advice, load_error)
-
-        return unavailable_advisor
+    loaded: tuple[object, object, str, str] | None = None
+    load_error: Exception | None = None
+    load_lock = Lock()
 
     def advisor(structure, hints, kpoint_advice):
+        nonlocal loaded, load_error
+
         if hints.k_grid is not None or hints.k_spacing is not None:
             return resolve_kpoints_from_advice(structure, hints, kpoint_advice)
+
+        if loaded is None and load_error is None:
+            with load_lock:
+                if loaded is None and load_error is None:
+                    try:
+                        from goldilocks_core.ml.metallicity import (
+                            load_metallicity_model,
+                        )
+                        from goldilocks_core.ml.models import load_model
+
+                        _validate_qrf_config(config)
+                        qrf = load_model(config.model)
+                        checkpoint, atom_init = _resolve_metallicity_artifacts(
+                            config,
+                            metallicity_checkpoint,
+                            metallicity_atom_init,
+                        )
+                        metal_model = load_metallicity_model(checkpoint)
+                        data_source = _model_data_source(
+                            config,
+                            metallicity_checkpoint,
+                            metallicity_atom_init,
+                        )
+                        loaded = (qrf, metal_model, atom_init, data_source)
+                    except Exception as error:
+                        load_error = error
+
+        if load_error is not None:
+            return _heuristic_fallback(
+                structure,
+                hints,
+                kpoint_advice,
+                load_error,
+            )
+
+        if loaded is None:  # pragma: no cover - defensive closure invariant
+            raise RuntimeError("QRF advisor reached an invalid unloaded state.")
+
+        qrf, metal_model, atom_init, data_source = loaded
         try:
+            from goldilocks_core.ml.kdistance_features import extract_qrf_features
+
             features = extract_qrf_features(structure, metal_model, atom_init)
             median, lower, upper = predict_kdistance_quantiles(
-                qrf, features, correction
+                qrf,
+                features,
+                config.correction,
             )
         except Exception as predict_error:
-            return _heuristic_fallback(structure, hints, kpoint_advice, predict_error)
+            return _heuristic_fallback(
+                structure,
+                hints,
+                kpoint_advice,
+                predict_error,
+            )
+
         return kdistance_to_selection(
             structure,
             median,
             lower,
             upper,
-            data_source=spec.name,
-            confidence=confidence,
+            data_source=data_source,
+            confidence=config.confidence,
         )
 
     return advisor
@@ -234,27 +320,60 @@ def qrf_kdistance_advisor(
 
 def default_kmesh_advisor(
     *,
+    registry_path: PathLike | None = None,
+    config: QrfKpointsConfig | None = None,
     metallicity_checkpoint: str | None = None,
     metallicity_atom_init: str | None = None,
-    metallicity_repo: str | None = None,
 ) -> KMeshAdvisor:
-    """Return the built-in default Kmesh backend: the QRF model with fallback.
+    """Return the configured default QRF Kmesh backend with fallback.
 
-    Resolves the QRF and the CGCNN metallicity model from Hugging Face
-    (``DEFAULT_KPOINTS_MODEL`` and ``DEFAULT_METALLICITY_REPO``). For offline
-    development, ``GOLDILOCKS_METALLICITY_CHECKPOINT`` /
-    ``GOLDILOCKS_METALLICITY_ATOM_INIT`` point at local files, and
-    ``GOLDILOCKS_METALLICITY_REPO`` overrides the source repo. This never
-    hard-fails: if the models or their dependencies are unavailable, the advisor
-    degrades to heuristic advice (see ``qrf_kdistance_advisor``).
+    The packaged model registry is used unless ``registry_path`` or
+    ``GOLDILOCKS_MODEL_REGISTRY`` selects another registry. Explicit local
+    metallicity paths can be supplied through arguments or the
+    ``GOLDILOCKS_METALLICITY_CHECKPOINT`` and
+    ``GOLDILOCKS_METALLICITY_ATOM_INIT`` environment variables.
     """
+    if config is not None and registry_path is not None:
+        raise ValueError("Pass config or registry_path, not both.")
+
     checkpoint = metallicity_checkpoint or os.environ.get(
         "GOLDILOCKS_METALLICITY_CHECKPOINT"
     )
     atom_init = metallicity_atom_init or os.environ.get(
         "GOLDILOCKS_METALLICITY_ATOM_INIT"
     )
-    repo = metallicity_repo or os.environ.get(
-        "GOLDILOCKS_METALLICITY_REPO", DEFAULT_METALLICITY_REPO
-    )
-    return qrf_kdistance_advisor(checkpoint, atom_init, metallicity_repo=repo)
+    configured_advisor: KMeshAdvisor | None = None
+    config_error: Exception | None = None
+    config_lock = Lock()
+
+    def advisor(structure, hints, kpoint_advice):
+        nonlocal configured_advisor, config_error
+
+        if hints.k_grid is not None or hints.k_spacing is not None:
+            return resolve_kpoints_from_advice(structure, hints, kpoint_advice)
+
+        if configured_advisor is None and config_error is None:
+            with config_lock:
+                if configured_advisor is None and config_error is None:
+                    try:
+                        active_config = config or load_default_qrf_config(registry_path)
+                        configured_advisor = qrf_kdistance_advisor(
+                            active_config,
+                            checkpoint,
+                            atom_init,
+                        )
+                    except Exception as error:
+                        config_error = error
+
+        if config_error is not None:
+            return _heuristic_fallback(
+                structure,
+                hints,
+                kpoint_advice,
+                config_error,
+            )
+        if configured_advisor is None:  # pragma: no cover - closure invariant
+            raise RuntimeError("Default Kmesh advisor failed to configure.")
+        return configured_advisor(structure, hints, kpoint_advice)
+
+    return advisor

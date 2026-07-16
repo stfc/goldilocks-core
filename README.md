@@ -201,8 +201,8 @@ src/goldilocks_core/
 ├── analysis.py    # structure facts
 ├── advice.py      # provenance-backed parameter advice
 ├── kmesh.py       # k-point grid resolution
-├── selection.py   # pseudos, cutoffs, concrete selections
-├── generation.py  # target-code input text
+├── selection.py   # current QE UPF/SSSP selection and Ry cutoffs
+├── generation.py  # current QE SCF validation and rendering
 ├── bundle.py      # bundle directory and manifest writing
 ├── advisors/      # model-backed stage backends
 ├── cli/           # thin command wrappers
@@ -217,6 +217,7 @@ See [architecture](docs/architecture.md) for boundaries and dependency direction
 ## Documentation
 
 - [Architecture](docs/architecture.md)
+- [Target-code adapter design](docs/target-code-adapters.md)
 - [Pipeline](docs/pipeline.md)
 - [Backends](docs/backends.md)
 - [Contracts](docs/contracts.md)

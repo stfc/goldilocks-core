@@ -121,9 +121,9 @@ GenerateStage = Callable[
 ]
 ```
 
-A generator translates completed Core records into target-code files.
+A generator translates completed Core records into files. The current `SelectionRecord` contains QE UPF selections and Ry cutoffs, so this seam supports alternate rendering of the current QE-shaped result; it is not sufficient to add another DFT code.
 
-It must not decide scientific defaults. It must read values from `intent`, `advice`, and `selection`.
+A generator must not decide scientific defaults or select resources. It reads values from `intent`, `advice`, and `selection`. A second target needs the coordinated validation, resource selection, target-data, and generation boundary described in [target-code adapters](target-code-adapters.md).
 
 ### Minimal generator
 
@@ -161,18 +161,20 @@ SelectStage = Callable[
 
 Select receives k-points from Kmesh. It should not recalculate the k-point grid.
 
-A custom Select backend is appropriate for:
+A custom Select backend is appropriate for the current QE resource model when it needs:
 
-- different pseudopotential ranking
-- different cutoff extraction
+- different UPF pseudopotential ranking
+- different SSSP/Ry cutoff extraction
 - additional selection warnings
 - specialized pseudo metadata formats already converted to `PseudoMetadata`
 
 It is not appropriate for:
 
 - ML k-point prediction (use Kmesh)
-- target-code syntax (use Generate)
+- target-code text rendering (use Generate)
 - structure facts (use Analyze)
+
+A future target adapter does own target resource selection and target-specific numerical materialization at the Select boundary. That work must be paired with the same adapter's Generate behavior rather than implemented as independent ad hoc overrides.
 
 ## Advise backends
 

@@ -183,8 +183,10 @@ Output:
 
 Responsibility:
 
-- translate completed records into target-code syntax
-- never choose scientific defaults
+- validate and render the current completed QE selection
+- never choose resources or scientific defaults
+
+The callable seam permits another renderer for the same selection contract. It is not, by itself, the boundary for adding a DFT code: current request resources, Select output, units, and generation are QE-shaped. See [target-code adapter boundary](target-code-adapters.md).
 
 ### Bundle
 
@@ -272,11 +274,13 @@ The request contains no model field. The request says what to compute. The pipel
 
 pipeline = Pipeline(
     kmesh=ml_kmesh_advisor(spec),
-    generate=generate_vasp_inputs,
+    generate=generate_alternate_qe_inputs,
 )
 ```
 
 A backend is just a function with the right signature. No base class, registry, plugin loader, or string resolution is required inside Core.
+
+A second target needs a coherent adapter that supplies compatible validation, target resource selection, target numerical data, and generation. The future composition layer must bind its Select and Generate behavior together rather than relying on unrelated stage overrides. The fixed graph and data-only request boundary remain unchanged.
 
 ## Provenance expectations
 

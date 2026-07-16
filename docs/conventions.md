@@ -13,7 +13,7 @@ This document records the physical and numerical conventions used by goldilocks-
 | Convergence threshold | Rydberg | `CalculationHints.conv_thr`, `ConvergenceAdvice.conv_thr` |
 | Mixing beta | dimensionless | `CalculationHints.mixing_beta`, `ConvergenceAdvice.mixing_beta` |
 
-All cutoffs and smearing values follow the Quantum ESPRESSO convention (Rydberg atomic units), not Hartree.
+All current cutoffs, smearing widths, and SCF energy thresholds follow the Quantum ESPRESSO convention (Rydberg atomic units), not Hartree. These fields are current QE coupling, not a target-neutral unit policy. A second target must keep target-native units and semantically target-specific controls inside typed adapter selections; shared physical quantities must use documented canonical or explicit unit-bearing values. See [target-code adapters](target-code-adapters.md).
 
 ## K-point spacing convention
 

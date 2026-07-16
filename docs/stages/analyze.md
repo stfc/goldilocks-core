@@ -26,7 +26,7 @@ The Analyze stage reports structure facts without making parameter decisions. It
 - `contains_transition_metals`: True if any element is a transition metal per pymatgen's `Element.is_transition_metal`.
 - `contains_lanthanides`: True if any element is a lanthanoid.
 - `contains_actinides`: True if any element is an actinoid.
-- `contains_heavy_elements`: True if any element has `row >= 5`. See [conventions](conventions.md) for the rationale.
+- `contains_heavy_elements`: True if any element has `row >= 5`. See [conventions](../conventions.md) for the rationale.
 - `heavy_elements`: tuple of period-5+ element symbols.
 - `magnetic_elements`: union of transition metals, lanthanides, and actinides.
 

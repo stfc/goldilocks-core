@@ -74,9 +74,9 @@ from goldilocks_core.advisors import ml_kmesh_advisor
 pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
 ```
 
-## Adding a DFT code generator
+## Changing the current QE generator
 
-Use this when adding target-code syntax such as VASP, CP2K, CASTEP, or ABINIT.
+Use `Pipeline(generate=...)` for alternate rendering of the same completed QE selection, such as replacing the hand-written QE formatter with a library writer.
 
 Signature:
 
@@ -87,15 +87,22 @@ GenerateStage = Callable[
 ]
 ```
 
-Steps:
+The generator returns `GeneratedFile` records with paths relative to the bundle root. It reads completed values from `intent`, `advice`, and `selection`; it does not choose resources or scientific defaults.
 
-1. Write a generator function with the signature above.
-2. Return `GeneratedFile` records with paths relative to the bundle root.
-3. Read all scientific/numerical values from `intent`, `advice`, and `selection`.
-4. Compose it with `Pipeline(generate=your_generator)`.
-5. Add tests through `run_core_job(..., pipeline=pipeline)`.
+## Adding a DFT target
 
-Do not add generator-side scientific defaults. If a value is missing from the contracts, add it to the appropriate advice/selection record first.
+Do not add VASP, CP2K, CASTEP, ABINIT, or another target by swapping only Generate. The current request resource type, Select contract, cutoff fields, units, and CLI choices are QE-specific.
+
+A future target implementation must follow the [target-code adapter boundary](target-code-adapters.md):
+
+1. validate the target, task, and supported feature combinations;
+2. define serializable target resource metadata and typed selections;
+3. select concrete target resources and materialize target-specific numerical data in Select;
+4. generate files from that completed target selection;
+5. bind compatible Select and Generate behavior together at the composition boundary;
+6. test `recommend`, `generate`, and `bundle` modes.
+
+The adapter design is not implemented yet. Do not introduce an executable adapter protocol speculatively.
 
 ## Adding a new calculation task
 
@@ -110,17 +117,19 @@ Steps:
 
 Current task support is `scf_single_point` only.
 
-## Adding a new pseudo source
+## Adding a new QE pseudo source
 
-Pseudo source support is data-oriented. Selection consumes `PseudoMetadata`, not raw files.
+Current pseudo source support is data-oriented but QE-shaped. Selection consumes UPF/SSSP-oriented `PseudoMetadata`, not raw files.
 
 Steps:
 
-1. Create a parser for the source format.
+1. Create a parser for the QE-compatible source format.
 2. Return populated `PseudoMetadata` records.
 3. Add a loader if the source has a directory or archive layout.
 4. Use the existing Select backend if the metadata fields fit.
-5. Replace Select only if ranking/cutoff policy must change.
+5. Replace Select only if QE ranking/cutoff policy must change.
+
+A resource source for another DFT target belongs to that target adapter and needs its own typed metadata; do not force it into `PseudoMetadata`.
 
 Rules:
 
@@ -162,7 +171,7 @@ AdviseStage = Callable[
 ]
 ```
 
-Advice should produce `ParameterAdvice` with provenance on every nested record.
+Advice should produce `ParameterAdvice` with provenance on every nested record. Analyze and Advise must stay free of target keyword names and file-format syntax. The current Ry-valued advice fields are documented QE coupling to remove before treating the records as target-neutral.
 
 ## Adding an Analyze backend
 

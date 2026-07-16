@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum
 from numbers import Integral, Real
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Any, Callable, Literal, Sequence
+from typing import Any, Callable, Literal, Sequence, get_args
 
 import numpy as np
 from pymatgen.core import Structure
@@ -102,7 +102,7 @@ Translated to code-specific keywords in the Generate stage (e.g. ``d3bj`` →
 QE ``vdw_corr='grimme-d3'`` with ``dftd3_version=4``).
 """
 
-_VALID_VDW_METHODS = frozenset({"d3", "d3bj", "ts", "mbd"})
+_VALID_VDW_METHODS: frozenset[str] = frozenset(get_args(VdwMethod))
 
 
 def _validate_finite_positive(value: Real, field_name: str) -> None:
@@ -786,7 +786,8 @@ class VdwAdvice:
     """Advised van der Waals dispersion correction.
 
     Method labels are code-agnostic physics names; the generator maps them
-    to code-specific strings (e.g. ``d3bj`` → QE ``grimme-d3bj``).
+    to code-specific settings (e.g. ``d3bj`` → QE ``vdw_corr='grimme-d3'``
+    with ``dftd3_version=4``).
 
     Attributes:
         use_vdw: whether a dispersion correction is applied.

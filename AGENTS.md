@@ -37,13 +37,14 @@ CI runs on push to `main` and on PRs (`.github/workflows/ci.yml`): ruff check, r
 - **Never push or merge directly to `main`.** All changes arrive through PRs.
 - Every PR must close an issue (`Closes #N`).
 - Track work status in GitHub Issues/PRs.
+- **Never edit or delete GitHub text authored by someone else**, including issue bodies, PR descriptions, comments, and reviews. Add new information as a comment instead. An agent may edit its own GitHub text only when explicitly asked or when maintaining a plan it created.
 - Any GitHub issue, issue comment, PR description, or review comment written by an agent must explicitly say so and name the human it represents: `Written by an agent on behalf of <user>.`
 - Use `uv`, not `pip`.
 
 ## Agent workflow
 
 - Start sustained work with `catchup`.
-- Use `plan` for multi-step changes; keep the issue body as the current plan.
+- Use `plan` for multi-step changes. Keep an issue body current only when the agent created it; otherwise add plan updates as comments.
 - Use `review` before PRs or after substantial changes.
 - Use `report` for handoff/progress comments.
 - Use `make-a-pr` only after implementation, tests, and review are ready.

@@ -82,6 +82,17 @@ def test_build_parser_parses_recommend_arguments() -> None:
     assert args.json is True
 
 
+def test_cli_request_canonicalizes_functional_intent() -> None:
+    """Normalize the CLI functional label through the shared intent boundary."""
+    args = cli_core.build_parser().parse_args(
+        ["recommend", "Si.cif", "--functional", "PBE_SOL"]
+    )
+
+    request = cli_core._request_from_args(args)
+
+    assert request.intent.functional == "PBEsol"
+
+
 def test_cli_uses_shared_default_pipeline_without_an_override() -> None:
     """A bare CLI request delegates default policy to run_core_job."""
     args = cli_core.build_parser().parse_args(["recommend", "Si.cif"])

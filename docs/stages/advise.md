@@ -50,6 +50,8 @@ SOC is never auto-enabled. See [conventions](../conventions.md) for the rational
 
 ### Pseudopotentials
 
+`CalculationIntent` canonicalizes supported functional spellings at construction. `PBEsol`, `PBESOL`, `PBE-sol`, `PBE_SOL`, and `PBE sol` become `PBEsol`; unknown labels are preserved and are not treated as another functional.
+
 1. `pseudo_mode`: `hints.pseudo_mode` if set, otherwise `intent.pseudo_mode`. Defaults to `"efficiency"`.
 2. `relativistic_mode`: `hints.relativistic_mode` if set, otherwise `"full"` if SOC is enabled, otherwise `"scalar"`.
 3. `pseudo_type`: `hints.pseudo_type` if set, otherwise `None` (accept any).

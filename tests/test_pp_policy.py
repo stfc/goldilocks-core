@@ -40,3 +40,22 @@ def test_apply_pseudo_policy_filters_metadata_list() -> None:
 
     assert len(selected) == 1
     assert selected[0].filename == "b.UPF"
+
+
+def test_apply_pseudo_policy_compares_canonical_functional_labels() -> None:
+    """Apply a PBEsol policy across supported label spellings."""
+    metadata = PseudoMetadata(
+        filepath="Si.UPF",
+        filename="Si.UPF",
+        header_format="attr",
+        element="Si",
+        functional="PBESOL",
+    )
+
+    selected = apply_pseudo_policy(
+        [metadata],
+        PseudoPolicy(preferred_functional="PBE-sol"),
+    )
+
+    assert selected == [metadata]
+    assert metadata.functional == "PBEsol"

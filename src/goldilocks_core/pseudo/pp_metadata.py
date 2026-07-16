@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from goldilocks_core.functionals import normalize_functional_label
+
 
 @dataclass(slots=True)
 class PseudoMetadata:
@@ -27,7 +29,7 @@ class PseudoMetadata:
         pseudo_type: normalized pseudo type: ``NC``, ``USPP``,
             or ``PAW``.
         functional: normalized functional label (e.g. ``PBE``,
-            ``PBESOL``, ``LDA``).
+            ``PBEsol``, ``LDA``).
         relativistic: normalized relativistic mode: ``scalar``,
             ``full``, or ``non-relativistic``.
         z_valence: valence charge.
@@ -54,6 +56,10 @@ class PseudoMetadata:
     is_sssp: bool = False
     source_pseudopotential: str | None = None
     sssp_recommended_cutoff: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        """Canonicalize supported functional labels from metadata producers."""
+        self.functional = normalize_functional_label(self.functional)
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the metadata."""

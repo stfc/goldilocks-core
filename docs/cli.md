@@ -35,7 +35,7 @@ Runs the full pipeline and publishes a portable bundle directory. `--out` is req
 | `structure` | positional | — | `CoreJobRequest.structure` |
 | `--code` | choice | `quantum_espresso` | `CalculationIntent.code` |
 | `--task` | choice | `scf_single_point` | `CalculationIntent.task` |
-| `--functional` | str | `PBE` | `CalculationIntent.functional` |
+| `--functional` | str | `PBE` | `CalculationIntent.functional` (canonicalized; e.g. `PBESOL` → `PBEsol`) |
 | `--accuracy-level` | choice | `standard` | `CalculationIntent.accuracy_level` |
 | `--pseudo-mode` | str | `efficiency` | `CalculationIntent.pseudo_mode` |
 | `--pseudo-type` | str | None | `CalculationHints.pseudo_type` |
@@ -88,7 +88,7 @@ warnings:
 
 ## Pseudo loading
 
-`--pseudo-root` recursively searches the given directory for `.upf` and `.UPF` files, parses each one with `parse_upf_metadata()`, and passes the resulting `PseudoMetadata` list to the selection stage.
+`--pseudo-root` recursively searches the given directory for `.upf` and `.UPF` files, parses each one with `parse_upf_metadata()`, and passes the resulting `PseudoMetadata` list to the selection stage. CLI functional intent and parsed UPF functional metadata use the same canonical labels. Supported PBEsol spellings match; unrecognized labels remain distinct rather than falling back to PBE or another functional.
 
 ## Kmesh backend selection
 

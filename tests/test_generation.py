@@ -204,6 +204,31 @@ def test_generate_inputs_rejects_missing_pseudopotential_selection() -> None:
         generate_inputs(structure, advice_context(), advice, selection)
 
 
+@pytest.mark.parametrize("field", ["ecutwfc_ry", "ecutrho_ry"])
+@pytest.mark.parametrize(
+    "invalid_value",
+    ["not-a-number", float("nan"), float("inf"), -float("inf"), 0, -1, True],
+)
+def test_generate_inputs_defensively_rejects_invalid_cutoffs(
+    field: str,
+    invalid_value: object,
+) -> None:
+    """Refuse malformed selection records even if contract validation is bypassed."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+    object.__setattr__(selection.pseudopotentials[0], field, invalid_value)
+
+    with pytest.raises(ValueError, match="invalid cutoff selections"):
+        generate_inputs(structure, advice_context(), advice, selection)
+
+
 def advice_context() -> CalculationIntent:
     """Return the default intent without obscuring test expectations."""
     return CalculationIntent()

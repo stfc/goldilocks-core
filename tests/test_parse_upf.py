@@ -101,15 +101,33 @@ def test_parse_upf_metadata_raises_for_missing_file(tmp_path: Path) -> None:
         parse_upf_metadata(pseudo_path)
 
 
-def test_parse_upf_metadata_parses_pbesol_functional(tmp_path: Path) -> None:
-    """Normalize PBESOL functional labels from UPF metadata."""
+@pytest.mark.parametrize(
+    ("functional", "expected"),
+    [
+        ("PBEsol", "PBEsol"),
+        ("PBESOL", "PBEsol"),
+        ("pbe-sol", "PBEsol"),
+        ("PBE_SOL", "PBEsol"),
+        ("PBE sol", "PBEsol"),
+        ("SLA PW PSX PSC", "PBEsol"),
+        ("SLA PW PBX PBC", "PBE"),
+        ("PZ", "LDA"),
+        ("SLA PZ NOGX NOGC", "LDA"),
+    ],
+)
+def test_parse_upf_metadata_canonicalizes_recognized_functional_labels(
+    tmp_path: Path,
+    functional: str,
+    expected: str,
+) -> None:
+    """Canonicalize only recognized PBE, PBEsol, and LDA UPF labels."""
     pseudo_root = tmp_path / "pseudopotentials" / "pslibrary"
     pseudo_root.mkdir(parents=True)
     pseudo_path = write_attr_upf(
         pseudo_root / "Al.pbesol-n-kjpaw_psl.1.0.0.UPF",
         element="Al",
         pseudo_type="PAW",
-        functional="PBESOL",
+        functional=functional,
         relativistic="scalar",
         z_valence="3.0",
     )
@@ -119,9 +137,41 @@ def test_parse_upf_metadata_parses_pbesol_functional(tmp_path: Path) -> None:
     assert metadata.element == "Al"
     assert metadata.filename == "Al.pbesol-n-kjpaw_psl.1.0.0.UPF"
     assert metadata.pseudo_type == "PAW"
-    assert metadata.functional == "PBESOL"
+    assert metadata.functional == expected
     assert metadata.relativistic == "scalar"
     assert metadata.z_valence == 3.0
+
+
+@pytest.mark.parametrize(
+    "functional",
+    [
+        "RPBE",
+        "RPBE PSX PSC",
+        "PBX PBC experimental",
+        "PZ experimental",
+        "SLA PW PSX PSC experimental",
+        "SLA PW PSX PSC PBX PBC",
+    ],
+)
+def test_parse_upf_metadata_preserves_unknown_functional_labels(
+    tmp_path: Path,
+    functional: str,
+) -> None:
+    """Do not reinterpret conflicting or extra UPF functional labels."""
+    pseudo_root = tmp_path / "pseudopotentials" / "pslibrary"
+    pseudo_root.mkdir(parents=True)
+    pseudo_path = write_attr_upf(
+        pseudo_root / "C.unknown.UPF",
+        element="C",
+        pseudo_type="NC",
+        functional=functional,
+        relativistic="scalar",
+        z_valence="4.0",
+    )
+
+    metadata = parse_upf_metadata(pseudo_path)
+
+    assert metadata.functional == functional
 
 
 def test_parse_upf_metadata_prefers_header_pseudo_type_over_filename_hint(

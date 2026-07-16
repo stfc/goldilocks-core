@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import math
+from numbers import Real
+
 from pymatgen.core import Structure
 from pymatgen.core.periodic_table import Element
 
@@ -121,8 +124,24 @@ def generate_quantum_espresso_scf_input(
             f"and cutoff selections for: {', '.join(incomplete)}"
         )
 
-    ecutwfc = max(pseudo.ecutwfc_ry or 0.0 for pseudo in pseudo_by_element.values())
-    ecutrho = max(pseudo.ecutrho_ry or 0.0 for pseudo in pseudo_by_element.values())
+    invalid_cutoffs = tuple(
+        f"{pseudo.element}.{field}={value!r}"
+        for pseudo in pseudo_by_element.values()
+        for field, value in (
+            ("ecutwfc_ry", pseudo.ecutwfc_ry),
+            ("ecutrho_ry", pseudo.ecutrho_ry),
+        )
+        if not _is_finite_positive_cutoff(value)
+    )
+    if invalid_cutoffs:
+        raise ValueError(
+            "Cannot generate Quantum ESPRESSO input with invalid cutoff "
+            f"selections ({', '.join(invalid_cutoffs)}); cutoffs must be finite "
+            "positive numbers"
+        )
+
+    ecutwfc = max(float(pseudo.ecutwfc_ry) for pseudo in pseudo_by_element.values())
+    ecutrho = max(float(pseudo.ecutrho_ry) for pseudo in pseudo_by_element.values())
 
     lines: list[str] = []
     lines.extend(_control_section())
@@ -255,6 +274,16 @@ def _k_points(selection: SelectionRecord) -> list[str]:
         "K_POINTS automatic",
         f"  {grid[0]}  {grid[1]}  {grid[2]}  {shift[0]}  {shift[1]}  {shift[2]}",
     ]
+
+
+def _is_finite_positive_cutoff(value: object) -> bool:
+    """Return whether a selected cutoff is safe for target-code generation."""
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, Real)
+        and math.isfinite(value)
+        and value > 0
+    )
 
 
 def _format_float(value: float) -> str:

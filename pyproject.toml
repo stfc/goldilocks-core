@@ -28,6 +28,7 @@ goldilocks-kmesh = "goldilocks_core.cli.cli_kmesh:main"
 
 [dependency-groups]
 dev = [
+    "mutmut>=3.6.0",
     "pre-commit>=4.5.1",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
@@ -59,6 +60,19 @@ exclude_also = [
 ]
 show_missing = true
 skip_covered = true
+
+[tool.mutmut]
+source_paths = ["src/goldilocks_core"]
+only_mutate = [
+    "src/goldilocks_core/advice.py",
+    "src/goldilocks_core/functionals.py",
+    "src/goldilocks_core/generation.py",
+    "src/goldilocks_core/kmesh.py",
+    "src/goldilocks_core/selection.py",
+    "src/goldilocks_core/pseudo/pp_policy.py",
+]
+mutate_only_covered_lines = false
+pytest_add_cli_args = ["-q"]
 
 [tool.ruff]
 target-version = "py312"

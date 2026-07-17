@@ -27,6 +27,17 @@ def test_apply_pseudo_policy_filters_metadata_list() -> None:
             relativistic="full",
             z_valence=12.0,
         ),
+        PseudoMetadata(
+            filepath="c.UPF",
+            filename="c.UPF",
+            header_format="attr",
+            library="SSSP",
+            element="Hg",
+            pseudo_type="PAW",
+            functional="LDA",
+            relativistic="full",
+            z_valence=12.0,
+        ),
     ]
 
     policy = PseudoPolicy(

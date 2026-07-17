@@ -1,59 +1,30 @@
 # goldilocks-core
 
-`goldilocks-core` recommends and generates DFT calculation inputs from crystal structures, calculation intent, operator hints, and pseudopotential metadata.
+`goldilocks-core` recommends DFT parameters and generates Quantum ESPRESSO SCF inputs from crystal structures, calculation intent, operator hints, and pseudopotential metadata.
 
-The public API is Python-first. The staged CLI calls the same internal job runner. Core does not own Runner/AiiDA workflows, frontend state, auth, scheduling, structure database search, or completed-output analysis.
+It provides:
 
-## What is implemented
-
-- Structure loading from `pymatgen.Structure` or files readable by pymatgen.
-- Structure analysis facts: formula, elements, symmetry, heavy elements, magnetic candidates, conservative electronic character, and disorder warnings.
-- Provenance-backed advice for k-points, smearing, magnetism, SOC, pseudopotential intent, and convergence.
-- Kmesh-stage resolution of concrete k-point grids, including an ML-backed backend.
-- Deterministic pseudopotential ranking and cutoff extraction from provided metadata.
-- Quantum ESPRESSO SCF input generation.
-- Bundle directory output with `manifest.json`.
-- JSON-safe `CoreJobRequest` and `CoreResult` records.
-
-`CalculationIntent.accuracy_level` was intentionally removed because no stage
-implemented distinct accuracy/cost semantics. Serialized requests no longer
-contain it, and the CLI does not expose `--accuracy-level`.
+- structure analysis and scientific warnings;
+- advice for k-points, smearing, magnetism, SOC, convergence, vdW, and pseudopotentials;
+- a default Quantile Random Forest k-point model with heuristic fallback;
+- deterministic pseudopotential selection and QE input generation;
+- Python and CLI entry points over the same staged pipeline.
 
 ## Install
+
+This project uses [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv sync
 ```
 
-For development:
+For development dependencies:
 
 ```bash
 uv sync --group dev
 ```
 
-## Quick start: Python recommendation
-
-```python
-from goldilocks_core import CalculationHints, CalculationIntent, recommend
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
-
-pseudo_metadata = load_pseudo_metadata("path/to/pseudopotentials")
-
-result = recommend(
-    "path/to/structure.cif",
-    intent=CalculationIntent(functional="PBE"),
-    hints=CalculationHints(k_spacing=0.2, pseudo_type="NC"),
-    pseudo_metadata=pseudo_metadata,
-)
-
-print(result.analysis.reduced_formula)
-print(result.selection.k_points.grid)
-print(result.to_dict())
-```
-
-See [tutorial](docs/tutorial.md), [pipeline](docs/pipeline.md), and [contract reference](docs/contracts.md) for the full API.
-
-## Quick start: generate files
+## Python API
 
 ```python
 from goldilocks_core import CalculationHints, generate
@@ -68,207 +39,58 @@ result = generate(
 for generated_file in result.generated_files:
     print(generated_file.path)
     print(generated_file.content)
+
+print(result.warnings)
 ```
 
-## Quick start: write a bundle
+The public workflows are:
 
-```python
-from goldilocks_core import CalculationHints, write_bundle
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
+- `recommend(...)` — return analysis, advice, and concrete selections;
+- `generate(...)` — also return generated QE input files;
+- `write_bundle(...)` — write generated files and `manifest.json` to a new directory.
 
-result = write_bundle(
-    "path/to/structure.cif",
-    "run/",
-    hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
-    pseudo_metadata=load_pseudo_metadata("path/to/pseudopotentials"),
-)
+Use `CoreJobRequest` with `run_core_job()` when you need a single request model. Use `Pipeline` to replace a stage backend.
 
-print(result.bundle.path)
-print(result.bundle.manifest)
-```
+The default k-point backend loads the configured QRF model lazily and falls back to heuristic advice with a warning when model inference is unavailable. Explicit `k_grid` and `k_spacing` hints bypass model loading.
 
-`run/` must not already exist. Bundle writing refuses existing destinations and does not provide an overwrite mode. Manifest entries identify each generated file by its bundle path and role. If a filesystem write fails, the incomplete new directory may remain for inspection or removal.
-
-Bundle layout:
-
-```text
-run/
-├── manifest.json
-└── inputs/
-    └── qe.in
-```
-
-See [bundle stage](docs/stages/bundle.md) and [manifest](docs/manifest.md).
-
-## Job runner
-
-Use `CoreJobRequest` and `run_core_job()` when a caller needs one request/result model for Python, CLI, or a future HTTP wrapper.
-
-```python
-from goldilocks_core import CoreJobRequest, run_core_job
-from goldilocks_core.contracts import CalculationHints
-
-result = run_core_job(
-    CoreJobRequest(
-        structure="path/to/structure.cif",
-        hints=CalculationHints(k_spacing=0.2),
-        mode="recommend",
-    )
-)
-
-print(result.to_dict())
-```
-
-Modes:
-
-```text
-recommend -> Load → Analyze → Advise → Kmesh → Select
-generate  -> Load → Analyze → Advise → Kmesh → Select → Generate
-bundle    -> Load → Analyze → Advise → Kmesh → Select → Generate → Bundle
-```
-
-### Default k-point model
-
-`Pipeline()` uses the configured QRF k-distance model by default and falls back
-to heuristic advice when its artifacts or dependencies are unavailable. Model
-loading is lazy: constructing a pipeline and resolving explicit `k_grid` or
-`k_spacing` hints performs no registry read, model download, or inference.
-
-The extractor owns the explicit 483-value feature schema. Model and supporting
-artifact identities, feature settings, interval confidence, quantiles, and
-calibration live in `goldilocks_core/model_registry.toml`. The advisor checks
-the declared schema before loading artifacts, then verifies that the loaded
-model's own quantiles match the declared confidence interval. Set
-`GOLDILOCKS_MODEL_REGISTRY=/path/to/models.toml` to replace the complete default
-configuration without changing package source.
-
-Successful QRF selections record the model identity, configuration digest,
-feature schema and count, interval confidence/quantiles, calibration, and
-metallicity artifact identity in `provenance.details.qrf_inference`. The
-advisor falls back to heuristic k-point advice when the model or its
-supporting artifacts are unavailable or incompatible.
-
-Hugging Face artifacts are cached by `huggingface_hub`; alternate remote
-registries must specify full 40-character commit revisions rather than branches
-or tags. The configured QRF is a
-joblib/pickle artifact, so only use registries and revisions you trust. To avoid
-remote model loading entirely, provide explicit k-point hints or compose the
-heuristic backend:
-
-```python
-from goldilocks_core import Pipeline
-from goldilocks_core.kmesh import resolve_kpoints_from_advice
-
-pipeline = Pipeline(kmesh=resolve_kpoints_from_advice)
-```
-
-Normal tests never resolve real remote artifacts. Run the explicit compatibility
-check only when network access is intended:
-
-```bash
-uv run python scripts/validate_qrf_artifacts.py --allow-network
-```
-
-## Custom backends
-
-`Pipeline` holds Python callables for stage backends. `CoreJobRequest` remains data-only.
-
-```python
-
-from goldilocks_core import Pipeline, recommend
-from goldilocks_core.advisors import ml_kmesh_advisor
-from goldilocks_core.contracts import ModelSpec
-
-spec = ModelSpec(
-    name="local-kmesh-model",
-    version="v0",
-    model_type="random_forest",
-    target="k_index",
-    feature_set="cslr",
-    source="local",
-    location="path/to/model.joblib",
-)
-
-pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
-result = recommend("path/to/structure.cif", pipeline=pipeline)
-```
-
-See [backends](docs/backends.md) for backend contracts and examples.
+See the [tutorial](docs/tutorial.md) and [pipeline reference](docs/pipeline.md) for complete examples.
 
 ## CLI
 
 ```bash
-uv run goldilocks-core recommend path/to/structure.cif --json
-uv run goldilocks-core recommend path/to/structure.cif --model path/to/model.joblib --json
-uv run goldilocks-core recommend path/to/structure.cif --heuristic-kpoints --json
-uv run goldilocks-core generate path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --use-vdw true --vdw-method d3bj --json
-uv run goldilocks-core bundle path/to/structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
+uv run goldilocks-core recommend structure.cif --json
+uv run goldilocks-core generate structure.cif \
+    --pseudo-root path/to/pseudos --k-grid 4 4 4 --json
+uv run goldilocks-core bundle structure.cif \
+    --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
 ```
 
-The legacy kmesh-focused entry point is still available:
+Bundle output requires a new destination directory. See the [CLI reference](docs/cli.md) for all controls.
+
+The standalone model-oriented entry point remains available:
 
 ```bash
-uv run goldilocks-kmesh path/to/structure.cif --model path/to/model.joblib
+uv run goldilocks-kmesh structure.cif --model path/to/model.joblib
 ```
-
-See [CLI reference](docs/cli.md).
-
-## Package layout
-
-```text
-src/goldilocks_core/
-├── contracts.py   # public records, type aliases, serialization
-├── jobs.py        # fixed job runner, Pipeline, and public convenience API
-├── analysis.py    # structure facts
-├── advice.py      # provenance-backed parameter advice
-├── kmesh.py       # k-point grid resolution
-├── selection.py   # current QE UPF/SSSP selection and Ry cutoffs
-├── generation.py  # current QE SCF validation and rendering
-├── bundle.py      # bundle directory and manifest writing
-├── advisors/      # model-backed stage backends
-├── cli/           # thin command wrappers
-├── io/            # loading only
-├── ml/            # feature extraction, model loading, prediction
-├── model_registry.toml  # replaceable default model and artifact metadata
-└── pseudo/        # UPF parsing, registry, filtering, policy
-```
-
-See [architecture](docs/architecture.md) for boundaries and dependency direction.
 
 ## Documentation
 
-- [Architecture](docs/architecture.md)
-- [Pipeline](docs/pipeline.md)
-- [Backends](docs/backends.md)
-- [Contracts](docs/contracts.md)
-- [Serialization](docs/serialization.md)
-- [Manifest](docs/manifest.md)
-- [Conventions](docs/conventions.md)
-- [Provenance](docs/provenance.md)
-- [CLI](docs/cli.md)
 - [Tutorial](docs/tutorial.md)
-- [Extension guide](docs/extension.md)
-- [Migration guide](docs/migration.md)
-- [Design decisions](docs/decisions.md)
-- [Changelog](docs/changelog.md)
+- [Pipeline and stage behavior](docs/pipeline.md)
+- [Scientific conventions](docs/conventions.md)
+- [Python contracts](docs/contracts.md)
+- [CLI reference](docs/cli.md)
+- [Architecture and backend extension](docs/architecture.md)
 
 ## Development
 
 ```bash
-uv run pytest                                      # complete suite
-uv run pytest -m unit                              # isolated behavior
-uv run pytest -m integration                       # complete workflows
-uv run pytest -m physics                           # scientific invariants
-uv run pytest --cov --cov-report=term-missing      # branch coverage + floor
-uv run mutmut run --max-children 4                 # focused deterministic modules
-uv run mutmut results                              # inspect surviving mutants
-uv run mutmut export-cicd-stats
-uv run python scripts/check_mutation_score.py mutants/mutmut-cicd-stats.json
-uv run ruff check src tests
-uv run ruff format --check src tests
+uv run pytest
+uv run pytest -m integration
+uv run pytest -m physics
+uv run pytest --cov --cov-report=term-missing
+uv run mutmut run --max-children 4
 uv run pre-commit run --all-files
 ```
 
-Tests are layered under `tests/unit`, `tests/integration`, and `tests/physics`. Mutation testing targets deterministic recommendation and generation modules configured in `pyproject.toml`; model downloads and generated third-party code are excluded.
-
-Committed tests must not depend on `local_data/`, private pseudopotential libraries, notebooks, or machine-specific paths. Use synthetic structures, temporary files, small UPF snippets, constructed dataclasses, and fake models.
+Tests use synthetic structures, temporary files, small UPF snippets, and fake models. They must not depend on private datasets or machine-specific paths.

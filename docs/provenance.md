@@ -26,15 +26,15 @@ Every scientific recommendation and selection in goldilocks-core carries a `Prov
 
 A model-backed QRF selection records:
 
-- the SHA-256 digest and complete structured registry configuration;
-- goldilocks-core version and extractor identity, feature schema, and feature count;
-- feature settings, interval confidence/quantiles, and calibration method/correction;
-- every required and installed inference runtime version;
-- QRF model, metallicity checkpoint, and atom-table identities.
+- the deterministic registry digest;
+- model identity (name, version, source, location, immutable revision when remote);
+- feature schema and feature count;
+- interval confidence/quantiles and calibration method/correction;
+- metallicity artifact identity (source, location, revision, checkpoint, atom table).
 
-Remote artifacts are identified by repository, filename, and immutable commit.
-Local QRF, checkpoint, and atom-table files include their path and SHA-256
-content hash. Paths alone are not artifact identities.
+This is enough to identify which model configuration produced the selection and
+to reproduce the intended feature schema. Fallback selections add a `fallback`
+flag and failure context under the same `details.qrf_inference` key.
 
 ## Warning propagation
 
@@ -42,7 +42,7 @@ Warnings flow through the pipeline in two parallel paths:
 
 1. **Provenance-level warnings**: each `Provenance` record carries its own `warnings` tuple. These are specific to that one decision — e.g. "SOC is not enabled automatically because it changes cost and setup" on `SpinOrbitAdvice.provenance`.
 
-2. **Aggregate warnings**: `CoreResult.warnings` collects and de-duplicates warnings from Analyze, Advise, Kmesh, and Select in first-seen order. These are the top-level warnings every caller should surface. Each `StageRecord.warnings` retains the warnings owned by that stage.
+2. **Aggregate warnings**: `CoreResult.warnings` collects and de-duplicates warnings from Analyze, Advise, Kmesh, and Select in first-seen order. These are the top-level warnings every caller should surface.
 
 Advice warnings remain attached to their individual provenance records as well as appearing in the aggregate, so callers can show a complete warning summary without traversing every decision record.
 

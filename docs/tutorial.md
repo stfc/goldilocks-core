@@ -143,7 +143,6 @@ result = run_core_job(
     )
 )
 
-print(result.stages)              # stage execution records
 print(result.to_dict())           # full JSON-safe output
 ```
 

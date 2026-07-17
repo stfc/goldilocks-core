@@ -47,9 +47,6 @@ def test_resolve_kpoints_from_advice_prefers_explicit_grid_hint() -> None:
     assert selection.shift == (0, 0, 0)
     assert selection.mesh_type == "monkhorst-pack"
     assert selection.provenance.source == "user_hint"
-    assert selection.provenance.reason == (
-        "Use the operator-provided explicit k-point grid."
-    )
     assert selection.provenance.data_source is None
     assert selection.provenance.warnings == (
         "Both k_grid and k_spacing were provided; explicit grid wins.",
@@ -80,9 +77,6 @@ def test_resolve_kpoints_from_advice_converts_spacing_hint() -> None:
     assert selection.shift == (0, 0, 0)
     assert selection.mesh_type == "monkhorst-pack"
     assert selection.provenance.source == "user_hint"
-    assert selection.provenance.reason == (
-        "Use the operator-provided VASP-style k-point spacing."
-    )
     assert selection.provenance.data_source == (
         "pymatgen solid-state reciprocal lattice"
     )
@@ -108,9 +102,6 @@ def test_resolve_kpoints_from_advice_converts_advised_spacing() -> None:
     assert selection.shift == (0, 0, 0)
     assert selection.mesh_type == "monkhorst-pack"
     assert selection.provenance.source == advice.provenance.source
-    assert selection.provenance.reason == (
-        "Convert advised VASP-style k-point spacing into a mesh."
-    )
     assert selection.provenance.data_source == (
         "pymatgen solid-state reciprocal lattice"
     )

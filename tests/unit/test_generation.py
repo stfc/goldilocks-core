@@ -1,4 +1,5 @@
 from dataclasses import replace
+from types import SimpleNamespace
 from typing import get_args
 
 import pytest
@@ -220,61 +221,6 @@ def test_generate_inputs_writes_non_d3_vdw_methods(
     assert "dftd3_version" not in content
 
 
-@pytest.mark.parametrize(
-    ("use_vdw", "method"),
-    [
-        (True, None),
-        (True, []),
-        (True, {}),
-        (True, True),
-        (True, "unknown"),
-        (False, "d3"),
-    ],
-    ids=["enabled-none", "list", "mapping", "boolean", "unknown", "disabled"],
-)
-def test_generate_inputs_rejects_malformed_injected_vdw_advice(
-    use_vdw: bool,
-    method: object,
-) -> None:
-    """Report malformed injected vdW advice with a QE-specific error."""
-    structure = make_structure()
-    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC", use_vdw=True)
-    advice = advise_parameters(analyze_structure(structure), hints=hints)
-    selection = select_from_advice(
-        structure,
-        advice,
-        hints=hints,
-        metadata_list=[make_metadata()],
-    )
-    object.__setattr__(advice.vdw, "use_vdw", use_vdw)
-    object.__setattr__(advice.vdw, "method", method)
-
-    with pytest.raises(ValueError, match="Quantum ESPRESSO vdW advice is invalid"):
-        generate_inputs(structure, advice_context(), advice, selection)
-
-
-def test_generate_inputs_defensively_rejects_injected_smearing_syntax() -> None:
-    """A malformed custom Advice record cannot inject QE namelist lines."""
-    structure = make_structure()
-    hints = CalculationHints(
-        k_grid=(2, 2, 2),
-        pseudo_type="NC",
-        smearing_type="cold",
-        smearing_width_ry=0.01,
-    )
-    advice = advise_parameters(analyze_structure(structure), hints=hints)
-    selection = select_from_advice(
-        structure,
-        advice,
-        hints=hints,
-        metadata_list=[make_metadata()],
-    )
-    object.__setattr__(advice.smearing, "smearing_type", "cold'\n  ecutwfc = 1")
-
-    with pytest.raises(ValueError, match="smearing advice is invalid"):
-        generate_inputs(structure, advice_context(), advice, selection)
-
-
 def test_generate_inputs_omits_vdw_corr_by_default() -> None:
     """Do not write vdw_corr for 3D bulk without an explicit vdW hint."""
     structure = make_bulk_structure()
@@ -290,6 +236,61 @@ def test_generate_inputs_omits_vdw_corr_by_default() -> None:
     content = generate_inputs(structure, advice_context(), advice, selection)[0].content
 
     assert "vdw_corr" not in content
+
+
+def test_generate_inputs_produces_full_expected_qe_input() -> None:
+    """The complete QE SCF input matches the expected deterministic layout."""
+    structure = make_bulk_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+
+    content = generate_inputs(structure, advice_context(), advice, selection)[0].content
+
+    expected = r"""&CONTROL
+  calculation = 'scf'
+  pseudo_dir = './pseudo'
+  outdir = './out'
+  tprnfor = .true.
+  tstress = .true.
+/
+
+&SYSTEM
+  ibrav = 0
+  nat = 2
+  ntyp = 1
+  ecutwfc = 35
+  ecutrho = 140
+  occupations = 'fixed'
+/
+
+&ELECTRONS
+  conv_thr = 1.0000000000e-06
+  mixing_beta = 0.4
+  electron_maxstep = 80
+/
+
+CELL_PARAMETERS angstrom
+  0  2.715  2.715
+  2.715  0  2.715
+  2.715  2.715  0
+
+ATOMIC_SPECIES
+  Si  28.0855  Si.UPF
+
+ATOMIC_POSITIONS crystal
+  Si  0  0  0
+  Si  0.25  0.25  0.25
+
+K_POINTS automatic
+  2  2  2  0  0  0
+"""
+    assert content == expected
 
 
 def test_generate_inputs_rejects_extraneous_pseudopotential_selection() -> None:
@@ -320,51 +321,8 @@ def test_generate_inputs_rejects_extraneous_pseudopotential_selection() -> None:
         generate_inputs(structure, advice_context(), advice, selection)
 
 
-def test_generate_inputs_defensively_rejects_duplicate_pseudopotentials() -> None:
-    """Reject ambiguity even when a frozen SelectionRecord was corrupted."""
-    structure = make_structure()
-    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
-    advice = advise_parameters(analyze_structure(structure), hints=hints)
-    selection = select_from_advice(
-        structure,
-        advice,
-        hints=hints,
-        metadata_list=[make_metadata()],
-    )
-    duplicate = replace(selection.pseudopotentials[0], filename="Si.second.UPF")
-    object.__setattr__(
-        selection,
-        "pseudopotentials",
-        (*selection.pseudopotentials, duplicate),
-    )
-
-    with pytest.raises(ValueError, match="duplicate pseudopotential"):
-        generate_inputs(structure, advice_context(), advice, selection)
-
-
-def test_generate_inputs_rejects_unsafe_pseudopotential_filename() -> None:
-    """Defensively reject line injection after record construction."""
-    structure = make_structure()
-    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
-    advice = advise_parameters(analyze_structure(structure), hints=hints)
-    selection = select_from_advice(
-        structure,
-        advice,
-        hints=hints,
-        metadata_list=[make_metadata()],
-    )
-    object.__setattr__(
-        selection.pseudopotentials[0],
-        "filename",
-        "Si.UPF\nO 1 O.UPF",
-    )
-
-    with pytest.raises(ValueError, match="unsafe pseudopotential filenames"):
-        generate_inputs(structure, advice_context(), advice, selection)
-
-
 def test_generate_inputs_rejects_absent_element_selection() -> None:
-    """Report structure elements omitted entirely by an injected selection."""
+    """Report structure elements omitted entirely by selection."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -398,16 +356,8 @@ def test_generate_inputs_rejects_incomplete_pseudopotential_selection() -> None:
         generate_inputs(structure, advice_context(), advice, selection)
 
 
-@pytest.mark.parametrize("field", ["ecutwfc_ry", "ecutrho_ry"])
-@pytest.mark.parametrize(
-    "invalid_value",
-    ["not-a-number", float("nan"), float("inf"), -float("inf"), 0, -1, True],
-)
-def test_generate_inputs_defensively_rejects_invalid_cutoffs(
-    field: str,
-    invalid_value: object,
-) -> None:
-    """Refuse malformed selection records even if contract validation is bypassed."""
+def test_generate_inputs_rejects_unsupported_target_code() -> None:
+    """Only Quantum ESPRESSO generation is implemented."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -417,10 +367,27 @@ def test_generate_inputs_defensively_rejects_invalid_cutoffs(
         hints=hints,
         metadata_list=[make_metadata()],
     )
-    object.__setattr__(selection.pseudopotentials[0], field, invalid_value)
+    intent = SimpleNamespace(code="vasp", task="scf_single_point")
 
-    with pytest.raises(ValueError, match="invalid cutoff selections"):
-        generate_inputs(structure, advice_context(), advice, selection)
+    with pytest.raises(ValueError, match="Only Quantum ESPRESSO"):
+        generate_inputs(structure, intent, advice, selection)
+
+
+def test_generate_inputs_rejects_unsupported_task() -> None:
+    """Only SCF single-point generation is implemented."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+    intent = SimpleNamespace(code="quantum_espresso", task="relax")
+
+    with pytest.raises(ValueError, match="Only SCF single-point"):
+        generate_inputs(structure, intent, advice, selection)
 
 
 def advice_context() -> CalculationIntent:

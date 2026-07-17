@@ -32,14 +32,6 @@ Stage backends are callables composed into a `Pipeline` dataclass. There are no 
 
 **Why:** `CoreJobRequest` is the JSON/HTTP-safe description of what to compute. A backend callable is executable Python behavior describing how to compute it. Mixing those concerns would make requests non-serializable and force Core to own backend-name resolution.
 
-## Target-code integration is an adapter, not a writer swap
-
-The target-code boundary spans target/task validation, concrete resource selection, target-specific numerical data and units, and generation. Analyze and Advise remain free of target syntax. The adapter's Select and Generate behavior is bound as one coherent composition without adding a stage or changing the fixed graph.
-
-**Why:** the current request metadata, selection records, Ry units, and generation behavior are QE-specific. Replacing Generate alone can render the same QE-shaped selection differently, but it cannot support a target with different resources or numerical semantics. Keeping executable adapter choice outside `CoreJobRequest` preserves the data-only boundary.
-
-See [target-code adapter boundary](target-code-adapters.md). This is a design decision; an executable adapter API is not implemented yet.
-
 ## Kmesh is its own stage
 
 Concrete k-point grid resolution lives in Kmesh, between Advise and Select. Advise produces `KPointAdvice`; Kmesh produces `KPointSelection`; Select consumes the `KPointSelection` and resolves pseudopotentials/cutoffs.

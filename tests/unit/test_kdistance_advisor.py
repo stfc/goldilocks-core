@@ -1,4 +1,3 @@
-import hashlib
 import json
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -24,7 +23,6 @@ from goldilocks_core.contracts import (
 from goldilocks_core.kmesh import k_distance_to_mesh
 from goldilocks_core.ml.model_registry import (
     MODEL_REGISTRY_ENV,
-    RuntimeRequirement,
     load_default_qrf_config,
 )
 
@@ -82,28 +80,6 @@ def _patch_models(monkeypatch, qrf: FakeQRF) -> None:
             feature_names=[f"feature_{index}" for index in range(483)],
         ),
     )
-
-
-def _assert_qrf_failure_context(selection, config, stage, error) -> dict:
-    """Assert serialized fallback details retain a parsed QRF contract."""
-    inference = selection.provenance.details["qrf_inference"]
-    assert inference["config_digest"] == {
-        "algorithm": "sha256",
-        "value": config.digest,
-    }
-    assert inference["configuration"] == config.to_dict()
-    assert inference["extractor"] == {
-        "identity": "goldilocks_core.ml.kdistance_features:extract_qrf_features",
-        "feature_schema": "qrf-483-v1",
-        "feature_count": 483,
-    }
-    assert inference["failure"] == {
-        "stage": stage,
-        "type": error.__class__.__name__,
-        "message": str(error),
-    }
-    assert json.dumps(selection.to_dict(), allow_nan=False)
-    return inference
 
 
 def test_predict_kdistance_quantiles_returns_median_and_corrected_interval() -> None:
@@ -231,8 +207,10 @@ def test_qrf_kdistance_advisor_predicts_with_model_provenance(
     assert selection.provenance.confidence == 0.9
     assert "@" in selection.provenance.data_source
     inference = selection.provenance.details["qrf_inference"]
-    assert inference["config_digest"]["value"] == make_config().digest
-    assert inference["extractor"]["feature_schema"] == "qrf-483-v1"
+    assert inference["config_digest"] == make_config().digest
+    assert inference["feature_schema"] == "qrf-483-v1"
+    assert "model" in inference
+    assert "metallicity" in inference
 
 
 def test_qrf_kdistance_advisor_respects_grid_hint_without_loading(monkeypatch) -> None:
@@ -271,15 +249,9 @@ def test_qrf_kdistance_advisor_rejects_incompatible_feature_contract(
     selection = advisor(make_structure(), CalculationHints(), _make_advice())
 
     assert selection.provenance.source == "fallback"
-    _assert_qrf_failure_context(
-        selection,
-        incompatible,
-        "schema",
-        ValueError(
-            "QRF advisor requires feature_set='qrf_comp_struct_soap_lattice_metal'; "
-            "got 'different-features'."
-        ),
-    )
+    inference = selection.provenance.details["qrf_inference"]
+    assert inference["config_digest"] == incompatible.digest
+    assert inference["failure"]["stage"] == "schema"
     assert any(
         "requires feature_set" in warning for warning in selection.provenance.warnings
     )
@@ -306,16 +278,8 @@ def test_qrf_advisor_rejects_extractor_schema_mismatch(
     )
 
     assert selection.provenance.source == "fallback"
-    _assert_qrf_failure_context(
-        selection,
-        config,
-        "schema",
-        ValueError(
-            f"QRF extractor requires {field}="
-            f"{('qrf-483-v1' if field == 'feature_schema' else 483)!r}; "
-            f"got {value!r}."
-        ),
-    )
+    inference = selection.provenance.details["qrf_inference"]
+    assert inference["failure"]["stage"] == "schema"
     assert any(message in warning for warning in selection.provenance.warnings)
 
 
@@ -349,74 +313,6 @@ def test_qrf_advisor_rejects_loaded_model_quantile_mismatch(
     )
 
 
-def test_qrf_advisor_rejects_runtime_mismatch_before_loading(monkeypatch) -> None:
-    config = make_config()
-    requirements = tuple(
-        RuntimeRequirement(item.distribution, "0.0.0")
-        if item.distribution == "matminer"
-        else item
-        for item in config.runtime_requirements
-    )
-    incompatible = replace(config, runtime_requirements=requirements)
-
-    def unexpected_load(spec):
-        raise AssertionError("runtime mismatch must fail before artifact loading")
-
-    monkeypatch.setattr("goldilocks_core.ml.models.load_model", unexpected_load)
-    selection = qrf_kdistance_advisor(incompatible, "ckpt.pkl", "atom.json")(
-        make_structure(), CalculationHints(), _make_advice()
-    )
-
-    assert selection.provenance.source == "fallback"
-    runtime = selection.provenance.details["qrf_inference"]["runtime"]
-    installed_version = next(
-        item["installed_version"]
-        for item in runtime
-        if item["distribution"] == "matminer"
-    )
-    inference = _assert_qrf_failure_context(
-        selection,
-        incompatible,
-        "runtime",
-        ValueError(f"QRF model requires matminer 0.0.0; found {installed_version}."),
-    )
-    assert all("required_version" in item for item in inference["runtime"])
-    assert any("installed_version" not in item for item in inference["runtime"])
-    assert any("matminer 0.0.0" in warning for warning in selection.provenance.warnings)
-
-
-def test_qrf_advisor_preserves_partial_context_for_artifact_resolution_failure(
-    monkeypatch,
-    tmp_path,
-) -> None:
-    """Supporting-artifact failure retains the resolved preceding artifact."""
-    checkpoint = tmp_path / "checkpoint.pkl"
-    checkpoint.write_bytes(b"checkpoint")
-    config = make_config()
-
-    def resolve_artifact(spec, filename):
-        if filename == config.metallicity_checkpoint_file:
-            return str(checkpoint)
-        raise FileNotFoundError("atom table is unavailable")
-
-    monkeypatch.setattr("goldilocks_core.ml.models.resolve_artifact", resolve_artifact)
-    selection = qrf_kdistance_advisor(config)(
-        make_structure(), CalculationHints(), _make_advice()
-    )
-
-    assert selection.provenance.source == "fallback"
-    inference = _assert_qrf_failure_context(
-        selection,
-        config,
-        "artifact_resolution",
-        FileNotFoundError("atom table is unavailable"),
-    )
-    assert all("installed_version" in item for item in inference["runtime"])
-    assert inference["resolved_artifacts"] == [
-        {"role": "metallicity_checkpoint", "path": str(checkpoint)}
-    ]
-
-
 def test_qrf_kdistance_advisor_caches_loaded_models(monkeypatch, tmp_path) -> None:
     """Successful model loading happens only on the first inference call."""
     calls = 0
@@ -434,16 +330,18 @@ def test_qrf_kdistance_advisor_caches_loaded_models(monkeypatch, tmp_path) -> No
     monkeypatch.setattr("goldilocks_core.ml.models.load_model", count_load)
     advisor = qrf_kdistance_advisor(make_config(), str(checkpoint), str(atom_table))
 
-    advisor(make_structure(), CalculationHints(), _make_advice())
-    advisor(make_structure(), CalculationHints(), _make_advice())
+    first = advisor(make_structure(), CalculationHints(), _make_advice())
+    second = advisor(make_structure(), CalculationHints(), _make_advice())
 
     assert calls == 1
+    assert first.provenance.source == "model"
+    assert second.provenance.source == "model"
 
 
 def test_qrf_kdistance_advisor_loads_once_under_concurrency(
     monkeypatch, tmp_path
 ) -> None:
-    """Concurrent first calls cannot race model success and failure state."""
+    """Concurrent first calls load one shared model instance."""
     calls = 0
     start = Barrier(2)
 
@@ -494,17 +392,8 @@ def test_qrf_kdistance_advisor_caches_model_load_failure(monkeypatch, tmp_path) 
     assert calls == 1
     assert first.provenance.source == "fallback"
     assert second.provenance.source == "fallback"
-    inference = _assert_qrf_failure_context(
-        first,
-        make_config(),
-        "model_load",
-        ModuleNotFoundError("No module named 'torch'"),
-    )
-    assert {artifact["role"] for artifact in inference["artifacts"]} == {
-        "qrf_model",
-        "metallicity_checkpoint",
-        "metallicity_atom_table",
-    }
+    inference = first.provenance.details["qrf_inference"]
+    assert inference["failure"]["stage"] == "model_load"
     assert any("torch" in warning for warning in first.provenance.warnings)
 
 
@@ -530,11 +419,8 @@ def test_qrf_kdistance_advisor_falls_back_when_prediction_fails(
 
     assert selection.grid == k_distance_to_mesh(structure, 0.2)
     assert selection.provenance.source == "fallback"
-    _assert_qrf_failure_context(
-        selection,
-        make_config(),
-        "prediction",
-        RuntimeError("feature extraction failed"),
+    assert selection.provenance.details["qrf_inference"]["failure"]["stage"] == (
+        "prediction"
     )
     assert any(
         "feature extraction failed" in warning
@@ -585,7 +471,7 @@ def test_default_kmesh_advisor_preserves_unparsed_registry_failure_context(
     monkeypatch,
     tmp_path,
 ) -> None:
-    """Malformed TOML does not invent an attempted QRF configuration."""
+    """Malformed TOML records a minimal registry failure context."""
     invalid_registry = tmp_path / "invalid.toml"
     invalid_registry.write_text("[defaults.kpoints\n", encoding="utf-8")
     monkeypatch.setenv(MODEL_REGISTRY_ENV, str(invalid_registry))
@@ -606,8 +492,6 @@ def test_default_kmesh_advisor_preserves_unparsed_registry_failure_context(
     assert inference["failure"]["type"] == "TOMLDecodeError"
     assert inference["failure"]["message"]
     assert "config_digest" not in inference
-    assert "configuration" not in inference
-    assert "extractor" not in inference
     assert json.dumps(selection.to_dict(), allow_nan=False)
     assert any(
         "Invalid value" in warning or "Expected" in warning
@@ -642,89 +526,6 @@ def test_default_kmesh_advisor_resolves_configured_metallicity_artifacts(
     assert {repo for repo, _, _ in downloads} == {config.metallicity.location}
     assert {revision for _, _, revision in downloads} == {config.metallicity.revision}
     inference = selection.provenance.details["qrf_inference"]
-    artifacts = {item["role"]: item for item in inference["artifacts"]}
-    assert artifacts["qrf_model"] == {
-        "role": "qrf_model",
-        "source": "huggingface",
-        "repository": "STFC-SCD/kpoints-goldilocks-QRF",
-        "filename": "QRF95.pkl",
-        "revision": config.model.revision,
-    }
-    assert artifacts["metallicity_checkpoint"]["repository"] == (
-        config.metallicity.location
-    )
-    assert artifacts["metallicity_checkpoint"]["filename"] == (
-        config.metallicity_checkpoint_file
-    )
-    assert artifacts["metallicity_atom_table"]["filename"] == (
-        config.metallicity_atom_init_file
-    )
+    assert inference["model"]["source"] == "huggingface"
+    assert inference["metallicity"]["source"] == "huggingface"
     assert json.dumps(selection.to_dict(), allow_nan=False)
-
-
-def test_local_qrf_artifacts_use_sha256_content_identities(
-    monkeypatch, tmp_path
-) -> None:
-    """Mutable local paths are supplemented by hashes of all three files."""
-    qrf_path = tmp_path / "qrf.joblib"
-    checkpoint = tmp_path / "metal.ckpt"
-    atom_table = tmp_path / "atom.json"
-    qrf_path.write_bytes(b"local qrf")
-    checkpoint.write_bytes(b"local checkpoint")
-    atom_table.write_bytes(b"local atom table")
-
-    config = make_config()
-    local_config = replace(
-        config,
-        model=replace(
-            config.model,
-            source="local",
-            location=str(qrf_path),
-            revision=None,
-        ),
-    )
-    _patch_models(monkeypatch, FakeQRF(0.2, 0.25, 0.3))
-    selection = qrf_kdistance_advisor(
-        local_config,
-        str(checkpoint),
-        str(atom_table),
-    )(make_structure(), CalculationHints(), _make_advice())
-
-    artifacts = {
-        item["role"]: item
-        for item in selection.provenance.details["qrf_inference"]["artifacts"]
-    }
-    assert artifacts["qrf_model"]["sha256"] == hashlib.sha256(b"local qrf").hexdigest()
-    assert (
-        artifacts["metallicity_checkpoint"]["sha256"]
-        == hashlib.sha256(b"local checkpoint").hexdigest()
-    )
-    assert (
-        artifacts["metallicity_atom_table"]["sha256"]
-        == hashlib.sha256(b"local atom table").hexdigest()
-    )
-
-
-def test_local_atom_table_mutation_is_rejected(monkeypatch, tmp_path) -> None:
-    """Cached provenance cannot describe different atom-table content."""
-    checkpoint = tmp_path / "metal.ckpt"
-    atom_table = tmp_path / "atom.json"
-    checkpoint.write_bytes(b"local checkpoint")
-    atom_table.write_bytes(b"original atom table")
-    _patch_models(monkeypatch, FakeQRF(0.2, 0.25, 0.3))
-    advisor = qrf_kdistance_advisor(
-        make_config(),
-        str(checkpoint),
-        str(atom_table),
-    )
-
-    first = advisor(make_structure(), CalculationHints(), _make_advice())
-    atom_table.write_bytes(b"changed atom table")
-    second = advisor(make_structure(), CalculationHints(), _make_advice())
-
-    assert first.provenance.source == "model"
-    assert second.provenance.source == "fallback"
-    assert second.provenance.details["qrf_inference"]["failure"]["stage"] == (
-        "prediction"
-    )
-    assert any("atom table changed" in item for item in second.provenance.warnings)

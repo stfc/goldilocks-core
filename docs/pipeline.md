@@ -186,7 +186,8 @@ Responsibility:
 - validate and render the current completed QE selection
 - never choose resources or scientific defaults
 
-The callable seam permits another renderer for the same selection contract. It is not, by itself, the boundary for adding a DFT code: current request resources, Select output, units, and generation are QE-shaped. See [target-code adapter boundary](target-code-adapters.md).
+The callable seam permits another renderer for the same selection contract.
+Only Quantum ESPRESSO SCF generation is currently implemented.
 
 ### Bundle
 
@@ -205,8 +206,7 @@ Output:
 
 Responsibility:
 
-- preflight generated paths and manifest metadata
-- stage the complete directory and publish to an absent destination
+- write generated files and the manifest to a new bundle directory
 - refuse overwrite and reject path traversal
 - stay independent of Runner/AiiDA/frontend assumptions
 
@@ -279,9 +279,10 @@ pipeline = Pipeline(
 )
 ```
 
-A backend is just a function with the right signature. No base class, registry, plugin loader, or string resolution is required inside Core.
-
-A second target needs a coherent adapter that supplies compatible validation, target resource selection, target numerical data, and generation. The future composition layer must bind its Select and Generate behavior together rather than relying on unrelated stage overrides. The fixed graph and data-only request boundary remain unchanged.
+A backend is just a function with the right signature. No base class, registry,
+plugin loader, or string resolution is required inside Core. Only Quantum ESPRESSO
+SCF generation is currently implemented; adding another DFT code would require
+coordinated changes across the request, Select, and Generate boundaries.
 
 ## Provenance expectations
 

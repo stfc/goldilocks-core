@@ -73,11 +73,10 @@ registry. Loading or inference failures use `resolve_kpoints_from_advice()` and
 append an actionable provenance warning.
 
 Constructing the pipeline does not load models or access the network. The first
-call without a k-point hint validates the extractor schema and exact configured
-runtime, then loads and caches either the configured models or the load failure.
-Successful selections carry the complete configuration digest and structured
-runtime/artifact identities in `provenance.details.qrf_inference`; local
-artifacts use SHA-256 content identities.
+call without a k-point hint validates the extractor schema, then loads and
+caches either the configured models or the load failure. Successful selections
+carry a compact model and feature-contract identity in
+`provenance.details.qrf_inference`.
 
 ### Explicit heuristic backend
 
@@ -124,9 +123,9 @@ GenerateStage = Callable[
 ]
 ```
 
-A generator translates completed Core records into files. The current `SelectionRecord` contains QE UPF selections and Ry cutoffs, so this seam supports alternate rendering of the current QE-shaped result; it is not sufficient to add another DFT code.
+A generator translates completed Core records into files. The current `SelectionRecord` contains QE UPF selections and Ry cutoffs, so this seam supports alternate rendering of the current QE-shaped result. Only Quantum ESPRESSO SCF generation is implemented.
 
-A generator must not decide scientific defaults or select resources. It reads values from `intent`, `advice`, and `selection`. A second target needs the coordinated validation, resource selection, target-data, and generation boundary described in [target-code adapters](target-code-adapters.md).
+A generator must not decide scientific defaults or select resources. It reads values from `intent`, `advice`, and `selection`.
 
 ### Minimal generator
 
@@ -176,8 +175,6 @@ It is not appropriate for:
 - ML k-point prediction (use Kmesh)
 - target-code text rendering (use Generate)
 - structure facts (use Analyze)
-
-A future target adapter does own target resource selection and target-specific numerical materialization at the Select boundary. That work must be paired with the same adapter's Generate behavior rather than implemented as independent ad hoc overrides.
 
 ## Advise backends
 

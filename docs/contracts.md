@@ -18,8 +18,6 @@ These objects are safe to serialize with `to_dict()`:
 - `GeneratedFile`
 - `CoreResult`
 - `CoreJobRequest`
-- `StageRecord`
-- `CoreResult`
 - model and k-mesh records such as `ModelSpec`, `StructureFeatureVector`, and `KMeshEntry`
 
 `CoreJobRequest` is the request boundary. It contains only serializable job data:
@@ -33,7 +31,7 @@ pseudo_metadata
 output_dir
 ```
 
-It does not contain backend functions, model objects, registry keys, generator objects, or future target adapter objects. Target and resource metadata are request data; the executable implementation is Pipeline composition.
+It does not contain backend functions, model objects, registry keys, or generator objects. Target and resource metadata are request data; executable implementation belongs in Pipeline composition.
 
 ### Public request controls
 
@@ -131,22 +129,6 @@ Callable[[CoreResult, str | Path], BundleRecord]
 
 Publishes generated files and manifest output to a new destination. The default backend refuses existing destinations and does not provide destructive overwrite behavior.
 
-## Pipeline stage names
-
-`StageName` values are:
-
-```text
-load
-analyze
-advise
-kmesh
-select
-generate
-bundle
-```
-
-`Load` is represented in `StageRecord`, but it is not a field on `Pipeline`. Loading is stable request-boundary I/O. Swappable computational backends start at Analyze.
-
 ## Job modes
 
 `JobMode` values are:
@@ -176,13 +158,7 @@ bundle    -> Load -> Analyze -> Advise -> Kmesh -> Select -> Generate -> Bundle
 - numpy arrays become lists
 - numpy scalars become Python scalars
 
-Callable fields in `Pipeline` are not serialized. If a service needs to expose backend or target-adapter names over HTTP, that service owns name-to-callable resolution outside Core.
-
-## Target-code contract direction
-
-The current contracts support QE SCF only. Ry-valued smearing/convergence fields, UPF/SSSP metadata, and pseudopotential/cutoff selections must not be presented as universal target contracts.
-
-The written multi-code design keeps shared physics records separate from typed target resource and selection records, while preserving JSON-safe requests/results and the fixed stage graph. It deliberately does not define an executable adapter API yet. See [target-code adapter boundary](target-code-adapters.md).
+Callable fields in `Pipeline` are not serialized. If a service needs to expose backend names over HTTP, that service owns name-to-callable resolution outside Core.
 
 ## Provenance contract
 

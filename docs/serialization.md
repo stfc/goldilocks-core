@@ -13,7 +13,7 @@ The `to_jsonable()` function converts pipeline values to JSON-safe Python object
 | dataclass | dict | Field names map to converted values |
 | tuple | list | All items converted recursively |
 | list | list | All items converted recursively |
-| dict | dict | Supported scalar, enum, and path keys become strings; values are converted recursively; stringification collisions raise `ValueError` |
+| dict | dict | String keys only; values are converted recursively |
 | `Enum` | converted enum value | The value is validated recursively |
 | `Path` | str | `str(path)` |
 | `pymatgen Structure` | dict | `structure.as_dict()` converted recursively |
@@ -27,10 +27,10 @@ The `to_jsonable()` function converts pipeline values to JSON-safe Python object
 ## Structured model provenance
 
 `Provenance.details` is `null` for decisions without additional structured
-metadata. Successful default QRF inference stores a JSON-safe reconstruction
-record under `details.qrf_inference`, including the complete registry
-configuration and digest, extractor/Core identity, runtime versions, and remote
-commit or local SHA-256 artifact identities.
+metadata. Successful default QRF inference stores a compact identity record
+under `details.qrf_inference`, including the registry digest, model identity,
+feature schema and count, interval confidence/quantiles, calibration, and
+metallicity artifact identity.
 
 ## Open-ended intervals
 

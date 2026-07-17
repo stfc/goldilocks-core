@@ -12,7 +12,6 @@ from goldilocks_core import (
     run_core_job,
 )
 from goldilocks_core.contracts import (
-    BundleRecord,
     GeneratedFile,
     KPointSelection,
     Provenance,
@@ -55,13 +54,6 @@ def test_run_core_job_recommend_matches_public_recommendation_shape() -> None:
         )
     )
 
-    assert [stage.name for stage in result.stages] == [
-        "load",
-        "analyze",
-        "advise",
-        "kmesh",
-        "select",
-    ]
     assert result.selection.k_points.grid == (2, 2, 1)
     assert result.selection.pseudopotentials[0].filename == "Si.UPF"
     assert result.generated_files == ()
@@ -84,18 +76,10 @@ def test_run_core_job_aggregates_kmesh_warnings() -> None:
 
     warning = "Both k_grid and k_spacing were provided; explicit grid wins."
     assert warning in result.warnings
-    assert [stage.name for stage in result.stages] == [
-        "load",
-        "analyze",
-        "advise",
-        "kmesh",
-        "select",
-    ]
-    assert result.stages[3].warnings == (warning,)
 
 
 def test_run_core_job_aggregates_advice_warnings() -> None:
-    """Surface scientific caveats in both Advice and job-level warnings."""
+    """Surface scientific caveats in job-level warnings."""
     result = run_core_job(
         CoreJobRequest(
             structure=make_structure(),
@@ -106,7 +90,6 @@ def test_run_core_job_aggregates_advice_warnings() -> None:
 
     warning = "Verify smearing manually for likely metallic systems."
     assert warning in result.warnings
-    assert warning in result.stages[2].warnings
     assert result.warnings.count(warning) == 1
 
 
@@ -234,7 +217,6 @@ def test_run_core_job_generate_adds_generated_files() -> None:
         )
     )
 
-    assert [stage.name for stage in result.stages][-1] == "generate"
     assert result.generated_files[0].path == "inputs/qe.in"
     assert "2  2  1  0  0  0" in result.generated_files[0].content
 
@@ -269,39 +251,6 @@ def test_duplicate_custom_generate_paths_cannot_reach_bundle(tmp_path: Path) -> 
     assert bundle_called is False
 
 
-def test_bundle_backend_receives_completed_pre_bundle_stage_trace(
-    tmp_path: Path,
-) -> None:
-    """Honor CoreResult's stage-trace contract at the Bundle seam."""
-    received_stages = ()
-
-    def inspect_bundle(result, output_dir):
-        nonlocal received_stages
-        received_stages = tuple(stage.name for stage in result.stages)
-        return BundleRecord(path=str(output_dir), manifest={})
-
-    result = run_core_job(
-        CoreJobRequest(
-            structure=make_structure(),
-            hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
-            pseudo_metadata=(make_metadata(),),
-            mode="bundle",
-            output_dir=str(tmp_path / "bundle"),
-        ),
-        pipeline=Pipeline(bundle=inspect_bundle),
-    )
-
-    assert received_stages == (
-        "load",
-        "analyze",
-        "advise",
-        "kmesh",
-        "select",
-        "generate",
-    )
-    assert result.stages[-1].name == "bundle"
-
-
 def test_run_core_job_bundle_writes_output_directory(tmp_path: Path) -> None:
     """Run the configured job graph through Bundle and write files."""
     output_dir = tmp_path / "bundle"
@@ -315,7 +264,6 @@ def test_run_core_job_bundle_writes_output_directory(tmp_path: Path) -> None:
         )
     )
 
-    assert [stage.name for stage in result.stages][-1] == "bundle"
     assert result.bundle is not None
     assert result.bundle.path == str(output_dir)
     assert (output_dir / "inputs" / "qe.in").exists()

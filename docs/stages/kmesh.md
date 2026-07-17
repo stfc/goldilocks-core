@@ -54,27 +54,26 @@ Fields:
 
 `Pipeline()` uses `default_kmesh_advisor()`. The extractor owns the explicit
 feature schema/version. The registry declares that schema and owns the model,
-supporting artifacts, immutable revisions, exact inference runtime, feature
-settings, confidence/quantiles, and calibration. Core dependencies that affect
-the packaged QRF feature and serialization contract are pinned to the same
-versions. The advisor rejects schema, feature-count, calibration-method, or
-runtime-version mismatch before loading artifacts, then verifies that the
-loaded model's own quantile configuration matches the registry before reporting
-its confidence. Set `GOLDILOCKS_MODEL_REGISTRY` to a replacement TOML file to
-hot-swap the complete configuration.
+supporting artifacts, immutable revisions, feature settings,
+confidence/quantiles, and calibration. The advisor rejects schema,
+feature-count, or calibration-method
+mismatch before loading artifacts, then verifies that the loaded model's own
+quantile configuration matches the registry before reporting its confidence. Set
+`GOLDILOCKS_MODEL_REGISTRY` to a replacement TOML file to hot-swap the
+configuration.
 
 Registry parsing, model imports, artifact resolution, and inference are all
 deferred until the first call without an explicit k-point hint. Loaded models
-or a load failure are cached safely for subsequent or concurrent structures.
-Failures resolve from advice and add the failure reason to provenance warnings.
-Before prediction, extracted values are checked for NaN and both infinities;
-non-finite values are never converted to finite sentinels.
+or a load failure are cached safely for subsequent structures. Failures resolve
+from advice and add the failure reason to provenance warnings. Before prediction,
+extracted values are checked for NaN and both infinities; non-finite values are
+never converted to finite sentinels.
 
-Successful inference records the deterministic configuration SHA-256, complete
-configuration, Core/extractor identity, runtime versions, and all artifact
-identities in `provenance.details.qrf_inference`. Remote identities use immutable
-repository commits. Local model/checkpoint/atom-table identities use SHA-256
-file content.
+Successful inference records a compact identity record in
+`provenance.details.qrf_inference`: the registry digest, model identity,
+feature schema and count, interval confidence/quantiles, calibration, and
+metallicity artifact identity. Fallback selections add a `fallback` flag and
+failure context under the same key.
 
 Normal tests are network-free. Real packaged-artifact validation is explicit:
 
@@ -172,7 +171,7 @@ Expected provenance sources:
 | default/advised spacing | inherited from `KPointAdvice.provenance.source` |
 | ML model prediction | `model` |
 
-Kmesh warnings are recorded on the `StageRecord(name="kmesh")` and included in the top-level recommendation warnings.
+Kmesh warnings are included in the top-level recommendation warnings.
 
 ## Select interaction
 

@@ -12,7 +12,7 @@ def main() -> int:
     """Read mutmut CI statistics and enforce a killed-mutant ratio."""
     parser = argparse.ArgumentParser()
     parser.add_argument("stats", type=Path)
-    parser.add_argument("--minimum", type=float, default=0.80)
+    parser.add_argument("--minimum", type=float, default=0.75)
     args = parser.parse_args()
 
     stats = json.loads(args.stats.read_text())

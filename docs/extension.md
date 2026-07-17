@@ -89,20 +89,10 @@ GenerateStage = Callable[
 
 The generator returns `GeneratedFile` records with paths relative to the bundle root. It reads completed values from `intent`, `advice`, and `selection`; it does not choose resources or scientific defaults.
 
-## Adding a DFT target
+## DFT target support
 
-Do not add VASP, CP2K, CASTEP, ABINIT, or another target by swapping only Generate. The current request resource type, Select contract, cutoff fields, units, and CLI choices are QE-specific.
-
-A future target implementation must follow the [target-code adapter boundary](target-code-adapters.md):
-
-1. validate the target, task, and supported feature combinations;
-2. define serializable target resource metadata and typed selections;
-3. select concrete target resources and materialize target-specific numerical data in Select;
-4. generate files from that completed target selection;
-5. bind compatible Select and Generate behavior together at the composition boundary;
-6. test `recommend`, `generate`, and `bundle` modes.
-
-The adapter design is not implemented yet. Do not introduce an executable adapter protocol speculatively.
+Only Quantum ESPRESSO SCF generation is implemented. There is no generic target
+adapter interface.
 
 ## Adding a new calculation task
 
@@ -128,8 +118,6 @@ Steps:
 3. Add a loader if the source has a directory or archive layout.
 4. Use the existing Select backend if the metadata fields fit.
 5. Replace Select only if QE ranking/cutoff policy must change.
-
-A resource source for another DFT target belongs to that target adapter and needs its own typed metadata; do not force it into `PseudoMetadata`.
 
 Rules:
 

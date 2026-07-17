@@ -2,55 +2,46 @@
 
 Owner: `bundle.py`
 
-The Bundle stage publishes a portable output directory containing generated input files and a `manifest.json` that records the full provenance chain.
+The Bundle stage writes a portable output directory containing generated input files and a `manifest.json` that records the full provenance chain.
 
 ## Input
 
-- `CoreResult` with generated files
-- Output directory path
+- `CoreResult` from the completed pipeline (generate mode or bundle mode).
+- `output_dir`: a new directory path. The parent directories are created if needed; the bundle directory itself must not already exist.
 
 ## Output
 
-- `BundleRecord` with the output directory path and manifest dictionary
-- `manifest.json` file
-- Generated input files under `inputs/`
+- `BundleRecord` with the bundle path and manifest dictionary.
 
-## Directory layout
+## Layout
 
 ```text
-{output_dir}/
+run/
 ├── manifest.json
 └── inputs/
     └── qe.in
 ```
 
-Pseudopotential files are not copied. If the caller needs pseudo files, they must copy them separately using the paths in `PseudopotentialSelection.filepath`.
+`inputs/qe.in` is the current generated file for Quantum ESPRESSO SCF jobs.
 
-## Manifest schema
+Pseudopotential files are not copied. If the caller needs pseudo files, they must stage them separately.
+
+## Manifest
 
 See [bundle manifest](../manifest.md) for the versioned schema and field reference.
 
-The manifest is written with `json.dumps(indent=2, sort_keys=True)` for deterministic output. Each generated-file entry records the UTF-8 byte count and SHA-256 digest of the exact bytes written.
+The manifest is written with `json.dumps(indent=2, sort_keys=True)` for deterministic output. Each generated-file entry records its bundle path and role.
 
-## Publication boundary
+## Output boundary
 
-The output directory must not exist. Bundle refuses existing files, directories, and symlinks; there is no destructive overwrite mode.
-
-Before creating output, Bundle reapplies the inherited `GeneratedFile` and `CoreResult` construction checks, resolves every generated path, and rejects manifest or file/directory layout conflicts. Collision checks use the target platform's semantics: Windows treats backslashes as separators and compares path components case-insensitively. For a Windows target, each component is also rejected when it ends in a period or space, is a reserved DOS device name (including extensions), contains an ASCII control character or one of `"`, `*`, `:`, `<`, `>`, `?`, or `|`; colon rejection also excludes alternate data stream syntax. POSIX preserves distinct legal backslash, case, and Windows-reserved variants. It then writes the complete bundle to a unique sibling staging directory on the destination filesystem. The staging directory is atomically renamed to the absent destination with a native no-replace operation on Linux, macOS, and Windows. Other platforms fail explicitly rather than weakening the no-overwrite guarantee.
-
-If writing or publication fails, Bundle attempts staging cleanup up to twice and preserves the original exception. A cleanup or staging-existence-probe failure is attached to that exception as a note, including the staging path and whether residue remains or cannot be verified. After publication succeeds, the same cleanup or probe problem emits a non-fatal `RuntimeWarning` instead: the returned bundle remains successfully published. Bundle cannot guarantee staging removal or verification after arbitrary filesystem failures; it does not publish a completed destination bundle or modify an existing destination.
+The output directory must not exist. Bundle refuses existing files and directories; there is no destructive overwrite mode. If a write fails, the incomplete new directory may remain for the caller to inspect or remove.
 
 ## Path traversal protection
 
-`GeneratedFile` rejects empty, absolute, or `..`-traversing paths at construction. `CoreResult` rejects duplicate normalized generated paths, so a custom Generate backend cannot pass either condition to Bundle. Bundle reapplies those contract checks and resolves each path beneath the output directory as a defensive filesystem check before staging. The additional Windows component rules are enforced by Bundle only when its target platform is Windows; they are not a global `GeneratedFile` restriction.
+`GeneratedFile` rejects empty, absolute, or `..`-traversing paths at construction. `CoreResult` rejects duplicate normalized generated paths, so a custom Generate backend cannot pass either condition to Bundle. Bundle reapplies the filesystem check and also rejects any generated path that would collide with `manifest.json`.
 
 ## What the bundle does not do
 
-- It does not copy pseudopotential files into the bundle directory.
-- It does not include the structure file.
-- It does not execute calculations.
-- It does not depend on Runner, AiiDA, or frontend assumptions.
-
-## Building a manifest without writing files
-
-`build_bundle_manifest()` returns the manifest dictionary without writing to disk. Useful for JSON API responses that don't need directory output.
+- It does not copy pseudopotential files.
+- It does not run calculations.
+- It does not overwrite existing output directories.

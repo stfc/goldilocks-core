@@ -16,7 +16,7 @@ Core does not own Runner/AiiDA workflows, schedulers, frontend/workspace state, 
 - Keep CLIs thin: parse arguments, build request/pipeline objects, call Core.
 - Keep future HTTP handlers thin: map JSON to `CoreJobRequest`, resolve service-level backend names outside Core, call Core.
 - Keep generators mechanical. Scientific defaults belong in advice, Kmesh, or selection.
-- Treat a target-code integration as one adapter spanning validation, target resource selection, target-specific data, and generation.
+- Only Quantum ESPRESSO SCF input generation is currently implemented.
 - Keep tests portable. Do not require `local_data/` or private pseudo libraries.
 
 ## Package layout
@@ -76,13 +76,12 @@ class Pipeline:
 
 `pipeline.py` was removed. `recommend`, `generate`, and `write_bundle` now live
 in `jobs.py` as thin wrappers around `run_core_job()`. The default Kmesh factory
-returns an advisor that lazily reads the complete replaceable QRF inference
+returns an advisor that lazily reads the replaceable QRF inference
 configuration from `model_registry.toml`; upstream artifact locations are not
 embedded in stage code. The extractor owns its feature schema/version, while
-the registry owns artifact identities, exact runtime requirements, feature
-settings, interval confidence/quantiles, and calibration. A deterministic
-configuration digest and structured reconstruction record cross the Kmesh
-boundary in provenance.
+the registry owns model and artifact identities, feature settings, interval
+confidence/quantiles, and calibration. A deterministic configuration digest and
+compact model identity cross the Kmesh boundary in provenance.
 
 ## Fixed graph
 
@@ -150,7 +149,7 @@ The separation means:
 | Kmesh | `kmesh.py`, `advisors/` | `KPointSelection` | Operator k-point hints win. |
 | Select | `selection.py` | `SelectionRecord` | Currently QE UPF resources and Ry cutoffs; no k-point recalculation. |
 | Generate | `generation.py` | `tuple[GeneratedFile, ...]` | Currently QE SCF validation and rendering. |
-| Bundle | `bundle.py` | `BundleRecord` | Atomic no-replace publication of a fully staged directory on supported platforms. |
+| Bundle | `bundle.py` | `BundleRecord` | Writes a new bundle directory; refuses existing destinations. |
 
 ## Extension points
 
@@ -161,7 +160,9 @@ Replace a `Pipeline` field to change one stage backend. This is suitable for a d
 pipeline = Pipeline(generate=my_qe_generator)
 ```
 
-Adding another DFT target is not a Generate-only extension. The current request, units, resource metadata, Select output, and generator are QE-shaped. A target adapter must bind compatible validation, Select, and Generate behavior while leaving the graph fixed. See [target-code adapter boundary](target-code-adapters.md).
+Adding another DFT target is not a Generate-only extension. The current
+request, units, resource metadata, Select output, and generator are QE-shaped.
+No multi-code adapter is implemented yet.
 
 Current fields:
 
@@ -176,7 +177,7 @@ Pipeline(
 )
 ```
 
-See [pipeline](pipeline.md) and [backends](backends.md) for current signatures and examples. See [target-code adapter boundary](target-code-adapters.md) for the multi-code design.
+See [pipeline](pipeline.md) and [backends](backends.md) for current signatures and examples.
 
 ## External surfaces
 

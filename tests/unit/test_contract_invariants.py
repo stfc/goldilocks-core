@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import Enum
-from pathlib import Path
 from typing import Callable
 
 import numpy as np
@@ -545,40 +542,6 @@ def test_feature_vector_values_must_be_one_dimensional() -> None:
         )
 
 
-class _Format(Enum):
-    JSON = "json"
-
-
-@dataclass(slots=True)
-class _SerializableRecord:
-    path: Path
-    format: _Format
-    values: np.ndarray
-
-
-def test_to_jsonable_keeps_supported_values_working() -> None:
-    record = _SerializableRecord(
-        path=Path("inputs/qe.in"),
-        format=_Format.JSON,
-        values=np.array([1.0, 2.0]),
-    )
-
-    assert to_jsonable({1: record}) == {
-        "1": {
-            "path": "inputs/qe.in",
-            "format": "json",
-            "values": [1.0, 2.0],
-        }
-    }
-    assert to_jsonable(np.longdouble("1.25")) == 1.25
-
-
-@pytest.mark.parametrize("value", [object(), {"unsupported"}, 1 + 2j])
-def test_to_jsonable_rejects_unsupported_values(value: object) -> None:
-    with pytest.raises(TypeError, match="Unsupported value"):
-        to_jsonable(value)
-
-
 @pytest.mark.parametrize(
     "value",
     [np.nan, np.inf, -np.inf, [1.0, np.nan], np.array([1.0, np.inf])],
@@ -588,12 +551,6 @@ def test_to_jsonable_rejects_nonfinite_numbers(value: object) -> None:
         to_jsonable(value)
 
 
-def test_to_jsonable_rejects_unsupported_dictionary_keys() -> None:
-    with pytest.raises(TypeError, match="Unsupported dictionary key"):
-        to_jsonable({object(): "value"})
-
-
-def test_to_jsonable_rejects_dictionary_key_stringification_collisions() -> None:
-    """Reject mappings that would silently overwrite a JSON object value."""
-    with pytest.raises(ValueError, match="stringify to the same key"):
-        to_jsonable({1: "integer", "1": "string"})
+def test_to_jsonable_rejects_non_string_dictionary_keys() -> None:
+    with pytest.raises(TypeError, match="dictionary key"):
+        to_jsonable({1: "value"})

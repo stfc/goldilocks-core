@@ -116,4 +116,5 @@ AdviseStage = Callable[
 
 Advice should remain intent-level. Concrete k-point grids belong to Kmesh. Concrete target resources and target-specific numerical data belong to Select. Target-code text rendering belongs to Generate.
 
-The current `width_ry`, `conv_thr`, pseudo-family, and SSSP-mode representation is QE-oriented. A target-neutral contract revision must keep shared physics intent and canonical quantities here while moving target-native units, resource fields, and keyword mappings behind the [target-code adapter boundary](../target-code-adapters.md).
+The current `width_ry`, `conv_thr`, pseudo-family, and SSSP-mode representation
+is QE-oriented because only Quantum ESPRESSO SCF generation is implemented.

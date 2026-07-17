@@ -23,7 +23,6 @@ from goldilocks_core.contracts import (
     KMeshAdvisor,
     ParameterAdvice,
     SelectStage,
-    StageRecord,
     StructureInput,
 )
 from goldilocks_core.generation import generate_inputs
@@ -73,8 +72,8 @@ def run_core_job(
             heuristic fallback.
 
     Returns:
-        A ``CoreResult`` containing the stage records, scientific records,
-        generated files when requested, and bundle record for bundle mode.
+        A ``CoreResult`` containing scientific records, generated files when
+        requested, and a bundle record for bundle mode.
 
     Raises:
         ValueError: If the job mode is unsupported, bundle mode lacks
@@ -82,32 +81,17 @@ def run_core_job(
     """
     active_pipeline = pipeline or Pipeline()
 
-    stages: list[StageRecord] = []
     structure = load_structure(request.structure)
-    stages.append(StageRecord(name="load"))
-
     analysis = active_pipeline.analyze(structure)
-    stages.append(
-        StageRecord(
-            name="analyze",
-            warnings=(*analysis.disorder_warnings, *analysis.analysis_warnings),
-        )
-    )
-
     advice = active_pipeline.advise(analysis, request.intent, request.hints)
     advice_warnings = _advice_warnings(advice)
-    stages.append(StageRecord(name="advise", warnings=advice_warnings))
-
     k_points = active_pipeline.kmesh(structure, request.hints, advice.k_points)
-    stages.append(StageRecord(name="kmesh", warnings=k_points.provenance.warnings))
-
     selection = active_pipeline.select(
         structure,
         advice,
         k_points,
         tuple(request.pseudo_metadata),
     )
-    stages.append(StageRecord(name="select", warnings=selection.warnings))
 
     warnings = _unique_warnings(
         analysis.disorder_warnings,
@@ -126,7 +110,6 @@ def run_core_job(
             advice,
             selection,
         )
-        stages.append(StageRecord(name="generate"))
 
     if request.mode == "bundle":
         # output_dir is guaranteed non-None for bundle mode by
@@ -138,10 +121,8 @@ def run_core_job(
             selection=selection,
             generated_files=generated_files,
             warnings=warnings,
-            stages=tuple(stages),
         )
         bundle = active_pipeline.bundle(in_progress, request.output_dir)
-        stages.append(StageRecord(name="bundle"))
 
     return CoreResult(
         intent=request.intent,
@@ -151,7 +132,6 @@ def run_core_job(
         generated_files=generated_files,
         warnings=warnings,
         bundle=bundle,
-        stages=tuple(stages),
     )
 
 
@@ -262,11 +242,11 @@ def write_bundle(
         pipeline: Optional stage backend composition.
 
     Returns:
-        ``CoreResult`` with generated files, bundle record, stages, and warnings.
+        ``CoreResult`` with generated files, bundle record, and warnings.
 
     Raises:
         FileExistsError: If the bundle output directory already exists.
-        OSError: If bundle staging or publication fails.
+        OSError: If bundle writing fails.
         ValueError: If generation or bundle writing rejects its inputs.
     """
     return run_core_job(

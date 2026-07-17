@@ -68,9 +68,8 @@ The generator raises `ValueError` if:
 - `intent.code` is not `"quantum_espresso"` (only QE is implemented).
 - `intent.task` is not `"scf_single_point"` (only SCF is implemented).
 - The structure is disordered (`structure.is_ordered` is False). Disordered structures require manual resolution of occupancies.
-- Pseudopotential selections do not contain exactly one entry for every structure element. Duplicate, missing, and extraneous elements are rejected before global cutoffs are calculated.
-- Any pseudopotential selection has `filename=None`, an unsafe unquoted filename token, or missing cutoffs (`ecutwfc_ry` or `ecutrho_ry` is None). The generator will not invent values.
-- Any selected cutoff is non-numeric, non-finite, zero, negative, or boolean. Record constructors normally reject these values; Generate repeats the finite, strictly positive check defensively before rendering.
+- Pseudopotential selections do not contain exactly one entry for every structure element. Missing and extraneous elements are rejected before global cutoffs are calculated.
+- Any pseudopotential selection has `filename=None` or missing cutoffs (`ecutwfc_ry` or `ecutrho_ry` is None). The generator will not invent values.
 - Smearing advice contains a method outside the canonical supported set. Generate maps known labels rather than interpolating arbitrary target syntax.
 
 ## What the generator does not do
@@ -79,9 +78,4 @@ The generator raises `ValueError` if:
 - It does not resolve disordered occupancies.
 - It does not write pseudopotential files.
 - It does not run calculations.
-
-## Multi-code boundary
-
-Replacing this writer can change how the current completed QE selection is rendered. It cannot correctly add another DFT code because target validation, resource metadata/selection, target units/data, CLI choices, and generation must change together. The future boundary is documented in [target-code adapters](../target-code-adapters.md); no executable adapter API exists yet.
-
-Issue #40's ASE rewrite belongs within the QE generation responsibility. It does not replace the QE UPF/SSSP selection boundary.
+- It does not generate inputs for any DFT code other than Quantum ESPRESSO SCF.

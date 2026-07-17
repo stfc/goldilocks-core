@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import math
-import re
-from numbers import Real
-
 from pymatgen.core import Structure
 from pymatgen.core.periodic_table import Element
 
@@ -93,9 +89,8 @@ def generate_quantum_espresso_scf_input(
         Complete QE input text ending with a trailing newline.
 
     Raises:
-        ValueError: If the structure is disordered, pseudopotential selections
-            are missing, cutoff metadata is incomplete, smearing is enabled
-            without a width, or vdW advice violates its enabled/method invariant.
+        ValueError: If the structure is disordered or pseudopotential selections
+            are missing or incomplete.
     """
     if not structure.is_ordered:
         raise ValueError(
@@ -105,21 +100,6 @@ def generate_quantum_espresso_scf_input(
     elements = tuple(
         sorted(element.symbol for element in structure.composition.elements)
     )
-    selected_elements = tuple(
-        pseudopotential.element for pseudopotential in selection.pseudopotentials
-    )
-    duplicate_elements = tuple(
-        element
-        for index, element in enumerate(selected_elements)
-        if element in selected_elements[:index]
-    )
-    if duplicate_elements:
-        raise ValueError(
-            "Cannot generate Quantum ESPRESSO input with duplicate "
-            "pseudopotential selections for: "
-            f"{', '.join(dict.fromkeys(duplicate_elements))}"
-        )
-
     pseudo_by_element = {
         pseudo.element: pseudo for pseudo in selection.pseudopotentials
     }
@@ -152,33 +132,6 @@ def generate_quantum_espresso_scf_input(
         raise ValueError(
             "Cannot generate Quantum ESPRESSO input without complete pseudo "
             f"and cutoff selections for: {', '.join(incomplete)}"
-        )
-
-    invalid_filenames = tuple(
-        f"{pseudo.element}.filename={pseudo.filename!r}"
-        for pseudo in selected_pseudos
-        if not _is_safe_pseudopotential_filename(pseudo.filename)
-    )
-    if invalid_filenames:
-        raise ValueError(
-            "Cannot generate Quantum ESPRESSO input with unsafe pseudopotential "
-            f"filenames ({', '.join(invalid_filenames)})"
-        )
-
-    invalid_cutoffs = tuple(
-        f"{pseudo.element}.{field}={value!r}"
-        for pseudo in selected_pseudos
-        for field, value in (
-            ("ecutwfc_ry", pseudo.ecutwfc_ry),
-            ("ecutrho_ry", pseudo.ecutrho_ry),
-        )
-        if not _is_finite_positive_cutoff(value)
-    )
-    if invalid_cutoffs:
-        raise ValueError(
-            "Cannot generate Quantum ESPRESSO input with invalid cutoff "
-            f"selections ({', '.join(invalid_cutoffs)}); cutoffs must be finite "
-            "positive numbers"
         )
 
     ecutwfc = max(float(pseudo.ecutwfc_ry) for pseudo in selected_pseudos)
@@ -333,28 +286,6 @@ def _k_points(selection: SelectionRecord) -> list[str]:
         "K_POINTS automatic",
         f"  {grid[0]}  {grid[1]}  {grid[2]}  {shift[0]}  {shift[1]}  {shift[2]}",
     ]
-
-
-def _is_safe_pseudopotential_filename(value: object) -> bool:
-    """Return whether a filename is safe as one unquoted QE card token."""
-    return (
-        isinstance(value, str)
-        and re.fullmatch(
-            r"[A-Za-z0-9][A-Za-z0-9._+-]*",
-            value,
-        )
-        is not None
-    )
-
-
-def _is_finite_positive_cutoff(value: object) -> bool:
-    """Return whether a selected cutoff is safe for target-code generation."""
-    return (
-        not isinstance(value, bool)
-        and isinstance(value, Real)
-        and math.isfinite(value)
-        and value > 0
-    )
 
 
 def _format_float(value: float) -> str:

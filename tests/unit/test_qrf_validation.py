@@ -38,24 +38,6 @@ def test_real_artifact_validation_runs_qrf_contract_before_mocked_inference(
         assert received_config is config
         validate_contract(received_config)
 
-    def resolve_artifacts(
-        received_config,
-        checkpoint,
-        atom_init,
-        *,
-        resolved_artifacts,
-    ) -> tuple[str, str]:
-        assert received_config is config
-        assert checkpoint is None
-        assert atom_init is None
-        resolved_artifacts.update(
-            {
-                "metallicity_checkpoint": "mock-checkpoint",
-                "metallicity_atom_table": "mock-atom-table",
-            }
-        )
-        return "mock-checkpoint", "mock-atom-table"
-
     class FakeQRF:
         q = [0.05, 0.5, 0.95]
 
@@ -67,9 +49,6 @@ def test_real_artifact_validation_runs_qrf_contract_before_mocked_inference(
         lambda path: config,
     )
     monkeypatch.setattr(kdistance_advisor, "_validate_qrf_contract", track_contract)
-    monkeypatch.setattr(
-        kdistance_advisor, "_resolve_metallicity_artifacts", resolve_artifacts
-    )
     monkeypatch.setattr("goldilocks_core.ml.models.load_model", lambda spec: FakeQRF())
     monkeypatch.setattr(
         "goldilocks_core.ml.metallicity.load_metallicity_model", lambda path: object()

@@ -26,10 +26,8 @@ def validate_real_qrf_artifacts(
         )
 
     from goldilocks_core.advisors.kdistance_advisor import (
-        _resolve_metallicity_artifacts,
         _validate_loaded_qrf_quantiles,
         _validate_qrf_contract,
-        _validate_qrf_runtime,
         predict_kdistance_quantiles,
     )
     from goldilocks_core.ml.kdistance_features import extract_qrf_features
@@ -38,16 +36,9 @@ def validate_real_qrf_artifacts(
 
     config = load_default_qrf_config(registry_path)
     _validate_qrf_contract(config)
-    runtime: dict[str, str] = {}
-    _validate_qrf_runtime(config, runtime)
     qrf = load_model(config.model)
     _validate_loaded_qrf_quantiles(qrf, config)
-    checkpoint, atom_table = _resolve_metallicity_artifacts(
-        config,
-        None,
-        None,
-        resolved_artifacts={},
-    )
+    checkpoint, atom_init = _resolve_metallicity_artifacts(config)
     metallicity_model = load_metallicity_model(checkpoint)
     structure = Structure(
         Lattice.cubic(5.43),
@@ -57,7 +48,7 @@ def validate_real_qrf_artifacts(
     features = extract_qrf_features(
         structure,
         metallicity_model,
-        atom_table,
+        atom_init,
         config.feature_settings,
     )
     median, lower, upper = predict_kdistance_quantiles(
@@ -69,6 +60,19 @@ def validate_real_qrf_artifacts(
         "config_digest": config.digest,
         "feature_schema": config.feature_schema,
         "feature_count": len(features.values),
-        "runtime": runtime,
         "prediction": {"median": median, "lower": lower, "upper": upper},
     }
+
+
+def _resolve_metallicity_artifacts(config) -> tuple[str, str]:
+    from goldilocks_core.ml.models import resolve_artifact
+
+    checkpoint = resolve_artifact(
+        config.metallicity,
+        config.metallicity_checkpoint_file,
+    )
+    atom_init = resolve_artifact(
+        config.metallicity,
+        config.metallicity_atom_init_file,
+    )
+    return checkpoint, atom_init

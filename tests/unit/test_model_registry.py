@@ -1,4 +1,3 @@
-import tomllib
 from dataclasses import fields, replace
 from pathlib import Path
 
@@ -11,7 +10,6 @@ from goldilocks_core.ml.kdistance_features import (
 )
 from goldilocks_core.ml.model_registry import (
     MODEL_REGISTRY_ENV,
-    RuntimeRequirement,
     load_default_qrf_config,
 )
 
@@ -36,18 +34,6 @@ interval_quantiles = [0.05, 0.5, 0.95]
 [defaults.kpoints.calibration]
 method = "symmetric_additive_bounds-v1"
 correction = 0.01
-
-[defaults.kpoints.runtime]
-goldilocks-core = "0.1.0"
-numpy = "2.4.4"
-scikit-learn = "1.7.2"
-sklearn-quantile = "0.1.1"
-joblib = "1.5.3"
-matminer = "0.10.1"
-dscribe = "2.1.2"
-pymatgen = "2026.3.23"
-torch = "2.12.1"
-torch-geometric = "2.8.0"
 
 [defaults.kpoints.features]
 composition_featurizers = ["ElementProperty", "Stoichiometry", "ValenceOrbital"]
@@ -95,13 +81,6 @@ def test_custom_registry_hotswaps_complete_inference_configuration(tmp_path) -> 
     assert config.interval_confidence == 0.9
     assert config.interval_quantiles == (0.05, 0.5, 0.95)
     assert config.calibration.correction == 0.01
-    assert {item.distribution for item in config.runtime_requirements} >= {
-        "matminer",
-        "dscribe",
-        "pymatgen",
-        "torch",
-        "torch-geometric",
-    }
     assert config.feature_settings.soap_r_cut == 10.0
     assert config.metallicity.location == "/models/metallicity"
     assert config.metallicity_checkpoint_file == "model.ckpt"
@@ -114,18 +93,6 @@ def test_registry_digest_is_deterministic() -> None:
 
     assert first.digest == second.digest
     assert len(first.digest) == 64
-
-
-def test_packaged_qrf_runtime_matches_exact_project_dependencies() -> None:
-    """Keep the install contract aligned with the default model contract."""
-    config = load_default_qrf_config()
-    with Path("pyproject.toml").open("rb") as project_file:
-        dependencies = set(tomllib.load(project_file)["project"]["dependencies"])
-
-    for requirement in config.runtime_requirements:
-        if requirement.distribution == "goldilocks-core":
-            continue
-        assert f"{requirement.distribution}=={requirement.version}" in dependencies
 
 
 def test_registry_digest_changes_for_each_top_level_contract_component() -> None:
@@ -144,13 +111,6 @@ def test_registry_digest_changes_for_each_top_level_contract_component() -> None
         replace(
             config,
             calibration=replace(config.calibration, correction=0.0),
-        ),
-        replace(
-            config,
-            runtime_requirements=(
-                RuntimeRequirement("changed-runtime", "1"),
-                *config.runtime_requirements[1:],
-            ),
         ),
         replace(
             config,
@@ -207,19 +167,6 @@ def test_registry_digest_includes_every_model_and_artifact_setting() -> None:
             assert changed.digest != config.digest, f"{nested_name}.{field.name}"
 
 
-def test_registry_digest_includes_every_runtime_version() -> None:
-    config = load_default_qrf_config()
-
-    for index, requirement in enumerate(config.runtime_requirements):
-        changed_requirements = list(config.runtime_requirements)
-        changed_requirements[index] = replace(requirement, version="changed")
-        changed = replace(
-            config,
-            runtime_requirements=tuple(changed_requirements),
-        )
-        assert changed.digest != config.digest, requirement.distribution
-
-
 def test_registry_environment_variable_selects_custom_file(
     monkeypatch, tmp_path
 ) -> None:
@@ -257,18 +204,6 @@ def test_registry_requires_immutable_huggingface_revision(tmp_path) -> None:
     registry.write_text(mutable_remote, encoding="utf-8")
 
     with pytest.raises(ValueError, match="40-character"):
-        load_default_qrf_config(registry)
-
-
-def test_registry_rejects_missing_runtime_requirement(tmp_path) -> None:
-    registry = tmp_path / "models.toml"
-    write_registry(registry)
-    registry.write_text(
-        registry.read_text(encoding="utf-8").replace('torch-geometric = "2.8.0"\n', ""),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(ValueError, match="torch-geometric"):
         load_default_qrf_config(registry)
 
 

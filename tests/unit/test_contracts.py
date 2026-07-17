@@ -17,7 +17,6 @@ from goldilocks_core.contracts import (
     SelectionRecord,
     SmearingAdvice,
     SpinOrbitAdvice,
-    StageRecord,
     StructureAnalysisRecord,
     StructureFeatureVector,
     VdwAdvice,
@@ -96,7 +95,6 @@ def test_contracts_serialize_to_json_safe_dicts() -> None:
         analysis=_make_analysis(),
         advice=_make_advice(),
         selection=_make_selection(),
-        stages=(StageRecord(name="load"), StageRecord(name="analyze")),
     )
 
     data = result.to_dict()
@@ -140,13 +138,11 @@ def test_job_records_serialize_to_json_safe_dicts() -> None:
         advice=_make_advice(),
         selection=_make_selection(),
         bundle=BundleRecord(path="run/", manifest={"manifest_version": 1}),
-        stages=(StageRecord(name="load"), StageRecord(name="analyze")),
     )
 
     data = result.to_dict()
 
     assert data["bundle"]["path"] == "run/"
-    assert data["stages"][0]["name"] == "load"
     assert data["selection"]["k_points"]["grid"] == [4, 4, 4]
 
 

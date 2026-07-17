@@ -87,7 +87,7 @@ print(result.bundle.path)
 print(result.bundle.manifest)
 ```
 
-`run/` must not already exist. Bundle publication stages the complete directory on the destination filesystem, refuses all existing destinations, and does not provide an overwrite mode. Manifest entries include the UTF-8 byte count and SHA-256 hash of each generated file.
+`run/` must not already exist. Bundle writing refuses existing destinations and does not provide an overwrite mode. Manifest entries identify each generated file by its bundle path and role. If a filesystem write fails, the incomplete new directory may remain for inspection or removal.
 
 Bundle layout:
 
@@ -135,19 +135,18 @@ loading is lazy: constructing a pipeline and resolving explicit `k_grid` or
 `k_spacing` hints performs no registry read, model download, or inference.
 
 The extractor owns the explicit 483-value feature schema. Model and supporting
-artifact identities, exact inference-stack versions, feature settings, interval
-confidence, quantiles, and calibration live in
-`goldilocks_core/model_registry.toml`. Package dependencies that affect this
-contract are pinned to those versions. The advisor checks the declared schema
-and runtime before loading artifacts, then verifies that the loaded model's own
-quantiles match the declared confidence interval. Set
+artifact identities, feature settings, interval confidence, quantiles, and
+calibration live in `goldilocks_core/model_registry.toml`. The advisor checks
+the declared schema before loading artifacts, then verifies that the loaded
+model's own quantiles match the declared confidence interval. Set
 `GOLDILOCKS_MODEL_REGISTRY=/path/to/models.toml` to replace the complete default
 configuration without changing package source.
 
-Successful QRF selections serialize the deterministic registry digest, full
-configuration, Core/extractor identity, required and installed runtime versions,
-and artifact identities in `provenance.details.qrf_inference`. Local model,
-checkpoint, and atom-table files are identified by SHA-256 content hashes.
+Successful QRF selections record the model identity, configuration digest,
+feature schema and count, interval confidence/quantiles, calibration, and
+metallicity artifact identity in `provenance.details.qrf_inference`. The
+advisor falls back to heuristic k-point advice when the model or its
+supporting artifacts are unavailable or incompatible.
 
 Hugging Face artifacts are cached by `huggingface_hub`; alternate remote
 registries must specify full 40-character commit revisions rather than branches
@@ -239,7 +238,6 @@ See [architecture](docs/architecture.md) for boundaries and dependency direction
 ## Documentation
 
 - [Architecture](docs/architecture.md)
-- [Target-code adapter design](docs/target-code-adapters.md)
 - [Pipeline](docs/pipeline.md)
 - [Backends](docs/backends.md)
 - [Contracts](docs/contracts.md)

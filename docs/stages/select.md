@@ -98,10 +98,4 @@ SelectStage = Callable[
 ]
 ```
 
-It may implement different QE pseudo ranking or cutoff policy, but it should not recalculate k-points. If k-point behavior needs to change, replace the Kmesh backend instead.
-
-## Multi-code boundary
-
-For another DFT target, Select is where the target adapter validates the target and task, resolves concrete target resources, and materializes explicit target-specific numerical data and units. Generate then renders that completed selection. This preserves the fixed graph while keeping target syntax out of Analyze and Advise.
-
-The current `PseudoMetadata` and `PseudopotentialSelection` types cannot represent resources such as coordinated CP2K basis/potential sets or VASP PAW datasets without target-specific contracts. See [target-code adapters](../target-code-adapters.md).
+It may implement different QE pseudo ranking or cutoff policy, but it should not recalculate k-points. If k-point behavior needs to change, replace the Kmesh backend instead. Only Quantum ESPRESSO SCF resources are currently supported.

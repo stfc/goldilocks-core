@@ -64,17 +64,6 @@ KPointGrid = tuple[int, int, int]
 KPointShift = tuple[int, int, int]
 """Immutable Monkhorst-Pack shift as (s1, s2, s3) with values 0 or 1."""
 
-StageName = Literal[
-    "load",
-    "analyze",
-    "advise",
-    "kmesh",
-    "select",
-    "generate",
-    "bundle",
-]
-"""Name of a stage in the fixed Core pipeline graph."""
-
 JobMode = Literal["recommend", "generate", "bundle"]
 """How far the fixed Core pipeline runs.
 
@@ -82,9 +71,6 @@ JobMode = Literal["recommend", "generate", "bundle"]
 - ``generate``: … → Generate.
 - ``bundle``: … → Bundle.
 """
-
-StageStatus = Literal["completed"]
-"""Execution status of a pipeline stage. Currently always ``completed``."""
 
 Dimensionality = Literal["3d", "2d", "1d", "molecule", "unknown"]
 """Bonded-structure dimensionality, or ``unknown`` when detection fails."""
@@ -1069,13 +1055,12 @@ class BundleRecord:
 
 @dataclass(frozen=True, slots=True)
 class CoreResult:
-    """Composed accumulator of every stage record the fixed graph produces.
+    """Composed accumulator of every record the fixed pipeline produces.
 
     Scientific records are populated as their stages run. ``generated_files``
     is populated in generate/bundle modes. ``bundle`` is set only in bundle
-    mode. ``stages`` is the execution trace, always populated. The request is
-    not echoed here — the caller already has it; CLI/HTTP layers echo it
-    themselves in their serialized output.
+    mode. The request is not echoed here — the caller already has it;
+    CLI/HTTP layers echo it themselves in their serialized output.
 
     Attributes:
         intent: what the operator asked for.
@@ -1089,7 +1074,6 @@ class CoreResult:
             selection.
         bundle: terminal Bundle-stage record, set only in bundle
             mode.
-        stages: execution record for each completed stage.
     """
 
     intent: CalculationIntent
@@ -1099,7 +1083,6 @@ class CoreResult:
     generated_files: tuple[GeneratedFile, ...] = ()
     warnings: tuple[str, ...] = ()
     bundle: BundleRecord | None = None
-    stages: tuple[StageRecord, ...] = ()
 
     def __post_init__(self) -> None:
         """Reject duplicate generated paths at their containing boundary."""
@@ -1159,28 +1142,6 @@ class CoreJobRequest:
         return to_jsonable(self)
 
 
-@dataclass(frozen=True, slots=True)
-class StageRecord:
-    """Observable execution record for one fixed Core pipeline stage.
-
-    Used in ``CoreResult.stages`` to report which stages ran and
-    what warnings they produced.
-
-    Attributes:
-        name: which stage this record is for.
-        status: execution status. Currently always ``completed``.
-        warnings: warnings produced during this stage.
-    """
-
-    name: StageName
-    status: StageStatus = "completed"
-    warnings: tuple[str, ...] = ()
-
-    def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary."""
-        return to_jsonable(self)
-
-
 AnalyzeStage = Callable[[Structure], StructureAnalysisRecord]
 """Analyze-stage backend signature."""
 
@@ -1209,20 +1170,6 @@ BundleStage = Callable[[CoreResult, str | Path], BundleRecord]
 """Bundle-stage backend signature."""
 
 
-def _numpy_scalar_to_python(value: np.generic) -> Any:
-    """Convert NumPy scalars, including extended precision values."""
-    converted = value.item()
-    if not isinstance(converted, np.generic):
-        return converted
-    if np.issubdtype(value.dtype, np.bool_):
-        return bool(value)
-    if np.issubdtype(value.dtype, np.integer):
-        return int(value)
-    if np.issubdtype(value.dtype, np.floating):
-        return float(value)
-    raise TypeError(f"Unsupported NumPy scalar for JSON serialization: {value.dtype}")
-
-
 def to_jsonable(value: Any) -> Any:
     """Convert supported pipeline values into JSON-safe Python objects.
 
@@ -1245,12 +1192,12 @@ def to_jsonable(value: Any) -> Any:
     if isinstance(value, dict):
         converted: dict[str, Any] = {}
         for key, item in value.items():
-            json_key = _to_json_key(key)
-            if json_key in converted:
-                raise ValueError(
-                    f"JSON dictionary keys stringify to the same key: {json_key!r}"
+            if not isinstance(key, str):
+                raise TypeError(
+                    "Unsupported dictionary key for JSON serialization: "
+                    f"{type(key).__name__}"
                 )
-            converted[json_key] = to_jsonable(item)
+            converted[key] = to_jsonable(item)
         return converted
 
     if isinstance(value, Path):
@@ -1263,7 +1210,7 @@ def to_jsonable(value: Any) -> Any:
         return to_jsonable(value.tolist())
 
     if isinstance(value, np.generic):
-        return to_jsonable(_numpy_scalar_to_python(value))
+        return to_jsonable(value.item())
 
     if value is None or isinstance(value, str | bool | int):
         return value
@@ -1274,22 +1221,3 @@ def to_jsonable(value: Any) -> Any:
         return value
 
     raise TypeError(f"Unsupported value for JSON serialization: {type(value).__name__}")
-
-
-def _to_json_key(value: Any) -> str:
-    """Return a string key for supported JSON scalar key values."""
-    if isinstance(value, Enum):
-        return _to_json_key(value.value)
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, np.generic):
-        return _to_json_key(_numpy_scalar_to_python(value))
-    if value is None or isinstance(value, str | bool | int):
-        return str(value)
-    if isinstance(value, float):
-        if not math.isfinite(value):
-            raise ValueError(f"JSON dictionary keys must be finite; got {value!r}")
-        return str(value)
-    raise TypeError(
-        f"Unsupported dictionary key for JSON serialization: {type(value).__name__}"
-    )

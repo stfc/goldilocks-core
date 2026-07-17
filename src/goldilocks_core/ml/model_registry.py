@@ -18,20 +18,6 @@ from goldilocks_core.contracts import ModelSource, ModelSpec, ModelType, PathLik
 MODEL_REGISTRY_ENV = "GOLDILOCKS_MODEL_REGISTRY"
 _REGISTRY_RESOURCE = "model_registry.toml"
 _HUGGINGFACE_COMMIT = re.compile(r"[0-9a-f]{40}")
-_QRF_RUNTIME_PACKAGES = frozenset(
-    {
-        "goldilocks-core",
-        "numpy",
-        "scikit-learn",
-        "sklearn-quantile",
-        "joblib",
-        "matminer",
-        "dscribe",
-        "pymatgen",
-        "torch",
-        "torch-geometric",
-    }
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,14 +27,6 @@ class ArtifactSpec:
     source: ModelSource
     location: str
     revision: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class RuntimeRequirement:
-    """Exact distribution version required by an inference artifact."""
-
-    distribution: str
-    version: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,7 +84,7 @@ class QrfCalibration:
 
 @dataclass(frozen=True, slots=True)
 class QrfKpointsConfig:
-    """Complete registry-owned QRF Kmesh inference configuration."""
+    """Registry-owned QRF Kmesh inference configuration."""
 
     model: ModelSpec
     feature_schema: str
@@ -115,13 +93,12 @@ class QrfKpointsConfig:
     interval_confidence: float
     interval_quantiles: tuple[float, float, float]
     calibration: QrfCalibration
-    runtime_requirements: tuple[RuntimeRequirement, ...]
     metallicity: ArtifactSpec
     metallicity_checkpoint_file: str
     metallicity_atom_init_file: str
 
     def to_dict(self) -> dict[str, object]:
-        """Return every inference-relevant registry value as structured data."""
+        """Return the inference-relevant registry values as structured data."""
         return {
             "advisor": "qrf_kdistance",
             "model": {
@@ -144,10 +121,6 @@ class QrfKpointsConfig:
             "calibration": {
                 "method": self.calibration.method,
                 "correction": self.calibration.correction,
-            },
-            "runtime_requirements": {
-                requirement.distribution: requirement.version
-                for requirement in self.runtime_requirements
             },
             "metallicity": {
                 "source": self.metallicity.source,
@@ -190,12 +163,11 @@ def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
         kpoints = data["defaults"]["kpoints"]
         features = kpoints["features"]
         calibration = kpoints["calibration"]
-        runtime = kpoints["runtime"]
         metallicity = kpoints["metallicity"]
     except (KeyError, TypeError) as error:
         raise ValueError(
             "Model registry must define defaults.kpoints plus features, "
-            "calibration, runtime, and metallicity tables."
+            "calibration, and metallicity tables."
         ) from error
 
     _require_advisor(kpoints)
@@ -220,7 +192,6 @@ def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
             "upper quantiles spanning interval_confidence."
         )
 
-    runtime_requirements = _load_runtime_requirements(runtime)
     feature_settings = _load_feature_settings(features)
 
     return QrfKpointsConfig(
@@ -243,7 +214,6 @@ def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
             method=_require_string(calibration, "method"),
             correction=_require_float(calibration, "correction"),
         ),
-        runtime_requirements=runtime_requirements,
         metallicity=ArtifactSpec(
             source=artifact_source,
             location=_require_string(metallicity, "location"),
@@ -286,26 +256,6 @@ def _load_feature_settings(features: dict[str, Any]) -> QrfFeatureSettings:
     if settings.soap_reduction != "mean":
         raise ValueError("defaults.kpoints.features.soap_reduction must be 'mean'.")
     return settings
-
-
-def _load_runtime_requirements(
-    runtime: dict[str, Any],
-) -> tuple[RuntimeRequirement, ...]:
-    """Require an exact version for the complete QRF inference stack."""
-    if not isinstance(runtime, dict):
-        raise ValueError("defaults.kpoints.runtime must be a table.")
-    package_names = set(runtime)
-    if package_names != _QRF_RUNTIME_PACKAGES:
-        missing = sorted(_QRF_RUNTIME_PACKAGES - package_names)
-        unexpected = sorted(package_names - _QRF_RUNTIME_PACKAGES)
-        raise ValueError(
-            "defaults.kpoints.runtime must define exactly the QRF runtime "
-            f"packages; missing={missing}, unexpected={unexpected}."
-        )
-    return tuple(
-        RuntimeRequirement(package, _require_string(runtime, package))
-        for package in sorted(_QRF_RUNTIME_PACKAGES)
-    )
 
 
 def _require_advisor(kpoints: dict[str, Any]) -> None:

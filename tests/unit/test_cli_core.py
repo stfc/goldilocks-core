@@ -15,7 +15,6 @@ from goldilocks_core.contracts import (
     KPointSelection,
     Provenance,
     SelectionRecord,
-    StageRecord,
     StructureAnalysisRecord,
 )
 from goldilocks_core.jobs import Pipeline
@@ -52,7 +51,6 @@ def make_result(request: CoreJobRequest) -> CoreResult:
             ),
             pseudopotentials=(),
         ),
-        stages=(StageRecord(name="load"), StageRecord(name="select")),
     )
 
 
@@ -466,7 +464,6 @@ def test_main_builds_bundle_request_with_output_dir(monkeypatch, capsys) -> None
             advice=result.advice,
             selection=result.selection,
             bundle=BundleRecord(path=request.output_dir, manifest={}),
-            stages=result.stages,
         )
 
     monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)

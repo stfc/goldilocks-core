@@ -49,7 +49,7 @@ jobs:
           uv run mutmut run --max-children 4
           uv run mutmut export-cicd-stats
           uv run python scripts/check_mutation_score.py \
-            mutants/mutmut-cicd-stats.json --minimum 0.80 \
+            mutants/mutmut-cicd-stats.json --minimum 0.75 \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
   package-build:

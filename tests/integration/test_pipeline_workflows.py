@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from collections.abc import Callable
 
@@ -26,14 +25,6 @@ def test_generate_crosses_every_in_memory_stage_with_real_backends(
         pseudo_metadata=pseudos,
     )
 
-    assert [stage.name for stage in result.stages] == [
-        "load",
-        "analyze",
-        "advise",
-        "kmesh",
-        "select",
-        "generate",
-    ]
     assert result.analysis.elements == ("Cl", "Na")
     assert result.selection.k_points.grid == (4, 4, 4)
     assert {pseudo.element for pseudo in result.selection.pseudopotentials} == {
@@ -51,12 +42,12 @@ def test_generate_crosses_every_in_memory_stage_with_real_backends(
     assert "4  4  4  0  0  0" in qe_input
 
 
-def test_structure_file_to_bundle_preserves_exact_generated_bytes_and_provenance(
+def test_structure_file_to_bundle_preserves_generated_files_and_provenance(
     tmp_path,
     sodium_chloride_structure: Structure,
     pseudo_metadata_factory: Callable[..., PseudoMetadata],
 ) -> None:
-    """Exercise file loading and complete atomic bundle publication end to end."""
+    """Exercise file loading and complete bundle writing end to end."""
     structure_path = tmp_path / "NaCl.cif"
     sodium_chloride_structure.to(filename=structure_path)
     output_dir = tmp_path / "bundle"
@@ -72,15 +63,6 @@ def test_structure_file_to_bundle_preserves_exact_generated_bytes_and_provenance
         pseudo_metadata=pseudos,
     )
 
-    assert [stage.name for stage in result.stages] == [
-        "load",
-        "analyze",
-        "advise",
-        "kmesh",
-        "select",
-        "generate",
-        "bundle",
-    ]
     assert result.bundle is not None
 
     generated_path = output_dir / "inputs" / "qe.in"
@@ -89,8 +71,10 @@ def test_structure_file_to_bundle_preserves_exact_generated_bytes_and_provenance
     file_record = manifest["generated_files"][0]
 
     assert generated_bytes == result.generated_files[0].content.encode("utf-8")
-    assert file_record["bytes"] == len(generated_bytes)
-    assert file_record["sha256"] == hashlib.sha256(generated_bytes).hexdigest()
+    assert file_record == {
+        "path": "inputs/qe.in",
+        "role": "input",
+    }
     assert manifest == result.bundle.manifest
     assert manifest["selection"]["k_points"]["grid"] == [3, 5, 7]
     assert manifest["advice"]["k_points"]["provenance"]["source"] == "user_hint"

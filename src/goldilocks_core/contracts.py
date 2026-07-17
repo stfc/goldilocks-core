@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import math
-import re
 from dataclasses import dataclass, field, fields, is_dataclass
-from enum import Enum
 from numbers import Integral, Real
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path
 from typing import Any, Callable, Literal, Sequence, get_args
 
 import numpy as np
@@ -43,11 +41,11 @@ PathLike = str | Path
 StructureInput = Structure | PathLike
 """Structure input: a pymatgen ``Structure`` or a path to a structure file."""
 
-CodeName = Literal["quantum_espresso"]
-"""Target DFT code. Only Quantum ESPRESSO is currently supported."""
+CodeName = str
+"""Target DFT code name."""
 
-CalcTask = Literal["scf_single_point"]
-"""Calculation task. Only SCF single-point is currently supported."""
+CalcTask = str
+"""Calculation task name."""
 
 SmearingType = Literal["fixed", "gaussian", "mp", "cold"]
 """Canonical occupation schemes supported by the current QE target."""
@@ -89,8 +87,6 @@ Translated to code-specific keywords in the Generate stage (e.g. ``d3bj`` →
 QE ``vdw_corr='grimme-d3'`` with ``dftd3_version=4``).
 """
 
-_VALID_CODE_NAMES: frozenset[str] = frozenset(get_args(CodeName))
-_VALID_CALC_TASKS: frozenset[str] = frozenset(get_args(CalcTask))
 _VALID_SMEARING_TYPES: frozenset[str] = frozenset(get_args(SmearingType))
 _VALID_VDW_METHODS: frozenset[str] = frozenset(get_args(VdwMethod))
 
@@ -125,24 +121,6 @@ def _validate_kpoint_grid(grid: object, field_name: str) -> KPointGrid:
         _validate_positive_integer(value, f"{field_name}[{index}]")
 
     return tuple(int(value) for value in grid)
-
-
-def _validate_kpoint_shift(shift: object, field_name: str) -> KPointShift:
-    """Return an immutable sequence of exactly three zero-or-one shift flags."""
-    if not isinstance(shift, tuple | list) or len(shift) != 3:
-        raise ValueError(
-            f"{field_name} must contain exactly three shift flags; got {shift!r}"
-        )
-
-    for index, value in enumerate(shift):
-        if (
-            isinstance(value, bool)
-            or not isinstance(value, Integral)
-            or value not in {0, 1}
-        ):
-            raise ValueError(f"{field_name}[{index}] must be 0 or 1; got {value!r}")
-
-    return tuple(int(value) for value in shift)
 
 
 def _validate_boolean(value: object, field_name: str) -> None:
@@ -193,38 +171,6 @@ def _validate_vdw_method(method: object, field_name: str) -> None:
         raise ValueError(f"{field_name} must be one of {valid}; got {method!r}")
 
 
-def _validate_pseudopotential_filename(filename: object, field_name: str) -> None:
-    """Require one safe, unquoted target-code filename token."""
-    if (
-        not isinstance(filename, str)
-        or re.fullmatch(
-            r"[A-Za-z0-9][A-Za-z0-9._+-]*",
-            filename,
-        )
-        is None
-    ):
-        raise ValueError(
-            f"{field_name} must be one safe unquoted filename token; got {filename!r}"
-        )
-
-
-def _validate_generated_path(path: str, field_name: str) -> str:
-    """Require a non-empty portable relative path without traversal."""
-    if not isinstance(path, str) or not path.strip():
-        raise ValueError(f"{field_name} must be a non-empty relative path")
-
-    posix_path = PurePosixPath(path)
-    windows_path = PureWindowsPath(path)
-    if posix_path.is_absolute() or windows_path.is_absolute() or windows_path.drive:
-        raise ValueError(f"{field_name} must be relative; got {path!r}")
-    if not posix_path.parts or posix_path == PurePosixPath("."):
-        raise ValueError(f"{field_name} must identify a file; got {path!r}")
-    if ".." in posix_path.parts or ".." in windows_path.parts:
-        raise ValueError(f"{field_name} must not contain '..' traversal; got {path!r}")
-
-    return str(posix_path)
-
-
 @dataclass(slots=True)
 class StructureFeatureVector:
     """Named numerical feature vector extracted from a structure.
@@ -238,39 +184,6 @@ class StructureFeatureVector:
 
     values: np.ndarray
     feature_names: list[str]
-
-    def __post_init__(self) -> None:
-        """Validate feature shape and numerical values."""
-        if not isinstance(self.values, np.ndarray):
-            raise ValueError(
-                "StructureFeatureVector.values must be a NumPy array; "
-                f"got {type(self.values).__name__}"
-            )
-        if self.values.ndim != 1:
-            raise ValueError(
-                "StructureFeatureVector.values must be one-dimensional; "
-                f"got shape {self.values.shape}"
-            )
-        if len(self.values) != len(self.feature_names):
-            raise ValueError(
-                "StructureFeatureVector.values and feature_names must have the "
-                f"same length; got {len(self.values)} values and "
-                f"{len(self.feature_names)} names"
-            )
-        if np.iscomplexobj(self.values):
-            raise ValueError(
-                "StructureFeatureVector.values must contain finite real numbers"
-            )
-        try:
-            values_are_finite = bool(np.isfinite(self.values).all())
-        except TypeError as error:
-            raise ValueError(
-                "StructureFeatureVector.values must contain finite numbers"
-            ) from error
-        if not values_are_finite:
-            raise ValueError(
-                "StructureFeatureVector.values must contain only finite numbers"
-            )
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -328,14 +241,6 @@ class KMeshEntry:
     k_pra: float
     n_reduced_kpoints: int
 
-    def __post_init__(self) -> None:
-        """Validate and normalize the concrete mesh dimensions."""
-        object.__setattr__(
-            self,
-            "mesh",
-            _validate_kpoint_grid(self.mesh, "KMeshEntry.mesh"),
-        )
-
 
 @dataclass(frozen=True, slots=True)
 class Provenance:
@@ -364,23 +269,6 @@ class Provenance:
     details: JsonDict | None = None
     warnings: tuple[str, ...] = ()
 
-    def __post_init__(self) -> None:
-        """Validate confidence and normalize structured details to JSON values."""
-        if self.confidence is not None and (
-            isinstance(self.confidence, bool)
-            or not isinstance(self.confidence, Real)
-            or not math.isfinite(self.confidence)
-            or not 0 <= self.confidence <= 1
-        ):
-            raise ValueError(
-                "Provenance.confidence must be a finite number in [0, 1]; "
-                f"got {self.confidence!r}"
-            )
-        if self.details is not None:
-            if not isinstance(self.details, dict):
-                raise ValueError("Provenance.details must be a dictionary or None")
-            object.__setattr__(self, "details", to_jsonable(self.details))
-
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
@@ -408,17 +296,14 @@ class CalculationIntent:
     pseudo_mode: str = "efficiency"
 
     def __post_init__(self) -> None:
-        """Validate the supported target/task and normalize the functional."""
-        if not isinstance(self.code, str) or self.code not in _VALID_CODE_NAMES:
-            valid = ", ".join(sorted(_VALID_CODE_NAMES))
-            raise ValueError(
-                f"CalculationIntent.code must be one of {valid}; got {self.code!r}"
-            )
-        if not isinstance(self.task, str) or self.task not in _VALID_CALC_TASKS:
-            valid = ", ".join(sorted(_VALID_CALC_TASKS))
-            raise ValueError(
-                f"CalculationIntent.task must be one of {valid}; got {self.task!r}"
-            )
+        """Require named targets and normalize the functional."""
+        for field_name in ("code", "task"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"CalculationIntent.{field_name} must be a non-empty string; "
+                    f"got {value!r}"
+                )
 
         functional = normalize_functional_label(self.functional)
         if functional is None:
@@ -632,17 +517,6 @@ class KPointAdvice:
             raise ValueError(
                 "KPointAdvice must have exactly one of spacing or an explicit grid set"
             )
-        if self.spacing is not None:
-            _validate_finite_positive(self.spacing, "KPointAdvice.spacing")
-        if self.explicit_grid is not None:
-            object.__setattr__(
-                self,
-                "explicit_grid",
-                _validate_kpoint_grid(
-                    self.explicit_grid,
-                    "KPointAdvice.explicit_grid",
-                ),
-            )
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -669,15 +543,6 @@ class SmearingAdvice:
     width_ry: float | None
     provenance: Provenance
 
-    def __post_init__(self) -> None:
-        """Validate the occupation type and width combination."""
-        _validate_smearing(
-            self.smearing_type,
-            self.width_ry,
-            type_field="SmearingAdvice.smearing_type",
-            width_field="SmearingAdvice.width_ry",
-        )
-
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
@@ -700,10 +565,6 @@ class MagnetismAdvice:
     spin_polarized: bool
     magnetic_elements: tuple[str, ...]
     provenance: Provenance
-
-    def __post_init__(self) -> None:
-        """Require an explicit spin-polarization control value."""
-        _validate_boolean(self.spin_polarized, "MagnetismAdvice.spin_polarized")
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -731,11 +592,6 @@ class SpinOrbitAdvice:
     consider: bool
     heavy_elements: tuple[str, ...]
     provenance: Provenance
-
-    def __post_init__(self) -> None:
-        """Require explicit SOC control and consideration values."""
-        _validate_boolean(self.enabled, "SpinOrbitAdvice.enabled")
-        _validate_boolean(self.consider, "SpinOrbitAdvice.consider")
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -799,14 +655,6 @@ class ConvergenceAdvice:
     mixing_beta: float = 0.4
     electron_maxstep: int = 80
 
-    def __post_init__(self) -> None:
-        """Validate finite positive convergence controls."""
-        _validate_finite_positive(self.conv_thr, "ConvergenceAdvice.conv_thr")
-        _validate_finite_positive(self.mixing_beta, "ConvergenceAdvice.mixing_beta")
-        _validate_positive_integer(
-            self.electron_maxstep, "ConvergenceAdvice.electron_maxstep"
-        )
-
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
@@ -838,16 +686,6 @@ class VdwAdvice:
     use_vdw: bool
     method: VdwMethod | None
     provenance: Provenance
-
-    def __post_init__(self) -> None:
-        """Validate that enabled vdW advice has exactly one supported method."""
-        _validate_boolean(self.use_vdw, "VdwAdvice.use_vdw")
-        if self.use_vdw and self.method is None:
-            raise ValueError("VdwAdvice.method is required when use_vdw is True")
-        if not self.use_vdw and self.method is not None:
-            raise ValueError("VdwAdvice.method must be None when use_vdw is False")
-        if self.method is not None:
-            _validate_vdw_method(self.method, "VdwAdvice.method")
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -904,19 +742,6 @@ class KPointSelection:
     mesh_type: str
     provenance: Provenance
 
-    def __post_init__(self) -> None:
-        """Validate and normalize the concrete grid and target shift flags."""
-        object.__setattr__(
-            self,
-            "grid",
-            _validate_kpoint_grid(self.grid, "KPointSelection.grid"),
-        )
-        object.__setattr__(
-            self,
-            "shift",
-            _validate_kpoint_shift(self.shift, "KPointSelection.shift"),
-        )
-
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
@@ -950,22 +775,6 @@ class PseudopotentialSelection:
     provenance: Provenance
     warnings: tuple[str, ...] = ()
 
-    def __post_init__(self) -> None:
-        """Validate the rendered filename and any available cutoff values."""
-        if self.filename is not None:
-            _validate_pseudopotential_filename(
-                self.filename,
-                "PseudopotentialSelection.filename",
-            )
-        if self.ecutwfc_ry is not None:
-            _validate_finite_positive(
-                self.ecutwfc_ry, "PseudopotentialSelection.ecutwfc_ry"
-            )
-        if self.ecutrho_ry is not None:
-            _validate_finite_positive(
-                self.ecutrho_ry, "PseudopotentialSelection.ecutrho_ry"
-            )
-
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
@@ -989,17 +798,6 @@ class SelectionRecord:
     pseudopotentials: tuple[PseudopotentialSelection, ...]
     warnings: tuple[str, ...] = ()
 
-    def __post_init__(self) -> None:
-        """Reject duplicate element selections at the stage boundary."""
-        seen_elements: set[str] = set()
-        for pseudopotential in self.pseudopotentials:
-            if pseudopotential.element in seen_elements:
-                raise ValueError(
-                    "SelectionRecord.pseudopotentials contains duplicate element "
-                    f"{pseudopotential.element!r}"
-                )
-            seen_elements.add(pseudopotential.element)
-
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
@@ -1009,8 +807,8 @@ class SelectionRecord:
 class GeneratedFile:
     """Generated text file content for a target DFT code.
 
-    ``path`` is non-empty, relative to the bundle root directory, and cannot
-    contain ``..`` traversal components.
+    Bundle writers interpret ``path`` relative to their output directory and
+    must reject paths that escape it.
 
     Attributes:
         path: relative file path within the bundle (e.g.
@@ -1023,10 +821,6 @@ class GeneratedFile:
     path: str
     content: str
     role: str = "input"
-
-    def __post_init__(self) -> None:
-        """Validate the bundle-relative generated path."""
-        _validate_generated_path(self.path, "GeneratedFile.path")
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -1055,7 +849,7 @@ class BundleRecord:
 
 @dataclass(frozen=True, slots=True)
 class CoreResult:
-    """Composed accumulator of every record the fixed pipeline produces.
+    """Records produced by a recommendation or generation workflow.
 
     Scientific records are populated as their stages run. ``generated_files``
     is populated in generate/bundle modes. ``bundle`` is set only in bundle
@@ -1084,20 +878,6 @@ class CoreResult:
     warnings: tuple[str, ...] = ()
     bundle: BundleRecord | None = None
 
-    def __post_init__(self) -> None:
-        """Reject duplicate generated paths at their containing boundary."""
-        seen_paths: set[str] = set()
-        for generated_file in self.generated_files:
-            normalized_path = _validate_generated_path(
-                generated_file.path, "CoreResult.generated_files[].path"
-            )
-            if normalized_path in seen_paths:
-                raise ValueError(
-                    "CoreResult.generated_files contains duplicate path "
-                    f"{generated_file.path!r}"
-                )
-            seen_paths.add(normalized_path)
-
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
@@ -1105,7 +885,7 @@ class CoreResult:
 
 @dataclass(frozen=True, slots=True)
 class CoreJobRequest:
-    """Request for running the fixed Core stage graph.
+    """Request for running the standard Core workflow.
 
     One request model shared by Python API, CLI, and future HTTP
     wrappers. ``mode`` controls how far the pipeline runs.
@@ -1171,16 +951,8 @@ BundleStage = Callable[[CoreResult, str | Path], BundleRecord]
 
 
 def to_jsonable(value: Any) -> Any:
-    """Convert supported pipeline values into JSON-safe Python objects.
-
-    Raises:
-        TypeError: If a value or dictionary key has no supported JSON mapping.
-        ValueError: If a floating-point value is NaN or infinite.
-    """
-    if isinstance(value, Enum):
-        return to_jsonable(value.value)
-
-    if is_dataclass(value) and not isinstance(value, type):
+    """Convert pipeline records and common scientific values to JSON data."""
+    if is_dataclass(value):
         return {
             field.name: to_jsonable(getattr(value, field.name))
             for field in fields(value)
@@ -1190,34 +962,18 @@ def to_jsonable(value: Any) -> Any:
         return [to_jsonable(item) for item in value]
 
     if isinstance(value, dict):
-        converted: dict[str, Any] = {}
-        for key, item in value.items():
-            if not isinstance(key, str):
-                raise TypeError(
-                    "Unsupported dictionary key for JSON serialization: "
-                    f"{type(key).__name__}"
-                )
-            converted[key] = to_jsonable(item)
-        return converted
+        return {str(key): to_jsonable(item) for key, item in value.items()}
 
     if isinstance(value, Path):
         return str(value)
 
     if isinstance(value, Structure):
-        return to_jsonable(value.as_dict())
+        return value.as_dict()
 
     if isinstance(value, np.ndarray):
-        return to_jsonable(value.tolist())
+        return value.tolist()
 
     if isinstance(value, np.generic):
-        return to_jsonable(value.item())
+        return value.item()
 
-    if value is None or isinstance(value, str | bool | int):
-        return value
-
-    if isinstance(value, float):
-        if not math.isfinite(value):
-            raise ValueError(f"JSON numbers must be finite; got {value!r}")
-        return value
-
-    raise TypeError(f"Unsupported value for JSON serialization: {type(value).__name__}")
+    return value

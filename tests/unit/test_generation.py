@@ -1,5 +1,4 @@
 from dataclasses import replace
-from types import SimpleNamespace
 from typing import get_args
 
 import pytest
@@ -356,6 +355,25 @@ def test_generate_inputs_rejects_incomplete_pseudopotential_selection() -> None:
         generate_inputs(structure, advice_context(), advice, selection)
 
 
+def test_generate_inputs_rejects_unsafe_pseudopotential_filename() -> None:
+    """Do not place untrusted metadata directly into QE syntax."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure, advice, hints=hints, metadata_list=[make_metadata()]
+    )
+    pseudo = replace(selection.pseudopotentials[0], filename="Si.UPF\n/")
+
+    with pytest.raises(ValueError, match="Unsafe pseudopotential filename"):
+        generate_inputs(
+            structure,
+            advice_context(),
+            advice,
+            replace(selection, pseudopotentials=(pseudo,)),
+        )
+
+
 def test_generate_inputs_rejects_unsupported_target_code() -> None:
     """Only Quantum ESPRESSO generation is implemented."""
     structure = make_structure()
@@ -367,7 +385,7 @@ def test_generate_inputs_rejects_unsupported_target_code() -> None:
         hints=hints,
         metadata_list=[make_metadata()],
     )
-    intent = SimpleNamespace(code="vasp", task="scf_single_point")
+    intent = CalculationIntent(code="vasp")
 
     with pytest.raises(ValueError, match="Only Quantum ESPRESSO"):
         generate_inputs(structure, intent, advice, selection)
@@ -384,7 +402,7 @@ def test_generate_inputs_rejects_unsupported_task() -> None:
         hints=hints,
         metadata_list=[make_metadata()],
     )
-    intent = SimpleNamespace(code="quantum_espresso", task="relax")
+    intent = CalculationIntent(task="relax")
 
     with pytest.raises(ValueError, match="Only SCF single-point"):
         generate_inputs(structure, intent, advice, selection)

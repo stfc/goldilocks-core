@@ -1,314 +1,145 @@
-# Composable Core pipeline
+# Pipeline
 
-The Core pipeline is a fixed graph with injectable stage backends.
+Goldilocks provides a standard staged workflow and public functions for using
+each stage independently.
 
-```text
-Load -> Analyze -> Advise -> Kmesh -> Select -> Generate -> Bundle
-```
-
-The graph order is fixed. The implementation behind each stage is configurable through a `Pipeline` object.
-
-## Why this exists
-
-Core has two separate concerns:
-
-- **What to compute**: structure, intent, hints, mode, pseudo metadata, output directory.
-- **How to compute it**: stage implementations for analysis, advice, k-point resolution, selection, generation, and bundle writing.
-
-`CoreJobRequest` carries the first concern. It is data-only and JSON-safe.
-
-`Pipeline` carries the second concern. It is a composition of callables and is not serialized as part of the request.
-
-This split keeps HTTP/JSON boundaries clean while making Python callers able to swap backends directly.
-
-## Core objects
+## Standard use
 
 ```python
-from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
+from goldilocks_core import CalculationHints, generate
+
+result = generate(
+    "Fe.cif",
+    hints=CalculationHints(k_grid=(6, 6, 6), spin_polarized=True),
+    pseudo_metadata=metadata,
+)
+
+for generated_file in result.generated_files:
+    print(generated_file.path)
 ```
 
-`Pipeline` is a frozen dataclass with one callable per stage:
+The convenience functions are:
 
-```python
-@dataclass(frozen=True, slots=True)
-class Pipeline:
-    analyze: AnalyzeStage = analyze_structure
-    advise: AdviseStage = advise_parameters
-    kmesh: KMeshAdvisor = field(default_factory=default_kmesh_advisor)
-    select: SelectStage = select_parameters
-    generate: GenerateStage = generate_inputs
-    bundle: BundleStage = write_bundle_directory
-```
+- `recommend(...)`: analyze, advise, resolve k-points, and select resources;
+- `generate(...)`: also generate input files;
+- `write_bundle(...)`: also write files and `manifest.json`.
 
-The built-in composition is returned by `Pipeline()`:
+All return `CoreResult`.
 
-```python
-pipeline = Pipeline()
-```
+## Request and pipeline
 
-`run_core_job()` accepts an optional pipeline:
-
-```python
-result = run_core_job(request, pipeline=pipeline)
-```
-
-If no pipeline is passed, `run_core_job()` calls `Pipeline()` and uses the
-built-in backends. The default Kmesh backend lazily loads the QRF configuration
-from `model_registry.toml`; explicit k-point hints bypass model loading. Use
-`Pipeline(kmesh=resolve_kpoints_from_advice)` for an explicitly heuristic path.
-
-## Stage contracts
-
-### Analyze
-
-```python
-AnalyzeStage = Callable[[Structure], StructureAnalysisRecord]
-```
-
-Input:
-
-- loaded `pymatgen.core.Structure`
-
-Output:
-
-- `StructureAnalysisRecord`
-
-Responsibility:
-
-- report structure facts only
-- no parameter recommendations
-- no generated file logic
-
-### Advise
-
-```python
-AdviseStage = Callable[
-    [StructureAnalysisRecord, CalculationIntent, CalculationHints],
-    ParameterAdvice,
-]
-```
-
-Inputs:
-
-- analysis facts
-- operator intent
-- operator hints
-
-Output:
-
-- `ParameterAdvice`
-
-Responsibility:
-
-- choose scientific/numerical intent
-- record provenance on every advice record
-- preserve uncertainty as warnings
-
-Advise does not produce concrete k-point grids. It produces `KPointAdvice`, which is intent: explicit grid or spacing plus mesh type and provenance.
-
-### Kmesh
-
-```python
-KMeshAdvisor = Callable[[Structure, CalculationHints, KPointAdvice], KPointSelection]
-```
-
-Inputs:
-
-- loaded structure
-- operator hints
-- `KPointAdvice` from Advise
-
-Output:
-
-- `KPointSelection`
-
-Responsibility:
-
-- resolve concrete k-point grid and shift
-- preserve hint precedence
-- record whether the grid came from a hint, default/advice path, or model
-
-Kmesh is a separate stage because k-point resolution is the natural backend
-seam. The configured default predicts a grid from a QRF model when no hint is
-set and falls back to advice-based resolution when ML is unavailable. A custom
-backend can replace either strategy.
-
-### Select
-
-```python
-SelectStage = Callable[
-    [Structure, ParameterAdvice, KPointSelection, Sequence[PseudoMetadata]],
-    SelectionRecord,
-]
-```
-
-Inputs:
-
-- loaded structure
-- full parameter advice
-- concrete k-point selection from Kmesh
-- pseudopotential metadata
-
-Output:
-
-- `SelectionRecord`
-
-Responsibility:
-
-- carry the Kmesh result into the final selection record
-- select pseudopotentials and cutoffs
-- aggregate selection warnings
-
-Select does not resolve k-points. That belongs to Kmesh.
-
-### Generate
-
-```python
-GenerateStage = Callable[
-    [Structure, CalculationIntent, ParameterAdvice, SelectionRecord],
-    tuple[GeneratedFile, ...],
-]
-```
-
-Inputs:
-
-- loaded structure
-- intent
-- advice
-- selection
-
-Output:
-
-- generated files
-
-Responsibility:
-
-- validate and render the current completed QE selection
-- never choose resources or scientific defaults
-
-The callable seam permits another renderer for the same selection contract.
-Only Quantum ESPRESSO SCF generation is currently implemented.
-
-### Bundle
-
-```python
-BundleStage = Callable[[CoreResult, str | Path], BundleRecord]
-```
-
-Inputs:
-
-- completed recommendation with generated files
-- output directory
-
-Output:
-
-- `BundleRecord` with the bundle path and manifest dictionary
-
-Responsibility:
-
-- write generated files and the manifest to a new bundle directory
-- refuse overwrite and reject path traversal
-- stay independent of Runner/AiiDA/frontend assumptions
-
-## Execution by mode
-
-```text
-recommend -> Load -> Analyze -> Advise -> Kmesh -> Select
-generate  -> Load -> Analyze -> Advise -> Kmesh -> Select -> Generate
-bundle    -> Load -> Analyze -> Advise -> Kmesh -> Select -> Generate -> Bundle
-```
-
-`Load` is not a field on `Pipeline`. Structure loading is stable I/O at the request boundary. The swappable computational stages start after loading.
-
-## Default behavior
-
-Default recommendation:
-
-```python
-from goldilocks_core import CoreJobRequest, run_core_job
-
-result = run_core_job(CoreJobRequest(structure="Si.cif"))
-```
-
-This is equivalent to:
+Use `CoreJobRequest` when an application needs one serializable job object.
+Use `Pipeline` to replace stage implementations without putting Python
+callables in that request.
 
 ```python
 from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
 
-result = run_core_job(
-    CoreJobRequest(structure="Si.cif"),
-    pipeline=Pipeline(),
+request = CoreJobRequest(
+    structure="Fe.cif",
+    mode="generate",
+    pseudo_metadata=tuple(metadata),
+)
+result = run_core_job(request, pipeline=Pipeline())
+```
+
+`Pipeline()` supplies the built-in Analyze, Advise, Kmesh, Select, Generate,
+and Bundle functions. Its fields are plain callables.
+
+## Replace a stage
+
+K-point selection is the common replacement point:
+
+```python
+from goldilocks_core import Pipeline, recommend
+from goldilocks_core.kmesh import resolve_kpoints_from_advice
+
+result = recommend(
+    "Fe.cif",
+    pipeline=Pipeline(kmesh=resolve_kpoints_from_advice),
 )
 ```
 
-## Replacing one backend
-
-Construct ``Pipeline`` with the field you want to swap; the remaining stages keep their default backends:
+A local model can be supplied the same way:
 
 ```python
-
-from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
 from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.contracts import ModelSpec
 
 spec = ModelSpec(
-    name="local-kmesh-model",
-    version="v1",
+    name="local-kmesh",
+    version="1",
     model_type="random_forest",
     target="k_index",
     feature_set="cslr",
     source="local",
-    location="models/kmesh.joblib",
+    location="model.joblib",
 )
 
 pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
-result = run_core_job(CoreJobRequest(structure="Si.cif"), pipeline=pipeline)
-
-print(result.selection.k_points.provenance.source)  # "model"
 ```
 
-The request contains no model field. The request says what to compute. The pipeline says how to compute it.
+## Add a calculation task
 
-## Replacing multiple backends
+The shared intent accepts task names beyond the built-in SCF task. A custom
+Generate callable can implement one while reusing the earlier stages:
 
 ```python
+from goldilocks_core import CalculationIntent, Pipeline, generate
+from goldilocks_core.contracts import GeneratedFile
 
-pipeline = Pipeline(
-    kmesh=ml_kmesh_advisor(spec),
-    generate=generate_alternate_qe_inputs,
+
+def generate_magnetic_nscf(structure, intent, advice, selection):
+    if intent.task != "magnetic_nscf":
+        raise ValueError(f"unsupported task: {intent.task}")
+    return (
+        GeneratedFile(path="inputs/scf.in", content=render_scf(...)),
+        GeneratedFile(path="inputs/nscf.in", content=render_nscf(...)),
+    )
+
+
+result = generate(
+    "Fe.cif",
+    intent=CalculationIntent(task="magnetic_nscf"),
+    pipeline=Pipeline(generate=generate_magnetic_nscf),
+    pseudo_metadata=metadata,
 )
 ```
 
-A backend is just a function with the right signature. No base class, registry,
-plugin loader, or string resolution is required inside Core. Only Quantum ESPRESSO
-SCF generation is currently implemented; adding another DFT code would require
-coordinated changes across the request, Select, and Generate boundaries.
+The built-in `generate_inputs` remains explicit: it supports Quantum ESPRESSO
+`scf_single_point` and rejects other target/task combinations.
 
-## Provenance expectations
+## Compose stages directly
 
-Backends must return the standard contract objects with correct provenance:
-
-- hint-derived values use `source="user_hint"`
-- model-derived values use `source="model"`
-- metadata lookups use `source="lookup"`
-- package defaults use `source="default"`
-- analysis-derived choices use `source="analysis"`
-- fallback/incomplete selections use `source="fallback"`
-
-Provenance is part of the backend contract. A backend that returns a bare tuple or string is not a Core backend.
-
-## HTTP and CLI mapping
-
-Core does not resolve backend names. It accepts callables.
-
-A CLI or HTTP layer may expose names such as `--model model.joblib` or JSON fields such as `"kmesh_backend": "cslr"`. That layer resolves the name to a callable and passes a `Pipeline` into `run_core_job()`.
-
-Example CLI mapping:
+Callers are not required to use `Pipeline` or `run_core_job`:
 
 ```python
+from goldilocks_core.advice import advise_parameters
+from goldilocks_core.analysis import analyze_structure
+from goldilocks_core.io.structures import load_structure
+from goldilocks_core.kmesh import resolve_kpoints_from_advice
+from goldilocks_core.selection import select_parameters
 
-pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
-result = run_core_job(request, pipeline=pipeline)
+structure = load_structure("Fe.cif")
+analysis = analyze_structure(structure)
+advice = advise_parameters(analysis, intent, hints)
+kpoints = resolve_kpoints_from_advice(structure, hints, advice.k_points)
+selection = select_parameters(structure, advice, kpoints, metadata)
 ```
 
-Core never sees the string `"cslr"`; it sees the function returned by `ml_kmesh_advisor(spec)`.
+Use this form to inspect intermediate records, insert project-specific work,
+reuse only part of the pipeline, or drive a calculation family with a different
+sequence.
+
+## Stage responsibilities
+
+- **Load** reads a `pymatgen.Structure` or structure file.
+- **Analyze** reports structure facts.
+- **Advise** recommends physics and numerical settings with provenance.
+- **Kmesh** resolves k-point advice to a concrete grid.
+- **Select** chooses pseudopotentials and cutoffs.
+- **Generate** creates one or more calculation input files.
+- **Bundle** writes generated files and a manifest to a new directory.
+
+The standard graph is intentionally simple. More complex workflows belong in
+calling Python code or Runner rather than a DAG system inside Core.

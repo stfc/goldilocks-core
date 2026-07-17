@@ -68,8 +68,13 @@ def write_bundle_directory(
         raise FileExistsError(f"Bundle destination already exists: {target_dir}")
 
     manifest_path = target_dir / MANIFEST_FILENAME
-    for generated_file in result.generated_files:
-        target_path = _resolve_bundle_path(target_dir, generated_file.path)
+    files = tuple(
+        (generated_file, _resolve_bundle_path(target_dir, generated_file.path))
+        for generated_file in result.generated_files
+    )
+    if len({path for _, path in files}) != len(files):
+        raise ValueError("Generated file paths must be unique")
+    for generated_file, target_path in files:
         if target_path == manifest_path or manifest_path in target_path.parents:
             raise ValueError(
                 "Generated file path is reserved for the bundle manifest: "
@@ -78,8 +83,7 @@ def write_bundle_directory(
 
     target_dir.mkdir(parents=True, exist_ok=False)
 
-    for generated_file in result.generated_files:
-        target_path = _resolve_bundle_path(target_dir, generated_file.path)
+    for generated_file, target_path in files:
         target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_text(generated_file.content, encoding="utf-8")
 

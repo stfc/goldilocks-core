@@ -132,7 +132,23 @@ def test_write_bundle_rejects_manifest_collision(tmp_path: Path, path: str) -> N
     assert not output_dir.exists()
 
 
-def test_generated_file_rejects_path_traversal_at_construction() -> None:
-    """Reject generated paths before they can reach bundle writing."""
-    with pytest.raises(ValueError, match="must not contain '..' traversal"):
-        GeneratedFile(path="../qe.in", content="bad")
+def test_bundle_rejects_duplicate_paths(tmp_path: Path) -> None:
+    """Refuse ambiguous output rather than overwrite an earlier file."""
+    generated = make_result().generated_files[0]
+    result = replace(make_result(), generated_files=(generated, generated))
+
+    with pytest.raises(ValueError, match="paths must be unique"):
+        write_bundle_directory(result, tmp_path / "bundle")
+
+
+def test_bundle_rejects_path_traversal(tmp_path: Path) -> None:
+    """Keep generated files inside the bundle directory."""
+    result = replace(
+        make_result(),
+        generated_files=(GeneratedFile(path="../qe.in", content="bad"),),
+    )
+
+    with pytest.raises(ValueError, match="escapes bundle directory"):
+        write_bundle_directory(result, tmp_path / "bundle")
+
+    assert not (tmp_path / "qe.in").exists()

@@ -35,8 +35,8 @@ from goldilocks_core.selection import select_parameters
 class Pipeline:
     """Composable stage backends for the Core pipeline.
 
-    Construct with no arguments for the built-in QRF k-point backend with
-    heuristic fallback; override any field to swap that stage's backend.
+    Construct with no arguments for the built-in QRF k-point backend;
+    override any field to swap that stage's backend.
     Backends are plain callables with the stage signature — no base class,
     no registry.
 
@@ -68,8 +68,7 @@ def run_core_job(
         request: Serializable job data: structure input, intent, hints,
             pseudopotential metadata, mode, and optional output directory.
         pipeline: Optional executable stage composition. When omitted,
-            ``Pipeline()`` uses the lazy built-in QRF k-point backend with
-            heuristic fallback.
+            ``Pipeline()`` uses the lazy built-in QRF k-point backend.
 
     Returns:
         A ``CoreResult`` containing scientific records, generated files when

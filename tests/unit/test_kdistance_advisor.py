@@ -1,9 +1,3 @@
-import json
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
-from threading import Barrier
-from time import sleep
-
 import numpy as np
 import pytest
 from pymatgen.core import Lattice, Structure
@@ -21,511 +15,174 @@ from goldilocks_core.contracts import (
     StructureFeatureVector,
 )
 from goldilocks_core.kmesh import k_distance_to_mesh
-from goldilocks_core.ml.model_registry import (
-    MODEL_REGISTRY_ENV,
-    load_default_qrf_config,
-)
+from goldilocks_core.ml.model_registry import load_default_qrf_config
 
 
 class FakeQRF:
-    """Minimal QRF stub returning fixed (lower, median, upper) quantiles."""
+    def __init__(self, lower=0.2, median=0.25, upper=0.3):
+        self.quantiles = np.array([[lower], [median], [upper]])
 
-    def __init__(
-        self,
-        lower,
-        median,
-        upper,
-        *,
-        q=(0.05, 0.5, 0.95),
-    ):
-        self.q = list(q)
-        self._quantiles = np.array([[lower], [median], [upper]])
-
-    def predict(self, X):
-        return self._quantiles
+    def predict(self, features):
+        return self.quantiles
 
 
 def make_features() -> StructureFeatureVector:
-    return StructureFeatureVector(
-        values=np.zeros(4), feature_names=["a", "b", "c", "d"]
-    )
+    return StructureFeatureVector(np.zeros(4), ["a", "b", "c", "d"])
 
 
 def make_structure() -> Structure:
     return Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
 
 
-def make_config():
-    return load_default_qrf_config()
-
-
-def _make_advice() -> KPointAdvice:
+def make_advice() -> KPointAdvice:
     return KPointAdvice(
         spacing=0.2,
         explicit_grid=None,
         mesh_type="monkhorst-pack",
-        provenance=Provenance(source="default", reason="baseline"),
+        provenance=Provenance(source="default", reason="test"),
     )
 
 
-def _patch_models(monkeypatch, qrf: FakeQRF) -> None:
-    monkeypatch.setattr("goldilocks_core.ml.models.load_model", lambda spec: qrf)
+def patch_inference(monkeypatch, *, model=None) -> None:
+    monkeypatch.setattr(
+        "goldilocks_core.ml.models.load_model", lambda spec: model or FakeQRF()
+    )
     monkeypatch.setattr(
         "goldilocks_core.ml.metallicity.load_metallicity_model", lambda path: object()
     )
     monkeypatch.setattr(
         "goldilocks_core.ml.kdistance_features.extract_qrf_features",
         lambda structure, model, atom_init, settings: StructureFeatureVector(
-            values=np.zeros(483),
-            feature_names=[f"feature_{index}" for index in range(483)],
+            np.zeros(483), [f"feature_{index}" for index in range(483)]
         ),
     )
 
 
-def test_predict_kdistance_quantiles_returns_median_and_corrected_interval() -> None:
-    """Median passes through; correction adjusts both interval bounds."""
-    model = FakeQRF(lower=0.20, median=0.25, upper=0.30)
-
-    median, lower, upper = predict_kdistance_quantiles(
-        model, make_features(), correction=0.01
+def test_predict_kdistance_quantiles_applies_correction() -> None:
+    assert predict_kdistance_quantiles(FakeQRF(), make_features(), 0.01) == (
+        0.25,
+        0.19,
+        0.31,
     )
-
-    assert median == 0.25
-    assert lower == 0.20 - 0.01
-    assert upper == 0.30 + 0.01
-
-
-def test_predict_kdistance_quantiles_rejects_wrong_quantile_count() -> None:
-    """Reject a prediction that is not three quantiles."""
-
-    class TwoQuantiles:
-        def predict(self, X):
-            return np.array([[0.2], [0.3]])
-
-    with pytest.raises(ValueError, match="3 quantiles"):
-        predict_kdistance_quantiles(TwoQuantiles(), make_features())
 
 
 @pytest.mark.parametrize(
-    ("values", "message"),
+    "model",
     [
-        ((0.2, np.nan, 0.3), "finite"),
-        ((-0.2, 0.25, 0.3), "positive"),
-        ((0.3, 0.25, 0.2), "lower <= median <= upper"),
+        FakeQRF(np.nan, 0.25, 0.3),
+        FakeQRF(-0.2, 0.25, 0.3),
+        FakeQRF(0.3, 0.25, 0.2),
     ],
 )
-def test_predict_kdistance_quantiles_rejects_invalid_values(values, message) -> None:
-    """Reject invalid model output before converting a median to a mesh."""
-    model = FakeQRF(*values)
-
-    with pytest.raises(ValueError, match=message):
+def test_predict_kdistance_quantiles_rejects_unusable_output(model) -> None:
+    with pytest.raises(ValueError):
         predict_kdistance_quantiles(model, make_features())
 
 
-@pytest.mark.parametrize("value", [np.nan, np.inf, -np.inf])
-def test_predict_rejects_non_finite_features_before_calling_model(value) -> None:
-    """NaN and both infinities are rejected immediately before prediction."""
+def test_predict_kdistance_quantiles_requires_three_values() -> None:
+    model = FakeQRF()
+    model.quantiles = np.array([[0.2], [0.3]])
 
-    class PredictSpy:
-        called = False
-
-        def predict(self, X):
-            self.called = True
-            return np.array([[0.2], [0.25], [0.3]])
-
-    model = PredictSpy()
-    features = make_features()
-    features.values[0] = value
-
-    with pytest.raises(ValueError, match="features.*finite"):
-        predict_kdistance_quantiles(model, features)
-
-    assert model.called is False
+    with pytest.raises(ValueError, match="3 QRF quantiles"):
+        predict_kdistance_quantiles(model, make_features())
 
 
-def test_kdistance_to_selection_builds_grid_with_model_provenance() -> None:
-    """Median distance sets the mesh; provenance records model and confidence."""
-    selection = kdistance_to_selection(
-        make_structure(),
-        median=0.25,
-        lower=0.19,
-        upper=0.31,
-        data_source="fixture-model@revision",
-        confidence=0.95,
-    )
-
-    assert selection.grid == (7, 7, 7)
-    assert selection.provenance.source == "model"
-    assert selection.provenance.confidence == 0.95
-    assert selection.provenance.data_source == "fixture-model@revision"
-
-
-def test_packaged_registry_defines_versioned_default_artifacts() -> None:
-    """Load pinned default model metadata from data rather than advisor source."""
-    config = make_config()
-
-    assert config.model.source == "huggingface"
-    assert config.model.target == "k_distance"
-    assert config.model.revision
-    assert config.metallicity.revision
-    assert config.metallicity_checkpoint_file
-    assert config.metallicity_atom_init_file
-
-
-def test_qrf_advisor_construction_does_not_load_models(monkeypatch) -> None:
-    """Constructing the backend is free of model and network side effects."""
-    calls = 0
-
-    def count_load(spec):
-        nonlocal calls
-        calls += 1
-        return FakeQRF(0.2, 0.25, 0.3)
-
-    monkeypatch.setattr("goldilocks_core.ml.models.load_model", count_load)
-
-    qrf_kdistance_advisor(make_config(), "ckpt.pkl", "atom.json")
-
-    assert calls == 0
-
-
-def test_qrf_kdistance_advisor_predicts_with_model_provenance(
-    monkeypatch, tmp_path
-) -> None:
-    """No hint: assemble features, run the QRF, and record model provenance."""
-    checkpoint = tmp_path / "ckpt.pkl"
-    atom_table = tmp_path / "atom.json"
-    checkpoint.write_bytes(b"checkpoint")
-    atom_table.write_bytes(b"atom table")
-    _patch_models(monkeypatch, FakeQRF(lower=0.20, median=0.25, upper=0.30))
-    advisor = qrf_kdistance_advisor(make_config(), str(checkpoint), str(atom_table))
-
+def test_kdistance_selection_records_model_provenance() -> None:
     structure = make_structure()
-    selection = advisor(structure, CalculationHints(), _make_advice())
+    selection = kdistance_to_selection(
+        structure,
+        0.25,
+        0.2,
+        0.3,
+        data_source="qrf@revision",
+        confidence=0.9,
+    )
 
     assert selection.grid == k_distance_to_mesh(structure, 0.25)
     assert selection.provenance.source == "model"
+    assert selection.provenance.data_source == "qrf@revision"
     assert selection.provenance.confidence == 0.9
-    assert "@" in selection.provenance.data_source
-    inference = selection.provenance.details["qrf_inference"]
-    assert inference["config_digest"] == make_config().digest
-    assert inference["feature_schema"] == "qrf-483-v1"
-    assert "model" in inference
-    assert "metallicity" in inference
 
 
-def test_qrf_kdistance_advisor_respects_grid_hint_without_loading(monkeypatch) -> None:
-    """An explicit k-grid hint bypasses model loading and wins."""
-
-    def unexpected_load(spec):
-        raise AssertionError("explicit hints must not load a model")
-
-    monkeypatch.setattr("goldilocks_core.ml.models.load_model", unexpected_load)
-    advisor = qrf_kdistance_advisor(make_config(), "ckpt.pkl", "atom.json")
-
-    selection = advisor(
-        make_structure(), CalculationHints(k_grid=(2, 2, 2)), _make_advice()
-    )
-
-    assert selection.grid == (2, 2, 2)
-    assert selection.provenance.source == "user_hint"
-
-
-def test_qrf_kdistance_advisor_rejects_incompatible_feature_contract(
-    monkeypatch,
-) -> None:
-    """A hot-swapped model cannot silently change QRF feature semantics."""
-    config = make_config()
-    incompatible = replace(
-        config,
-        model=replace(config.model, feature_set="different-features"),
-    )
-
-    def unexpected_load(spec):
-        raise AssertionError("incompatible configuration must fail before loading")
-
-    monkeypatch.setattr("goldilocks_core.ml.models.load_model", unexpected_load)
-    advisor = qrf_kdistance_advisor(incompatible, "ckpt.pkl", "atom.json")
-
-    selection = advisor(make_structure(), CalculationHints(), _make_advice())
-
-    assert selection.provenance.source == "fallback"
-    inference = selection.provenance.details["qrf_inference"]
-    assert inference["config_digest"] == incompatible.digest
-    assert inference["failure"]["stage"] == "schema"
-    assert any(
-        "requires feature_set" in warning for warning in selection.provenance.warnings
-    )
-
-
-@pytest.mark.parametrize(
-    ("field", "value", "message"),
-    [
-        ("feature_schema", "qrf-unknown", "feature_schema"),
-        ("feature_count", 482, "feature_count"),
-    ],
-)
-def test_qrf_advisor_rejects_extractor_schema_mismatch(
-    monkeypatch, field, value, message
-) -> None:
-    config = replace(make_config(), **{field: value})
-
-    def unexpected_load(spec):
-        raise AssertionError("schema mismatch must fail before artifact loading")
-
-    monkeypatch.setattr("goldilocks_core.ml.models.load_model", unexpected_load)
-    selection = qrf_kdistance_advisor(config, "ckpt.pkl", "atom.json")(
-        make_structure(), CalculationHints(), _make_advice()
-    )
-
-    assert selection.provenance.source == "fallback"
-    inference = selection.provenance.details["qrf_inference"]
-    assert inference["failure"]["stage"] == "schema"
-    assert any(message in warning for warning in selection.provenance.warnings)
-
-
-def test_qrf_advisor_rejects_loaded_model_quantile_mismatch(
-    monkeypatch,
-    tmp_path,
-) -> None:
-    """Registry confidence cannot describe different model quantiles."""
-    checkpoint = tmp_path / "ckpt.pkl"
-    atom_table = tmp_path / "atom.json"
-    checkpoint.write_bytes(b"checkpoint")
-    atom_table.write_bytes(b"atom table")
-    config = make_config()
-    _patch_models(
-        monkeypatch,
-        FakeQRF(0.2, 0.25, 0.3, q=(0.025, 0.5, 0.975)),
-    )
-
-    selection = qrf_kdistance_advisor(
-        config,
-        str(checkpoint),
-        str(atom_table),
-    )(make_structure(), CalculationHints(), _make_advice())
-
-    assert selection.provenance.source == "fallback"
-    assert selection.provenance.details["qrf_inference"]["failure"]["stage"] == (
-        "model_contract"
-    )
-    assert any(
-        "quantiles do not match" in warning for warning in selection.provenance.warnings
-    )
-
-
-def test_qrf_kdistance_advisor_caches_loaded_models(monkeypatch, tmp_path) -> None:
-    """Successful model loading happens only on the first inference call."""
-    calls = 0
-
-    def count_load(spec):
-        nonlocal calls
-        calls += 1
-        return FakeQRF(0.2, 0.25, 0.3)
-
-    checkpoint = tmp_path / "ckpt.pkl"
-    atom_table = tmp_path / "atom.json"
-    checkpoint.write_bytes(b"checkpoint")
-    atom_table.write_bytes(b"atom table")
-    _patch_models(monkeypatch, FakeQRF(0.2, 0.25, 0.3))
-    monkeypatch.setattr("goldilocks_core.ml.models.load_model", count_load)
-    advisor = qrf_kdistance_advisor(make_config(), str(checkpoint), str(atom_table))
-
-    first = advisor(make_structure(), CalculationHints(), _make_advice())
-    second = advisor(make_structure(), CalculationHints(), _make_advice())
-
-    assert calls == 1
-    assert first.provenance.source == "model"
-    assert second.provenance.source == "model"
-
-
-def test_qrf_kdistance_advisor_loads_once_under_concurrency(
-    monkeypatch, tmp_path
-) -> None:
-    """Concurrent first calls load one shared model instance."""
-    calls = 0
-    start = Barrier(2)
-
-    def count_load(spec):
-        nonlocal calls
-        calls += 1
-        sleep(0.05)
-        return FakeQRF(0.2, 0.25, 0.3)
-
-    checkpoint = tmp_path / "ckpt.pkl"
-    atom_table = tmp_path / "atom.json"
-    checkpoint.write_bytes(b"checkpoint")
-    atom_table.write_bytes(b"atom table")
-    _patch_models(monkeypatch, FakeQRF(0.2, 0.25, 0.3))
-    monkeypatch.setattr("goldilocks_core.ml.models.load_model", count_load)
-    advisor = qrf_kdistance_advisor(make_config(), str(checkpoint), str(atom_table))
-
-    def call_advisor():
-        start.wait()
-        return advisor(make_structure(), CalculationHints(), _make_advice())
-
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        results = list(executor.map(lambda _: call_advisor(), range(2)))
-
-    assert calls == 1
-    assert all(result.provenance.source == "model" for result in results)
-
-
-def test_qrf_kdistance_advisor_caches_model_load_failure(monkeypatch, tmp_path) -> None:
-    """A failed artifact load falls back without retrying on every structure."""
-    calls = 0
-
-    def boom(spec):
-        nonlocal calls
-        calls += 1
-        raise ModuleNotFoundError("No module named 'torch'")
-
-    checkpoint = tmp_path / "ckpt.pkl"
-    atom_table = tmp_path / "atom.json"
-    checkpoint.write_bytes(b"checkpoint")
-    atom_table.write_bytes(b"atom table")
-    monkeypatch.setattr("goldilocks_core.ml.models.load_model", boom)
-    advisor = qrf_kdistance_advisor(make_config(), str(checkpoint), str(atom_table))
-
-    first = advisor(make_structure(), CalculationHints(), _make_advice())
-    second = advisor(make_structure(), CalculationHints(), _make_advice())
-
-    assert calls == 1
-    assert first.provenance.source == "fallback"
-    assert second.provenance.source == "fallback"
-    inference = first.provenance.details["qrf_inference"]
-    assert inference["failure"]["stage"] == "model_load"
-    assert any("torch" in warning for warning in first.provenance.warnings)
-
-
-def test_qrf_kdistance_advisor_falls_back_when_prediction_fails(
-    monkeypatch, tmp_path
-) -> None:
-    """Per-structure inference errors fall back with a provenance warning."""
-    checkpoint = tmp_path / "ckpt.pkl"
-    atom_table = tmp_path / "atom.json"
-    checkpoint.write_bytes(b"checkpoint")
-    atom_table.write_bytes(b"atom table")
-    _patch_models(monkeypatch, FakeQRF(lower=0.20, median=0.25, upper=0.30))
+def test_explicit_hint_bypasses_model_loading(monkeypatch) -> None:
     monkeypatch.setattr(
-        "goldilocks_core.ml.kdistance_features.extract_qrf_features",
-        lambda structure, model, atom_init, settings: (_ for _ in ()).throw(
-            RuntimeError("feature extraction failed")
-        ),
+        "goldilocks_core.ml.models.load_model",
+        lambda spec: pytest.fail("model should not load"),
     )
-    advisor = qrf_kdistance_advisor(make_config(), str(checkpoint), str(atom_table))
+    advisor = qrf_kdistance_advisor(load_default_qrf_config())
 
-    structure = make_structure()
-    selection = advisor(structure, CalculationHints(), _make_advice())
-
-    assert selection.grid == k_distance_to_mesh(structure, 0.2)
-    assert selection.provenance.source == "fallback"
-    assert selection.provenance.details["qrf_inference"]["failure"]["stage"] == (
-        "prediction"
-    )
-    assert any(
-        "feature extraction failed" in warning
-        for warning in selection.provenance.warnings
-    )
-
-
-def test_qrf_kdistance_advisor_invalid_output_falls_back(monkeypatch, tmp_path) -> None:
-    """Invalid QRF output never reaches mesh conversion."""
-    checkpoint = tmp_path / "ckpt.pkl"
-    atom_table = tmp_path / "atom.json"
-    checkpoint.write_bytes(b"checkpoint")
-    atom_table.write_bytes(b"atom table")
-    _patch_models(monkeypatch, FakeQRF(lower=0.3, median=0.25, upper=0.2))
-    advisor = qrf_kdistance_advisor(make_config(), str(checkpoint), str(atom_table))
-
-    selection = advisor(make_structure(), CalculationHints(), _make_advice())
-
-    assert selection.grid == k_distance_to_mesh(make_structure(), 0.2)
-    assert selection.provenance.source == "fallback"
-    assert any(
-        "lower <= median <= upper" in warning
-        for warning in selection.provenance.warnings
-    )
-
-
-def test_default_kmesh_advisor_honors_hint_with_invalid_registry(
-    monkeypatch,
-    tmp_path,
-) -> None:
-    """Hint-only jobs bypass both registry parsing and model loading."""
-    monkeypatch.setenv(MODEL_REGISTRY_ENV, str(tmp_path / "missing.toml"))
-
-    def unexpected_load(spec):
-        raise AssertionError("explicit hints must not load a model")
-
-    monkeypatch.setattr("goldilocks_core.ml.models.load_model", unexpected_load)
-    advisor = default_kmesh_advisor()
     selection = advisor(
-        make_structure(), CalculationHints(k_grid=(4, 4, 4)), _make_advice()
+        make_structure(),
+        CalculationHints(k_grid=(2, 3, 4)),
+        make_advice(),
     )
 
-    assert selection.grid == (4, 4, 4)
+    assert selection.grid == (2, 3, 4)
     assert selection.provenance.source == "user_hint"
 
 
-def test_default_kmesh_advisor_preserves_unparsed_registry_failure_context(
-    monkeypatch,
-    tmp_path,
-) -> None:
-    """Malformed TOML records a minimal registry failure context."""
-    invalid_registry = tmp_path / "invalid.toml"
-    invalid_registry.write_text("[defaults.kpoints\n", encoding="utf-8")
-    monkeypatch.setenv(MODEL_REGISTRY_ENV, str(invalid_registry))
+def test_qrf_advisor_loads_lazily_and_reuses_resources(monkeypatch) -> None:
+    loads = 0
 
-    selection = default_kmesh_advisor()(
-        make_structure(),
-        CalculationHints(),
-        _make_advice(),
+    def load_model(spec):
+        nonlocal loads
+        loads += 1
+        return FakeQRF()
+
+    patch_inference(monkeypatch)
+    monkeypatch.setattr("goldilocks_core.ml.models.load_model", load_model)
+    advisor = qrf_kdistance_advisor(
+        load_default_qrf_config(),
+        "checkpoint.ckpt",
+        "atom-init.json",
     )
 
-    assert selection.provenance.source == "fallback"
-    inference = selection.provenance.details["qrf_inference"]
-    assert inference["registry"] == {
-        "status": "unparsed",
-        "path": str(invalid_registry),
-    }
-    assert inference["failure"]["stage"] == "registry"
-    assert inference["failure"]["type"] == "TOMLDecodeError"
-    assert inference["failure"]["message"]
-    assert "config_digest" not in inference
-    assert json.dumps(selection.to_dict(), allow_nan=False)
-    assert any(
-        "Invalid value" in warning or "Expected" in warning
-        for warning in selection.provenance.warnings
+    first = advisor(make_structure(), CalculationHints(), make_advice())
+    second = advisor(make_structure(), CalculationHints(), make_advice())
+
+    assert first.grid == second.grid
+    assert first.provenance.source == "model"
+    assert loads == 1
+
+
+def test_model_loading_errors_propagate(monkeypatch) -> None:
+    def fail(spec):
+        raise FileNotFoundError("missing model")
+
+    monkeypatch.setattr("goldilocks_core.ml.models.load_model", fail)
+    advisor = qrf_kdistance_advisor(
+        load_default_qrf_config(),
+        "checkpoint.ckpt",
+        "atom-init.json",
     )
 
+    with pytest.raises(FileNotFoundError, match="missing model"):
+        advisor(make_structure(), CalculationHints(), make_advice())
 
-def test_default_kmesh_advisor_resolves_configured_metallicity_artifacts(
-    monkeypatch,
-) -> None:
-    """The default resolves supporting files from the loaded registry."""
-    monkeypatch.delenv("GOLDILOCKS_METALLICITY_CHECKPOINT", raising=False)
-    monkeypatch.delenv("GOLDILOCKS_METALLICITY_ATOM_INIT", raising=False)
-    downloads: list[tuple[str, str, str | None]] = []
 
-    def fake_download(*, repo_id, filename, revision):
-        downloads.append((repo_id, filename, revision))
-        return f"/cache/{repo_id}/{filename}"
+def test_default_advisor_loads_registry_only_when_needed(monkeypatch) -> None:
+    loads = 0
 
-    monkeypatch.setattr("huggingface_hub.hf_hub_download", fake_download)
-    _patch_models(monkeypatch, FakeQRF(lower=0.20, median=0.25, upper=0.30))
+    def load_config(path=None):
+        nonlocal loads
+        loads += 1
+        return load_default_qrf_config()
 
-    config = make_config()
-    advisor = default_kmesh_advisor(config=config)
-    selection = advisor(make_structure(), CalculationHints(), _make_advice())
+    monkeypatch.setattr(
+        "goldilocks_core.advisors.kdistance_advisor.load_default_qrf_config",
+        load_config,
+    )
+    patch_inference(monkeypatch)
+    advisor = default_kmesh_advisor(
+        metallicity_checkpoint="checkpoint.ckpt",
+        metallicity_atom_init="atom-init.json",
+    )
 
-    assert selection.provenance.source == "model"
-    assert {filename for _, filename, _ in downloads} == {
-        config.metallicity_checkpoint_file,
-        config.metallicity_atom_init_file,
-    }
-    assert {repo for repo, _, _ in downloads} == {config.metallicity.location}
-    assert {revision for _, _, revision in downloads} == {config.metallicity.revision}
-    inference = selection.provenance.details["qrf_inference"]
-    assert inference["model"]["source"] == "huggingface"
-    assert inference["metallicity"]["source"] == "huggingface"
-    assert json.dumps(selection.to_dict(), allow_nan=False)
+    hinted = advisor(
+        make_structure(), CalculationHints(k_grid=(2, 2, 2)), make_advice()
+    )
+    modeled = advisor(make_structure(), CalculationHints(), make_advice())
+
+    assert hinted.grid == (2, 2, 2)
+    assert modeled.provenance.source == "model"
+    assert loads == 1

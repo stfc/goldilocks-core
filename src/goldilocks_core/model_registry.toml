@@ -1,20 +1,15 @@
 [defaults.kpoints]
-advisor = "qrf_kdistance"
 name = "kpoints-goldilocks-QRF"
 version = "QRF95"
 model_type = "random_forest"
 target = "k_distance"
 feature_set = "qrf_comp_struct_soap_lattice_metal"
-feature_schema = "qrf-483-v1"
-feature_count = 483
 source = "huggingface"
 location = "STFC-SCD/kpoints-goldilocks-QRF::QRF95.pkl"
 revision = "75588288f755522e47984b5a31b82824860d6943"
 interval_confidence = 0.90
-interval_quantiles = [0.05, 0.5, 0.95]
 
 [defaults.kpoints.calibration]
-method = "symmetric_additive_bounds-v1"
 correction = -0.0016
 
 [defaults.kpoints.features]

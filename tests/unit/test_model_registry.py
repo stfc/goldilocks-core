@@ -1,38 +1,27 @@
-from dataclasses import fields, replace
 from pathlib import Path
 
 import pytest
 
-from goldilocks_core.ml.kdistance_features import (
-    QRF_FEATURE_COUNT,
-    QRF_FEATURE_SCHEMA,
-    QRF_FEATURE_SET,
-)
 from goldilocks_core.ml.model_registry import (
     MODEL_REGISTRY_ENV,
     load_default_qrf_config,
 )
 
 
-def write_registry(path: Path, *, advisor: str = "qrf_kdistance") -> None:
+def write_registry(path: Path, *, name: str = "replacement-qrf") -> None:
     path.write_text(
         f"""[defaults.kpoints]
-advisor = "{advisor}"
-name = "replacement-qrf"
+name = "{name}"
 version = "v2"
 model_type = "random_forest"
 target = "k_distance"
-feature_set = "{QRF_FEATURE_SET}"
-feature_schema = "{QRF_FEATURE_SCHEMA}"
-feature_count = {QRF_FEATURE_COUNT}
+feature_set = "qrf_comp_struct_soap_lattice_metal"
 source = "local"
 location = "/models/qrf.joblib"
 revision = "model-revision"
 interval_confidence = 0.9
-interval_quantiles = [0.05, 0.5, 0.95]
 
 [defaults.kpoints.calibration]
-method = "symmetric_additive_bounds-v1"
 correction = 0.01
 
 [defaults.kpoints.features]
@@ -67,8 +56,16 @@ atom_init_file = "elements.json"
     )
 
 
-def test_custom_registry_hotswaps_complete_inference_configuration(tmp_path) -> None:
-    """Load the complete inference contract from a caller registry."""
+def test_packaged_registry_loads_qrf_resources() -> None:
+    config = load_default_qrf_config()
+
+    assert config.model.name == "kpoints-goldilocks-QRF"
+    assert config.feature_settings.soap_r_cut == 10.0
+    assert config.confidence == 0.9
+    assert config.metallicity_checkpoint_file == "is_metal.ckpt"
+
+
+def test_explicit_registry_replaces_model_and_artifacts(tmp_path: Path) -> None:
     registry = tmp_path / "models.toml"
     write_registry(registry)
 
@@ -76,140 +73,35 @@ def test_custom_registry_hotswaps_complete_inference_configuration(tmp_path) -> 
 
     assert config.model.name == "replacement-qrf"
     assert config.model.location == "/models/qrf.joblib"
-    assert config.feature_schema == QRF_FEATURE_SCHEMA
-    assert config.feature_count == QRF_FEATURE_COUNT
-    assert config.interval_confidence == 0.9
-    assert config.interval_quantiles == (0.05, 0.5, 0.95)
-    assert config.calibration.correction == 0.01
-    assert config.feature_settings.soap_r_cut == 10.0
+    assert config.correction == 0.01
     assert config.metallicity.location == "/models/metallicity"
-    assert config.metallicity_checkpoint_file == "model.ckpt"
+    assert config.metallicity_atom_init_file == "elements.json"
 
 
-def test_registry_digest_is_deterministic() -> None:
-    """Equivalent packaged configuration has one stable content identity."""
-    first = load_default_qrf_config()
-    second = load_default_qrf_config()
-
-    assert first.digest == second.digest
-    assert len(first.digest) == 64
-
-
-def test_registry_digest_changes_for_each_top_level_contract_component() -> None:
-    """No inference-relevant top-level configuration is omitted from hashing."""
-    config = load_default_qrf_config()
-    changed = [
-        replace(config, model=replace(config.model, version="changed")),
-        replace(config, feature_schema="changed"),
-        replace(config, feature_count=config.feature_count + 1),
-        replace(
-            config,
-            feature_settings=replace(config.feature_settings, soap_sigma=2.0),
-        ),
-        replace(config, interval_confidence=0.95),
-        replace(config, interval_quantiles=(0.025, 0.5, 0.975)),
-        replace(
-            config,
-            calibration=replace(config.calibration, correction=0.0),
-        ),
-        replace(
-            config,
-            metallicity=replace(config.metallicity, revision="changed"),
-        ),
-        replace(config, metallicity_checkpoint_file="changed.ckpt"),
-        replace(config, metallicity_atom_init_file="changed.json"),
-    ]
-
-    assert all(item.digest != config.digest for item in changed)
-
-
-def test_registry_digest_includes_every_feature_setting() -> None:
-    """Every registry-owned feature setting contributes to the digest."""
-    config = load_default_qrf_config()
-    settings = config.feature_settings
-
-    for field in fields(settings):
-        value = getattr(settings, field.name)
-        if isinstance(value, bool):
-            changed_value = not value
-        elif isinstance(value, float):
-            changed_value = value + 1.0
-        elif isinstance(value, int):
-            changed_value = value + 1
-        elif isinstance(value, str):
-            changed_value = f"{value}-changed"
-        else:
-            changed_value = (*value, "changed")
-        changed = replace(
-            config,
-            feature_settings=replace(settings, **{field.name: changed_value}),
-        )
-        assert changed.digest != config.digest, field.name
-
-
-def test_registry_digest_includes_every_model_and_artifact_setting() -> None:
-    config = load_default_qrf_config()
-
-    for nested_name in ("model", "metallicity", "calibration"):
-        nested = getattr(config, nested_name)
-        for field in fields(nested):
-            value = getattr(nested, field.name)
-            if value is None:
-                changed_value = "changed"
-            elif isinstance(value, float):
-                changed_value = value + 1.0
-            else:
-                changed_value = f"{value}-changed"
-            changed = replace(
-                config,
-                **{nested_name: replace(nested, **{field.name: changed_value})},
-            )
-            assert changed.digest != config.digest, f"{nested_name}.{field.name}"
-
-
-def test_registry_environment_variable_selects_custom_file(
-    monkeypatch, tmp_path
+def test_explicit_registry_takes_precedence_over_environment(
+    monkeypatch,
+    tmp_path: Path,
 ) -> None:
-    registry = tmp_path / "models.toml"
-    write_registry(registry)
-    monkeypatch.setenv(MODEL_REGISTRY_ENV, str(registry))
-
-    config = load_default_qrf_config()
-
-    assert config.model.name == "replacement-qrf"
-
-
-def test_explicit_registry_path_precedes_environment(monkeypatch, tmp_path) -> None:
-    explicit = tmp_path / "explicit.toml"
     environment = tmp_path / "environment.toml"
-    write_registry(explicit)
-    write_registry(environment, advisor="unsupported")
+    explicit = tmp_path / "explicit.toml"
+    write_registry(environment, name="environment")
+    write_registry(explicit, name="explicit")
     monkeypatch.setenv(MODEL_REGISTRY_ENV, str(environment))
 
-    config = load_default_qrf_config(explicit)
-
-    assert config.model.name == "replacement-qrf"
+    assert load_default_qrf_config(explicit).model.name == "explicit"
 
 
-def test_registry_requires_immutable_huggingface_revision(tmp_path) -> None:
+def test_environment_selects_registry(monkeypatch, tmp_path: Path) -> None:
     registry = tmp_path / "models.toml"
-    write_registry(registry)
-    mutable_remote = registry.read_text(encoding="utf-8").replace(
-        'source = "local"\nlocation = "/models/qrf.joblib"\n'
-        'revision = "model-revision"',
-        'source = "huggingface"\nlocation = "organization/model::model.pkl"\n'
-        'revision = "main"',
-        1,
-    )
-    registry.write_text(mutable_remote, encoding="utf-8")
+    write_registry(registry, name="environment")
+    monkeypatch.setenv(MODEL_REGISTRY_ENV, str(registry))
 
-    with pytest.raises(ValueError, match="40-character"):
-        load_default_qrf_config(registry)
+    assert load_default_qrf_config().model.name == "environment"
 
 
-def test_registry_rejects_unsupported_advisor(tmp_path) -> None:
+def test_incomplete_registry_fails_at_missing_field(tmp_path: Path) -> None:
     registry = tmp_path / "models.toml"
-    write_registry(registry, advisor="unknown")
+    registry.write_text("[defaults.kpoints]\nname = 'incomplete'\n")
 
-    with pytest.raises(ValueError, match="qrf_kdistance"):
+    with pytest.raises(KeyError):
         load_default_qrf_config(registry)

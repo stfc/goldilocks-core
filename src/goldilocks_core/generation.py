@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import math
+import re
+
 from pymatgen.core import Structure
 from pymatgen.core.periodic_table import Element
 
@@ -103,6 +106,9 @@ def generate_quantum_espresso_scf_input(
     pseudo_by_element = {
         pseudo.element: pseudo for pseudo in selection.pseudopotentials
     }
+    if len(pseudo_by_element) != len(selection.pseudopotentials):
+        raise ValueError("Quantum ESPRESSO requires one pseudopotential per element")
+
     missing_elements = tuple(
         element for element in elements if element not in pseudo_by_element
     )
@@ -133,6 +139,13 @@ def generate_quantum_espresso_scf_input(
             "Cannot generate Quantum ESPRESSO input without complete pseudo "
             f"and cutoff selections for: {', '.join(incomplete)}"
         )
+
+    for pseudo in selected_pseudos:
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", pseudo.filename) is None:
+            raise ValueError(f"Unsafe pseudopotential filename: {pseudo.filename!r}")
+        cutoffs = (float(pseudo.ecutwfc_ry), float(pseudo.ecutrho_ry))
+        if not all(math.isfinite(value) and value > 0 for value in cutoffs):
+            raise ValueError(f"Invalid pseudopotential cutoffs for {pseudo.element}")
 
     ecutwfc = max(float(pseudo.ecutwfc_ry) for pseudo in selected_pseudos)
     ecutrho = max(float(pseudo.ecutrho_ry) for pseudo in selected_pseudos)

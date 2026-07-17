@@ -3,8 +3,6 @@ import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.ml.kdistance_features import (
-    QRF_FEATURE_COUNT,
-    QRF_FEATURE_SCHEMA,
     _require_finite,
     extract_qrf_features,
     extract_structure_features,
@@ -19,14 +17,6 @@ def make_diamond_silicon() -> Structure:
         species=["Si", "Si"],
         coords=[[0.0, 0.0, 0.0], [0.25, 0.25, 0.25]],
     )
-
-
-def test_extractor_schema_matches_packaged_registry() -> None:
-    """The extractor owns the schema declared by the packaged artifact."""
-    config = load_default_qrf_config()
-
-    assert config.feature_schema == QRF_FEATURE_SCHEMA
-    assert config.feature_count == QRF_FEATURE_COUNT
 
 
 def test_extract_structure_features_dimension_and_finiteness() -> None:

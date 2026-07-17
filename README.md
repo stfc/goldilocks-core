@@ -6,7 +6,7 @@ It provides:
 
 - structure analysis and scientific warnings;
 - advice for k-points, smearing, magnetism, SOC, convergence, vdW, and pseudopotentials;
-- a default Quantile Random Forest k-point model with heuristic fallback;
+- a default Quantile Random Forest k-point model;
 - deterministic pseudopotential selection and QE input generation;
 - Python and CLI entry points over the same staged pipeline.
 
@@ -78,9 +78,8 @@ uv run goldilocks-kmesh structure.cif --model path/to/model.joblib
 - [Tutorial](docs/tutorial.md)
 - [Pipeline and stage behavior](docs/pipeline.md)
 - [Scientific conventions](docs/conventions.md)
-- [Python contracts](docs/contracts.md)
 - [CLI reference](docs/cli.md)
-- [Architecture and backend extension](docs/architecture.md)
+- [Architecture and extension points](docs/architecture.md)
 
 ## Development
 

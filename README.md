@@ -51,7 +51,7 @@ The public workflows are:
 
 Use `CoreJobRequest` with `run_core_job()` when you need a single request model. Use `Pipeline` to replace a stage backend.
 
-The default k-point backend loads the configured QRF model lazily and falls back to heuristic advice with a warning when model inference is unavailable. Explicit `k_grid` and `k_spacing` hints bypass model loading.
+The default k-point backend loads the configured QRF model lazily. Model errors are reported directly; use `--heuristic-kpoints` to select the model-free backend explicitly. Explicit `k_grid` and `k_spacing` hints bypass model loading.
 
 See the [tutorial](docs/tutorial.md) and [pipeline reference](docs/pipeline.md) for complete examples.
 

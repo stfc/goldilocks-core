@@ -111,9 +111,9 @@ warnings:
 ## Kmesh backend selection
 
 A bare invocation delegates to the same `Pipeline()` default used by the Python
-API. That backend lazily resolves the configured QRF model and falls back to
-heuristic advice with a provenance warning if model loading or inference fails.
-Explicit `--k-grid` and `--k-spacing` hints bypass model resolution entirely.
+API. That backend lazily resolves the configured QRF model and reports model
+loading or inference errors directly. Explicit `--k-grid` and `--k-spacing`
+hints bypass model resolution entirely.
 
 Use `--heuristic-kpoints` to disable model resolution explicitly:
 

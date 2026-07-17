@@ -32,5 +32,11 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check src tests
 
-      - name: Pytest
-        run: uv run pytest
+      - name: Pytest with branch coverage
+        run: uv run pytest --cov --cov-report=term-missing:skip-covered
+
+      - name: Mutation testing
+        run: |
+          uv run mutmut run --max-children 4
+          uv run mutmut export-cicd-stats
+          uv run python scripts/check_mutation_score.py mutants/mutmut-cicd-stats.json --minimum 0.80

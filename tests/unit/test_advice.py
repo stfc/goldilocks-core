@@ -50,14 +50,29 @@ def test_advise_parameters_records_user_hint_provenance() -> None:
 
     assert advice.k_points.explicit_grid == (2, 2, 1)
     assert advice.k_points.provenance.source == "user_hint"
+    assert advice.k_points.provenance.reason == (
+        "Use the operator-provided explicit k-point grid."
+    )
     assert advice.magnetism.spin_polarized is True
     assert advice.magnetism.provenance.source == "user_hint"
+    assert advice.magnetism.provenance.reason == (
+        "Use the operator-provided spin-polarization setting."
+    )
     assert advice.spin_orbit.enabled is True
     assert advice.spin_orbit.consider is False
+    assert advice.spin_orbit.provenance.reason == (
+        "Use the operator-provided SOC setting."
+    )
     assert advice.pseudopotentials.pseudo_mode == "precision"
     assert advice.pseudopotentials.relativistic_mode == "full"
     assert advice.smearing.smearing_type == "cold"
+    assert advice.smearing.provenance.reason == (
+        "Use operator-provided smearing settings."
+    )
     assert advice.convergence.provenance.source == "default"
+    assert advice.convergence.provenance.reason == (
+        "Use package default SCF convergence settings."
+    )
 
 
 def test_advise_parameters_uses_analysis_without_silently_enabling_soc() -> None:
@@ -69,11 +84,20 @@ def test_advise_parameters_uses_analysis_without_silently_enabling_soc() -> None
 
     assert advice.magnetism.spin_polarized is True
     assert advice.magnetism.provenance.source == "analysis"
+    assert advice.magnetism.provenance.reason == (
+        "Magnetic candidate elements are present in the structure."
+    )
     assert advice.spin_orbit.consider is True
     assert advice.spin_orbit.enabled is False
     assert advice.spin_orbit.provenance.source == "analysis"
+    assert advice.spin_orbit.provenance.reason == (
+        "Period-5-or-heavier elements make SOC worth considering."
+    )
     assert advice.pseudopotentials.functional == "PBEsol"
     assert advice.pseudopotentials.relativistic_mode == "scalar"
+    assert advice.pseudopotentials.provenance.reason == (
+        "Resolve pseudopotential intent from calculation intent and hints."
+    )
     assert advice.pseudopotentials.provenance.warnings
 
 
@@ -106,6 +130,9 @@ def test_advise_parameters_uses_likely_metal_smearing_from_analysis() -> None:
     assert advice.smearing.smearing_type == "cold"
     assert advice.smearing.width_ry == 0.01
     assert advice.smearing.provenance.source == "analysis"
+    assert advice.smearing.provenance.reason == (
+        "Likely metallic composition benefits from modest smearing."
+    )
 
 
 def test_advise_parameters_records_convergence_hints() -> None:
@@ -119,6 +146,9 @@ def test_advise_parameters_records_convergence_hints() -> None:
     assert advice.convergence.mixing_beta == 0.2
     assert advice.convergence.electron_maxstep == 120
     assert advice.convergence.provenance.source == "user_hint"
+    assert advice.convergence.provenance.reason == (
+        "Use operator-provided convergence settings where supplied."
+    )
 
 
 def test_calculation_hints_validate_before_advice() -> None:

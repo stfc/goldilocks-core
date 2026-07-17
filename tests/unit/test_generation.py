@@ -363,7 +363,26 @@ def test_generate_inputs_rejects_unsafe_pseudopotential_filename() -> None:
         generate_inputs(structure, advice_context(), advice, selection)
 
 
-def test_generate_inputs_rejects_missing_pseudopotential_selection() -> None:
+def test_generate_inputs_rejects_absent_element_selection() -> None:
+    """Report structure elements omitted entirely by an injected selection."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+    selection = replace(selection, pseudopotentials=())
+
+    with pytest.raises(
+        ValueError, match="match the structure elements exactly.*missing Si"
+    ):
+        generate_inputs(structure, advice_context(), advice, selection)
+
+
+def test_generate_inputs_rejects_incomplete_pseudopotential_selection() -> None:
     """Do not let generators invent missing pseudopotentials or cutoffs."""
     structure = make_structure()
     hints = CalculationHints()

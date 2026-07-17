@@ -257,10 +257,20 @@ See [architecture](docs/architecture.md) for boundaries and dependency direction
 ## Development
 
 ```bash
-uv run pytest
+uv run pytest                                      # complete suite
+uv run pytest -m unit                              # isolated behavior
+uv run pytest -m integration                       # complete workflows
+uv run pytest -m physics                           # scientific invariants
+uv run pytest --cov --cov-report=term-missing      # branch coverage + floor
+uv run mutmut run --max-children 4                 # focused deterministic modules
+uv run mutmut results                              # inspect surviving mutants
+uv run mutmut export-cicd-stats
+uv run python scripts/check_mutation_score.py mutants/mutmut-cicd-stats.json
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv run pre-commit run --all-files
 ```
+
+Tests are layered under `tests/unit`, `tests/integration`, and `tests/physics`. Mutation testing targets deterministic recommendation and generation modules configured in `pyproject.toml`; model downloads and generated third-party code are excluded.
 
 Committed tests must not depend on `local_data/`, private pseudopotential libraries, notebooks, or machine-specific paths. Use synthetic structures, temporary files, small UPF snippets, constructed dataclasses, and fake models.

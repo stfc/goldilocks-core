@@ -246,6 +246,20 @@ def test_kpoint_lists_are_normalized_to_immutable_tuples() -> None:
         selection.grid[0] = 1
 
 
+@pytest.mark.parametrize("code", ["vasp", "", None, []])
+def test_calculation_intent_rejects_unsupported_target(code: object) -> None:
+    """Literal annotations are enforced at the Python request boundary."""
+    with pytest.raises(ValueError, match="CalculationIntent.code"):
+        CalculationIntent(code=code)
+
+
+@pytest.mark.parametrize("task", ["relax", "", None, []])
+def test_calculation_intent_rejects_unsupported_task(task: object) -> None:
+    """Only implemented calculation tasks cross the request boundary."""
+    with pytest.raises(ValueError, match="CalculationIntent.task"):
+        CalculationIntent(task=task)
+
+
 @pytest.mark.parametrize(
     "field_name",
     ["spin_polarized", "spin_orbit_coupling", "use_vdw"],
@@ -348,6 +362,9 @@ def test_provenance_details_reject_non_finite_numbers() -> None:
         ("cold", np.nan),
         ("cold", np.inf),
         ("", None),
+        ("unsupported", 0.01),
+        ("cold'\n  ecutwfc = 1", 0.01),
+        ([], 0.01),
     ],
 )
 @pytest.mark.parametrize(
@@ -419,6 +436,30 @@ def test_vdw_hint_method_is_incompatible_with_explicitly_disabled_vdw() -> None:
     """Reject a method that an explicit off hint would otherwise ignore."""
     with pytest.raises(ValueError, match="vdw_method must be None"):
         CalculationHints(use_vdw=False, vdw_method="d3")
+
+
+def test_pseudopotential_filename_must_be_one_safe_token() -> None:
+    """Reject path and line injection before target-code generation."""
+    for filename in (
+        "",
+        "../Si.UPF",
+        "pseudo/Si.UPF",
+        "Si bad.UPF",
+        "Si'bad.UPF",
+        "Si.UPF\nX",
+    ):
+        with pytest.raises(ValueError, match="PseudopotentialSelection.filename"):
+            _pseudopotential_selection(filename=filename)
+
+
+def test_selection_record_rejects_duplicate_elements() -> None:
+    """Custom Select backends cannot provide ambiguous resources."""
+    duplicate = _pseudopotential_selection(filename="Si.second.UPF")
+    with pytest.raises(ValueError, match="duplicate element 'Si'"):
+        SelectionRecord(
+            k_points=_kpoint_selection(),
+            pseudopotentials=(_pseudopotential_selection(), duplicate),
+        )
 
 
 @pytest.mark.parametrize("field_name", ["ecutwfc_ry", "ecutrho_ry"])

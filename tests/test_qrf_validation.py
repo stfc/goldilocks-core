@@ -57,6 +57,8 @@ def test_real_artifact_validation_runs_qrf_contract_before_mocked_inference(
         return "mock-checkpoint", "mock-atom-table"
 
     class FakeQRF:
+        q = [0.05, 0.5, 0.95]
+
         def predict(self, values):
             return np.array([[0.2], [0.25], [0.3]])
 

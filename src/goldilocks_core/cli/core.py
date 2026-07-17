@@ -107,7 +107,10 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
         type=int,
         metavar=("NK1", "NK2", "NK3"),
     )
-    parser.add_argument("--smearing-type")
+    parser.add_argument(
+        "--smearing-type",
+        choices=["fixed", "gaussian", "mp", "cold"],
+    )
     parser.add_argument("--smearing-width-ry", type=float)
     parser.add_argument(
         "--spin-polarized",

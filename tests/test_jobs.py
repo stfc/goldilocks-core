@@ -12,6 +12,7 @@ from goldilocks_core import (
     run_core_job,
 )
 from goldilocks_core.contracts import (
+    BundleRecord,
     GeneratedFile,
     KPointSelection,
     Provenance,
@@ -93,10 +94,28 @@ def test_run_core_job_aggregates_kmesh_warnings() -> None:
     assert result.stages[3].warnings == (warning,)
 
 
+def test_run_core_job_aggregates_advice_warnings() -> None:
+    """Surface scientific caveats in both Advice and job-level warnings."""
+    result = run_core_job(
+        CoreJobRequest(
+            structure=make_structure(),
+            hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+            pseudo_metadata=(make_metadata(),),
+        )
+    )
+
+    warning = "Verify smearing manually for likely metallic systems."
+    assert warning in result.warnings
+    assert warning in result.stages[2].warnings
+    assert result.warnings.count(warning) == 1
+
+
 def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> None:
     """The Python job runner uses the same configured default as the CLI."""
 
     class FakeQRF:
+        q = [0.05, 0.5, 0.95]
+
         def predict(self, features):
             return [[0.2], [0.25], [0.3]]
 
@@ -128,7 +147,7 @@ def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> 
     )
 
     assert result.selection.k_points.provenance.source == "model"
-    assert result.selection.k_points.provenance.confidence == 0.95
+    assert result.selection.k_points.provenance.confidence == 0.9
 
 
 def test_run_core_job_uses_custom_kmesh_backend() -> None:
@@ -248,6 +267,39 @@ def test_duplicate_custom_generate_paths_cannot_reach_bundle(tmp_path: Path) -> 
         run_core_job(request, pipeline=pipeline)
 
     assert bundle_called is False
+
+
+def test_bundle_backend_receives_completed_pre_bundle_stage_trace(
+    tmp_path: Path,
+) -> None:
+    """Honor CoreResult's stage-trace contract at the Bundle seam."""
+    received_stages = ()
+
+    def inspect_bundle(result, output_dir):
+        nonlocal received_stages
+        received_stages = tuple(stage.name for stage in result.stages)
+        return BundleRecord(path=str(output_dir), manifest={})
+
+    result = run_core_job(
+        CoreJobRequest(
+            structure=make_structure(),
+            hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+            pseudo_metadata=(make_metadata(),),
+            mode="bundle",
+            output_dir=str(tmp_path / "bundle"),
+        ),
+        pipeline=Pipeline(bundle=inspect_bundle),
+    )
+
+    assert received_stages == (
+        "load",
+        "analyze",
+        "advise",
+        "kmesh",
+        "select",
+        "generate",
+    )
+    assert result.stages[-1].name == "bundle"
 
 
 def test_run_core_job_bundle_writes_output_directory(tmp_path: Path) -> None:

@@ -27,6 +27,7 @@ def validate_real_qrf_artifacts(
 
     from goldilocks_core.advisors.kdistance_advisor import (
         _resolve_metallicity_artifacts,
+        _validate_loaded_qrf_quantiles,
         _validate_qrf_contract,
         _validate_qrf_runtime,
         predict_kdistance_quantiles,
@@ -40,6 +41,7 @@ def validate_real_qrf_artifacts(
     runtime: dict[str, str] = {}
     _validate_qrf_runtime(config, runtime)
     qrf = load_model(config.model)
+    _validate_loaded_qrf_quantiles(qrf, config)
     checkpoint, atom_table = _resolve_metallicity_artifacts(
         config,
         None,

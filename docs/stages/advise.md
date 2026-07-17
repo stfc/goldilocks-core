@@ -30,9 +30,9 @@ The default Kmesh backend converts the advice to a `KPointSelection`. A model-ba
 
 ### Smearing
 
-1. If coherent `hints.smearing_type` and `hints.smearing_width_ry` values are set → `SmearingAdvice` from hints, `provenance.source="user_hint"`. Fixed occupations use no width; another type requires a finite positive width.
+1. If coherent `hints.smearing_type` and `hints.smearing_width_ry` values are set → `SmearingAdvice` from hints, `provenance.source="user_hint"`. Fixed occupations use no width; the canonical `gaussian`, `mp`, and `cold` types require a finite positive width.
 2. If `analysis.electronic_character` is `metal` or `likely_metal` → `SmearingAdvice(smearing_type="cold", width_ry=0.01, provenance.source="analysis")`. Warning: metallicity is inferred, not confirmed.
-3. Otherwise → `SmearingAdvice(smearing_type=None, width_ry=None, provenance.source="default")`. This means fixed occupations. Warning: verify smearing for metallic systems.
+3. Otherwise → `SmearingAdvice(smearing_type="fixed", width_ry=None, provenance.source="default")`. Warning: verify smearing for metallic systems.
 
 ### Magnetism
 
@@ -42,7 +42,7 @@ The default Kmesh backend converts the advice to a `KPointSelection`. A model-ba
 
 ### Spin-orbit coupling
 
-1. If `hints.spin_orbit_coupling` is set → `SpinOrbitAdvice(enabled=hint, consider=hint, provenance.source="user_hint")`.
+1. If `hints.spin_orbit_coupling` is set → `SpinOrbitAdvice(enabled=hint, consider=False, provenance.source="user_hint")`; the operator has already made the decision.
 2. If `analysis.heavy_elements` is non-empty → `SpinOrbitAdvice(enabled=False, consider=True, provenance.source="analysis")`. Warning: SOC is not enabled automatically.
 3. Otherwise → `SpinOrbitAdvice(enabled=False, consider=False, provenance.source="default")`.
 
@@ -95,7 +95,7 @@ The vdW/SOC asymmetry is intentional. A detected low-dimensional classification 
 
 - `k_spacing` is non-finite or non-positive;
 - `k_grid` does not contain exactly three positive integers;
-- smearing type and width are inconsistent, or an enabled width is non-finite or non-positive;
+- smearing type is unsupported, type and width are inconsistent, or an enabled width is non-finite or non-positive;
 - `conv_thr` or `mixing_beta` is non-finite or non-positive;
 - `electron_maxstep` is not a positive integer;
 - `vdw_method` is not a supported label;

@@ -662,17 +662,17 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "dscribe", specifier = ">=2.1" },
+    { name = "dscribe", specifier = "==2.1.2" },
     { name = "huggingface-hub", specifier = ">=0.23" },
     { name = "joblib", specifier = "==1.5.3" },
-    { name = "matminer", specifier = ">=0.10.1" },
-    { name = "numpy", specifier = ">=2.4.4" },
+    { name = "matminer", specifier = "==0.10.1" },
+    { name = "numpy", specifier = "==2.4.4" },
     { name = "pandas", specifier = ">=2.0" },
-    { name = "pymatgen", specifier = ">=2026.3.23" },
+    { name = "pymatgen", specifier = "==2026.3.23" },
     { name = "scikit-learn", specifier = "==1.7.2" },
     { name = "sklearn-quantile", specifier = "==0.1.1" },
-    { name = "torch", specifier = ">=2.0" },
-    { name = "torch-geometric", specifier = ">=2.5" },
+    { name = "torch", specifier = "==2.12.1" },
+    { name = "torch-geometric", specifier = "==2.8.0" },
 ]
 
 [package.metadata.requires-dev]

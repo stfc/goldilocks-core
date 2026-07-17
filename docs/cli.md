@@ -46,7 +46,7 @@ Runs the full pipeline and publishes a portable bundle directory. `--out` is req
 | `--model-version` | str | `unknown` with `--model` | Model version recorded in `ModelSpec`; requires `--model` |
 | `--k-spacing` | float | None | `CalculationHints.k_spacing` |
 | `--k-grid` | 3 ints | None | `CalculationHints.k_grid` |
-| `--smearing-type` | str | None | `CalculationHints.smearing_type` |
+| `--smearing-type` | `fixed`, `gaussian`, `mp`, or `cold` | None | `CalculationHints.smearing_type` |
 | `--smearing-width-ry` | float | None | `CalculationHints.smearing_width_ry` |
 | `--spin-polarized` | `true`/`false` | None | `CalculationHints.spin_polarized` |
 | `--spin-orbit-coupling` | `true`/`false` | None | `CalculationHints.spin_orbit_coupling` |

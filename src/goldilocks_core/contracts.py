@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum
 from numbers import Integral, Real
@@ -47,6 +48,9 @@ CodeName = Literal["quantum_espresso"]
 
 CalcTask = Literal["scf_single_point"]
 """Calculation task. Only SCF single-point is currently supported."""
+
+SmearingType = Literal["fixed", "gaussian", "mp", "cold"]
+"""Canonical occupation schemes supported by the current QE target."""
 
 ModelSource = Literal["huggingface", "local"]
 """Where a trained model or supporting artifact is resolved from."""
@@ -99,6 +103,9 @@ Translated to code-specific keywords in the Generate stage (e.g. ``d3bj`` →
 QE ``vdw_corr='grimme-d3'`` with ``dftd3_version=4``).
 """
 
+_VALID_CODE_NAMES: frozenset[str] = frozenset(get_args(CodeName))
+_VALID_CALC_TASKS: frozenset[str] = frozenset(get_args(CalcTask))
+_VALID_SMEARING_TYPES: frozenset[str] = frozenset(get_args(SmearingType))
 _VALID_VDW_METHODS: frozenset[str] = frozenset(get_args(VdwMethod))
 
 
@@ -173,10 +180,11 @@ def _validate_smearing(
 ) -> None:
     """Require fixed occupations without width or smearing with positive width."""
     if smearing_type is not None and (
-        not isinstance(smearing_type, str) or not smearing_type.strip()
+        not isinstance(smearing_type, str) or smearing_type not in _VALID_SMEARING_TYPES
     ):
+        valid = ", ".join(sorted(_VALID_SMEARING_TYPES))
         raise ValueError(
-            f"{type_field} must be a non-empty string or None; got {smearing_type!r}"
+            f"{type_field} must be one of {valid}, or None; got {smearing_type!r}"
         )
 
     fixed_occupations = smearing_type in {None, "fixed"}
@@ -197,6 +205,21 @@ def _validate_vdw_method(method: object, field_name: str) -> None:
     if not isinstance(method, str) or method not in _VALID_VDW_METHODS:
         valid = ", ".join(sorted(_VALID_VDW_METHODS))
         raise ValueError(f"{field_name} must be one of {valid}; got {method!r}")
+
+
+def _validate_pseudopotential_filename(filename: object, field_name: str) -> None:
+    """Require one safe, unquoted target-code filename token."""
+    if (
+        not isinstance(filename, str)
+        or re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._+-]*",
+            filename,
+        )
+        is None
+    ):
+        raise ValueError(
+            f"{field_name} must be one safe unquoted filename token; got {filename!r}"
+        )
 
 
 def _validate_generated_path(path: str, field_name: str) -> str:
@@ -399,7 +422,18 @@ class CalculationIntent:
     pseudo_mode: str = "efficiency"
 
     def __post_init__(self) -> None:
-        """Normalize the functional at the operator-intent boundary."""
+        """Validate the supported target/task and normalize the functional."""
+        if not isinstance(self.code, str) or self.code not in _VALID_CODE_NAMES:
+            valid = ", ".join(sorted(_VALID_CODE_NAMES))
+            raise ValueError(
+                f"CalculationIntent.code must be one of {valid}; got {self.code!r}"
+            )
+        if not isinstance(self.task, str) or self.task not in _VALID_CALC_TASKS:
+            valid = ", ".join(sorted(_VALID_CALC_TASKS))
+            raise ValueError(
+                f"CalculationIntent.task must be one of {valid}; got {self.task!r}"
+            )
+
         functional = normalize_functional_label(self.functional)
         if functional is None:
             raise ValueError(
@@ -931,7 +965,12 @@ class PseudopotentialSelection:
     warnings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        """Validate any available pseudopotential cutoff values."""
+        """Validate the rendered filename and any available cutoff values."""
+        if self.filename is not None:
+            _validate_pseudopotential_filename(
+                self.filename,
+                "PseudopotentialSelection.filename",
+            )
         if self.ecutwfc_ry is not None:
             _validate_finite_positive(
                 self.ecutwfc_ry, "PseudopotentialSelection.ecutwfc_ry"
@@ -963,6 +1002,17 @@ class SelectionRecord:
     k_points: KPointSelection
     pseudopotentials: tuple[PseudopotentialSelection, ...]
     warnings: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Reject duplicate element selections at the stage boundary."""
+        seen_elements: set[str] = set()
+        for pseudopotential in self.pseudopotentials:
+            if pseudopotential.element in seen_elements:
+                raise ValueError(
+                    "SelectionRecord.pseudopotentials contains duplicate element "
+                    f"{pseudopotential.element!r}"
+                )
+            seen_elements.add(pseudopotential.element)
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""

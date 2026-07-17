@@ -55,9 +55,12 @@ Fields:
 `Pipeline()` uses `default_kmesh_advisor()`. The extractor owns the explicit
 feature schema/version. The registry declares that schema and owns the model,
 supporting artifacts, immutable revisions, exact inference runtime, feature
-settings, confidence/quantiles, and calibration. The advisor rejects schema,
-feature-count, calibration-method, or runtime-version mismatch before loading
-artifacts. Set `GOLDILOCKS_MODEL_REGISTRY` to a replacement TOML file to
+settings, confidence/quantiles, and calibration. Core dependencies that affect
+the packaged QRF feature and serialization contract are pinned to the same
+versions. The advisor rejects schema, feature-count, calibration-method, or
+runtime-version mismatch before loading artifacts, then verifies that the
+loaded model's own quantile configuration matches the registry before reporting
+its confidence. Set `GOLDILOCKS_MODEL_REGISTRY` to a replacement TOML file to
 hot-swap the complete configuration.
 
 Registry parsing, model imports, artifact resolution, and inference are all

@@ -10,8 +10,8 @@ feature_count = 483
 source = "huggingface"
 location = "STFC-SCD/kpoints-goldilocks-QRF::QRF95.pkl"
 revision = "75588288f755522e47984b5a31b82824860d6943"
-interval_confidence = 0.95
-interval_quantiles = [0.025, 0.5, 0.975]
+interval_confidence = 0.90
+interval_quantiles = [0.05, 0.5, 0.95]
 
 [defaults.kpoints.calibration]
 method = "symmetric_additive_bounds-v1"

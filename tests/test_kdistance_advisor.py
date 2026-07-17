@@ -32,7 +32,15 @@ from goldilocks_core.ml.model_registry import (
 class FakeQRF:
     """Minimal QRF stub returning fixed (lower, median, upper) quantiles."""
 
-    def __init__(self, lower, median, upper):
+    def __init__(
+        self,
+        lower,
+        median,
+        upper,
+        *,
+        q=(0.05, 0.5, 0.95),
+    ):
+        self.q = list(q)
         self._quantiles = np.array([[lower], [median], [upper]])
 
     def predict(self, X):
@@ -220,7 +228,7 @@ def test_qrf_kdistance_advisor_predicts_with_model_provenance(
 
     assert selection.grid == k_distance_to_mesh(structure, 0.25)
     assert selection.provenance.source == "model"
-    assert selection.provenance.confidence == 0.95
+    assert selection.provenance.confidence == 0.9
     assert "@" in selection.provenance.data_source
     inference = selection.provenance.details["qrf_inference"]
     assert inference["config_digest"]["value"] == make_config().digest
@@ -309,6 +317,36 @@ def test_qrf_advisor_rejects_extractor_schema_mismatch(
         ),
     )
     assert any(message in warning for warning in selection.provenance.warnings)
+
+
+def test_qrf_advisor_rejects_loaded_model_quantile_mismatch(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """Registry confidence cannot describe different model quantiles."""
+    checkpoint = tmp_path / "ckpt.pkl"
+    atom_table = tmp_path / "atom.json"
+    checkpoint.write_bytes(b"checkpoint")
+    atom_table.write_bytes(b"atom table")
+    config = make_config()
+    _patch_models(
+        monkeypatch,
+        FakeQRF(0.2, 0.25, 0.3, q=(0.025, 0.5, 0.975)),
+    )
+
+    selection = qrf_kdistance_advisor(
+        config,
+        str(checkpoint),
+        str(atom_table),
+    )(make_structure(), CalculationHints(), _make_advice())
+
+    assert selection.provenance.source == "fallback"
+    assert selection.provenance.details["qrf_inference"]["failure"]["stage"] == (
+        "model_contract"
+    )
+    assert any(
+        "quantiles do not match" in warning for warning in selection.provenance.warnings
+    )
 
 
 def test_qrf_advisor_rejects_runtime_mismatch_before_loading(monkeypatch) -> None:

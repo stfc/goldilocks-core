@@ -38,7 +38,7 @@ Currently only Quantum ESPRESSO SCF single-point input is supported, producing o
 - `ecutwfc`: max of all `PseudopotentialSelection.ecutwfc_ry`
 - `ecutrho`: max of all `PseudopotentialSelection.ecutrho_ry`
 - **Occupations**: `"fixed"` when smearing is None or `"fixed"`; `"smearing"` otherwise
-- **Smearing**: `smearing` and `degauss` from `SmearingAdvice` when applicable
+- **Smearing**: canonical `gaussian`, `mp`, and `cold` labels are mapped explicitly to QE syntax with `degauss`; arbitrary strings are rejected
 - **Spin**: `nspin = 2` when magnetism is spin-polarized and SOC is not enabled
 - **SOC**: `noncolin = .true.` and `lspinorb = .true.` when SOC is enabled. `nspin = 2` is **not** emitted alongside noncollinear SOC flags.
 - **vdW**: code-agnostic `VdwAdvice.method` values map to QE settings:
@@ -68,9 +68,10 @@ The generator raises `ValueError` if:
 - `intent.code` is not `"quantum_espresso"` (only QE is implemented).
 - `intent.task` is not `"scf_single_point"` (only SCF is implemented).
 - The structure is disordered (`structure.is_ordered` is False). Disordered structures require manual resolution of occupancies.
-- Any element lacks a pseudopotential selection (no `PseudopotentialSelection` for that element).
-- Any pseudopotential selection has `filename=None` or missing cutoffs (`ecutwfc_ry` or `ecutrho_ry` is None). The generator will not invent values.
+- Pseudopotential selections do not contain exactly one entry for every structure element. Duplicate, missing, and extraneous elements are rejected before global cutoffs are calculated.
+- Any pseudopotential selection has `filename=None`, an unsafe unquoted filename token, or missing cutoffs (`ecutwfc_ry` or `ecutrho_ry` is None). The generator will not invent values.
 - Any selected cutoff is non-numeric, non-finite, zero, negative, or boolean. Record constructors normally reject these values; Generate repeats the finite, strictly positive check defensively before rendering.
+- Smearing advice contains a method outside the canonical supported set. Generate maps known labels rather than interpolating arbitrary target syntax.
 
 ## What the generator does not do
 

@@ -20,6 +20,7 @@ MANIFEST_FILENAME = "manifest.json"
 MANIFEST_VERSION = 1
 _AT_FDCWD = -100
 _RENAME_NOREPLACE = 1
+_RENAME_EXCL = 0x00000004
 _WINDOWS_RESERVED_COMPONENT_CHARACTERS = frozenset(
     {chr(codepoint) for codepoint in range(32)} | {'"', "*", ":", "<", ">", "?", "|"}
 )
@@ -330,6 +331,10 @@ def _publish_staged_directory(staging_dir: Path, target_dir: Path) -> None:
         _linux_rename_noreplace(staging_dir, target_dir)
         return
 
+    if sys.platform == "darwin":
+        _darwin_rename_noreplace(staging_dir, target_dir)
+        return
+
     if os.name == "nt":
         os.rename(staging_dir, target_dir)
         return
@@ -339,6 +344,28 @@ def _publish_staged_directory(staging_dir: Path, target_dir: Path) -> None:
         "Atomic no-replace directory publication is unsupported on this platform",
         str(target_dir),
     )
+
+
+def _darwin_rename_noreplace(staging_dir: Path, target_dir: Path) -> None:
+    """Publish with Darwin renamex_np(RENAME_EXCL)."""
+    renamex_np = getattr(ctypes.CDLL(None, use_errno=True), "renamex_np", None)
+    if renamex_np is None:
+        raise OSError(
+            errno.ENOTSUP,
+            "Atomic no-replace directory publication is unavailable",
+            str(target_dir),
+        )
+
+    renamex_np.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+    renamex_np.restype = ctypes.c_int
+    result = renamex_np(
+        os.fsencode(staging_dir),
+        os.fsencode(target_dir),
+        _RENAME_EXCL,
+    )
+    if result != 0:
+        error_number = ctypes.get_errno()
+        raise OSError(error_number, os.strerror(error_number), str(target_dir))
 
 
 def _linux_rename_noreplace(staging_dir: Path, target_dir: Path) -> None:

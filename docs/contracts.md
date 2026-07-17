@@ -210,9 +210,10 @@ Public records reject invalid boundary values in dataclass `__post_init__` metho
 - Boolean hint and advice controls accept only `bool` (or `None` for optional hints), never truthy values such as `1`.
 - `KMeshEntry.k_distance_interval` uses `None` for an upper bound that is unbounded above, preserving the scientific interval without an `Infinity` JSON number.
 - `Provenance.confidence`, when present, is finite and in the closed interval `[0, 1]`; `Provenance.details`, when present, is a JSON-safe dictionary.
-- Fixed occupations (`smearing_type=None` or `"fixed"`) have no width. Other smearing types require a finite positive width.
+- `CalculationIntent` accepts only the implemented `quantum_espresso` target and `scf_single_point` task at runtime; Python type annotations are not the enforcement boundary.
+- Fixed occupations (`smearing_type=None` or `"fixed"`) have no width. Canonical `gaussian`, `mp`, and `cold` smearing types require a finite positive width; unsupported strings are rejected before target rendering.
 - `CalculationHints.vdw_method` is a supported label and is not present when `use_vdw=False`; enabled `VdwAdvice` has one supported method, while disabled advice has `method=None`.
-- Present pseudopotential cutoffs and convergence controls are finite and positive; SCF step counts are positive integers.
+- Present pseudopotential filenames are safe unquoted tokens, cutoffs and convergence controls are finite and positive, and SCF step counts are positive integers. `SelectionRecord` rejects duplicate pseudopotential elements; Generate additionally requires the selected element set to match the structure exactly.
 - `GeneratedFile.path` is non-empty, relative, and contains no `..` traversal. `CoreResult` rejects duplicate generated paths before Bundle can consume them.
 - `StructureFeatureVector.values` is one-dimensional, finite, and the same length as `feature_names`.
 

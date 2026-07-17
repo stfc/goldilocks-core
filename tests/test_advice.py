@@ -53,6 +53,7 @@ def test_advise_parameters_records_user_hint_provenance() -> None:
     assert advice.magnetism.spin_polarized is True
     assert advice.magnetism.provenance.source == "user_hint"
     assert advice.spin_orbit.enabled is True
+    assert advice.spin_orbit.consider is False
     assert advice.pseudopotentials.pseudo_mode == "precision"
     assert advice.pseudopotentials.relativistic_mode == "full"
     assert advice.smearing.smearing_type == "cold"

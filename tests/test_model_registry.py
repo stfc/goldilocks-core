@@ -1,3 +1,4 @@
+import tomllib
 from dataclasses import fields, replace
 from pathlib import Path
 
@@ -115,6 +116,18 @@ def test_registry_digest_is_deterministic() -> None:
     assert len(first.digest) == 64
 
 
+def test_packaged_qrf_runtime_matches_exact_project_dependencies() -> None:
+    """Keep the install contract aligned with the default model contract."""
+    config = load_default_qrf_config()
+    with Path("pyproject.toml").open("rb") as project_file:
+        dependencies = set(tomllib.load(project_file)["project"]["dependencies"])
+
+    for requirement in config.runtime_requirements:
+        if requirement.distribution == "goldilocks-core":
+            continue
+        assert f"{requirement.distribution}=={requirement.version}" in dependencies
+
+
 def test_registry_digest_changes_for_each_top_level_contract_component() -> None:
     """No inference-relevant top-level configuration is omitted from hashing."""
     config = load_default_qrf_config()
@@ -126,8 +139,8 @@ def test_registry_digest_changes_for_each_top_level_contract_component() -> None
             config,
             feature_settings=replace(config.feature_settings, soap_sigma=2.0),
         ),
-        replace(config, interval_confidence=0.9),
-        replace(config, interval_quantiles=(0.05, 0.5, 0.95)),
+        replace(config, interval_confidence=0.95),
+        replace(config, interval_quantiles=(0.025, 0.5, 0.975)),
         replace(
             config,
             calibration=replace(config.calibration, correction=0.0),

@@ -42,9 +42,9 @@ Warnings flow through the pipeline in two parallel paths:
 
 1. **Provenance-level warnings**: each `Provenance` record carries its own `warnings` tuple. These are specific to that one decision — e.g. "SOC is not enabled automatically because it changes cost and setup" on `SpinOrbitAdvice.provenance`.
 
-2. **Aggregate warnings**: `CoreResult.warnings` collects warnings from analysis, Kmesh, and selection stages. These are the top-level warnings a caller should surface.
+2. **Aggregate warnings**: `CoreResult.warnings` collects and de-duplicates warnings from Analyze, Advise, Kmesh, and Select in first-seen order. These are the top-level warnings every caller should surface. Each `StageRecord.warnings` retains the warnings owned by that stage.
 
-Advice-level provenance warnings are preserved in nested advice records but are **not** all aggregated into the top-level `warnings` tuples. A JSON caller should inspect nested advice provenance directly when a specific decision matters.
+Advice warnings remain attached to their individual provenance records as well as appearing in the aggregate, so callers can show a complete warning summary without traversing every decision record.
 
 ## Interpreting provenance
 

@@ -137,8 +137,10 @@ loading is lazy: constructing a pipeline and resolving explicit `k_grid` or
 The extractor owns the explicit 483-value feature schema. Model and supporting
 artifact identities, exact inference-stack versions, feature settings, interval
 confidence, quantiles, and calibration live in
-`goldilocks_core/model_registry.toml`. The advisor checks the declared schema
-and runtime before loading artifacts. Set
+`goldilocks_core/model_registry.toml`. Package dependencies that affect this
+contract are pinned to those versions. The advisor checks the declared schema
+and runtime before loading artifacts, then verifies that the loaded model's own
+quantiles match the declared confidence interval. Set
 `GOLDILOCKS_MODEL_REGISTRY=/path/to/models.toml` to replace the complete default
 configuration without changing package source.
 

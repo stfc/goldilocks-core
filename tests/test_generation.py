@@ -1,3 +1,4 @@
+from dataclasses import replace
 from typing import get_args
 
 import pytest
@@ -9,9 +10,14 @@ from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
     ParameterAdvice,
+    SmearingType,
     VdwMethod,
 )
-from goldilocks_core.generation import _QE_VDW_CORR, generate_inputs
+from goldilocks_core.generation import (
+    _QE_SMEARING,
+    _QE_VDW_CORR,
+    generate_inputs,
+)
 from goldilocks_core.kmesh import resolve_kpoints_from_advice
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.selection import select_parameters
@@ -135,6 +141,11 @@ def test_generate_inputs_uses_noncollinear_soc_without_nspin() -> None:
     assert "nspin = 2" not in content
 
 
+def test_qe_smearing_translation_map_exactly_covers_enabled_methods() -> None:
+    """Keep every non-fixed occupation scheme mapped explicitly."""
+    assert set(_QE_SMEARING) == set(get_args(SmearingType)) - {"fixed"}
+
+
 def test_qe_vdw_translation_map_exactly_covers_supported_methods() -> None:
     """Keep every domain method translated by the supported QE target."""
     assert set(_QE_VDW_CORR) == set(get_args(VdwMethod))
@@ -242,6 +253,28 @@ def test_generate_inputs_rejects_malformed_injected_vdw_advice(
         generate_inputs(structure, advice_context(), advice, selection)
 
 
+def test_generate_inputs_defensively_rejects_injected_smearing_syntax() -> None:
+    """A malformed custom Advice record cannot inject QE namelist lines."""
+    structure = make_structure()
+    hints = CalculationHints(
+        k_grid=(2, 2, 2),
+        pseudo_type="NC",
+        smearing_type="cold",
+        smearing_width_ry=0.01,
+    )
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+    object.__setattr__(advice.smearing, "smearing_type", "cold'\n  ecutwfc = 1")
+
+    with pytest.raises(ValueError, match="smearing advice is invalid"):
+        generate_inputs(structure, advice_context(), advice, selection)
+
+
 def test_generate_inputs_omits_vdw_corr_by_default() -> None:
     """Do not write vdw_corr for 3D bulk without an explicit vdW hint."""
     structure = make_bulk_structure()
@@ -257,6 +290,77 @@ def test_generate_inputs_omits_vdw_corr_by_default() -> None:
     content = generate_inputs(structure, advice_context(), advice, selection)[0].content
 
     assert "vdw_corr" not in content
+
+
+def test_generate_inputs_rejects_extraneous_pseudopotential_selection() -> None:
+    """Unrelated resources cannot inflate the generated global cutoffs."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+    silicon = selection.pseudopotentials[0]
+    oxygen = replace(
+        silicon,
+        element="O",
+        filename="O.UPF",
+        ecutwfc_ry=999.0,
+        ecutrho_ry=3996.0,
+    )
+    selection = replace(
+        selection,
+        pseudopotentials=(*selection.pseudopotentials, oxygen),
+    )
+
+    with pytest.raises(ValueError, match="unexpected O"):
+        generate_inputs(structure, advice_context(), advice, selection)
+
+
+def test_generate_inputs_defensively_rejects_duplicate_pseudopotentials() -> None:
+    """Reject ambiguity even when a frozen SelectionRecord was corrupted."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+    duplicate = replace(selection.pseudopotentials[0], filename="Si.second.UPF")
+    object.__setattr__(
+        selection,
+        "pseudopotentials",
+        (*selection.pseudopotentials, duplicate),
+    )
+
+    with pytest.raises(ValueError, match="duplicate pseudopotential"):
+        generate_inputs(structure, advice_context(), advice, selection)
+
+
+def test_generate_inputs_rejects_unsafe_pseudopotential_filename() -> None:
+    """Defensively reject line injection after record construction."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+    object.__setattr__(
+        selection.pseudopotentials[0],
+        "filename",
+        "Si.UPF\nO 1 O.UPF",
+    )
+
+    with pytest.raises(ValueError, match="unsafe pseudopotential filenames"):
+        generate_inputs(structure, advice_context(), advice, selection)
 
 
 def test_generate_inputs_rejects_missing_pseudopotential_selection() -> None:

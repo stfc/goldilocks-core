@@ -345,6 +345,44 @@ def test_write_bundle_keeps_valid_posix_distinct_paths(tmp_path: Path) -> None:
     ) == "colon"
 
 
+def test_publication_uses_darwin_no_replace_rename(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dispatch macOS publication through renamex_np(RENAME_EXCL)."""
+    calls = []
+
+    class RenameExclusive:
+        argtypes = None
+        restype = None
+
+        def __call__(self, source, target, flags):
+            calls.append((source, target, flags))
+            return 0
+
+    class DarwinLibc:
+        renamex_np = RenameExclusive()
+
+    monkeypatch.setattr(bundle_module.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        bundle_module.ctypes,
+        "CDLL",
+        lambda *args, **kwargs: DarwinLibc(),
+    )
+    source = tmp_path / "staging"
+    target = tmp_path / "bundle"
+
+    bundle_module._publish_staged_directory(source, target)
+
+    assert calls == [
+        (
+            os.fsencode(source),
+            os.fsencode(target),
+            bundle_module._RENAME_EXCL,
+        )
+    ]
+
+
 def test_concurrent_destination_is_not_replaced_during_publication(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

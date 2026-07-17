@@ -21,6 +21,7 @@ from goldilocks_core.contracts import (
     GeneratedFile,
     GenerateStage,
     KMeshAdvisor,
+    ParameterAdvice,
     SelectStage,
     StageRecord,
     StructureInput,
@@ -94,7 +95,8 @@ def run_core_job(
     )
 
     advice = active_pipeline.advise(analysis, request.intent, request.hints)
-    stages.append(StageRecord(name="advise"))
+    advice_warnings = _advice_warnings(advice)
+    stages.append(StageRecord(name="advise", warnings=advice_warnings))
 
     k_points = active_pipeline.kmesh(structure, request.hints, advice.k_points)
     stages.append(StageRecord(name="kmesh", warnings=k_points.provenance.warnings))
@@ -107,11 +109,12 @@ def run_core_job(
     )
     stages.append(StageRecord(name="select", warnings=selection.warnings))
 
-    warnings = (
-        *analysis.disorder_warnings,
-        *analysis.analysis_warnings,
-        *k_points.provenance.warnings,
-        *selection.warnings,
+    warnings = _unique_warnings(
+        analysis.disorder_warnings,
+        analysis.analysis_warnings,
+        advice_warnings,
+        k_points.provenance.warnings,
+        selection.warnings,
     )
     generated_files: tuple[GeneratedFile, ...] = ()
     bundle: BundleRecord | None = None
@@ -135,6 +138,7 @@ def run_core_job(
             selection=selection,
             generated_files=generated_files,
             warnings=warnings,
+            stages=tuple(stages),
         )
         bundle = active_pipeline.bundle(in_progress, request.output_dir)
         stages.append(StageRecord(name="bundle"))
@@ -149,6 +153,24 @@ def run_core_job(
         bundle=bundle,
         stages=tuple(stages),
     )
+
+
+def _advice_warnings(advice: ParameterAdvice) -> tuple[str, ...]:
+    """Return actionable warnings from every Advise sub-decision."""
+    return _unique_warnings(
+        advice.k_points.provenance.warnings,
+        advice.smearing.provenance.warnings,
+        advice.magnetism.provenance.warnings,
+        advice.spin_orbit.provenance.warnings,
+        advice.pseudopotentials.provenance.warnings,
+        advice.convergence.provenance.warnings,
+        advice.vdw.provenance.warnings,
+    )
+
+
+def _unique_warnings(*groups: tuple[str, ...]) -> tuple[str, ...]:
+    """Return warnings in first-seen order without duplicate messages."""
+    return tuple(dict.fromkeys(warning for group in groups for warning in group))
 
 
 def recommend(

@@ -249,6 +249,39 @@ def _validate_qrf_contract(config: QrfKpointsConfig) -> None:
         )
 
 
+def _validate_loaded_qrf_quantiles(
+    model: object,
+    config: QrfKpointsConfig,
+) -> None:
+    """Require the loaded model to implement the registry's quantile contract."""
+    model_quantiles = getattr(model, "q", None)
+    if model_quantiles is None and hasattr(model, "get_params"):
+        parameters = model.get_params(deep=False)
+        model_quantiles = parameters.get("q")
+    if model_quantiles is None:
+        raise ValueError(
+            "Loaded QRF model does not expose its configured quantiles as 'q'."
+        )
+
+    try:
+        quantiles = np.asarray(model_quantiles, dtype=float).reshape(-1)
+    except (TypeError, ValueError) as error:
+        raise ValueError(
+            "Loaded QRF model has an invalid quantile configuration."
+        ) from error
+    expected = np.asarray(config.interval_quantiles, dtype=float)
+    if quantiles.shape != expected.shape or not np.allclose(
+        quantiles,
+        expected,
+        rtol=0.0,
+        atol=1e-12,
+    ):
+        raise ValueError(
+            "Loaded QRF model quantiles do not match the registry: "
+            f"expected {config.interval_quantiles!r}, got {tuple(quantiles)!r}."
+        )
+
+
 def _validate_qrf_runtime(
     config: QrfKpointsConfig,
     runtime_versions: dict[str, str],
@@ -513,6 +546,8 @@ def qrf_kdistance_advisor(
                         load_details = details
                         load_failure_stage = "model_load"
                         qrf = load_model(config.model)
+                        load_failure_stage = "model_contract"
+                        _validate_loaded_qrf_quantiles(qrf, config)
                         metal_model = load_metallicity_model(checkpoint)
                         if details != _qrf_provenance_details(
                             config,

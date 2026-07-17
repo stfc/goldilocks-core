@@ -179,7 +179,7 @@ def _advise_spin_orbit(
     if hints.spin_orbit_coupling is not None:
         return SpinOrbitAdvice(
             enabled=hints.spin_orbit_coupling,
-            consider=hints.spin_orbit_coupling,
+            consider=False,
             heavy_elements=analysis.heavy_elements,
             provenance=Provenance(
                 source="user_hint",

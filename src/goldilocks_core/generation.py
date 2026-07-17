@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from numbers import Real
 
 from pymatgen.core import Structure
@@ -23,6 +24,11 @@ _QE_VDW_CORR = {
     "d3bj": ("grimme-d3", 4),
     "ts": ("ts-vdw", None),
     "mbd": ("many-body-dispersion", None),
+}
+_QE_SMEARING = {
+    "gaussian": "gaussian",
+    "mp": "mp",
+    "cold": "cold",
 }
 
 
@@ -96,24 +102,48 @@ def generate_quantum_espresso_scf_input(
             "Cannot generate Quantum ESPRESSO input for disordered structures"
         )
 
-    pseudo_by_element = {
-        pseudo.element: pseudo for pseudo in selection.pseudopotentials
-    }
     elements = tuple(
         sorted(element.symbol for element in structure.composition.elements)
     )
+    selected_elements = tuple(
+        pseudopotential.element for pseudopotential in selection.pseudopotentials
+    )
+    duplicate_elements = tuple(
+        element
+        for index, element in enumerate(selected_elements)
+        if element in selected_elements[:index]
+    )
+    if duplicate_elements:
+        raise ValueError(
+            "Cannot generate Quantum ESPRESSO input with duplicate "
+            "pseudopotential selections for: "
+            f"{', '.join(dict.fromkeys(duplicate_elements))}"
+        )
+
+    pseudo_by_element = {
+        pseudo.element: pseudo for pseudo in selection.pseudopotentials
+    }
     missing_elements = tuple(
         element for element in elements if element not in pseudo_by_element
     )
-    if missing_elements:
+    unexpected_elements = tuple(
+        element for element in pseudo_by_element if element not in elements
+    )
+    if missing_elements or unexpected_elements:
+        problems: list[str] = []
+        if missing_elements:
+            problems.append(f"missing {', '.join(missing_elements)}")
+        if unexpected_elements:
+            problems.append(f"unexpected {', '.join(unexpected_elements)}")
         raise ValueError(
-            "Cannot generate Quantum ESPRESSO input without pseudopotential "
-            f"selections for: {', '.join(missing_elements)}"
+            "Quantum ESPRESSO pseudopotential selections must match the structure "
+            f"elements exactly ({'; '.join(problems)})"
         )
 
+    selected_pseudos = tuple(pseudo_by_element[element] for element in elements)
     incomplete = tuple(
         pseudo.element
-        for pseudo in pseudo_by_element.values()
+        for pseudo in selected_pseudos
         if pseudo.filename is None
         or pseudo.ecutwfc_ry is None
         or pseudo.ecutrho_ry is None
@@ -124,9 +154,20 @@ def generate_quantum_espresso_scf_input(
             f"and cutoff selections for: {', '.join(incomplete)}"
         )
 
+    invalid_filenames = tuple(
+        f"{pseudo.element}.filename={pseudo.filename!r}"
+        for pseudo in selected_pseudos
+        if not _is_safe_pseudopotential_filename(pseudo.filename)
+    )
+    if invalid_filenames:
+        raise ValueError(
+            "Cannot generate Quantum ESPRESSO input with unsafe pseudopotential "
+            f"filenames ({', '.join(invalid_filenames)})"
+        )
+
     invalid_cutoffs = tuple(
         f"{pseudo.element}.{field}={value!r}"
-        for pseudo in pseudo_by_element.values()
+        for pseudo in selected_pseudos
         for field, value in (
             ("ecutwfc_ry", pseudo.ecutwfc_ry),
             ("ecutrho_ry", pseudo.ecutrho_ry),
@@ -140,8 +181,8 @@ def generate_quantum_espresso_scf_input(
             "positive numbers"
         )
 
-    ecutwfc = max(float(pseudo.ecutwfc_ry) for pseudo in pseudo_by_element.values())
-    ecutrho = max(float(pseudo.ecutrho_ry) for pseudo in pseudo_by_element.values())
+    ecutwfc = max(float(pseudo.ecutwfc_ry) for pseudo in selected_pseudos)
+    ecutrho = max(float(pseudo.ecutrho_ry) for pseudo in selected_pseudos)
 
     lines: list[str] = []
     lines.extend(_control_section())
@@ -194,15 +235,22 @@ def _system_section(
         f"  ecutrho = {_format_float(ecutrho)}",
     ]
 
-    if advice.smearing.smearing_type in (None, "fixed"):
+    smearing_type = advice.smearing.smearing_type
+    if smearing_type in (None, "fixed"):
         lines.append("  occupations = 'fixed'")
     else:
+        qe_smearing = _QE_SMEARING.get(smearing_type)
+        if qe_smearing is None:
+            raise ValueError(
+                "Quantum ESPRESSO smearing advice is invalid: unsupported "
+                f"method {smearing_type!r}"
+            )
         if advice.smearing.width_ry is None:
             raise ValueError("Smearing width is required when smearing is enabled")
         lines.extend(
             [
                 "  occupations = 'smearing'",
-                f"  smearing = '{advice.smearing.smearing_type}'",
+                f"  smearing = '{qe_smearing}'",
                 f"  degauss = {_format_float(advice.smearing.width_ry)}",
             ]
         )
@@ -285,6 +333,18 @@ def _k_points(selection: SelectionRecord) -> list[str]:
         "K_POINTS automatic",
         f"  {grid[0]}  {grid[1]}  {grid[2]}  {shift[0]}  {shift[1]}  {shift[2]}",
     ]
+
+
+def _is_safe_pseudopotential_filename(value: object) -> bool:
+    """Return whether a filename is safe as one unquoted QE card token."""
+    return (
+        isinstance(value, str)
+        and re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._+-]*",
+            value,
+        )
+        is not None
+    )
 
 
 def _is_finite_positive_cutoff(value: object) -> bool:

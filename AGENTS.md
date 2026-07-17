@@ -12,7 +12,7 @@ uv run ruff format src tests             # format
 uv run pre-commit run --all-files        # lint + test in one shot
 ```
 
-CI runs on push to `main` and on PRs (`.github/workflows/ci.yml`): ruff check, ruff format check, pytest, all via `uv`. Third-party Actions are SHA-pinned; Dependabot bumps them weekly. Still run `pre-commit` before committing locally.
+CI runs on push to `main` and on PRs (`.github/workflows/ci.yml`): Ruff, pytest with branch coverage, focused mutation testing, and distribution validation, all via `uv`. Third-party Actions are SHA-pinned; Dependabot bumps them weekly. Still run `pre-commit` before committing locally.
 
 ## Code style
 
@@ -24,6 +24,27 @@ CI runs on push to `main` and on PRs (`.github/workflows/ci.yml`): ruff check, r
 - `snake_case` for everything. No `CamelCase` except in string literals matching external formats.
 - Type hints on public API surfaces. Internal functions can be looser.
 - Docstrings: factual — what it does, what it returns, what it assumes. Not prose essays.
+
+## Architecture
+
+- Keep the staged workflow, but do not build a workflow framework.
+- `Pipeline` is a convenience composition; every stage remains directly callable.
+- Calculation task names are extensible. Built-in generators validate what they support.
+- Generate may return multiple linked input files for one calculation intent.
+
+## Validation
+
+- Validate operator input, external metadata, rendered syntax, and filesystem writes.
+- Trust records produced by internal stages. Do not test deliberately corrupted internals.
+- Let errors propagate. Do not add catch-all fallbacks or failure-state machinery.
+- Alternative scientific behavior, such as heuristic k-points, must be selected explicitly.
+
+## Tests
+
+- Prioritize scientific behavior, public APIs, and end-to-end workflows.
+- Keep unit, integration, and physics tests distinct.
+- Use focused mutation testing to detect weak assertions.
+- Do not add production complexity solely to satisfy coverage or mutation metrics.
 
 ## What doesn't belong here
 

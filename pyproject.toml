@@ -18,7 +18,7 @@ dependencies = [
     # so its ML stack ships in the base install (decision: stfc/goldilocks-core#32).
     # torch-geometric requires torch; on GPU hosts install the matching CUDA wheel
     # of torch first, then sync.
-    "torch>=2.0",
+    "torch>=2.13.0",
     "torch-geometric>=2.5",
 ]
 

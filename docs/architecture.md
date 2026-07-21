@@ -1,178 +1,96 @@
 # Architecture
 
-`goldilocks-core` is the Core package for DFT input recommendation and input generation.
-
-Core owns the deterministic recommendation path: load a structure, analyze it, advise parameters, resolve k-points, select pseudopotentials and cutoffs, generate target-code inputs, and optionally write a portable bundle.
-
-Core does not own Runner/AiiDA workflows, schedulers, frontend/workspace state, auth, sessions, WebSockets, pods, structure database search, completed-output analysis, or HTTP backend registries.
-
-## Principles
-
-- Keep one canonical API. Do not add compatibility shims unless explicitly requested.
-- Keep the graph fixed and inspectable: `Load → Analyze → Advise → Kmesh → Select → Generate → Bundle`.
-- Keep `CoreJobRequest` data-only and serializable.
-- Keep executable backend choice in `Pipeline`, not in request data.
-- Prefer composition over inheritance. Backends are plain functions.
-- Keep CLIs thin: parse arguments, build request/pipeline objects, call Core.
-- Keep future HTTP handlers thin: map JSON to `CoreJobRequest`, resolve service-level backend names outside Core, call Core.
-- Keep generators mechanical. Scientific defaults belong in advice, Kmesh, or selection.
-- Keep tests portable. Do not require `local_data/` or private pseudo libraries.
-
-## Package layout
+Goldilocks Core turns a structure and calculation intent into DFT input files.
+The built-in workflow currently generates Quantum ESPRESSO SCF input. The data
+flow is staged so later calculation types can reuse analysis, advice, resource
+selection, and output handling.
 
 ```text
-src/goldilocks_core/
-├── contracts.py
-├── jobs.py
-├── analysis.py
-├── advice.py
-├── kmesh.py
-├── selection.py
-├── generation.py
-├── bundle.py
-├── advisors/
-├── cli/
-├── io/
-├── ml/
-└── pseudo/
+Load -> Analyze -> Advise -> Kmesh -> Select -> Generate -> Bundle
 ```
 
-Responsibilities:
+This is the default workflow, not a workflow engine. Core has no DAG scheduler,
+plugin registry, service container, or stage base classes.
 
-| Module | Owns |
+## Modules
+
+| Module | Responsibility |
 | --- | --- |
-| `contracts.py` | Public records, type aliases, stage callable contracts, JSON-safe serialization. |
-| `jobs.py` | `run_core_job()`, `Pipeline`, and public convenience functions `recommend`, `generate`, `write_bundle`. |
-| `pipeline.py` | Removed. `recommend`, `generate`, `write_bundle` moved to `jobs.py`. |
-| `analysis.py` | Structure facts only. No recommendations. |
-| `advice.py` | Provenance-backed scientific and numerical advice. |
-| `kmesh.py` | Concrete k-point grid resolution from advice or hints. |
-| `selection.py` | Pseudopotential selection, cutoff extraction, selection warnings. |
-| `generation.py` | Target-code input text from completed records. |
-| `bundle.py` | Bundle directory output and manifest writing. |
-| `advisors/` | Model-backed stage backend factories. |
-| `cli/` | Thin command-line wrappers. |
-| `io/` | Structure loading only. |
-| `ml/` | Feature extraction, model loading, prediction helpers. |
-| `pseudo/` | UPF parsing, metadata registry, filtering, policies. |
+| `contracts.py` | Data records shared between stages. |
+| `jobs.py` | `Pipeline`, `run_core_job`, and convenience functions. |
+| `io/structures.py` | Structure loading. |
+| `analysis.py` | Structure facts. |
+| `advice.py` | Scientific and numerical recommendations. |
+| `kmesh.py`, `advisors/` | Concrete k-point selection. |
+| `selection.py` | Pseudopotentials and cutoffs. |
+| `generation.py` | Calculation-specific file generation. |
+| `bundle.py` | Generated files and manifest output. |
 
-## Dependency direction
+Stages communicate through dataclasses. They do not need to inherit from a Core
+class, and callers can invoke any stage function directly.
 
-`contracts.py` defines boundary records and callable signatures. Stage modules import contracts; contracts do not import stage modules.
+## Standard workflow
 
-`jobs.py` composes stage implementations through the `Pipeline` dataclass. The built-in composition uses default field values:
+`CoreJobRequest` contains job data. `Pipeline` contains the callables used to
+process it. Keeping these separate allows requests to be serialized while
+Python callers replace implementations.
 
 ```python
-@dataclass(frozen=True, slots=True)
-class Pipeline:
-    analyze: AnalyzeStage = analyze_structure
-    advise: AdviseStage = advise_parameters
-    kmesh: KMeshAdvisor = field(default_factory=default_kmesh_advisor)
-    select: SelectStage = select_parameters
-    generate: GenerateStage = generate_inputs
-    bundle: BundleStage = write_bundle_directory
+request = CoreJobRequest(structure="Fe.cif", mode="generate")
+result = run_core_job(request, pipeline=Pipeline())
 ```
 
-`pipeline.py` was removed. `recommend`, `generate`, and `write_bundle` now live
-in `jobs.py` as thin wrappers around `run_core_job()`. The default Kmesh factory
-returns an advisor that lazily reads replaceable model metadata from
-`model_registry.toml`; upstream artifact locations are not embedded in stage
-code.
+`mode` controls where the standard workflow stops:
 
-## Fixed graph
+- `recommend`: after Select
+- `generate`: after Generate
+- `bundle`: after Bundle
 
-The full graph is:
+`CalculationIntent.task` describes the calculation. Task names are not closed
+in the shared contract. The built-in generator currently accepts only
+`scf_single_point`; another generator may support additional tasks and emit
+multiple `GeneratedFile` records.
 
-```text
-Load → Analyze → Advise → Kmesh → Select → Generate → Bundle
-```
+## Flexible Python use
 
-Mode controls how far the graph runs:
-
-```text
-recommend -> Load → Analyze → Advise → Kmesh → Select
-generate  -> Load → Analyze → Advise → Kmesh → Select → Generate
-bundle    -> Load → Analyze → Advise → Kmesh → Select → Generate → Bundle
-```
-
-The graph is not a DAG engine and has no scheduler. Each computational stage behind the graph is injectable through `Pipeline`.
-
-Detailed behavior lives in the stage docs:
-
-- [Analyze](stages/analyze.md)
-- [Advise](stages/advise.md)
-- [Kmesh](stages/kmesh.md)
-- [Select](stages/select.md)
-- [Generate](stages/generate.md)
-- [Bundle](stages/bundle.md)
-
-## Request versus Pipeline
-
-`CoreJobRequest` is serializable job data:
+The pipeline is optional convenience, not an access restriction. Advanced
+callers can import stage functions and compose them themselves:
 
 ```python
-CoreJobRequest(
-    structure="Si.cif",
-    intent=CalculationIntent(functional="PBE"),
-    hints=CalculationHints(k_spacing=0.2),
-    pseudo_metadata=tuple(metadata),
-    mode="recommend",
-)
+from goldilocks_core.advice import advise_parameters
+from goldilocks_core.analysis import analyze_structure
+from goldilocks_core.generation import generate_inputs
+from goldilocks_core.io.structures import load_structure
+from goldilocks_core.kmesh import resolve_kpoints_from_advice
+from goldilocks_core.selection import select_parameters
+
+structure = load_structure("Fe.cif")
+analysis = analyze_structure(structure)
+advice = advise_parameters(analysis, intent, hints)
+kpoints = resolve_kpoints_from_advice(structure, hints, advice.k_points)
+selection = select_parameters(structure, advice, kpoints, metadata)
+files = generate_inputs(structure, intent, advice, selection)
 ```
 
-`Pipeline` is executable composition:
+This supports custom ordering, extra project-specific steps, intermediate
+inspection, and calculation-specific generation without extending a framework.
 
-```python
+## Boundaries
 
-pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
-result = run_core_job(request, pipeline=pipeline)
-```
+Validate where data enters or causes side effects:
 
-The separation means:
+- request records validate operator controls;
+- pseudopotential selection treats metadata as untrusted;
+- generators reject unsupported or incomplete inputs before rendering;
+- bundle writing confines paths to a new output directory.
 
-- requests can cross JSON and HTTP boundaries;
-- pipelines can carry Python callables;
-- Core does not need string-based backend registries;
-- provenance still records whether a value came from a default, analysis, user hint, lookup, model, or fallback.
+Intermediate records remain ordinary Python data. Custom stage authors are
+responsible for returning coherent records; Core does not defensively re-check
+every possible malformed internal object.
 
-## Stage ownership summary
+Scientific choices belong in Analyze, Advise, Kmesh, and Select. Generate maps
+completed choices to calculation syntax. Bundle writes files but does not run
+calculations or copy pseudopotential libraries.
 
-| Stage | Owner | Output | Rule |
-| --- | --- | --- | --- |
-| Load | `io/structures.py` | `Structure` | I/O only. |
-| Analyze | `analysis.py` | `StructureAnalysisRecord` | Facts only. |
-| Advise | `advice.py` | `ParameterAdvice` | Intent and provenance, not final syntax. |
-| Kmesh | `kmesh.py`, `advisors/` | `KPointSelection` | Operator k-point hints win. |
-| Select | `selection.py` | `SelectionRecord` | Pseudos and cutoffs; no k-point recalculation. |
-| Generate | `generation.py` | `tuple[GeneratedFile, ...]` | Mechanical target-code translation. |
-| Bundle | `bundle.py` | `BundleRecord` | Deterministic, path-safe directory output. |
-
-## Extension points
-
-Replace a `Pipeline` field to change one stage backend:
-
-```python
-
-pipeline = Pipeline(generate=my_generator)
-```
-
-Current fields:
-
-```python
-Pipeline(
-    analyze=...,
-    advise=...,
-    kmesh=...,
-    select=...,
-    generate=...,
-    bundle=...,
-)
-```
-
-See [pipeline](pipeline.md) and [backends](backends.md) for signatures and examples.
-
-## External surfaces
-
-The Python API and CLI both call `run_core_job()`.
-
-A future HTTP API should do the same: deserialize request JSON into `CoreJobRequest`, resolve any service-level backend choices outside Core, call `run_core_job()`, and serialize `CoreResult.to_dict()`. HTTP concerns such as auth, uploads, workspaces, and response transport stay outside Core.
+Runner/AiiDA workflows, schedulers, auth, HTTP transport, frontend state, and
+completed-output analysis are outside this package.

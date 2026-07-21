@@ -27,12 +27,17 @@ def predict(model: object, features: StructureFeatureVector) -> float:
     AttributeError
         If the model does not provide a ``predict`` method.
     ValueError
-        If the model prediction does not return at least one value.
+        If current feature values are non-finite or the model prediction does
+        not return at least one value.
     """
     if not hasattr(model, "predict"):
         raise AttributeError("Loaded model does not provide a 'predict' method.")
 
-    predictions = model.predict(features.values.reshape(1, -1))
+    feature_values = np.asarray(features.values, dtype=float)
+    if not np.isfinite(feature_values).all():
+        raise ValueError("Model features must contain only finite values.")
+
+    predictions = model.predict(feature_values.reshape(1, -1))
     predictions = np.asarray(predictions, dtype=float)
 
     if predictions.size == 0:

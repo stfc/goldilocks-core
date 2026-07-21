@@ -50,7 +50,7 @@ Use this distinction to avoid unnecessary source reading:
 Before running anything, identify:
 
 1. Structure path or `pymatgen.Structure`.
-2. Target intent: code, task, functional, accuracy level, pseudo mode.
+2. Target intent: code, task, functional, pseudo mode.
 3. Operator hints: k-grid or k-spacing, smearing, spin/SOC, pseudo type, convergence.
 4. Pseudopotential metadata source: usually a local directory of `.UPF` files.
 5. Desired output style: numbers only, generated file, or bundle directory.

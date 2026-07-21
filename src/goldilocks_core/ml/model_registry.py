@@ -1,25 +1,23 @@
-"""Load configurable default model and artifact specifications."""
+"""Load the configurable default QRF model and feature settings."""
 
 from __future__ import annotations
 
 import os
-import re
 import tomllib
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from goldilocks_core.contracts import ModelSource, ModelSpec, ModelType, PathLike
 
 MODEL_REGISTRY_ENV = "GOLDILOCKS_MODEL_REGISTRY"
 _REGISTRY_RESOURCE = "model_registry.toml"
-_HUGGINGFACE_COMMIT = re.compile(r"[0-9a-f]{40}")
 
 
 @dataclass(frozen=True, slots=True)
 class ArtifactSpec:
-    """Location of a versioned set of supporting model artifacts."""
+    """Location of supporting model artifacts."""
 
     source: ModelSource
     location: str
@@ -27,26 +25,43 @@ class ArtifactSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class QrfFeatureSettings:
+    """Settings used to reproduce the QRF feature vector."""
+
+    composition_featurizers: tuple[str, ...]
+    element_property_preset: str
+    impute_nan: bool
+    structure_featurizers: tuple[str, ...]
+    global_symmetry_features: tuple[str, ...]
+    density_features: tuple[str, ...]
+    soap_species: str
+    soap_r_cut: float
+    soap_n_max: int
+    soap_l_max: int
+    soap_sigma: float
+    soap_periodic: bool
+    soap_sparse: bool
+    soap_reduction: str
+    lattice_symprec: float
+    metallicity_graph_radius: float
+    metallicity_max_neighbors: int
+
+
+@dataclass(frozen=True, slots=True)
 class QrfKpointsConfig:
-    """Model and supporting artifacts required by the QRF Kmesh advisor."""
+    """Resources and settings required for QRF k-point inference."""
 
     model: ModelSpec
+    feature_settings: QrfFeatureSettings
     confidence: float
     correction: float
-    scikit_learn_version: str
-    sklearn_quantile_version: str
-    joblib_version: str
     metallicity: ArtifactSpec
     metallicity_checkpoint_file: str
     metallicity_atom_init_file: str
 
 
 def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
-    """Load the default QRF configuration from a package or custom registry.
-
-    ``path`` takes precedence over ``GOLDILOCKS_MODEL_REGISTRY``. When neither
-    is set, the registry packaged with goldilocks-core is used.
-    """
+    """Load QRF configuration from an explicit, environment, or packaged TOML."""
     registry_path = path or os.environ.get(MODEL_REGISTRY_ENV)
     if registry_path is None:
         registry = resources.files("goldilocks_core").joinpath(_REGISTRY_RESOURCE)
@@ -56,102 +71,48 @@ def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
         with Path(registry_path).open("rb") as registry_file:
             data = tomllib.load(registry_file)
 
-    try:
-        kpoints = data["defaults"]["kpoints"]
-        metallicity = kpoints["metallicity"]
-    except (KeyError, TypeError) as error:
-        raise ValueError(
-            "Model registry must define defaults.kpoints and its metallicity table."
-        ) from error
-
-    _require_advisor(kpoints)
-    model_source, model_revision = _require_source(kpoints, "defaults.kpoints")
-    artifact_source, artifact_revision = _require_source(
-        metallicity,
-        "defaults.kpoints.metallicity",
-    )
-    confidence = _require_float(kpoints, "confidence")
-    if not 0.0 <= confidence <= 1.0:
-        raise ValueError("defaults.kpoints.confidence must be between 0 and 1.")
+    kpoints = data["defaults"]["kpoints"]
+    features = kpoints["features"]
+    metallicity = kpoints["metallicity"]
+    calibration = kpoints["calibration"]
 
     return QrfKpointsConfig(
         model=ModelSpec(
-            name=_require_string(kpoints, "name"),
-            version=_require_string(kpoints, "version"),
-            model_type=cast(ModelType, _require_string(kpoints, "model_type")),
-            target=_require_string(kpoints, "target"),
-            feature_set=_require_string(kpoints, "feature_set"),
-            source=model_source,
-            location=_require_string(kpoints, "location"),
-            revision=model_revision,
+            name=kpoints["name"],
+            version=kpoints["version"],
+            model_type=cast(ModelType, kpoints["model_type"]),
+            target=kpoints["target"],
+            feature_set=kpoints["feature_set"],
+            source=cast(ModelSource, kpoints["source"]),
+            location=kpoints["location"],
+            revision=kpoints.get("revision"),
         ),
-        confidence=confidence,
-        correction=_require_float(kpoints, "correction"),
-        scikit_learn_version=_require_string(kpoints, "scikit_learn_version"),
-        sklearn_quantile_version=_require_string(kpoints, "sklearn_quantile_version"),
-        joblib_version=_require_string(kpoints, "joblib_version"),
+        feature_settings=QrfFeatureSettings(
+            composition_featurizers=tuple(features["composition_featurizers"]),
+            element_property_preset=features["element_property_preset"],
+            impute_nan=features["impute_nan"],
+            structure_featurizers=tuple(features["structure_featurizers"]),
+            global_symmetry_features=tuple(features["global_symmetry_features"]),
+            density_features=tuple(features["density_features"]),
+            soap_species=features["soap_species"],
+            soap_r_cut=features["soap_r_cut"],
+            soap_n_max=features["soap_n_max"],
+            soap_l_max=features["soap_l_max"],
+            soap_sigma=features["soap_sigma"],
+            soap_periodic=features["soap_periodic"],
+            soap_sparse=features["soap_sparse"],
+            soap_reduction=features["soap_reduction"],
+            lattice_symprec=features["lattice_symprec"],
+            metallicity_graph_radius=features["metallicity_graph_radius"],
+            metallicity_max_neighbors=features["metallicity_max_neighbors"],
+        ),
+        confidence=kpoints["interval_confidence"],
+        correction=calibration["correction"],
         metallicity=ArtifactSpec(
-            source=artifact_source,
-            location=_require_string(metallicity, "location"),
-            revision=artifact_revision,
+            source=cast(ModelSource, metallicity["source"]),
+            location=metallicity["location"],
+            revision=metallicity.get("revision"),
         ),
-        metallicity_checkpoint_file=_require_string(metallicity, "checkpoint_file"),
-        metallicity_atom_init_file=_require_string(metallicity, "atom_init_file"),
+        metallicity_checkpoint_file=metallicity["checkpoint_file"],
+        metallicity_atom_init_file=metallicity["atom_init_file"],
     )
-
-
-def _require_advisor(kpoints: dict[str, Any]) -> None:
-    """Reject registry entries intended for an unsupported advisor."""
-    advisor = _require_string(kpoints, "advisor")
-    if advisor != "qrf_kdistance":
-        raise ValueError(
-            f"defaults.kpoints.advisor must be 'qrf_kdistance'; got {advisor!r}."
-        )
-
-
-def is_immutable_huggingface_revision(revision: str | None) -> bool:
-    """Return whether a revision is a full immutable Hugging Face commit ID."""
-    return revision is not None and _HUGGINGFACE_COMMIT.fullmatch(revision) is not None
-
-
-def _require_source(
-    table: dict[str, Any],
-    table_name: str,
-) -> tuple[ModelSource, str | None]:
-    """Validate a model source and require immutable remote revisions."""
-    source = _require_string(table, "source")
-    if source not in {"huggingface", "local"}:
-        raise ValueError(f"{table_name}.source is unsupported: {source!r}.")
-    revision = _optional_string(table, "revision")
-    if source == "huggingface" and not is_immutable_huggingface_revision(revision):
-        raise ValueError(
-            f"{table_name}.revision must be a full 40-character "
-            "huggingface commit hash."
-        )
-    return cast(ModelSource, source), revision
-
-
-def _require_string(table: dict[str, Any], key: str) -> str:
-    """Return a required non-empty string from a registry table."""
-    value = table.get(key)
-    if not isinstance(value, str) or not value:
-        raise ValueError(f"Model registry field {key!r} must be a non-empty string.")
-    return value
-
-
-def _optional_string(table: dict[str, Any], key: str) -> str | None:
-    """Return an optional string from a registry table."""
-    value = table.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value:
-        raise ValueError(f"Model registry field {key!r} must be a non-empty string.")
-    return value
-
-
-def _require_float(table: dict[str, Any], key: str) -> float:
-    """Return a required numeric value from a registry table."""
-    value = table.get(key)
-    if not isinstance(value, int | float):
-        raise ValueError(f"Model registry field {key!r} must be numeric.")
-    return float(value)

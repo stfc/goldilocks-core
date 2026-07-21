@@ -27,7 +27,6 @@ def build_bundle_manifest(result: CoreResult) -> JsonDict:
         {
             "path": generated_file.path,
             "role": generated_file.role,
-            "bytes": len(generated_file.content.encode("utf-8")),
         }
         for generated_file in result.generated_files
     ]
@@ -47,32 +46,53 @@ def write_bundle_directory(
     result: CoreResult,
     output_dir: str | Path,
 ) -> BundleRecord:
-    """Write generated files and manifest to a deterministic bundle directory.
+    """Write generated files and a manifest to a new bundle directory.
 
     Args:
         result: Completed Core result with generated files to write.
-        output_dir: Bundle root directory. It is created if needed.
+        output_dir: New bundle root directory. Its parent directories are
+            created if needed, but the bundle directory must not already exist.
 
     Returns:
         ``BundleRecord`` with the output directory path and manifest.
 
     Raises:
-        ValueError: If a generated file path would escape ``output_dir``.
+        FileExistsError: If ``output_dir`` already exists.
+        ValueError: If a generated file path would escape ``output_dir`` or is
+            reserved for the manifest.
     """
     target_dir = Path(output_dir)
-    target_dir.mkdir(parents=True, exist_ok=True)
+    target_dir.parent.mkdir(parents=True, exist_ok=True)
 
-    for generated_file in result.generated_files:
-        target_path = _resolve_bundle_path(target_dir, generated_file.path)
+    if target_dir.exists():
+        raise FileExistsError(f"Bundle destination already exists: {target_dir}")
+
+    manifest_path = target_dir / MANIFEST_FILENAME
+    files = tuple(
+        (generated_file, _resolve_bundle_path(target_dir, generated_file.path))
+        for generated_file in result.generated_files
+    )
+    if len({path for _, path in files}) != len(files):
+        raise ValueError("Generated file paths must be unique")
+    for generated_file, target_path in files:
+        if target_path == manifest_path or manifest_path in target_path.parents:
+            raise ValueError(
+                "Generated file path is reserved for the bundle manifest: "
+                f"{generated_file.path}"
+            )
+
+    target_dir.mkdir(parents=True, exist_ok=False)
+
+    for generated_file, target_path in files:
         target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_text(generated_file.content, encoding="utf-8")
 
     manifest = build_bundle_manifest(result)
-    manifest_path = target_dir / MANIFEST_FILENAME
     manifest_path.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+
     return BundleRecord(path=str(output_dir), manifest=manifest)
 
 

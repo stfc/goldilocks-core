@@ -2,12 +2,38 @@
 
 All notable changes to goldilocks-core are documented here.
 
+## Unreleased
+
+### Added
+
+- CLI `--use-vdw` and `--vdw-method` options matching the Python hint controls.
+
+### Changed
+
+- CLI model name/version metadata now requires the local `--model` backend.
+- Loaded-model quantiles are checked before QRF confidence is reported.
+- Job-level warnings now include de-duplicated scientific caveats from Advise as well as Analyze, Kmesh, and Select.
+- Bundle output uses a straightforward no-overwrite directory writer.
+
+### Fixed
+
+- Python requests reject unsupported target codes and calculation tasks before running QE-oriented stages.
+- QE generation rejects unsupported smearing labels, unsafe pseudopotential filenames, and duplicate, missing, or extraneous pseudopotential selections.
+
+### Removed
+
+- Operational stage traces from `CoreResult`.
+- Bundle content hashes, byte counts, atomic publication machinery, and platform-specific path simulation.
+- Exact runtime reconstruction and local artifact hashing from QRF provenance.
+
+- `CalculationIntent.accuracy_level` and CLI `--accuracy-level`; the advertised levels had no implemented scientific effect. This is an intentional API and serialized-schema change with no compatibility alias.
+
 ## [0.1.0] - 2026-06-10
 
 ### Added
 
 - Staged Core pipeline: Load → Analyze → Advise → Kmesh → Select → Generate → Bundle.
-- `CoreJobRequest`, `CoreResult`, `StageRecord` for shared Python/CLI/HTTP job surface. `CoreResult` is a single accumulator that includes the optional `BundleRecord`.
+- `CoreJobRequest` and `CoreResult` for shared Python/CLI/HTTP job surface. `CoreResult` is a single accumulator that includes the optional `BundleRecord`.
 - `run_core_job()` as the fixed stage runner with `recommend`, `generate`, and `bundle` modes.
 - `StructureAnalysisRecord` with composition, element classification, symmetry, disorder warnings, and conservative electronic-character heuristic.
 - `ParameterAdvice` with provenance-backed advice for k-points, smearing, magnetism, SOC, pseudopotentials, and convergence.

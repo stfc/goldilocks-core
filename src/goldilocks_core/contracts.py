@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field, fields, is_dataclass
+from numbers import Integral, Real
 from pathlib import Path
-from typing import Any, Callable, Literal, Sequence
+from typing import Any, Callable, Literal, Sequence, get_args
 
 import numpy as np
 from pymatgen.core import Structure
 
+from goldilocks_core.functionals import normalize_functional_label
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 ProvenanceSource = Literal[
@@ -38,14 +41,14 @@ PathLike = str | Path
 StructureInput = Structure | PathLike
 """Structure input: a pymatgen ``Structure`` or a path to a structure file."""
 
-CodeName = Literal["quantum_espresso"]
-"""Target DFT code. Only Quantum ESPRESSO is currently supported."""
+CodeName = str
+"""Target DFT code name."""
 
-CalcTask = Literal["scf_single_point"]
-"""Calculation task. Only SCF single-point is currently supported."""
+CalcTask = str
+"""Calculation task name."""
 
-AccuracyLevel = Literal["low", "standard", "high"]
-"""Desired accuracy/cost tradeoff for the recommendation."""
+SmearingType = Literal["fixed", "gaussian", "mp", "cold"]
+"""Canonical occupation schemes supported by the current QE target."""
 
 ModelSource = Literal["huggingface", "local"]
 """Where a trained model or supporting artifact is resolved from."""
@@ -54,21 +57,10 @@ ModelType = Literal["random_forest", "cgcnn", "xgboost"]
 """ML model architecture. Only ``random_forest`` is currently supported."""
 
 KPointGrid = tuple[int, int, int]
-"""Uniform k-point mesh as (nk1, nk2, nk3)."""
+"""Uniform immutable k-point mesh as (nk1, nk2, nk3)."""
 
 KPointShift = tuple[int, int, int]
-"""Monkhorst-Pack grid shift as (s1, s2, s3) with values 0 or 1."""
-
-StageName = Literal[
-    "load",
-    "analyze",
-    "advise",
-    "kmesh",
-    "select",
-    "generate",
-    "bundle",
-]
-"""Name of a stage in the fixed Core pipeline graph."""
+"""Immutable Monkhorst-Pack shift as (s1, s2, s3) with values 0 or 1."""
 
 JobMode = Literal["recommend", "generate", "bundle"]
 """How far the fixed Core pipeline runs.
@@ -78,11 +70,8 @@ JobMode = Literal["recommend", "generate", "bundle"]
 - ``bundle``: … → Bundle.
 """
 
-StageStatus = Literal["completed"]
-"""Execution status of a pipeline stage. Currently always ``completed``."""
-
 Dimensionality = Literal["3d", "2d", "1d", "molecule", "unknown"]
-"""Structure dimensionality classification. Currently always ``unknown``."""
+"""Bonded-structure dimensionality, or ``unknown`` when detection fails."""
 
 ElectronicCharacter = Literal["metal", "insulator", "likely_metal", "unknown"]
 """Conservative electronic-character classification from structure facts.
@@ -97,6 +86,89 @@ VdwMethod = Literal["d3", "d3bj", "ts", "mbd"]
 Translated to code-specific keywords in the Generate stage (e.g. ``d3bj`` →
 QE ``vdw_corr='grimme-d3'`` with ``dftd3_version=4``).
 """
+
+_VALID_SMEARING_TYPES: frozenset[str] = frozenset(get_args(SmearingType))
+_VALID_VDW_METHODS: frozenset[str] = frozenset(get_args(VdwMethod))
+
+
+def _validate_finite_positive(value: Real, field_name: str) -> None:
+    """Require a finite number greater than zero."""
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, Real)
+        or not math.isfinite(value)
+        or value <= 0
+    ):
+        raise ValueError(
+            f"{field_name} must be a finite positive number; got {value!r}"
+        )
+
+
+def _validate_positive_integer(value: int, field_name: str) -> None:
+    """Require a positive integer without accepting booleans."""
+    if isinstance(value, bool) or not isinstance(value, Integral) or value < 1:
+        raise ValueError(f"{field_name} must be a positive integer; got {value!r}")
+
+
+def _validate_kpoint_grid(grid: object, field_name: str) -> KPointGrid:
+    """Return an immutable grid of exactly three positive integer dimensions."""
+    if not isinstance(grid, tuple | list) or len(grid) != 3:
+        raise ValueError(
+            f"{field_name} must contain exactly three positive integers; got {grid!r}"
+        )
+
+    for index, value in enumerate(grid):
+        _validate_positive_integer(value, f"{field_name}[{index}]")
+
+    return tuple(int(value) for value in grid)
+
+
+def _validate_boolean(value: object, field_name: str) -> None:
+    """Require a built-in boolean rather than a truthy value."""
+    if not isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a boolean; got {value!r}")
+
+
+def _validate_optional_boolean(value: object, field_name: str) -> None:
+    """Require None or a built-in boolean."""
+    if value is not None:
+        _validate_boolean(value, field_name)
+
+
+def _validate_smearing(
+    smearing_type: str | None,
+    width: float | None,
+    *,
+    type_field: str,
+    width_field: str,
+) -> None:
+    """Require fixed occupations without width or smearing with positive width."""
+    if smearing_type is not None and (
+        not isinstance(smearing_type, str) or smearing_type not in _VALID_SMEARING_TYPES
+    ):
+        valid = ", ".join(sorted(_VALID_SMEARING_TYPES))
+        raise ValueError(
+            f"{type_field} must be one of {valid}, or None; got {smearing_type!r}"
+        )
+
+    fixed_occupations = smearing_type in {None, "fixed"}
+    if fixed_occupations and width is not None:
+        raise ValueError(
+            f"{width_field} must be None when {type_field} is {smearing_type!r}"
+        )
+    if not fixed_occupations and width is None:
+        raise ValueError(
+            f"{width_field} is required when {type_field} is {smearing_type!r}"
+        )
+    if width is not None:
+        _validate_finite_positive(width, width_field)
+
+
+def _validate_vdw_method(method: object, field_name: str) -> None:
+    """Require a supported code-agnostic vdW method label."""
+    if not isinstance(method, str) or method not in _VALID_VDW_METHODS:
+        valid = ", ".join(sorted(_VALID_VDW_METHODS))
+        raise ValueError(f"{field_name} must be one of {valid}; got {method!r}")
 
 
 @dataclass(slots=True)
@@ -154,7 +226,8 @@ class KMeshEntry:
         k_index: 1-based index into the ordered k-mesh table.
         mesh: uniform k-point grid for this entry.
         k_distance_interval: VASP-style k-distance range (Å⁻¹)
-            that maps to this mesh.
+            that maps to this mesh. ``None`` as the upper endpoint means
+            the interval is unbounded above.
         k_line_density_interval: k-line-density range, or None if
             mesh is invalid for a scalar density.
         k_pra: k-points-per-reciprocal-atom for this mesh.
@@ -163,7 +236,7 @@ class KMeshEntry:
 
     k_index: int
     mesh: KPointGrid
-    k_distance_interval: tuple[float, float]
+    k_distance_interval: tuple[float, float | None]
     k_line_density_interval: tuple[float, float] | None
     k_pra: float
     n_reduced_kpoints: int
@@ -183,8 +256,9 @@ class Provenance:
         reason: human-readable explanation of the choice.
         data_source: origin of supporting data (e.g. model name,
             pseudo library, SSSP version).
-        confidence: optional confidence score in [0, 1]. Not
-            currently populated by Core.
+        confidence: optional confidence score in [0, 1].
+        details: optional structured, JSON-safe decision metadata. Model-backed
+            decisions use this for reproducible inference configuration.
         warnings: caveats the caller should be aware of.
     """
 
@@ -192,6 +266,7 @@ class Provenance:
     reason: str
     data_source: str | None = None
     confidence: float | None = None
+    details: JsonDict | None = None
     warnings: tuple[str, ...] = ()
 
     def to_dict(self) -> JsonDict:
@@ -211,7 +286,6 @@ class CalculationIntent:
         task: type of calculation to prepare.
         functional: exchange-correlation functional label
             (e.g. ``PBE``, ``PBEsol``, ``LDA``).
-        accuracy_level: desired accuracy/cost tradeoff.
         pseudo_mode: pseudopotential family preference
             (e.g. ``efficiency``, ``precision``).
     """
@@ -219,8 +293,25 @@ class CalculationIntent:
     code: CodeName = "quantum_espresso"
     task: CalcTask = "scf_single_point"
     functional: str = "PBE"
-    accuracy_level: AccuracyLevel = "standard"
     pseudo_mode: str = "efficiency"
+
+    def __post_init__(self) -> None:
+        """Require named targets and normalize the functional."""
+        for field_name in ("code", "task"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"CalculationIntent.{field_name} must be a non-empty string; "
+                    f"got {value!r}"
+                )
+
+        functional = normalize_functional_label(self.functional)
+        if functional is None:
+            raise ValueError(
+                "CalculationIntent.functional must be a non-empty string; "
+                f"got {self.functional!r}"
+            )
+        object.__setattr__(self, "functional", functional)
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -244,7 +335,7 @@ class CalculationHints:
         smearing_type: smearing method (e.g. ``cold``,
             ``gaussian``, ``mp``, ``fixed``).
         smearing_width_ry: smearing width in Rydberg. Must be
-            non-negative.
+            finite and positive when smearing is enabled.
         spin_polarized: force spin-polarized (``True``) or
             non-magnetic (``False``) calculation.
         spin_orbit_coupling: force SOC on (``True``) or off
@@ -261,6 +352,11 @@ class CalculationHints:
             positive.
         electron_maxstep: maximum number of SCF iterations. Must
             be ≥ 1.
+        use_vdw: force dispersion correction on (``True``), force it off
+            (``False``), or let Core decide (``None``).
+        vdw_method: preferred dispersion method. Valid without ``use_vdw``
+            so analysis can decide whether to apply it, but incompatible with
+            ``use_vdw=False``.
     """
 
     k_spacing: float | None = None
@@ -277,6 +373,46 @@ class CalculationHints:
     electron_maxstep: int | None = None
     use_vdw: bool | None = None
     vdw_method: str | None = None
+
+    def __post_init__(self) -> None:
+        """Validate numerical and coupled hint fields at the request boundary."""
+        if self.k_spacing is not None:
+            _validate_finite_positive(self.k_spacing, "CalculationHints.k_spacing")
+        if self.k_grid is not None:
+            object.__setattr__(
+                self,
+                "k_grid",
+                _validate_kpoint_grid(self.k_grid, "CalculationHints.k_grid"),
+            )
+        _validate_optional_boolean(
+            self.spin_polarized, "CalculationHints.spin_polarized"
+        )
+        _validate_optional_boolean(
+            self.spin_orbit_coupling, "CalculationHints.spin_orbit_coupling"
+        )
+        _validate_optional_boolean(self.use_vdw, "CalculationHints.use_vdw")
+
+        _validate_smearing(
+            self.smearing_type,
+            self.smearing_width_ry,
+            type_field="CalculationHints.smearing_type",
+            width_field="CalculationHints.smearing_width_ry",
+        )
+
+        if self.conv_thr is not None:
+            _validate_finite_positive(self.conv_thr, "CalculationHints.conv_thr")
+        if self.mixing_beta is not None:
+            _validate_finite_positive(self.mixing_beta, "CalculationHints.mixing_beta")
+        if self.electron_maxstep is not None:
+            _validate_positive_integer(
+                self.electron_maxstep, "CalculationHints.electron_maxstep"
+            )
+        if self.vdw_method is not None:
+            _validate_vdw_method(self.vdw_method, "CalculationHints.vdw_method")
+        if self.use_vdw is False and self.vdw_method is not None:
+            raise ValueError(
+                "CalculationHints.vdw_method must be None when use_vdw is False"
+            )
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -319,8 +455,9 @@ class StructureAnalysisRecord:
         dimensionality: structure dimensionality from a bonded-cluster
             analysis (``3d``, ``2d``, ``1d``, ``molecule``), or
             ``unknown`` when detection fails.
-        has_vacuum: whether the cell has vacuum in at least one
-            direction (dimensionality below 3D).
+        has_vacuum: connectivity-derived low-dimensional/vacuum heuristic:
+            True when bonded dimensionality is below 3D. This is not a
+            measured cell-vacuum quantity.
         electronic_character: conservative electronic-character
             heuristic.
         analysis_warnings: warnings about heuristic limitations
@@ -485,6 +622,16 @@ class PseudopotentialAdvice:
     relativistic_mode: str
     provenance: Provenance
 
+    def __post_init__(self) -> None:
+        """Normalize the functional at the advice-record boundary."""
+        functional = normalize_functional_label(self.functional)
+        if functional is None:
+            raise ValueError(
+                "PseudopotentialAdvice.functional must be a non-empty string; "
+                f"got {self.functional!r}"
+            )
+        object.__setattr__(self, "functional", functional)
+
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
@@ -518,7 +665,16 @@ class VdwAdvice:
     """Advised van der Waals dispersion correction.
 
     Method labels are code-agnostic physics names; the generator maps them
-    to code-specific strings (e.g. ``d3bj`` → QE ``grimme-d3bj``).
+    to code-specific settings (e.g. ``d3bj`` → QE
+    ``vdw_corr='grimme-d3'`` with ``dftd3_version=4``).
+
+    The built-in Advise stage treats its connectivity-derived
+    low-dimensional/vacuum heuristic as a conservative D3BJ default because
+    dispersion may be important. It does not establish that dispersion
+    dominates; the operator can override the setting or method with
+    ``CalculationHints``. Heavy elements only mark SOC for consideration
+    because SOC changes calculation cost, setup, and pseudopotential
+    requirements.
 
     Attributes:
         use_vdw: whether a dispersion correction is applied.
@@ -651,7 +807,8 @@ class SelectionRecord:
 class GeneratedFile:
     """Generated text file content for a target DFT code.
 
-    ``path`` is relative to the bundle root directory.
+    Bundle writers interpret ``path`` relative to their output directory and
+    must reject paths that escape it.
 
     Attributes:
         path: relative file path within the bundle (e.g.
@@ -692,13 +849,12 @@ class BundleRecord:
 
 @dataclass(frozen=True, slots=True)
 class CoreResult:
-    """Composed accumulator of every stage record the fixed graph produces.
+    """Records produced by a recommendation or generation workflow.
 
     Scientific records are populated as their stages run. ``generated_files``
     is populated in generate/bundle modes. ``bundle`` is set only in bundle
-    mode. ``stages`` is the execution trace, always populated. The request is
-    not echoed here — the caller already has it; CLI/HTTP layers echo it
-    themselves in their serialized output.
+    mode. The request is not echoed here — the caller already has it;
+    CLI/HTTP layers echo it themselves in their serialized output.
 
     Attributes:
         intent: what the operator asked for.
@@ -712,7 +868,6 @@ class CoreResult:
             selection.
         bundle: terminal Bundle-stage record, set only in bundle
             mode.
-        stages: execution record for each completed stage.
     """
 
     intent: CalculationIntent
@@ -722,7 +877,6 @@ class CoreResult:
     generated_files: tuple[GeneratedFile, ...] = ()
     warnings: tuple[str, ...] = ()
     bundle: BundleRecord | None = None
-    stages: tuple[StageRecord, ...] = ()
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -731,7 +885,7 @@ class CoreResult:
 
 @dataclass(frozen=True, slots=True)
 class CoreJobRequest:
-    """Request for running the fixed Core stage graph.
+    """Request for running the standard Core workflow.
 
     One request model shared by Python API, CLI, and future HTTP
     wrappers. ``mode`` controls how far the pipeline runs.
@@ -768,28 +922,6 @@ class CoreJobRequest:
         return to_jsonable(self)
 
 
-@dataclass(frozen=True, slots=True)
-class StageRecord:
-    """Observable execution record for one fixed Core pipeline stage.
-
-    Used in ``CoreResult.stages`` to report which stages ran and
-    what warnings they produced.
-
-    Attributes:
-        name: which stage this record is for.
-        status: execution status. Currently always ``completed``.
-        warnings: warnings produced during this stage.
-    """
-
-    name: StageName
-    status: StageStatus = "completed"
-    warnings: tuple[str, ...] = ()
-
-    def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary."""
-        return to_jsonable(self)
-
-
 AnalyzeStage = Callable[[Structure], StructureAnalysisRecord]
 """Analyze-stage backend signature."""
 
@@ -819,19 +951,7 @@ BundleStage = Callable[[CoreResult, str | Path], BundleRecord]
 
 
 def to_jsonable(value: Any) -> Any:
-    """Convert staged pipeline values into JSON-safe Python objects.
-
-    Type conversions:
-
-    - dataclass → dict of field names to converted values
-    - tuple, list → list of converted items
-    - dict → dict with string keys and converted values
-    - Path → str
-    - pymatgen Structure → dict (via ``Structure.as_dict()``)
-    - numpy ndarray → list
-    - numpy scalar → Python scalar
-    - None, str, int, float, bool → passed through unchanged
-    """
+    """Convert pipeline records and common scientific values to JSON data."""
     if is_dataclass(value):
         return {
             field.name: to_jsonable(getattr(value, field.name))

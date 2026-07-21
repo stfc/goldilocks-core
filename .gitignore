@@ -1,6 +1,12 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+mutants/
+.mutmut-cache/
 build/
 dist/
 wheels/

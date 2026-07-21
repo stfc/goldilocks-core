@@ -8,8 +8,8 @@ repos:
   - repo: local
     hooks:
       - id: pytest
-        name: pytest
-        entry: uv run pytest
+        name: pytest with branch coverage
+        entry: uv run pytest --cov --cov-report=term-missing:skip-covered
         language: system
         pass_filenames: false
 

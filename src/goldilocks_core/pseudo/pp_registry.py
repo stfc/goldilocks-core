@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from goldilocks_core.functionals import normalize_functional_label
 from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
@@ -28,8 +29,15 @@ def filter_by_functional(
     metadata_list: list[PseudoMetadata],
     functional: str,
 ) -> list[PseudoMetadata]:
-    """Filter pseudopotential metadata by functional."""
-    return [metadata for metadata in metadata_list if metadata.functional == functional]
+    """Filter pseudopotential metadata by canonical functional label."""
+    canonical = normalize_functional_label(functional)
+    if canonical is None:
+        return []
+    return [
+        metadata
+        for metadata in metadata_list
+        if normalize_functional_label(metadata.functional) == canonical
+    ]
 
 
 def filter_by_pseudo_type(

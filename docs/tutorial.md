@@ -11,8 +11,8 @@ result = recommend("path/to/structure.cif")
 
 print(result.analysis.reduced_formula)          # e.g. "Si"
 print(result.advice.k_points.provenance.source) # "default"
-print(result.selection.k_points.provenance.source)  # "model" or fallback source
-print(result.selection.k_points.grid)           # concrete model/fallback grid
+print(result.selection.k_points.provenance.source)  # "model"
+print(result.selection.k_points.grid)               # concrete model grid
 print(result.to_dict())                         # full JSON-safe dict
 ```
 
@@ -143,7 +143,6 @@ result = run_core_job(
     )
 )
 
-print(result.stages)              # stage execution records
 print(result.to_dict())           # full JSON-safe output
 ```
 

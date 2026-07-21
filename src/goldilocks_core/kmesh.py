@@ -78,19 +78,12 @@ def resolve_kpoints_from_advice(
 def k_distance_to_mesh(
     structure: Structure,
     k_distance: float,
-    *,
-    force_parity: bool = False,
 ) -> tuple[int, int, int]:
     """Convert a reciprocal-space k-point distance into a uniform mesh.
 
     The distance is interpreted like VASP ``KSPACING``: the maximum spacing
     between adjacent k-points in units of 1/Angstrom. Mesh sizes are computed
     from solid-state reciprocal lattice lengths that include the 2π factor.
-
-    Notes
-    -----
-    The current implementation computes the base mesh from reciprocal lattice
-    lengths and does not yet apply the ``force_parity`` option.
     """
     reciprocal_lattice = structure.lattice.reciprocal_lattice
     reciprocal_lengths = (
@@ -225,12 +218,13 @@ def build_kmesh_entries(
         except ValueError:
             k_line_density_interval = None
 
+        lower, upper = k_distance_interval
         entries.append(
             KMeshEntry(
                 k_index=index,
                 mesh=mesh,
                 n_reduced_kpoints=mesh_to_n_reduced_kpoints(structure, mesh),
-                k_distance_interval=k_distance_interval,
+                k_distance_interval=(lower, None if upper == math.inf else upper),
                 k_line_density_interval=k_line_density_interval,
                 k_pra=mesh_to_k_pra(structure, mesh),
             )

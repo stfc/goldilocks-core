@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import math
+import re
+
 from pymatgen.core import Structure
 from pymatgen.core.periodic_table import Element
 
@@ -20,6 +23,11 @@ _QE_VDW_CORR = {
     "d3bj": ("grimme-d3", 4),
     "ts": ("ts-vdw", None),
     "mbd": ("many-body-dispersion", None),
+}
+_QE_SMEARING = {
+    "gaussian": "gaussian",
+    "mp": "mp",
+    "cold": "cold",
 }
 
 
@@ -84,33 +92,44 @@ def generate_quantum_espresso_scf_input(
         Complete QE input text ending with a trailing newline.
 
     Raises:
-        ValueError: If the structure is disordered, pseudopotential selections
-            are missing, cutoff metadata is incomplete, or smearing is enabled
-            without a width.
+        ValueError: If the structure is disordered or pseudopotential selections
+            are missing or incomplete.
     """
     if not structure.is_ordered:
         raise ValueError(
             "Cannot generate Quantum ESPRESSO input for disordered structures"
         )
 
-    pseudo_by_element = {
-        pseudo.element: pseudo for pseudo in selection.pseudopotentials
-    }
     elements = tuple(
         sorted(element.symbol for element in structure.composition.elements)
     )
+    pseudo_by_element = {
+        pseudo.element: pseudo for pseudo in selection.pseudopotentials
+    }
+    if len(pseudo_by_element) != len(selection.pseudopotentials):
+        raise ValueError("Quantum ESPRESSO requires one pseudopotential per element")
+
     missing_elements = tuple(
         element for element in elements if element not in pseudo_by_element
     )
-    if missing_elements:
+    unexpected_elements = tuple(
+        element for element in pseudo_by_element if element not in elements
+    )
+    if missing_elements or unexpected_elements:
+        problems: list[str] = []
+        if missing_elements:
+            problems.append(f"missing {', '.join(missing_elements)}")
+        if unexpected_elements:
+            problems.append(f"unexpected {', '.join(unexpected_elements)}")
         raise ValueError(
-            "Cannot generate Quantum ESPRESSO input without pseudopotential "
-            f"selections for: {', '.join(missing_elements)}"
+            "Quantum ESPRESSO pseudopotential selections must match the structure "
+            f"elements exactly ({'; '.join(problems)})"
         )
 
+    selected_pseudos = tuple(pseudo_by_element[element] for element in elements)
     incomplete = tuple(
         pseudo.element
-        for pseudo in pseudo_by_element.values()
+        for pseudo in selected_pseudos
         if pseudo.filename is None
         or pseudo.ecutwfc_ry is None
         or pseudo.ecutrho_ry is None
@@ -121,8 +140,15 @@ def generate_quantum_espresso_scf_input(
             f"and cutoff selections for: {', '.join(incomplete)}"
         )
 
-    ecutwfc = max(pseudo.ecutwfc_ry or 0.0 for pseudo in pseudo_by_element.values())
-    ecutrho = max(pseudo.ecutrho_ry or 0.0 for pseudo in pseudo_by_element.values())
+    for pseudo in selected_pseudos:
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", pseudo.filename) is None:
+            raise ValueError(f"Unsafe pseudopotential filename: {pseudo.filename!r}")
+        cutoffs = (float(pseudo.ecutwfc_ry), float(pseudo.ecutrho_ry))
+        if not all(math.isfinite(value) and value > 0 for value in cutoffs):
+            raise ValueError(f"Invalid pseudopotential cutoffs for {pseudo.element}")
+
+    ecutwfc = max(float(pseudo.ecutwfc_ry) for pseudo in selected_pseudos)
+    ecutrho = max(float(pseudo.ecutrho_ry) for pseudo in selected_pseudos)
 
     lines: list[str] = []
     lines.extend(_control_section())
@@ -175,15 +201,22 @@ def _system_section(
         f"  ecutrho = {_format_float(ecutrho)}",
     ]
 
-    if advice.smearing.smearing_type in (None, "fixed"):
+    smearing_type = advice.smearing.smearing_type
+    if smearing_type in (None, "fixed"):
         lines.append("  occupations = 'fixed'")
     else:
+        qe_smearing = _QE_SMEARING.get(smearing_type)
+        if qe_smearing is None:
+            raise ValueError(
+                "Quantum ESPRESSO smearing advice is invalid: unsupported "
+                f"method {smearing_type!r}"
+            )
         if advice.smearing.width_ry is None:
             raise ValueError("Smearing width is required when smearing is enabled")
         lines.extend(
             [
                 "  occupations = 'smearing'",
-                f"  smearing = '{advice.smearing.smearing_type}'",
+                f"  smearing = '{qe_smearing}'",
                 f"  degauss = {_format_float(advice.smearing.width_ry)}",
             ]
         )
@@ -193,11 +226,22 @@ def _system_section(
     elif advice.magnetism.spin_polarized:
         lines.append("  nspin = 2")
 
-    if advice.vdw.use_vdw and advice.vdw.method is not None:
-        vdw_corr, dftd3_version = _QE_VDW_CORR[advice.vdw.method]
+    method = advice.vdw.method
+    if advice.vdw.use_vdw:
+        if not isinstance(method, str) or method not in _QE_VDW_CORR:
+            raise ValueError(
+                "Quantum ESPRESSO vdW advice is invalid: enabled vdW requires "
+                f"a supported method; got {method!r}"
+            )
+        vdw_corr, dftd3_version = _QE_VDW_CORR[method]
         lines.append(f"  vdw_corr = '{vdw_corr}'")
         if dftd3_version is not None:
             lines.append(f"  dftd3_version = {dftd3_version}")
+    elif method is not None:
+        raise ValueError(
+            "Quantum ESPRESSO vdW advice is invalid: disabled vdW requires "
+            f"method=None; got {method!r}"
+        )
 
     lines.extend(["/", ""])
     return lines

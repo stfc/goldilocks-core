@@ -21,8 +21,8 @@ from goldilocks_core.contracts import (
     GeneratedFile,
     GenerateStage,
     KMeshAdvisor,
+    ParameterAdvice,
     SelectStage,
-    StageRecord,
     StructureInput,
 )
 from goldilocks_core.generation import generate_inputs
@@ -35,8 +35,8 @@ from goldilocks_core.selection import select_parameters
 class Pipeline:
     """Composable stage backends for the Core pipeline.
 
-    Construct with no arguments for the built-in QRF k-point backend with
-    heuristic fallback; override any field to swap that stage's backend.
+    Construct with no arguments for the built-in QRF k-point backend;
+    override any field to swap that stage's backend.
     Backends are plain callables with the stage signature — no base class,
     no registry.
 
@@ -68,12 +68,11 @@ def run_core_job(
         request: Serializable job data: structure input, intent, hints,
             pseudopotential metadata, mode, and optional output directory.
         pipeline: Optional executable stage composition. When omitted,
-            ``Pipeline()`` uses the lazy built-in QRF k-point backend with
-            heuristic fallback.
+            ``Pipeline()`` uses the lazy built-in QRF k-point backend.
 
     Returns:
-        A ``CoreResult`` containing the stage records, scientific records,
-        generated files when requested, and bundle record for bundle mode.
+        A ``CoreResult`` containing scientific records, generated files when
+        requested, and a bundle record for bundle mode.
 
     Raises:
         ValueError: If the job mode is unsupported, bundle mode lacks
@@ -81,37 +80,24 @@ def run_core_job(
     """
     active_pipeline = pipeline or Pipeline()
 
-    stages: list[StageRecord] = []
     structure = load_structure(request.structure)
-    stages.append(StageRecord(name="load"))
-
     analysis = active_pipeline.analyze(structure)
-    stages.append(
-        StageRecord(
-            name="analyze",
-            warnings=(*analysis.disorder_warnings, *analysis.analysis_warnings),
-        )
-    )
-
     advice = active_pipeline.advise(analysis, request.intent, request.hints)
-    stages.append(StageRecord(name="advise"))
-
+    advice_warnings = _advice_warnings(advice)
     k_points = active_pipeline.kmesh(structure, request.hints, advice.k_points)
-    stages.append(StageRecord(name="kmesh", warnings=k_points.provenance.warnings))
-
     selection = active_pipeline.select(
         structure,
         advice,
         k_points,
         tuple(request.pseudo_metadata),
     )
-    stages.append(StageRecord(name="select", warnings=selection.warnings))
 
-    warnings = (
-        *analysis.disorder_warnings,
-        *analysis.analysis_warnings,
-        *k_points.provenance.warnings,
-        *selection.warnings,
+    warnings = _unique_warnings(
+        analysis.disorder_warnings,
+        analysis.analysis_warnings,
+        advice_warnings,
+        k_points.provenance.warnings,
+        selection.warnings,
     )
     generated_files: tuple[GeneratedFile, ...] = ()
     bundle: BundleRecord | None = None
@@ -123,7 +109,6 @@ def run_core_job(
             advice,
             selection,
         )
-        stages.append(StageRecord(name="generate"))
 
     if request.mode == "bundle":
         # output_dir is guaranteed non-None for bundle mode by
@@ -137,7 +122,6 @@ def run_core_job(
             warnings=warnings,
         )
         bundle = active_pipeline.bundle(in_progress, request.output_dir)
-        stages.append(StageRecord(name="bundle"))
 
     return CoreResult(
         intent=request.intent,
@@ -147,8 +131,25 @@ def run_core_job(
         generated_files=generated_files,
         warnings=warnings,
         bundle=bundle,
-        stages=tuple(stages),
     )
+
+
+def _advice_warnings(advice: ParameterAdvice) -> tuple[str, ...]:
+    """Return actionable warnings from every Advise sub-decision."""
+    return _unique_warnings(
+        advice.k_points.provenance.warnings,
+        advice.smearing.provenance.warnings,
+        advice.magnetism.provenance.warnings,
+        advice.spin_orbit.provenance.warnings,
+        advice.pseudopotentials.provenance.warnings,
+        advice.convergence.provenance.warnings,
+        advice.vdw.provenance.warnings,
+    )
+
+
+def _unique_warnings(*groups: tuple[str, ...]) -> tuple[str, ...]:
+    """Return warnings in first-seen order without duplicate messages."""
+    return tuple(dict.fromkeys(warning for group in groups for warning in group))
 
 
 def recommend(
@@ -232,16 +233,19 @@ def write_bundle(
 
     Args:
         structure: Structure object or structure file path.
-        output_dir: Bundle output directory.
+        output_dir: New bundle output directory. Existing destinations are
+            refused.
         intent: Optional calculation intent.
         hints: Optional operator hints.
         pseudo_metadata: Available pseudopotential metadata.
         pipeline: Optional stage backend composition.
 
     Returns:
-        ``CoreResult`` with generated files, bundle record, stages, and warnings.
+        ``CoreResult`` with generated files, bundle record, and warnings.
 
     Raises:
+        FileExistsError: If the bundle output directory already exists.
+        OSError: If bundle writing fails.
         ValueError: If generation or bundle writing rejects its inputs.
     """
     return run_core_job(

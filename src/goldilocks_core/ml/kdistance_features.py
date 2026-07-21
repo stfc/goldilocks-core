@@ -1,12 +1,8 @@
-"""Composition + structure + SOAP + lattice features for the QRF k-distance model.
+"""Composition + structure + SOAP + lattice features for the QRF model.
 
-Reproduces the non-metallicity half of the feature vector the STFC QRF was
-trained on (matminer composition/structure descriptors, dscribe SOAP, and
-lattice/symmetry values). The CGCNN metallicity block is appended separately.
-
-Feature order within the block: composition, structure, SOAP, lattice. Heavy
-dependencies (matminer, dscribe) are imported lazily so importing this module
-stays cheap.
+The extractor owns the ordered 483-value schema. The model registry declares
+that schema and owns the feature-producing settings used for one artifact.
+Heavy dependencies are imported lazily so importing this module stays cheap.
 """
 
 from __future__ import annotations
@@ -15,13 +11,12 @@ import numpy as np
 from pymatgen.core import Structure
 
 from goldilocks_core.contracts import StructureFeatureVector
+from goldilocks_core.ml.model_registry import QrfFeatureSettings
 
+QRF_EXTRACTOR_ID = "goldilocks_core.ml.kdistance_features:extract_qrf_features"
 QRF_FEATURE_SET = "qrf_comp_struct_soap_lattice_metal"
+QRF_FEATURE_SCHEMA = "qrf-483-v1"
 QRF_FEATURE_COUNT = 483
-
-_COMPOSITION_FEATURES = ("ElementProperty", "Stoichiometry", "ValenceOrbital")
-_STRUCTURE_FEATURES = ("GlobalSymmetryFeatures", "DensityFeatures")
-_SOAP_PARAMS = {"r_cut": 10.0, "n_max": 8, "l_max": 6, "sigma": 1.0}
 
 _CRYSTAL_SYSTEM_ID = {
     "triclinic": 0,
@@ -59,18 +54,17 @@ _BRAVAIS_ID = {
 }
 
 
-def extract_structure_features(structure: Structure) -> np.ndarray:
-    """Return the composition+structure+SOAP+lattice feature block (1-D).
-
-    Order matches the trained QRF: composition, structure, SOAP, lattice. The
-    CGCNN metallicity block is concatenated by the caller.
-    """
+def extract_structure_features(
+    structure: Structure,
+    settings: QrfFeatureSettings,
+) -> np.ndarray:
+    """Return the ordered composition, structure, SOAP, and lattice block."""
     return np.concatenate(
         [
-            _composition_features(structure),
-            _structure_features(structure),
-            _soap_features(structure),
-            _lattice_features(structure),
+            _composition_features(structure, settings),
+            _structure_features(structure, settings),
+            _soap_features(structure, settings),
+            _lattice_features(structure, settings),
         ]
     )
 
@@ -79,17 +73,23 @@ def extract_qrf_features(
     structure: Structure,
     metal_model: object,
     atom_init_path: str,
+    settings: QrfFeatureSettings,
 ) -> StructureFeatureVector:
-    """Assemble the full 483-dim QRF feature vector for one structure.
-
-    Concatenates the composition+structure+SOAP+lattice block (419) with the
-    CGCNN metallicity crystal representation (64), in the trained order.
-    """
+    """Assemble the extractor-owned 483-value QRF feature schema."""
     from goldilocks_core.ml.metallicity import metal_features
 
-    structure_block = extract_structure_features(structure)
-    metal_block = metal_features(structure, metal_model, atom_init_path)
-    values = np.concatenate([structure_block, metal_block])
+    structure_block = extract_structure_features(structure, settings)
+    metal_block = metal_features(
+        structure,
+        metal_model,
+        atom_init_path,
+        graph_radius=settings.metallicity_graph_radius,
+        max_neighbors=settings.metallicity_max_neighbors,
+    )
+    values = _require_finite(
+        np.concatenate([structure_block, metal_block]),
+        "QRF feature vector",
+    )
     if values.size != QRF_FEATURE_COUNT:
         raise ValueError(
             f"QRF feature extractor expected {QRF_FEATURE_COUNT} values; "
@@ -101,12 +101,18 @@ def extract_qrf_features(
     )
 
 
-def _clean(values: np.ndarray) -> np.ndarray:
-    """Return a finite float array (NaN/inf -> 0.0)."""
-    return np.nan_to_num(np.asarray(values, dtype=float), nan=0.0)
+def _require_finite(values: object, block_name: str) -> np.ndarray:
+    """Return a float array after rejecting NaN and both infinities."""
+    converted = np.asarray(values, dtype=float)
+    if not np.isfinite(converted).all():
+        raise ValueError(f"{block_name} contains non-finite values.")
+    return converted
 
 
-def _composition_features(structure: Structure) -> np.ndarray:
+def _composition_features(
+    structure: Structure,
+    settings: QrfFeatureSettings,
+) -> np.ndarray:
     import matminer.featurizers.composition as composition_featurizers
     from matminer.featurizers.base import MultipleFeaturizer
     from pymatgen.core.composition import Composition
@@ -115,54 +121,76 @@ def _composition_features(structure: Structure) -> np.ndarray:
     composition = Composition(Composition(integer_formula).iupac_formula)
 
     methods = []
-    for name in _COMPOSITION_FEATURES:
+    for name in settings.composition_featurizers:
         featurizer_cls = getattr(composition_featurizers, name)
         if name == "ElementProperty":
-            method = featurizer_cls.from_preset("magpie", impute_nan=True)
+            method = featurizer_cls.from_preset(
+                settings.element_property_preset,
+                impute_nan=settings.impute_nan,
+            )
         else:
             try:
-                method = featurizer_cls(impute_nan=True)
+                method = featurizer_cls(impute_nan=settings.impute_nan)
             except TypeError:
                 method = featurizer_cls()
         methods.append(method)
 
     featurizer = MultipleFeaturizer(methods)
-    return _clean(featurizer.featurize(composition))
+    return _require_finite(featurizer.featurize(composition), "QRF composition block")
 
 
-def _structure_features(structure: Structure) -> np.ndarray:
+def _structure_features(
+    structure: Structure,
+    settings: QrfFeatureSettings,
+) -> np.ndarray:
     import matminer.featurizers.structure as structure_featurizers
     from matminer.featurizers.base import MultipleFeaturizer
 
-    methods = [
-        structure_featurizers.GlobalSymmetryFeatures(
-            ["spacegroup_num", "crystal_system_int", "is_centrosymmetric"]
-        ),
-        structure_featurizers.DensityFeatures(["density", "vpa", "packing fraction"]),
-    ]
+    methods = []
+    for name in settings.structure_featurizers:
+        if name == "GlobalSymmetryFeatures":
+            method = structure_featurizers.GlobalSymmetryFeatures(
+                list(settings.global_symmetry_features)
+            )
+        elif name == "DensityFeatures":
+            method = structure_featurizers.DensityFeatures(
+                list(settings.density_features)
+            )
+        else:
+            raise ValueError(f"Unsupported QRF structure featurizer: {name!r}.")
+        methods.append(method)
     featurizer = MultipleFeaturizer(methods)
-    return _clean(featurizer.featurize(structure))
+    return _require_finite(featurizer.featurize(structure), "QRF structure block")
 
 
-def _soap_features(structure: Structure) -> np.ndarray:
+def _soap_features(
+    structure: Structure,
+    settings: QrfFeatureSettings,
+) -> np.ndarray:
     from dscribe.descriptors import SOAP
     from pymatgen.io.ase import AseAtomsAdaptor
 
     soap = SOAP(
-        species=["X"],
-        r_cut=_SOAP_PARAMS["r_cut"],
-        n_max=_SOAP_PARAMS["n_max"],
-        l_max=_SOAP_PARAMS["l_max"],
-        sigma=_SOAP_PARAMS["sigma"],
-        periodic=True,
-        sparse=False,
+        species=[settings.soap_species],
+        r_cut=settings.soap_r_cut,
+        n_max=settings.soap_n_max,
+        l_max=settings.soap_l_max,
+        sigma=settings.soap_sigma,
+        periodic=settings.soap_periodic,
+        sparse=settings.soap_sparse,
     )
     atoms = AseAtomsAdaptor.get_atoms(structure)
-    atoms.set_chemical_symbols(["X"] * len(atoms))
-    return _clean(soap.create(atoms).mean(axis=0))
+    atoms.set_chemical_symbols([settings.soap_species] * len(atoms))
+    values = soap.create(atoms)
+    if settings.soap_reduction == "mean":
+        values = values.mean(axis=0)
+    return _require_finite(values, "QRF SOAP block")
 
 
-def _lattice_features(structure: Structure) -> np.ndarray:
+def _lattice_features(
+    structure: Structure,
+    settings: QrfFeatureSettings,
+) -> np.ndarray:
     from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
     values: list[float] = []
@@ -171,7 +199,7 @@ def _lattice_features(structure: Structure) -> np.ndarray:
     values.extend(structure.lattice.reciprocal_lattice.abc)
     values.extend(structure.lattice.reciprocal_lattice.angles)
 
-    analyzer = SpacegroupAnalyzer(structure, symprec=0.01)
+    analyzer = SpacegroupAnalyzer(structure, symprec=settings.lattice_symprec)
     crystal_system = analyzer.get_crystal_system()
     space_group_symbol = analyzer.get_space_group_symbol()
     bravais = _SYSTEM_ABBREVIATION[crystal_system] + space_group_symbol[0]
@@ -180,4 +208,4 @@ def _lattice_features(structure: Structure) -> np.ndarray:
     values.append(_BRAVAIS_ID.get(bravais, -1))
     values.append(analyzer.get_space_group_number())
 
-    return _clean(values)
+    return _require_finite(values, "QRF lattice block")

@@ -13,7 +13,9 @@ This document records the physical and numerical conventions used by goldilocks-
 | Convergence threshold | Rydberg | `CalculationHints.conv_thr`, `ConvergenceAdvice.conv_thr` |
 | Mixing beta | dimensionless | `CalculationHints.mixing_beta`, `ConvergenceAdvice.mixing_beta` |
 
-All cutoffs and smearing values follow the Quantum ESPRESSO convention (Rydberg atomic units), not Hartree.
+All current cutoffs, smearing widths, and SCF energy thresholds follow the
+Quantum ESPRESSO convention (Rydberg atomic units), not Hartree. Only Quantum
+ESPRESSO SCF generation is currently implemented.
 
 ## K-point spacing convention
 
@@ -62,6 +64,8 @@ SOC is **never enabled automatically**, even when heavy elements are present. In
 - `SpinOrbitAdvice.enabled` remains `False` unless the operator explicitly sets `CalculationHints(spin_orbit_coupling=True)`.
 
 Rationale: enabling SOC significantly changes calculation cost, convergence behavior, and pseudopotential requirements. The operator must make an informed decision.
+
+This differs intentionally from the vdW policy: a connectivity-derived low-dimensional classification makes D3BJ a conservative package default because dispersion may be important to weak interlayer, surface, and intermolecular interactions and the correction adds relatively little setup and cost. It does not establish that dispersion dominates; the operator can override the setting or method with `CalculationHints(use_vdw=..., vdw_method=...)`. Heavy elements only trigger SOC consideration because SOC has broader cost and setup consequences.
 
 ## Pseudopotential relativistic modes
 

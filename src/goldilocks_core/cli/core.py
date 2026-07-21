@@ -15,6 +15,7 @@ from goldilocks_core.contracts import (
     ModelSpec,
 )
 from goldilocks_core.jobs import Pipeline, run_core_job
+from goldilocks_core.kmesh import resolve_kpoints_from_advice
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 
@@ -80,9 +81,15 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--pseudo-type")
     parser.add_argument("--relativistic-mode")
     parser.add_argument("--pseudo-root", help="Directory containing UPF files.")
-    parser.add_argument(
+    kpoint_backend = parser.add_mutually_exclusive_group()
+    kpoint_backend.add_argument(
         "--model",
         help="Local ML model path for Kmesh-stage k-point selection.",
+    )
+    kpoint_backend.add_argument(
+        "--heuristic-kpoints",
+        action="store_true",
+        help="Use heuristic k-point advice instead of the built-in QRF model.",
     )
     parser.add_argument(
         "--model-name",
@@ -160,20 +167,29 @@ def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
 
 
 def _pipeline_from_args(args: argparse.Namespace) -> Pipeline | None:
-    """Build a custom pipeline from CLI backend options."""
-    if args.model is None:
-        return None
+    """Build the pipeline for the requested k-point backend.
 
-    spec = ModelSpec(
-        name=args.model_name,
-        version=args.model_version,
-        model_type="random_forest",
-        target="k_index",
-        feature_set="cslr",
-        source="local",
-        location=args.model,
-    )
-    return Pipeline(kmesh=ml_kmesh_advisor(spec))
+    An explicit ``--model`` selects a local CSLR k-index model.
+    ``--heuristic-kpoints`` selects advice-based resolution. Otherwise no
+    override is returned and ``run_core_job`` uses the shared QRF default.
+    Explicit k-point hints bypass model loading inside every built-in backend.
+    """
+    if args.model is not None:
+        spec = ModelSpec(
+            name=args.model_name,
+            version=args.model_version,
+            model_type="random_forest",
+            target="k_index",
+            feature_set="cslr",
+            source="local",
+            location=args.model,
+        )
+        return Pipeline(kmesh=ml_kmesh_advisor(spec))
+
+    if args.heuristic_kpoints:
+        return Pipeline(kmesh=resolve_kpoints_from_advice)
+
+    return None
 
 
 def _parse_optional_bool(value: str | None) -> bool | None:

@@ -48,7 +48,7 @@ AccuracyLevel = Literal["low", "standard", "high"]
 """Desired accuracy/cost tradeoff for the recommendation."""
 
 ModelSource = Literal["huggingface", "local"]
-"""Where a trained model is loaded from. Only ``local`` is currently supported."""
+"""Where a trained model or supporting artifact is resolved from."""
 
 ModelType = Literal["random_forest", "cgcnn", "xgboost"]
 """ML model architecture. Only ``random_forest`` is currently supported."""
@@ -128,9 +128,9 @@ class ModelSpec:
         model_type: architecture type (e.g. ``random_forest``).
         target: prediction target (e.g. ``k_index``).
         feature_set: feature set name (e.g. ``cslr``).
-        source: where the model is loaded from (e.g. ``local``).
-        location: file path or URI for the model artifact.
-        revision: optional revision or commit hash.
+        source: where the model is loaded from (``local`` or ``huggingface``).
+        location: file path or source-specific artifact identifier.
+        revision: optional immutable source revision.
     """
 
     name: str

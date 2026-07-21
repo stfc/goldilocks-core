@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from goldilocks_core.advice import advise_parameters
+from goldilocks_core.advisors import default_kmesh_advisor
 from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.bundle import write_bundle_directory
 from goldilocks_core.contracts import (
@@ -26,7 +27,6 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.generation import generate_inputs
 from goldilocks_core.io.structures import load_structure
-from goldilocks_core.kmesh import resolve_kpoints_from_advice
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.selection import select_parameters
 
@@ -35,9 +35,10 @@ from goldilocks_core.selection import select_parameters
 class Pipeline:
     """Composable stage backends for the Core pipeline.
 
-    Construct with no arguments for the default pipeline; override any
-    field to swap that stage's backend. Backends are plain callables with
-    the stage signature — no base class, no registry.
+    Construct with no arguments for the built-in QRF k-point backend with
+    heuristic fallback; override any field to swap that stage's backend.
+    Backends are plain callables with the stage signature — no base class,
+    no registry.
 
     Attributes:
         analyze: Analyze-stage backend.
@@ -50,7 +51,7 @@ class Pipeline:
 
     analyze: AnalyzeStage = analyze_structure
     advise: AdviseStage = advise_parameters
-    kmesh: KMeshAdvisor = resolve_kpoints_from_advice
+    kmesh: KMeshAdvisor = field(default_factory=default_kmesh_advisor)
     select: SelectStage = select_parameters
     generate: GenerateStage = generate_inputs
     bundle: BundleStage = write_bundle_directory
@@ -67,7 +68,8 @@ def run_core_job(
         request: Serializable job data: structure input, intent, hints,
             pseudopotential metadata, mode, and optional output directory.
         pipeline: Optional executable stage composition. When omitted,
-            ``Pipeline()`` is used.
+            ``Pipeline()`` uses the lazy built-in QRF k-point backend with
+            heuristic fallback.
 
     Returns:
         A ``CoreResult`` containing the stage records, scientific records,

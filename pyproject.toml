@@ -5,10 +5,21 @@ description = "Materials machine learning tools for recommending DFT calculation
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "joblib>=1.5.3",
+    "dscribe>=2.1",
+    "huggingface_hub>=0.23",
+    "joblib==1.5.3",
     "matminer>=0.10.1",
     "numpy>=2.4.4",
+    "pandas>=2.0",
     "pymatgen>=2026.3.23",
+    "scikit-learn==1.7.2",
+    "sklearn-quantile==0.1.1",
+    # The default k-points model (QRF + CGCNN metallicity) is a core capability,
+    # so its ML stack ships in the base install (decision: stfc/goldilocks-core#32).
+    # torch-geometric requires torch; on GPU hosts install the matching CUDA wheel
+    # of torch first, then sync.
+    "torch>=2.0",
+    "torch-geometric>=2.5",
 ]
 
 [project.scripts]
@@ -33,4 +44,7 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
+
+[tool.setuptools.package-data]
+goldilocks_core = ["model_registry.toml"]
 

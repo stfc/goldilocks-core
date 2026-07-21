@@ -67,11 +67,25 @@ def fixed_kmesh(structure, hints, kpoint_advice):
 
 ### Built-in default backend
 
+`Pipeline()` installs `default_kmesh_advisor()`. It checks operator hints first,
+then lazily resolves the QRF model and its supporting artifacts from the model
+registry. Loading or inference failures use `resolve_kpoints_from_advice()` and
+append an actionable provenance warning.
+
+Constructing the pipeline does not load models or access the network. The first
+call without a k-point hint loads and caches either the configured models or the
+load failure.
+
+### Explicit heuristic backend
+
 ```python
+from goldilocks_core import Pipeline
 from goldilocks_core.kmesh import resolve_kpoints_from_advice
+
+pipeline = Pipeline(kmesh=resolve_kpoints_from_advice)
 ```
 
-`resolve_kpoints_from_advice()` implements the default Kmesh behavior:
+`resolve_kpoints_from_advice()` uses this order:
 
 1. `hints.k_grid` → explicit grid, `source="user_hint"`
 2. `hints.k_spacing` → converted grid, `source="user_hint"`
@@ -79,7 +93,7 @@ from goldilocks_core.kmesh import resolve_kpoints_from_advice
 4. `KPointAdvice.spacing` → converted grid, source inherited from advice
 5. no grid or spacing → `ValueError`
 
-### Built-in ML backend
+### Custom ML backend
 
 ```python
 from goldilocks_core.advisors import ml_kmesh_advisor

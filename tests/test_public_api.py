@@ -1,6 +1,13 @@
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core import CalculationHints, generate, recommend, write_bundle
+from goldilocks_core import (
+    CalculationHints,
+    Pipeline,
+    generate,
+    recommend,
+    write_bundle,
+)
+from goldilocks_core.kmesh import resolve_kpoints_from_advice
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 
@@ -75,7 +82,10 @@ def test_core_result_serializes_to_manifest_style_dict() -> None:
         coords=[[0.0, 0.0, 0.0]],
     )
 
-    result = recommend(structure)
+    result = recommend(
+        structure,
+        pipeline=Pipeline(kmesh=resolve_kpoints_from_advice),
+    )
     manifest = result.to_dict()
 
     assert manifest["analysis"]["heavy_elements"] == ["I"]

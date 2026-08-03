@@ -93,3 +93,13 @@ uv run pre-commit run --all-files
 ```
 
 Tests use synthetic structures, temporary files, small UPF snippets, and fake models. They must not depend on private datasets or machine-specific paths.
+
+## Licence
+
+Code is licensed under the [BSD 3-Clause License](LICENSE).
+
+Documentation under `docs/` and the example structures under `examples/` are
+licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+Bundled and user-supplied pseudopotentials carry their own upstream licences —
+see [docs/pseudopotentials.md](docs/pseudopotentials.md).

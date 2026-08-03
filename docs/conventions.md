@@ -39,7 +39,7 @@ This is the same convention as VASP's `KSPACING` tag. It differs from some codes
 | smearing type (metallic) | cold | — | `advice.py` |
 | smearing type (unknown) | fixed | — | `advice.py` |
 | pseudo mode | efficiency | — | `CalculationIntent.pseudo_mode` |
-| functional | PBE | — | `CalculationIntent.functional` |
+| functional | PBEsol | — | `CalculationIntent.functional` |
 
 ## Heavy-element heuristic
 

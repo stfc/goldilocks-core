@@ -77,7 +77,11 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
         choices=["scf_single_point"],
         help="Calculation task.",
     )
-    parser.add_argument("--functional", default="PBE")
+    parser.add_argument(
+        "--functional",
+        default="PBEsol",
+        help="Exchange-correlation functional.",
+    )
     parser.add_argument("--pseudo-mode", default="efficiency")
     parser.add_argument("--pseudo-type")
     parser.add_argument("--relativistic-mode")

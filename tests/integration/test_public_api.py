@@ -27,7 +27,7 @@ def _make_si_metadata() -> PseudoMetadata:
         library="SSSP",
         element="Si",
         pseudo_type="NC",
-        functional="PBE",
+        functional="PBEsol",
         relativistic="scalar",
         sssp_recommended_cutoff={"ecutwfc_ry": 30, "ecutrho_ry": 120},
     )

@@ -35,7 +35,7 @@ Runs the full pipeline and publishes a portable bundle directory. `--out` is req
 | `structure` | positional | — | `CoreJobRequest.structure` |
 | `--code` | choice | `quantum_espresso` | `CalculationIntent.code` |
 | `--task` | choice | `scf_single_point` | `CalculationIntent.task` |
-| `--functional` | str | `PBE` | `CalculationIntent.functional` (canonicalized; e.g. `PBESOL` → `PBEsol`) |
+| `--functional` | str | `PBEsol` | `CalculationIntent.functional` (canonicalized; e.g. `PBESOL` → `PBEsol`) |
 | `--pseudo-mode` | str | `efficiency` | `CalculationIntent.pseudo_mode` |
 | `--pseudo-type` | str | None | `CalculationHints.pseudo_type` |
 | `--relativistic-mode` | str | None | `CalculationHints.relativistic_mode` |

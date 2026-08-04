@@ -14,6 +14,8 @@ All notable changes to goldilocks-core are documented here.
 - Loaded-model quantiles are checked before QRF confidence is reported.
 - Job-level warnings now include de-duplicated scientific caveats from Advise as well as Analyze, Kmesh, and Select.
 - Bundle output uses a straightforward no-overwrite directory writer.
+- Default exchange-correlation functional changed from PBE to PBEsol. This changes generated inputs and the pseudopotentials selected on a default run; pass `--functional PBE` to restore the previous behaviour.
+
 
 ### Fixed
 

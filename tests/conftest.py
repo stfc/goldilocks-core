@@ -34,7 +34,7 @@ def pseudo_metadata_factory() -> Callable[..., PseudoMetadata]:
         *,
         ecutwfc_ry: float = 30.0,
         ecutrho_ry: float = 120.0,
-        functional: str = "PBE",
+        functional: str = "PBEsol",
         pseudo_type: str = "NC",
         relativistic: str = "scalar",
         root: Path = Path("/pseudo"),

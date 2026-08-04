@@ -207,3 +207,8 @@ def test_core_job_request_validates_mode_and_bundle_output_dir() -> None:
         pass
     else:
         raise AssertionError("expected ValueError for bundle mode without output_dir")
+
+
+def test_calculation_intent_defaults_to_pbesol() -> None:
+    """Pin the default functional: changing it changes every generated input."""
+    assert CalculationIntent().functional == "PBEsol"

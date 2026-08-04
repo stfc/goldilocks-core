@@ -292,7 +292,7 @@ class CalculationIntent:
 
     code: CodeName = "quantum_espresso"
     task: CalcTask = "scf_single_point"
-    functional: str = "PBE"
+    functional: str = "PBEsol"
     pseudo_mode: str = "efficiency"
 
     def __post_init__(self) -> None:

@@ -27,7 +27,7 @@ def make_metadata(
     *,
     filename: str = "Si.UPF",
     source_set: str | None = None,
-    functional: str = "PBE",
+    functional: str = "PBEsol",
     cutoffs: dict | None = None,
 ) -> PseudoMetadata:
     """Build synthetic pseudopotential metadata for selection tests."""
@@ -337,7 +337,7 @@ def test_select_parameters_warns_when_pseudo_is_missing() -> None:
     selection = select_from_advice(
         structure,
         advice,
-        metadata_list=[make_metadata()],
+        metadata_list=[make_metadata(functional="PBE")],
     )
 
     assert selection.pseudopotentials[0].filename is None

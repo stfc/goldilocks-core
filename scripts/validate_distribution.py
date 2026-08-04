@@ -8,7 +8,12 @@ import tarfile
 from pathlib import Path
 from zipfile import ZipFile
 
-_REQUIRED_PACKAGE_FILE = "goldilocks_core/model_registry.toml"
+_REQUIRED_PACKAGE_FILES = (
+    "goldilocks_core/model_registry.toml",
+    "goldilocks_core/examples/structures/Si.cif",
+    "goldilocks_core/examples/structures/Fe_bcc.cif",
+    "goldilocks_core/examples/structures/Pt_fcc.cif",
+)
 
 
 def main() -> int:
@@ -25,16 +30,29 @@ def main() -> int:
         parser.error(f"expected one source archive, found {len(source_archives)}")
 
     with ZipFile(wheels[0]) as wheel:
-        if _REQUIRED_PACKAGE_FILE not in wheel.namelist():
-            parser.error(f"wheel does not contain {_REQUIRED_PACKAGE_FILE}")
+        wheel_names = set(wheel.namelist())
+    missing_from_wheel = [
+        name for name in _REQUIRED_PACKAGE_FILES if name not in wheel_names
+    ]
+    if missing_from_wheel:
+        parser.error(f"wheel does not contain {', '.join(missing_from_wheel)}")
 
     with tarfile.open(source_archives[0], mode="r:gz") as source_archive:
         members = source_archive.getnames()
-        suffix = f"/src/{_REQUIRED_PACKAGE_FILE}"
-        if not any(member.endswith(suffix) for member in members):
-            parser.error(f"source archive does not contain {_REQUIRED_PACKAGE_FILE}")
+    missing_from_source = [
+        name
+        for name in _REQUIRED_PACKAGE_FILES
+        if not any(member.endswith(f"/src/{name}") for member in members)
+    ]
+    if missing_from_source:
+        parser.error(
+            f"source archive does not contain {', '.join(missing_from_source)}"
+        )
 
-    print(f"Validated {wheels[0]} and {source_archives[0]}")
+    print(
+        f"Validated {len(_REQUIRED_PACKAGE_FILES)} packaged files in "
+        f"{wheels[0]} and {source_archives[0]}"
+    )
     return 0
 
 

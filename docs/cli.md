@@ -28,6 +28,22 @@ goldilocks-core bundle structure.cif --out run/ [options]
 
 Runs the full pipeline and publishes a portable bundle directory. `--out` is required and must not already exist; bundle mode has no overwrite option.
 
+### examples
+
+```bash
+goldilocks-core examples path
+```
+
+Prints the directory holding the example structures installed with the package. It takes none of the common options below.
+
+Use it to run the pipeline without supplying a structure of your own:
+
+```bash
+goldilocks-core recommend "$(goldilocks-core examples path)/Si.cif" --json
+```
+
+The directory's `README.md` explains what each example exercises. From Python, use `goldilocks_core.examples.structure("Si.cif")` rather than building the path by hand.
+
 ## Common options
 
 | Flag | Type | Default | Maps to |

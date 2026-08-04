@@ -67,6 +67,12 @@ uv run goldilocks-core bundle structure.cif \
 
 Bundle output requires a new destination directory. See the [CLI reference](docs/cli.md) for all controls.
 
+Example structures are installed with the package, so there is something to run straight away:
+
+```bash
+uv run goldilocks-core recommend "$(uv run goldilocks-core examples path)/Si.cif" --json
+```
+
 The standalone model-oriented entry point remains available:
 
 ```bash

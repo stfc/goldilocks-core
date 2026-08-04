@@ -14,6 +14,7 @@ from goldilocks_core.contracts import (
     CoreResult,
     ModelSpec,
 )
+from goldilocks_core.examples import structures_path
 from goldilocks_core.jobs import Pipeline, run_core_job
 from goldilocks_core.kmesh import resolve_kpoints_from_advice
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
@@ -37,6 +38,16 @@ def build_parser() -> argparse.ArgumentParser:
                 help="Output directory for the portable Core bundle.",
             )
 
+    examples = subparsers.add_parser(
+        "examples",
+        help="Inspect the example structures bundled with the package.",
+    )
+    example_commands = examples.add_subparsers(dest="examples_command", required=True)
+    example_commands.add_parser(
+        "path",
+        help="Print the directory holding the bundled example structures.",
+    )
+
     return parser
 
 
@@ -44,6 +55,10 @@ def main() -> None:
     """Run the staged Core CLI."""
     parser = build_parser()
     args = parser.parse_args()
+
+    if args.command == "examples":
+        print(structures_path())
+        return
 
     try:
         _validate_backend_options(args)

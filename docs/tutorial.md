@@ -4,10 +4,25 @@ A start-to-finish walkthrough of the goldilocks-core Python API.
 
 ## Quick start
 
+The package ships a few small example structures, so you can run this without
+supplying a structure of your own:
+
+```python
+from goldilocks_core import recommend
+from goldilocks_core.examples import available_structures, structure
+
+print(available_structures())   # ('Fe_bcc.cif', 'Pt_fcc.cif', 'Si.cif')
+
+result = recommend(structure("Si.cif"))
+```
+
+See `goldilocks_core/examples/structures/README.md` for what each example is
+for. Everywhere below, `"structure.cif"` stands for your own structure file.
+
 ```python
 from goldilocks_core import recommend
 
-result = recommend("path/to/structure.cif")
+result = recommend("structure.cif")
 
 print(result.analysis.reduced_formula)          # e.g. "Si"
 print(result.advice.k_points.provenance.source) # "default"

@@ -18,12 +18,24 @@ Create a structured plan as a GitHub Issue. The issue body serves as the plan do
 
 **Plans are for orientation, not control.** A good plan helps the implementer understand *what* to build and *why*, then gets out of the way.
 
+## Issue Hygiene
+
+A plan becomes one GitHub issue. Follow the project's issue-hygiene rules (AGENTS.md):
+
+- **One issue per feature.** The issue is a shippable unit. Don't file a separate issue for a decision, a question, or a sub-step — put those in the issue's "Open questions" or phase checklist.
+- **Phases, not sub-issues.** Multi-phase work is one issue with a phase checklist in the body. Do not pre-file a sub-issue per phase for work that hasn't started; file a sub-issue only when its PR is about to start, or just open the PR.
+- **Reuse before creating.** Before filing, search open issues (`gh issue list --search ...`) for one to extend. Comment on or extend an existing issue rather than creating a new one — especially when the board is already large.
+- **Every issue has a milestone.** Assign the new issue to a milestone. If none fits, propose one before filing; don't leave it milestone-less.
+
+When in doubt, fewer issues is better. A 40-issue board where 8 are one not-started refactor is a failure mode, not thoroughness.
+
 ## Planning Process
 
 1. **Research** — explore the codebase to understand current structure and constraints
-2. **Design** — define scope, goals, and key decisions
-3. **Write** — create a GitHub Issue with the plan
-4. **Track** — keep the issue body current when the plan changes; use comments/PR links for progress, reviews, verification, and handoff history
+2. **Search** — before creating, look for an existing open issue to extend (`gh issue list --search ...`). Reuse over create.
+3. **Design** — define scope, goals, and key decisions
+4. **Write** — create one GitHub Issue with the plan, and assign it to a milestone (propose one if none fits)
+5. **Track** — keep the issue body current when the plan changes; use comments/PR links for progress, reviews, verification, and handoff history
 
 ## Issue Templates
 
@@ -49,6 +61,8 @@ gh issue create --title "feat: short description" --body-file plan.md
 ```
 
 ### Full (multi-phase work)
+
+One issue. Phases live in the body as the checklist below — do not file a sub-issue per phase.
 
 ```markdown
 ## Problem
@@ -93,11 +107,12 @@ gh issue create --title "feat: short description" --body-file plan.md
 
 ## After Creating
 
-1. Summarize the plan for the user
-2. Ask whether to proceed with implementation or refine the plan
-3. As phases complete, update checklist state in the issue body if that checklist is the active tracker
-4. Add progress, review results, verification output, and handoff notes as comments
-5. Link the issue from follow-up PRs and reports so the thread remains the durable record
+1. Assign the issue to a milestone (or propose one) — no milestone-less issues
+2. Summarize the plan for the user
+3. Ask whether to proceed with implementation or refine the plan
+4. As phases complete, update checklist state in the issue body if that checklist is the active tracker
+5. Add progress, review results, verification output, and handoff notes as comments
+6. Link the issue from follow-up PRs and reports so the thread remains the durable record
 
 ## Gotchas
 

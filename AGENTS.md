@@ -62,10 +62,20 @@ CI runs on push to `main` and on PRs (`.github/workflows/ci.yml`): Ruff, pytest 
 - Any GitHub issue, issue comment, PR description, or review comment written by an agent must explicitly say so and name the human it represents: `Written by an agent on behalf of <user>.`
 - Use `uv`, not `pip`.
 
+## Issue hygiene
+
+- **One issue per PR/feature.** An issue is a shippable unit of work. Don't file issues for decisions, discussions, or sub-steps of a feature — those go inside the feature issue.
+- **Decisions fold in.** An open question that gates a feature lives in that feature issue's "Open questions" section, not as a standalone issue.
+- **Phases, not sub-issues.** Multi-phase work is one issue with a phase checklist in the body. Don't pre-file sub-issues for work that hasn't started; file a sub-issue only when its PR is about to start, or just open the PR.
+- **Every issue has a milestone.** No milestone-less issues. If no milestone fits, propose one before filing.
+- **Reuse before creating.** Before filing, search open issues for one to extend. Comment or extend rather than creating a new one.
+- **Triage periodically.** Close stale, superseded, and out-of-scope issues; fold duplicates. Use `catchup` to surface candidates and `triage` to run the pass. Don't let the board accumulate.
+
 ## Agent workflow
 
 - Start sustained work with `catchup`.
 - Use `plan` for multi-step changes. Keep an issue body current only when the agent created it; otherwise add plan updates as comments.
+- Use `triage` when the board has accumulated stale, duplicate, or superseded issues, or before/after a milestone.
 - Use `review` before PRs or after substantial changes.
 - Use `report` for handoff/progress comments.
 - Use `make-a-pr` only after implementation, tests, and review are ready.

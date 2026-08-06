@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from pymatgen.core import Structure
 from pymatgen.core.periodic_table import Element
 
@@ -93,6 +95,10 @@ def _render_qe_scf(
     selected_pseudos = tuple(pseudo_by_element[element] for element in elements)
     ecutwfc = max(float(pseudo.ecutwfc_ry) for pseudo in selected_pseudos)
     ecutrho = max(float(pseudo.ecutrho_ry) for pseudo in selected_pseudos)
+
+    for pseudo in selected_pseudos:
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", pseudo.filename) is None:
+            raise ValueError(f"Unsafe pseudopotential filename: {pseudo.filename!r}")
 
     lines: list[str] = []
     lines.extend(_control_section())

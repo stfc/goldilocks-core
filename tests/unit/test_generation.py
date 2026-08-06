@@ -1,3 +1,4 @@
+from dataclasses import replace
 from typing import get_args
 
 import pytest
@@ -322,6 +323,28 @@ def test_generate_inputs_rejects_unsupported_task() -> None:
         ValueError, match="No input writer registered for .*task='relax'"
     ):
         generate_inputs(structure, intent, advice, selection)
+
+
+def test_generate_inputs_rejects_unsafe_pseudopotential_filename() -> None:
+    """Reject pseudopotential filenames that are unsafe to render verbatim."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+    pseudo = replace(selection.pseudopotentials[0], filename="Si.UPF\n/")
+
+    with pytest.raises(ValueError, match="Unsafe pseudopotential filename"):
+        generate_inputs(
+            structure,
+            advice_context(),
+            advice,
+            replace(selection, pseudopotentials=(pseudo,)),
+        )
 
 
 def advice_context() -> CalculationIntent:

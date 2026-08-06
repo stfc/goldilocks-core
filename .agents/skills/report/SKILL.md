@@ -16,7 +16,7 @@ Each agent session is ephemeral. Without a report, the next session has to recon
 
 ## Report Process
 
-1. **Identify the issue** — which issue does this work belong to? If none exists, create one.
+1. **Identify the issue** — which issue does this work belong to? If none exists and the work is a concrete shippable feature, file one (meeting AGENTS.md issue hygiene — no placeholder, no `decide(...)`). If it's a decision, question, or sub-step, fold it into an existing issue; don't file a placeholder just to have a thread.
 2. **Review the session** — what was accomplished, what was decided, what remains.
 3. **Write a comment** on the issue.
 4. **Update the issue body only if needed** — approach, scope, acceptance criteria, or active checklist changed.
@@ -124,3 +124,4 @@ If the count is non-zero, or the board has accumulated stale/superseded/duplicat
 - If the report says "next: X", the next session should find X actionable — be specific
 - Don't bury important decisions in long prose — the Decisions section should be scannable
 - If you discovered a distinct new PR/feature during the session, file it as a separate issue. But if it's a decision, a question, or a sub-step of the current work, fold it into the current issue (open questions / checklist / comment) — don't spin up a new issue for it (per issue hygiene, AGENTS.md)
+- Don't file a placeholder issue ("scope still to be worked out") or a roadmap-mirror issue just to have a thread to report on — report against the closest active issue or the branch instead

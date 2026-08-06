@@ -17,7 +17,7 @@ Keep the issue board small and shippable. Every open issue should be one PR/feat
 
 ## Principle
 
-Issue hygiene is policy in AGENTS.md; this skill is the pass that enforces it. The rule that bites most often: **one issue per PR/feature**. Decision, discussion, and sub-step issues are spam — their content folds into the feature issue they belong to. A 40-issue board where 8 are one not-started refactor is the failure mode this skill prevents.
+Issue hygiene is policy in AGENTS.md; this skill is the pass that enforces it. The rules that bite most often: **one issue per PR/feature**, and **no placeholders**. Decision, discussion, sub-step, placeholder ("scope still to be worked out"), and roadmap-mirror (filed to "make the milestone reflect its real scope") issues are all spam — their content folds into the feature issue they belong to, or stays on the roadmap. A 40-issue board where 8 are one not-started refactor is the failure mode this skill prevents.
 
 ## Process
 
@@ -40,6 +40,8 @@ Read every open issue body and recent comments. You cannot triage what you have 
 - **Close: superseded** — covered by another issue or by merged code. Point at the survivor.
 - **Close: duplicate** — same feature/decision as another; pick one, point the rest at it.
 - **Close: decision-only** — a question, not a PR. Fold its content into the feature issue it gates, then close with a pointer.
+- **Close: placeholder / no plan** — "scope and design still to be worked out" or no concrete problem + proposed approach. Fold any useful direction into the feature it would belong to, or leave it on the roadmap; close with a pointer.
+- **Close: roadmap mirror** — filed to "make the milestone reflect its real scope" rather than to track shippable work. The deliverable belongs on the roadmap, not as an open issue.
 - **Close: out of scope** — not core's concern (AGENTS.md "What doesn't belong here").
 - **Close: stale / done** — no movement, or the work already landed.
 - **Fold** — distinct content that belongs inside another issue. Carry the content (a comment, or a body edit if it is your issue to edit), then close the source with a pointer.

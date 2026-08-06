@@ -1,9 +1,11 @@
 ---
 name: make-a-pr
-description: Commit and open a pull request. Use when you have changes ready to submit — after implementing, testing, and self-reviewing.
+description: Commit changes and hand off to the human to open a pull request. Use when you have changes ready to submit — after implementing, testing, and self-reviewing.
 ---
 
 # Make a PR
+
+The agent prepares the branch and commits. **The human opens the PR and writes the PR body** — an agent never writes a PR body, not even a draft (AGENTS.md). The agent's job ends at pushing the branch and handing the human the diff, the commit log, and the issue number to close.
 
 ## Branch
 
@@ -43,40 +45,23 @@ Fix any failures before pushing.
 git push -u origin feat/short-description
 ```
 
-## Open the PR
+## Hand off to the human
 
-```bash
-gh pr create --title "feat(scope): short description" --body-file pr-body.md
-```
+The agent's work ends here. Do **not** write a PR body, do **not** draft one for the human, do **not** run `gh pr create`. Give the human, as plain facts (not a PR-body template):
 
-PR body template:
+- the branch name
+- the commit log: `git log main..HEAD --oneline`
+- the diff stat: `git diff main...HEAD --stat`
+- the issue number to close: `Closes #N`
 
-```markdown
-## What
-One-sentence summary of the change.
+The human opens the PR and writes the body. If the human hands you a body file **they wrote**, you may post it with `gh pr create --title "..." --body-file <their-file>` — but you never author, fill, or draft a PR body.
 
-## Why
-Context — what problem does this solve? Reference the issue: Closes #N.
+## After the human opens the PR
 
-## How to test
-Concrete steps a reviewer can follow to verify the change works.
-Commands, expected outputs, or how to exercise new behaviour.
-
-## Changes
-- Bullet list of the meaningful changes. Not every file — the stuff that matters.
-
----
-Written by an agent on behalf of <user>.
-```
-
-## After opening
-
-- PR descriptions written by an agent must include `Written by an agent on behalf of <user>.`, replacing `<user>` with the human who requested the work.
-- Make sure the PR body includes `Closes #N` for the linked issue.
-- The linked issue must have a milestone. If it doesn't, assign one before the PR merges (`gh api repos/stfc/goldilocks-core/issues/<N> --method PATCH -F milestone=<id>`) — no milestone-less issues.
-- If CI exists, inspect checks with `gh pr checks <number>`.
-- If GitHub Actions workflows exist and you need more detail, use `gh run list --branch <branch>` and `gh run view <run-id> --log`.
-- If there is no CI yet, say so plainly and rely on local verification results in the PR body.
+- Get the PR number: `gh pr list --repo stfc/goldilocks-core --head "$(git branch --show-current)" --json number --jq '.[0].number'`.
+- Confirm the PR body includes `Closes #N` — flag it to the human if missing (it is their responsibility, not yours to write).
+- The linked issue must have a milestone; assign one before merge if it doesn't (`gh api repos/stfc/goldilocks-core/issues/<N> --method PATCH -F milestone=<id>`).
+- Inspect CI: `gh pr checks <number>`. For detail, `gh run list --branch <branch>` and `gh run view <run-id> --log`. If there is no CI, say so plainly.
 - Respond to review comments by pushing new commits — don't force-push reviewed code unless asked.
 
 ## Merging

@@ -20,12 +20,16 @@ Create a structured plan as a GitHub Issue. The issue body serves as the plan do
 
 ## Issue Hygiene
 
-A plan becomes one GitHub issue. Follow the project's issue-hygiene rules (AGENTS.md):
+A plan becomes one GitHub issue and must clear the project's issue-hygiene bar (AGENTS.md) before filing:
 
-- **One issue per feature.** The issue is a shippable unit. Don't file a separate issue for a decision, a question, or a sub-step — put those in the issue's "Open questions" or phase checklist.
-- **Phases, not sub-issues.** Multi-phase work is one issue with a phase checklist in the body. Do not pre-file a sub-issue per phase for work that hasn't started; file a sub-issue only when its PR is about to start, or just open the PR.
-- **Reuse before creating.** Before filing, search open issues (`gh issue list --search ...`) for one to extend. Comment on or extend an existing issue rather than creating a new one — especially when the board is already large.
-- **Every issue has a milestone.** Assign the new issue to a milestone. If none fits, propose one before filing; don't leave it milestone-less.
+- **No placeholders.** If you cannot state a concrete problem and a proposed approach, do not file — work the design first. "Scope and design still to be worked out" is not an issue; an unplanned deliverable is not an issue.
+- **One issue per feature.** Decisions, questions, and sub-steps go in the issue's "Open questions" or phase checklist, not as separate issues.
+- **Phases, not sub-issues.** Multi-phase work is one issue with a phase checklist. File a sub-issue only when its PR is about to start, or just open the PR.
+- **Scope gate.** Check AGENTS.md "What doesn't belong here" first; an out-of-scope-layer item needs maintainer sign-off.
+- **Reuse before creating.** Search open issues (`gh issue list --search ...`) first; extend rather than duplicate. If a closed issue's design is stale, fold the fresh design in and point at the closed one.
+- **Check live state.** Read open issues, recent merged PRs, and any open decision the plan depends on; cite the controlling decision.
+- **Every issue has a milestone.** Assign one; propose one if none fits.
+- **Coordinate before burst.** Filing more than three issues, or any structural change (milestone, epic, label), needs prior maintainer agreement — not a fait accompli.
 
 When in doubt, fewer issues is better. A 40-issue board where 8 are one not-started refactor is a failure mode, not thoroughness.
 

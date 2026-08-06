@@ -85,9 +85,9 @@ Written by an agent on behalf of <user>.
 
 ## After review
 
-- If findings are critical or high, offer to fix them before opening the PR.
-- If findings are medium/low only, note them in the PR body and proceed.
-- If the branch is clean, proceed to open the PR.
+- If findings are critical or high, offer to fix them before the PR is opened.
+- If findings are medium/low only, hand them to the human — they decide what goes in the PR body. The agent does not write PR body text.
+- If the branch is clean, hand off to the human to open the PR (AGENTS.md: the human opens the PR and writes the body).
 - If a durable review record is needed, post the review as an issue comment. Do not add review artifacts to the repository unless the user explicitly asks for a file.
 
 ## Gotchas

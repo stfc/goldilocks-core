@@ -86,6 +86,7 @@ uv run goldilocks-kmesh structure.cif --model path/to/model.joblib
 - [Scientific conventions](docs/conventions.md)
 - [CLI reference](docs/cli.md)
 - [Architecture and extension points](docs/architecture.md)
+- [Roadmap](docs/roadmap.md)
 
 ## Development
 

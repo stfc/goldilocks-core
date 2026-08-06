@@ -11,8 +11,8 @@ from __future__ import annotations
 import numpy as np
 from pymatgen.core.structure import Structure
 
-from goldilocks_core.ml.atom_features import atom_features_from_structure
-from goldilocks_core.ml.cgcnn_graph import build_radius_cgcnn_graph_from_structure
+from .atom_features import atom_features_from_structure
+from .cgcnn_graph import build_radius_cgcnn_graph_from_structure
 
 
 def load_metallicity_model(checkpoint_path: str) -> object:
@@ -24,7 +24,7 @@ def load_metallicity_model(checkpoint_path: str) -> object:
     """
     import torch
 
-    from goldilocks_core.ml.cgcnn import CGCNN_PyG
+    from .cgcnn import CGCNN_PyG
 
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     model = CGCNN_PyG(**checkpoint["hyper_parameters"]["model"])

@@ -2,12 +2,12 @@ import numpy as np
 import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.ml.kdistance_features import (
+from goldilocks_core.ml.model_registry import load_default_qrf_config
+from goldilocks_core.ml.qrf.features import (
     _require_finite,
     extract_qrf_features,
     extract_structure_features,
 )
-from goldilocks_core.ml.model_registry import load_default_qrf_config
 
 
 def make_diamond_silicon() -> Structure:
@@ -34,11 +34,11 @@ def test_extract_structure_features_dimension_and_finiteness() -> None:
 def test_extract_qrf_features_assembles_483_values_and_names(monkeypatch) -> None:
     config = load_default_qrf_config()
     monkeypatch.setattr(
-        "goldilocks_core.ml.kdistance_features.extract_structure_features",
+        "goldilocks_core.ml.qrf.features.extract_structure_features",
         lambda structure, settings: np.arange(419, dtype=float),
     )
     monkeypatch.setattr(
-        "goldilocks_core.ml.metallicity.metal_features",
+        "goldilocks_core.ml.qrf.metallicity.metal_features",
         lambda structure, model, atom_init_path, **settings: np.arange(64, dtype=float),
     )
 

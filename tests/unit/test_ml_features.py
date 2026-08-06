@@ -1,7 +1,7 @@
 import numpy as np
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.ml.features import (
+from goldilocks_core.ml.kindex.features import (
     extract_c_features,
     extract_cslr_features,
     extract_l_features,

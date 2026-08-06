@@ -5,7 +5,6 @@ from pymatgen.core import Lattice, Structure
 from goldilocks_core.advisors.kdistance_advisor import (
     default_kmesh_advisor,
     kdistance_to_selection,
-    predict_kdistance_quantiles,
     qrf_kdistance_advisor,
 )
 from goldilocks_core.contracts import (
@@ -16,6 +15,7 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.kmesh.math import k_distance_to_mesh
 from goldilocks_core.ml.model_registry import load_default_qrf_config
+from goldilocks_core.ml.qrf import _predict_kdistance_quantiles
 
 
 class FakeQRF:
@@ -48,10 +48,11 @@ def patch_inference(monkeypatch, *, model=None) -> None:
         "goldilocks_core.ml.models.load_model", lambda spec: model or FakeQRF()
     )
     monkeypatch.setattr(
-        "goldilocks_core.ml.metallicity.load_metallicity_model", lambda path: object()
+        "goldilocks_core.ml.qrf.metallicity.load_metallicity_model",
+        lambda path: object(),
     )
     monkeypatch.setattr(
-        "goldilocks_core.ml.kdistance_features.extract_qrf_features",
+        "goldilocks_core.ml.qrf.features.extract_qrf_features",
         lambda structure, model, atom_init, settings: StructureFeatureVector(
             np.zeros(483), [f"feature_{index}" for index in range(483)]
         ),
@@ -59,7 +60,7 @@ def patch_inference(monkeypatch, *, model=None) -> None:
 
 
 def test_predict_kdistance_quantiles_applies_correction() -> None:
-    assert predict_kdistance_quantiles(FakeQRF(), make_features(), 0.01) == (
+    assert _predict_kdistance_quantiles(FakeQRF(), make_features(), 0.01) == (
         0.25,
         0.19,
         0.31,
@@ -76,7 +77,7 @@ def test_predict_kdistance_quantiles_applies_correction() -> None:
 )
 def test_predict_kdistance_quantiles_rejects_unusable_output(model) -> None:
     with pytest.raises(ValueError):
-        predict_kdistance_quantiles(model, make_features())
+        _predict_kdistance_quantiles(model, make_features())
 
 
 def test_predict_kdistance_quantiles_requires_three_values() -> None:
@@ -84,7 +85,7 @@ def test_predict_kdistance_quantiles_requires_three_values() -> None:
     model.quantiles = np.array([[0.2], [0.3]])
 
     with pytest.raises(ValueError, match="3 QRF quantiles"):
-        predict_kdistance_quantiles(model, make_features())
+        _predict_kdistance_quantiles(model, make_features())
 
 
 def test_kdistance_selection_records_model_provenance() -> None:

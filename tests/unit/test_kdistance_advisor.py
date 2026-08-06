@@ -14,7 +14,7 @@ from goldilocks_core.contracts import (
     Provenance,
     StructureFeatureVector,
 )
-from goldilocks_core.kpoint_math import k_distance_to_mesh
+from goldilocks_core.kmesh.math import k_distance_to_mesh
 from goldilocks_core.ml.model_registry import load_default_qrf_config
 
 

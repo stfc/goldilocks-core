@@ -18,7 +18,7 @@ from goldilocks_core.contracts import (
     StructureFeatureVector,
 )
 from goldilocks_core.kmesh import resolve_kpoints_from_advice
-from goldilocks_core.kpoint_math import k_distance_to_mesh
+from goldilocks_core.kmesh.math import k_distance_to_mesh
 from goldilocks_core.ml.model_registry import QrfKpointsConfig, load_default_qrf_config
 
 

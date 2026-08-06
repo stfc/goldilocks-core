@@ -13,10 +13,10 @@ from goldilocks_core.contracts import (
     ModelSpec,
     Provenance,
 )
-from goldilocks_core.kmesh import (
+from goldilocks_core.kmesh import resolve_kpoints_from_advice
+from goldilocks_core.kpoint_math import (
     build_kmesh_entries,
     generate_candidate_k_distances,
-    resolve_kpoints_from_advice,
 )
 from goldilocks_core.ml.features import extract_cslr_features
 from goldilocks_core.ml.inference import predict

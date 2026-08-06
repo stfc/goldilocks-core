@@ -5,7 +5,7 @@ import math
 import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.kmesh import k_distance_to_mesh
+from goldilocks_core.kpoint_math import k_distance_to_mesh
 
 
 @pytest.mark.parametrize(

@@ -16,13 +16,13 @@ Repo: `stfc/goldilocks-core`
 - Use `--body-file` for long issue, comment, and PR bodies. Do not fight shell quoting goblins by pasting Markdown into one command.
 - Prefer issue comments for progress updates, reviews, decisions, blockers, and session reports. Edit issue bodies only when the issue's current plan/source-of-truth is stale or structurally wrong.
 - **Never merge directly to `main`.** All changes arrive through PRs.
-- Any GitHub issue, issue comment, PR description, or review comment written by an agent must include:
+- Any GitHub issue, issue comment, or review comment written by an agent must include:
 
 ```text
 Written by an agent on behalf of <user>.
 ```
 
-Replace `<user>` with the human who requested the work.
+Replace `<user>` with the human who requested the work. **PR descriptions are never agent-written — not even a draft** (AGENTS.md); the human opens the PR and writes the body.
 
 ## Inspect state
 
@@ -83,38 +83,17 @@ EOF
 gh issue comment <number> --repo stfc/goldilocks-core --body-file /tmp/comment.md
 ```
 
-## Create a PR
+## Open a PR
 
-Before creating:
+PR descriptions are written by a human — an agent never writes a PR body, not even a draft (AGENTS.md). The agent does not open the PR. After pushing the branch, hand the human the branch name, commit log (`git log main..HEAD --oneline`), diff stat, and the issue number to close (`Closes #N`). The human opens the PR and writes the body.
 
-```bash
-git status -sb
-git branch --show-current
-gh pr list --repo stfc/goldilocks-core --head "$(git branch --show-current)"
-```
-
-Then:
+If the human hands you a body file **they wrote**, you may post it:
 
 ```bash
-cat > /tmp/pr-body.md <<'EOF'
-## What
-...
-
-## Why
-Closes #<issue-number>.
-
-## How to test
-...
-
-## Changes
-- ...
-
----
-Written by an agent on behalf of <user>.
-EOF
-
-gh pr create --repo stfc/goldilocks-core --title "type(scope): short title" --body-file /tmp/pr-body.md
+gh pr create --repo stfc/goldilocks-core --title "type(scope): short title" --body-file <human-authored-file>
 ```
+
+Never author, fill, or draft the body. Verify branch and base before creating.
 
 ## Edit existing GitHub text
 
@@ -231,7 +210,7 @@ Triage rules (AGENTS.md issue hygiene): one issue per PR/feature; fold decisions
 
 ## Gotchas
 
-- `gh pr create` uses the current branch by default — verify branch and base before creating.
+- `gh pr create` uses the current branch by default — verify branch and base before creating, and only post a body the human authored.
 - `gh issue edit --body-file` replaces the whole body. Fetch first so you do not erase context.
 - Before editing an issue body, ask: "Am I changing the current plan/source-of-truth, or just adding history?" If it is history, comment instead.
 - `gh api ... -f body="$(cat file)"` can mangle complex Markdown in some shells. If in doubt, use a small Python snippet to PATCH JSON.

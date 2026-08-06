@@ -72,7 +72,8 @@ source_paths = ["src/goldilocks_core"]
 only_mutate = [
     "src/goldilocks_core/advice.py",
     "src/goldilocks_core/functionals.py",
-    "src/goldilocks_core/generation.py",
+    "src/goldilocks_core/generation/registry.py",
+    "src/goldilocks_core/generation/qe/scf.py",
     "src/goldilocks_core/kmesh.py",
     "src/goldilocks_core/selection.py",
     "src/goldilocks_core/pseudo/pp_policy.py",

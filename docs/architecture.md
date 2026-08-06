@@ -23,7 +23,7 @@ plugin registry, service container, or stage base classes.
 | `advice.py` | Scientific and numerical recommendations. |
 | `kmesh.py`, `advisors/` | Concrete k-point selection. |
 | `selection.py` | Pseudopotentials and cutoffs. |
-| `generation.py` | Calculation-specific file generation. |
+| `generation/` | Calculation-specific file generation. |
 | `bundle.py` | Generated files and manifest output. |
 
 Stages communicate through dataclasses. They do not need to inherit from a Core

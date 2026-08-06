@@ -1,174 +1,37 @@
-"""Typed contracts for the staged Core recommendation pipeline."""
+"""Dataclass records for the staged Core recommendation pipeline."""
 
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass, field, fields, is_dataclass
-from numbers import Integral, Real
-from pathlib import Path
-from typing import Any, Callable, Literal, Sequence, get_args
+from dataclasses import dataclass, field
 
 import numpy as np
-from pymatgen.core import Structure
 
+from goldilocks_core.contracts.serial import to_jsonable
+from goldilocks_core.contracts.types import (
+    CalcTask,
+    CodeName,
+    Dimensionality,
+    ElectronicCharacter,
+    JobMode,
+    JsonDict,
+    KPointGrid,
+    KPointShift,
+    ModelSource,
+    ModelType,
+    ProvenanceSource,
+    StructureInput,
+    VdwMethod,
+)
+from goldilocks_core.contracts.validate import (
+    _validate_finite_positive,
+    _validate_kpoint_grid,
+    _validate_optional_boolean,
+    _validate_positive_integer,
+    _validate_smearing,
+    _validate_vdw_method,
+)
 from goldilocks_core.functionals import normalize_functional_label
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
-
-ProvenanceSource = Literal[
-    "analysis",
-    "user_hint",
-    "default",
-    "model",
-    "lookup",
-    "fallback",
-]
-"""Origin of a scientific recommendation or selection.
-
-- ``analysis``: derived from structure facts (e.g. heavy elements → SOC consideration).
-- ``user_hint``: explicitly provided by the operator via ``CalculationHints``.
-- ``default``: package-level default when no analysis or hint applies.
-- ``model``: ML model prediction (e.g. k-index from the CSLR advisor).
-- ``lookup``: resolved from supplied metadata (e.g. pseudo selection from a registry).
-- ``fallback``: no matching data was available; the value is a placeholder.
-"""
-
-JsonDict = dict[str, Any]
-"""JSON-serializable dictionary type."""
-
-PathLike = str | Path
-"""String or path-like object accepted as a file location."""
-
-StructureInput = Structure | PathLike
-"""Structure input: a pymatgen ``Structure`` or a path to a structure file."""
-
-CodeName = str
-"""Target DFT code name."""
-
-CalcTask = str
-"""Calculation task name."""
-
-SmearingType = Literal["fixed", "gaussian", "mp", "cold"]
-"""Canonical occupation schemes supported by the current QE target."""
-
-ModelSource = Literal["huggingface", "local"]
-"""Where a trained model or supporting artifact is resolved from."""
-
-ModelType = Literal["random_forest", "cgcnn", "xgboost"]
-"""ML model architecture. Only ``random_forest`` is currently supported."""
-
-KPointGrid = tuple[int, int, int]
-"""Uniform immutable k-point mesh as (nk1, nk2, nk3)."""
-
-KPointShift = tuple[int, int, int]
-"""Immutable Monkhorst-Pack shift as (s1, s2, s3) with values 0 or 1."""
-
-JobMode = Literal["recommend", "generate", "bundle"]
-"""How far the fixed Core pipeline runs.
-
-- ``recommend``: Load → Analyze → Advise → Kmesh → Select.
-- ``generate``: … → Generate.
-- ``bundle``: … → Bundle.
-"""
-
-Dimensionality = Literal["3d", "2d", "1d", "molecule", "unknown"]
-"""Bonded-structure dimensionality, or ``unknown`` when detection fails."""
-
-ElectronicCharacter = Literal["metal", "insulator", "likely_metal", "unknown"]
-"""Conservative electronic-character classification from structure facts.
-
-- ``likely_metal``: all elements are metallic; treat as likely, not confirmed.
-- ``unknown``: cannot determine from structure alone; verify manually.
-"""
-
-VdwMethod = Literal["d3", "d3bj", "ts", "mbd"]
-"""Code-agnostic van der Waals dispersion method label.
-
-Translated to code-specific keywords in the Generate stage (e.g. ``d3bj`` →
-QE ``vdw_corr='grimme-d3'`` with ``dftd3_version=4``).
-"""
-
-_VALID_SMEARING_TYPES: frozenset[str] = frozenset(get_args(SmearingType))
-_VALID_VDW_METHODS: frozenset[str] = frozenset(get_args(VdwMethod))
-
-
-def _validate_finite_positive(value: Real, field_name: str) -> None:
-    """Require a finite number greater than zero."""
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, Real)
-        or not math.isfinite(value)
-        or value <= 0
-    ):
-        raise ValueError(
-            f"{field_name} must be a finite positive number; got {value!r}"
-        )
-
-
-def _validate_positive_integer(value: int, field_name: str) -> None:
-    """Require a positive integer without accepting booleans."""
-    if isinstance(value, bool) or not isinstance(value, Integral) or value < 1:
-        raise ValueError(f"{field_name} must be a positive integer; got {value!r}")
-
-
-def _validate_kpoint_grid(grid: object, field_name: str) -> KPointGrid:
-    """Return an immutable grid of exactly three positive integer dimensions."""
-    if not isinstance(grid, tuple | list) or len(grid) != 3:
-        raise ValueError(
-            f"{field_name} must contain exactly three positive integers; got {grid!r}"
-        )
-
-    for index, value in enumerate(grid):
-        _validate_positive_integer(value, f"{field_name}[{index}]")
-
-    return tuple(int(value) for value in grid)
-
-
-def _validate_boolean(value: object, field_name: str) -> None:
-    """Require a built-in boolean rather than a truthy value."""
-    if not isinstance(value, bool):
-        raise ValueError(f"{field_name} must be a boolean; got {value!r}")
-
-
-def _validate_optional_boolean(value: object, field_name: str) -> None:
-    """Require None or a built-in boolean."""
-    if value is not None:
-        _validate_boolean(value, field_name)
-
-
-def _validate_smearing(
-    smearing_type: str | None,
-    width: float | None,
-    *,
-    type_field: str,
-    width_field: str,
-) -> None:
-    """Require fixed occupations without width or smearing with positive width."""
-    if smearing_type is not None and (
-        not isinstance(smearing_type, str) or smearing_type not in _VALID_SMEARING_TYPES
-    ):
-        valid = ", ".join(sorted(_VALID_SMEARING_TYPES))
-        raise ValueError(
-            f"{type_field} must be one of {valid}, or None; got {smearing_type!r}"
-        )
-
-    fixed_occupations = smearing_type in {None, "fixed"}
-    if fixed_occupations and width is not None:
-        raise ValueError(
-            f"{width_field} must be None when {type_field} is {smearing_type!r}"
-        )
-    if not fixed_occupations and width is None:
-        raise ValueError(
-            f"{width_field} is required when {type_field} is {smearing_type!r}"
-        )
-    if width is not None:
-        _validate_finite_positive(width, width_field)
-
-
-def _validate_vdw_method(method: object, field_name: str) -> None:
-    """Require a supported code-agnostic vdW method label."""
-    if not isinstance(method, str) or method not in _VALID_VDW_METHODS:
-        valid = ", ".join(sorted(_VALID_VDW_METHODS))
-        raise ValueError(f"{field_name} must be one of {valid}; got {method!r}")
 
 
 @dataclass(slots=True)
@@ -920,60 +783,3 @@ class CoreJobRequest:
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
-
-
-AnalyzeStage = Callable[[Structure], StructureAnalysisRecord]
-"""Analyze-stage backend signature."""
-
-AdviseStage = Callable[
-    [StructureAnalysisRecord, CalculationIntent, CalculationHints],
-    ParameterAdvice,
-]
-"""Advise-stage backend signature."""
-
-KMeshAdvisor = Callable[[Structure, CalculationHints, KPointAdvice], KPointSelection]
-"""Kmesh-stage backend signature."""
-
-SelectStage = Callable[
-    [Structure, ParameterAdvice, KPointSelection, Sequence[PseudoMetadata]],
-    SelectionRecord,
-]
-"""Select-stage backend signature."""
-
-GenerateStage = Callable[
-    [Structure, CalculationIntent, ParameterAdvice, SelectionRecord],
-    tuple[GeneratedFile, ...],
-]
-"""Generate-stage backend signature."""
-
-BundleStage = Callable[[CoreResult, str | Path], BundleRecord]
-"""Bundle-stage backend signature."""
-
-
-def to_jsonable(value: Any) -> Any:
-    """Convert pipeline records and common scientific values to JSON data."""
-    if is_dataclass(value):
-        return {
-            field.name: to_jsonable(getattr(value, field.name))
-            for field in fields(value)
-        }
-
-    if isinstance(value, tuple | list):
-        return [to_jsonable(item) for item in value]
-
-    if isinstance(value, dict):
-        return {str(key): to_jsonable(item) for key, item in value.items()}
-
-    if isinstance(value, Path):
-        return str(value)
-
-    if isinstance(value, Structure):
-        return value.as_dict()
-
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-
-    if isinstance(value, np.generic):
-        return value.item()
-
-    return value

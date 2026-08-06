@@ -6,7 +6,7 @@ from pathlib import Path
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import CalculationHints, CalculationIntent, generate, recommend
-from goldilocks_core.advice import METALLIC_SMEARING_WIDTH_RY
+from goldilocks_core.advice.smearing import METALLIC_SMEARING_WIDTH_RY
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 

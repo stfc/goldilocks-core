@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from pymatgen.analysis.dimensionality import get_dimensionality_larsen
 from pymatgen.analysis.local_env import CrystalNN
 from pymatgen.core import Structure
@@ -9,7 +11,11 @@ from pymatgen.core.graphs import StructureGraph
 from pymatgen.core.periodic_table import Element
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
-from goldilocks_core.contracts import Dimensionality, StructureAnalysisRecord
+from goldilocks_core.contracts import (
+    Dimensionality,
+    ElectronicCharacter,
+    StructureAnalysisRecord,
+)
 
 _DIMENSIONALITY_BY_VALUE: dict[int, Dimensionality] = {
     3: "3d",
@@ -18,8 +24,34 @@ _DIMENSIONALITY_BY_VALUE: dict[int, Dimensionality] = {
     0: "molecule",
 }
 
+MetallicityClassifier = Callable[[Structure], ElectronicCharacter]
+"""Injectable electronic-character classifier for the Analyze stage.
 
-def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
+The default, :func:`heuristic_metallicity`, is structure-only. An ML backend
+may be injected here so ``analysis`` depends on no ``ml/`` module.
+"""
+
+
+def heuristic_metallicity(structure: Structure) -> ElectronicCharacter:
+    """Return a conservative structure-only electronic character heuristic.
+
+    Classifies a composition as ``likely_metal`` when every element is metallic
+    and ``unknown`` otherwise. Carries no electronic-structure evidence.
+    """
+    periodic_elements = tuple(
+        Element(symbol)
+        for symbol in sorted(e.symbol for e in structure.composition.elements)
+    )
+    if periodic_elements and all(element.is_metal for element in periodic_elements):
+        return "likely_metal"
+    return "unknown"
+
+
+def analyze_structure(
+    structure: Structure,
+    *,
+    metallicity: MetallicityClassifier = heuristic_metallicity,
+) -> StructureAnalysisRecord:
     """Return deterministic structure facts used by later pipeline stages.
 
     Args:
@@ -57,9 +89,8 @@ def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
         structure
     )
     symmetry = _analyze_symmetry(structure)
-    electronic_character, electronic_warnings = _classify_electronic_character(
-        periodic_elements
-    )
+    electronic_character = metallicity(structure)
+    electronic_warnings = _electronic_character_warnings(electronic_character)
 
     return StructureAnalysisRecord(
         formula=structure.composition.formula,
@@ -161,23 +192,23 @@ def _analyze_symmetry(structure: Structure) -> dict[str, str | int | None]:
         }
 
 
-def _classify_electronic_character(
-    elements: tuple[Element, ...],
-) -> tuple[str, tuple[str, ...]]:
-    """Return a conservative structure-only electronic character heuristic."""
-    if elements and all(element.is_metal for element in elements):
-        return (
-            "likely_metal",
-            (
-                "All elements are metallic; treat metallicity as likely, not "
-                "confirmed without electronic-structure data.",
-            ),
-        )
+def _electronic_character_warnings(
+    character: ElectronicCharacter,
+) -> tuple[str, ...]:
+    """Return heuristic-uncertainty warnings for a given electronic character.
 
-    return (
-        "unknown",
-        (
+    Only the structure-only heuristics (``likely_metal``, ``unknown``) carry
+    uncertainty warnings. An injected ML classifier returning ``metal`` or
+    ``insulator`` is treated as decided and carries no heuristic warning.
+    """
+    if character == "likely_metal":
+        return (
+            "All elements are metallic; treat metallicity as likely, not "
+            "confirmed without electronic-structure data.",
+        )
+    if character == "unknown":
+        return (
             "Electronic character is unknown from structure facts alone; verify "
             "smearing manually for metallic systems.",
-        ),
-    )
+        )
+    return ()

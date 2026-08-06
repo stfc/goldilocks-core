@@ -1,0 +1,57 @@
+"""JSON serialization of pipeline records and scientific values."""
+
+from __future__ import annotations
+
+from dataclasses import fields, is_dataclass
+from functools import singledispatch
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+from pymatgen.core import Structure
+
+
+@singledispatch
+def to_jsonable(value: Any) -> Any:
+    """Convert pipeline records and common scientific values to JSON data."""
+    if is_dataclass(value):
+        return {
+            field.name: to_jsonable(getattr(value, field.name))
+            for field in fields(value)
+        }
+    return value
+
+
+@to_jsonable.register(tuple)
+def _to_jsonable_tuple(value: tuple) -> list:
+    return [to_jsonable(item) for item in value]
+
+
+@to_jsonable.register(list)
+def _to_jsonable_list(value: list) -> list:
+    return [to_jsonable(item) for item in value]
+
+
+@to_jsonable.register(dict)
+def _to_jsonable_dict(value: dict) -> dict:
+    return {str(key): to_jsonable(item) for key, item in value.items()}
+
+
+@to_jsonable.register(Path)
+def _to_jsonable_path(value: Path) -> str:
+    return str(value)
+
+
+@to_jsonable.register(Structure)
+def _to_jsonable_structure(value: Structure) -> dict:
+    return value.as_dict()
+
+
+@to_jsonable.register(np.ndarray)
+def _to_jsonable_ndarray(value: np.ndarray) -> list:
+    return value.tolist()
+
+
+@to_jsonable.register(np.generic)
+def _to_jsonable_generic(value: np.generic) -> Any:
+    return value.item()

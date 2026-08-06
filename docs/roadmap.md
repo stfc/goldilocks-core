@@ -28,16 +28,16 @@ Goldilocks ships as three coordinated repositories: [`goldilocks-core`](https://
 
 ## Work streams
 
-A release answers *when*. These answer *what line of work*, and they cut across releases — which is why they are umbrella issues rather than milestones.
+A release answers *when*. These answer *what line of work*. They cut across releases, so an issue carries its stream as a label rather than as a second milestone.
 
 | Stream | Label | Spans |
 | --- | --- | --- |
-| [M1 — Zero-config pseudopotential & artifact pipeline](https://github.com/stfc/goldilocks-core/issues/112) | `epic:m1` | v0.1 |
-| [M2 — Deepen the staged Core pipeline](https://github.com/stfc/goldilocks-core/issues/113) | `epic:m2` | v0.1 → v0.3 → v1.2 |
-| [M3 — Server transports (HTTP + MCP)](https://github.com/stfc/goldilocks-core/issues/114) | `epic:m3` | v0.1 |
-| [M4 — Agent process & repo hygiene](https://github.com/stfc/goldilocks-core/issues/115) | `epic:m4` | continuous |
+| [Zero-config pseudopotential & artifact pipeline](https://github.com/stfc/goldilocks-core/labels/epic%3Am1) | `epic:m1` | v0.1 |
+| [Deepen the staged Core pipeline](https://github.com/stfc/goldilocks-core/labels/epic%3Am2) | `epic:m2` | v0.1 → v0.3 → v1.2 |
+| [Server transports (HTTP + MCP)](https://github.com/stfc/goldilocks-core/labels/epic%3Am3) | `epic:m3` | v0.1 |
+| [Agent process & repo hygiene](https://github.com/stfc/goldilocks-core/labels/epic%3Am4) | `epic:m4` | continuous |
 
-M2 is the one that cannot sit in a single release: the ML-facts work it contains gates metallicity classification in v0.1, real magnetization in v0.3, and phonons in v1.2.
+The second is the one that cannot sit in a single release: the ML-facts work it contains gates metallicity classification in v0.1, real magnetization in v0.3, and phonons in v1.2.
 
 Cross-repository tracking lives on the [`data-to-knowledge`](https://github.com/orgs/stfc/projects/17) programme board, alongside `janus-core`, `aiida-mlip` and `dtk`.
 

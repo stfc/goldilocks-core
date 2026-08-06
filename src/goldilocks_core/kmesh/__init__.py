@@ -10,7 +10,7 @@ from goldilocks_core.contracts import (
     KPointSelection,
     Provenance,
 )
-from goldilocks_core.kpoint_math import k_distance_to_mesh
+from goldilocks_core.kmesh.math import k_distance_to_mesh
 
 
 def resolve_kpoints_from_advice(

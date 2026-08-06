@@ -11,7 +11,7 @@ from goldilocks_core.contracts import (
     to_jsonable,
 )
 from goldilocks_core.kmesh import resolve_kpoints_from_advice
-from goldilocks_core.kpoint_math import (
+from goldilocks_core.kmesh.math import (
     build_k_distance_intervals,
     build_kmesh_entries,
     generate_candidate_k_distances,

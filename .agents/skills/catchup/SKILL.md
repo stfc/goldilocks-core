@@ -45,7 +45,29 @@ Focus on:
 - **Next steps** — what was the intended next action?
 - **Blockers** — is anything waiting on review, external input, or another PR?
 
-### 4. Cross-Reference
+### 4. Check Milestones & Triage Candidates
+
+```bash
+# Milestones: do they exist? are issues assigned?
+gh api repos/stfc/goldilocks-core/milestones --jq '.[] | "\(.number) | \(.title) | open=\(.open_issues)"'
+
+# Open issues with no milestone (a hygiene red flag — see AGENTS.md "Issue hygiene")
+gh issue list --repo stfc/goldilocks-core --state open --limit 100 \
+  --json number,milestone --jq '.[] | select(.milestone == null) | .number'
+```
+
+If there are no milestones, or many milestone-less issues, flag it — the board is drifting.
+
+While reading issues (step 3), note triage candidates for the `triage` skill:
+- **Superseded** — covered by another issue, or by merged code.
+- **Duplicate / overlap** — two issues describing the same feature or decision.
+- **Decision-only** — a question, not a shippable PR/feature (per "one issue per PR/feature").
+- **Stale** — no movement for a long time, or a parked investigation with no trigger.
+- **Done but open** — work landed (a merged PR) but the issue wasn't closed.
+
+Surface these; don't close them here. `triage` runs the actual pass.
+
+### 5. Cross-Reference
 
 Compare what you found:
 - Branch exists locally, not pushed → risk of lost work
@@ -55,7 +77,7 @@ Compare what you found:
 - PR merged but issue still open → close it
 - Recent issue comments disagree with the actual branch or PR state → fix the record
 
-### 5. Present Summary
+### 6. Present Summary
 
 ```markdown
 ## Project State
@@ -63,6 +85,8 @@ Compare what you found:
 **Branch**: [current]
 **Open PRs**: [list or none]
 **Issue activity**: [what's in flight]
+**Milestones**: [list, or "none — propose some"]
+**Triage candidates**: [superseded/duplicate/decision-only/stale/done-but-open, or none]
 
 ### Pending Work
 - Issue #N: [status, what's left]
@@ -78,8 +102,9 @@ Compare what you found:
 ## After Catchup
 
 1. Fix discrepancies first — push stranded branches, close stale issues, correct issue/PR status
-2. Confirm the next step with the user
-3. Proceed with work
+2. If catchup surfaced triage candidates, suggest running `triage` before starting new work
+3. Confirm the next step with the user
+4. Proceed with work
 
 If catchup reveals completed work that wasn't integrated:
 - **Do NOT redo the work.** Push, PR, or merge the existing work first.

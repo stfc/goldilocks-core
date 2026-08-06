@@ -105,10 +105,22 @@ git diff main...HEAD | grep -E "^\+.*(# |print|breakpoint|pdb)"
 
 Clean up anything embarrassing before you call it done.
 
+## Triage Nudge
+
+Before ending, glance at the board. A session that only adds issues and never subtracts them is how the board drifts to 40.
+
+```bash
+# how many open issues have no milestone?
+gh issue list --repo stfc/goldilocks-core --state open --limit 200 \
+  --json number,milestone --jq '[.[] | select(.milestone == null)] | length'
+```
+
+If the count is non-zero, or the board has accumulated stale/superseded/duplicate/decision-only issues, suggest running `triage` before the next session starts.
+
 ## Gotchas
 
 - Every issue comment written by an agent must include `Written by an agent on behalf of <user>.`, replacing `<user>` with the human who requested the work.
 - Always verify git state before writing it — don't assume from conversation context
 - If the report says "next: X", the next session should find X actionable — be specific
 - Don't bury important decisions in long prose — the Decisions section should be scannable
-- If you discovered a new issue or blocker during the session, file it as a separate issue — don't just mention it in a comment
+- If you discovered a distinct new PR/feature during the session, file it as a separate issue. But if it's a decision, a question, or a sub-step of the current work, fold it into the current issue (open questions / checklist / comment) — don't spin up a new issue for it (per issue hygiene, AGENTS.md)

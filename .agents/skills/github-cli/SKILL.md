@@ -189,6 +189,46 @@ gh api repos/stfc/goldilocks-core/issues/8/sub_issues/$CHILD_ID --method DELETE
 - Closing all sub-issues does not auto-close the parent.
 - Use sub-issues instead of task-list checkboxes (`- [ ] #20`) for formal tracking. Task lists are fine for informal checklists within a single issue.
 
+## Milestones
+
+Milestones group issues into deliverables. Every open issue should belong to one (AGENTS.md "Issue hygiene").
+
+```bash
+# List milestones with counts
+gh api repos/stfc/goldilocks-core/milestones --jq '.[] | "\(.number) | \(.title) | open=\(.open_issues) closed=\(.closed_issues)"'
+
+# Create one (returns the new milestone id)
+gh api repos/stfc/goldilocks-core/milestones --method POST \
+  -f title='M1 — ...' -f description='...' -f state='open' --jq '.number'
+
+# Assign an issue to a milestone (the API takes the numeric milestone id)
+gh api repos/stfc/goldilocks-core/issues/<N> --method PATCH -F milestone=<id>
+```
+
+`gh issue edit --milestone` expects the milestone *title*; the REST API takes the numeric *id*. Prefer the API for scripting.
+
+## Triage
+
+Periodic board hygiene. The `triage` skill runs the full pass; these are the building blocks.
+
+```bash
+# Open issues with no milestone
+gh issue list --repo stfc/goldilocks-core --state open --limit 200 \
+  --json number,milestone --jq '.[] | select(.milestone == null) | .number'
+
+# Recently updated (to tell stale from active)
+gh issue list --repo stfc/goldilocks-core --state all --limit 10 --search "sort:updated-desc"
+```
+
+Close-with-comment pattern (comment first, then close — avoids shell-quoting long bodies):
+
+```bash
+gh issue comment <N> --repo stfc/goldilocks-core --body-file /tmp/close.md
+gh issue close   <N> --repo stfc/goldilocks-core
+```
+
+Triage rules (AGENTS.md issue hygiene): one issue per PR/feature; fold decisions into feature issues; phases are a body checklist; close superseded/duplicate/stale/out-of-scope; never edit others' text — comment instead. Propose closes/folds to the user before executing on someone else's issues.
+
 ## Gotchas
 
 - `gh pr create` uses the current branch by default — verify branch and base before creating.

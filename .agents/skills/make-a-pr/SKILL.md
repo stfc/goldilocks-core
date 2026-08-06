@@ -73,6 +73,7 @@ Written by an agent on behalf of <user>.
 
 - PR descriptions written by an agent must include `Written by an agent on behalf of <user>.`, replacing `<user>` with the human who requested the work.
 - Make sure the PR body includes `Closes #N` for the linked issue.
+- The linked issue must have a milestone. If it doesn't, assign one before the PR merges (`gh api repos/stfc/goldilocks-core/issues/<N> --method PATCH -F milestone=<id>`) — no milestone-less issues.
 - If CI exists, inspect checks with `gh pr checks <number>`.
 - If GitHub Actions workflows exist and you need more detail, use `gh run list --branch <branch>` and `gh run view <run-id> --log`.
 - If there is no CI yet, say so plainly and rely on local verification results in the PR body.

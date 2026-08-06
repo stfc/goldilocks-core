@@ -15,6 +15,7 @@ from goldilocks_core.contracts import (
     ModelSpec,
 )
 from goldilocks_core.examples import structures_path
+from goldilocks_core.generation import available_codes, available_tasks
 from goldilocks_core.jobs import Pipeline, run_core_job
 from goldilocks_core.kmesh import resolve_kpoints_from_advice
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
@@ -83,13 +84,13 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--code",
         default="quantum_espresso",
-        choices=["quantum_espresso"],
+        choices=available_codes(),
         help="Target DFT code.",
     )
     parser.add_argument(
         "--task",
         default="scf_single_point",
-        choices=["scf_single_point"],
+        choices=available_tasks(),
         help="Calculation task.",
     )
     parser.add_argument(

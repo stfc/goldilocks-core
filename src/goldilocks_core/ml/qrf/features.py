@@ -13,7 +13,7 @@ from pymatgen.core import Structure
 from goldilocks_core.contracts import StructureFeatureVector
 from goldilocks_core.ml.model_registry import QrfFeatureSettings
 
-QRF_EXTRACTOR_ID = "goldilocks_core.ml.kdistance_features:extract_qrf_features"
+QRF_EXTRACTOR_ID = "goldilocks_core.ml.qrf.features:extract_qrf_features"
 QRF_FEATURE_SET = "qrf_comp_struct_soap_lattice_metal"
 QRF_FEATURE_SCHEMA = "qrf-483-v1"
 QRF_FEATURE_COUNT = 483
@@ -76,7 +76,7 @@ def extract_qrf_features(
     settings: QrfFeatureSettings,
 ) -> StructureFeatureVector:
     """Assemble the extractor-owned 483-value QRF feature schema."""
-    from goldilocks_core.ml.metallicity import metal_features
+    from .metallicity import metal_features
 
     structure_block = extract_structure_features(structure, settings)
     metal_block = metal_features(

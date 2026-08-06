@@ -110,11 +110,11 @@ def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> 
     monkeypatch.setenv("GOLDILOCKS_METALLICITY_ATOM_INIT", str(atom_table))
     monkeypatch.setattr("goldilocks_core.ml.models.load_model", lambda spec: FakeQRF())
     monkeypatch.setattr(
-        "goldilocks_core.ml.metallicity.load_metallicity_model",
+        "goldilocks_core.ml.qrf.metallicity.load_metallicity_model",
         lambda path: object(),
     )
     monkeypatch.setattr(
-        "goldilocks_core.ml.kdistance_features.extract_qrf_features",
+        "goldilocks_core.ml.qrf.features.extract_qrf_features",
         lambda structure, model, atom_init, settings: StructureFeatureVector(
             values=np.zeros(483),
             feature_names=[f"feature_{index}" for index in range(483)],

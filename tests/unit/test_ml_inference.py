@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.ml.features import extract_cslr_features, extract_l_features
-from goldilocks_core.ml.inference import predict
+from goldilocks_core.ml.kindex.features import extract_cslr_features, extract_l_features
+from goldilocks_core.ml.kindex.inference import predict
 
 
 class DummyModel:

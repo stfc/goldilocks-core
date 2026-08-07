@@ -527,3 +527,59 @@ def test_cli_generate_with_out_writes_bundle(monkeypatch, capsys, tmp_path) -> N
     assert (output_dir / "inputs" / "qe.in").exists()
     assert (output_dir / "manifest.json").exists()
     assert f"bundle: {output_dir}" in capsys.readouterr().out
+
+
+def test_cli_has_serve_subcommand_group() -> None:
+    """The serve subcommand group exposes http and mcp children."""
+    parser = cli_core.build_parser()
+
+    http_args = parser.parse_args(
+        ["serve", "http", "--host", "0.0.0.0", "--port", "9000"]
+    )
+    assert http_args.command == "serve"
+    assert http_args.serve_command == "http"
+    assert http_args.host == "0.0.0.0"
+    assert http_args.port == 9000
+
+    mcp_args = parser.parse_args(["serve", "mcp"])
+    assert mcp_args.serve_command == "mcp"
+
+
+def test_cli_serve_http_imports_lazily(monkeypatch) -> None:
+    """serve http dispatches to server.http.serve without importing at module load."""
+    captured: dict[str, object] = {}
+
+    def fake_serve_http(*, host: str = "127.0.0.1", port: int = 8000) -> None:
+        captured["host"] = host
+        captured["port"] = port
+
+    import goldilocks_core.server.http as http_module
+
+    monkeypatch.setattr(http_module, "serve", fake_serve_http)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["goldilocks-core", "serve", "http", "--host", "0.0.0.0", "--port", "9001"],
+    )
+
+    cli_core.main()
+
+    assert captured["host"] == "0.0.0.0"
+    assert captured["port"] == 9001
+
+
+def test_cli_serve_mcp_imports_lazily(monkeypatch) -> None:
+    """serve mcp dispatches to server.mcp.serve without importing at module load."""
+    called: list[bool] = []
+
+    def fake_serve_mcp() -> None:
+        called.append(True)
+
+    import goldilocks_core.server.mcp as mcp_module
+
+    monkeypatch.setattr(mcp_module, "serve", fake_serve_mcp)
+    monkeypatch.setattr(sys, "argv", ["goldilocks-core", "serve", "mcp"])
+
+    cli_core.main()
+
+    assert called == [True]

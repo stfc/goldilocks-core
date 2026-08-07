@@ -54,6 +54,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print the directory holding the bundled example structures.",
     )
 
+    _add_serve_subparser(subparsers)
+
     return parser
 
 
@@ -64,6 +66,10 @@ def main() -> None:
 
     if args.command == "examples":
         print(structures_path())
+        return
+
+    if args.command == "serve":
+        _run_serve(args)
         return
 
     try:
@@ -81,6 +87,39 @@ def main() -> None:
 
     result = run_core_job(request)
     _print_output(args, result)
+
+
+def _add_serve_subparser(subparsers: argparse._SubParsersAction) -> None:
+    """Add the ``serve`` subcommand group with ``http`` and ``mcp`` children."""
+    serve = subparsers.add_parser(
+        "serve",
+        help="Run an HTTP or MCP server exposing the Core pipeline.",
+    )
+    serve_sub = serve.add_subparsers(dest="serve_command", required=True)
+
+    http_parser = serve_sub.add_parser(
+        "http",
+        help="Run the HTTP server (requires the [http] extra).",
+    )
+    http_parser.add_argument("--host", default="127.0.0.1", help="Bind host.")
+    http_parser.add_argument("--port", type=int, default=8000, help="Bind port.")
+
+    serve_sub.add_parser(
+        "mcp",
+        help="Run the MCP server over stdio (requires the [mcp] extra).",
+    )
+
+
+def _run_serve(args: argparse.Namespace) -> None:
+    """Dispatch a ``serve`` subcommand, importing optional deps lazily."""
+    if args.serve_command == "http":
+        from goldilocks_core.server.http import serve as serve_http
+
+        serve_http(host=args.host, port=args.port)
+    elif args.serve_command == "mcp":
+        from goldilocks_core.server.mcp import serve as serve_mcp
+
+        serve_mcp()
 
 
 def _run_raw_stage(command: str, request: CoreJobRequest) -> Any:

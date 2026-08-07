@@ -10,7 +10,6 @@ from goldilocks_core.contracts import (
     CoreResult,
 )
 from goldilocks_core.jobs import (
-    Pipeline,
     generate,
     recommend,
     run_core_job,
@@ -23,7 +22,6 @@ __all__ = [
     "CalculationIntent",
     "CoreJobRequest",
     "CoreResult",
-    "Pipeline",
     "generate",
     "recommend",
     "run_core_job",

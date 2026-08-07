@@ -7,9 +7,11 @@ from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
+    KPointSelection,
     ParameterAdvice,
+    Provenance,
 )
-from goldilocks_core.kmesh import resolve_kpoints_from_advice
+from goldilocks_core.kmesh import resolve_kpoints
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.selection import select_parameters
 
@@ -48,6 +50,16 @@ def make_metadata(
     )
 
 
+def _stub_backend(structure: Structure) -> KPointSelection:
+    """Deterministic k-point backend for selection unit tests."""
+    return KPointSelection(
+        grid=(4, 4, 4),
+        shift=(0, 0, 0),
+        mesh_type="monkhorst-pack",
+        provenance=Provenance(source="model", reason="stub"),
+    )
+
+
 def select_from_advice(
     structure: Structure,
     advice: ParameterAdvice,
@@ -60,7 +72,7 @@ def select_from_advice(
     return select_parameters(
         structure,
         advice,
-        resolve_kpoints_from_advice(structure, hints, advice.k_points),
+        resolve_kpoints(structure, hints, _stub_backend),
         metadata_list=metadata_list,
     )
 

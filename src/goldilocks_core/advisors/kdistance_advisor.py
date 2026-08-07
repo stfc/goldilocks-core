@@ -8,14 +8,11 @@ from functools import cache
 from pymatgen.core import Structure
 
 from goldilocks_core.contracts import (
-    CalculationHints,
     KMeshAdvisor,
-    KPointAdvice,
     KPointSelection,
     PathLike,
     Provenance,
 )
-from goldilocks_core.kmesh import resolve_kpoints_from_advice
 from goldilocks_core.kmesh.math import k_distance_to_mesh
 from goldilocks_core.ml.model_registry import QrfKpointsConfig, load_default_qrf_config
 from goldilocks_core.ml.qrf import predict_kdistance
@@ -55,14 +52,7 @@ def qrf_kdistance_advisor(
 ) -> KMeshAdvisor:
     """Return a lazy QRF k-point advisor."""
 
-    def advisor(
-        structure: Structure,
-        hints: CalculationHints,
-        kpoint_advice: KPointAdvice,
-    ) -> KPointSelection:
-        if hints.k_grid is not None or hints.k_spacing is not None:
-            return resolve_kpoints_from_advice(structure, hints, kpoint_advice)
-
+    def advisor(structure: Structure) -> KPointSelection:
         prediction = predict_kdistance(
             structure,
             config,
@@ -101,13 +91,7 @@ def default_kmesh_advisor(
         active_config = config or load_default_qrf_config(registry_path)
         return qrf_kdistance_advisor(active_config, checkpoint, atom_init)
 
-    def advisor(
-        structure: Structure,
-        hints: CalculationHints,
-        kpoint_advice: KPointAdvice,
-    ) -> KPointSelection:
-        if hints.k_grid is not None or hints.k_spacing is not None:
-            return resolve_kpoints_from_advice(structure, hints, kpoint_advice)
-        return configured_advisor()(structure, hints, kpoint_advice)
+    def advisor(structure: Structure) -> KPointSelection:
+        return configured_advisor()(structure)
 
     return advisor

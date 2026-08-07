@@ -2,21 +2,16 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
     CalculationHints,
     CalculationIntent,
     CoreJobRequest,
-    Pipeline,
     run_core_job,
 )
-from goldilocks_core.contracts import (
-    GeneratedFile,
-    KPointSelection,
-    Provenance,
-    StructureFeatureVector,
-)
+from goldilocks_core.contracts import StructureFeatureVector
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 
@@ -133,51 +128,19 @@ def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> 
     assert result.selection.k_points.provenance.confidence == 0.9
 
 
-def test_run_core_job_uses_custom_kmesh_backend() -> None:
-    """Replace one pipeline backend without changing the rest."""
-
-    def custom_kmesh(structure, hints, kpoint_advice):
-        return KPointSelection(
-            grid=(9, 8, 7),
-            shift=(0, 0, 0),
-            mesh_type=kpoint_advice.mesh_type,
-            provenance=Provenance(source="model", reason="test backend"),
+def test_run_core_job_rejects_unknown_task() -> None:
+    """Tasks without a registered path raise at dispatch."""
+    with pytest.raises(
+        ValueError, match="No Core path registered for task='magnetic_nscf'"
+    ):
+        run_core_job(
+            CoreJobRequest(
+                structure=make_structure(),
+                intent=CalculationIntent(task="magnetic_nscf"),
+                hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+                pseudo_metadata=(make_metadata(),),
+            )
         )
-
-    pipeline = Pipeline(kmesh=custom_kmesh)
-
-    result = run_core_job(
-        CoreJobRequest(
-            structure=make_structure(),
-            hints=CalculationHints(pseudo_type="NC"),
-            pseudo_metadata=(make_metadata(),),
-        ),
-        pipeline=pipeline,
-    )
-
-    assert result.selection.k_points.grid == (9, 8, 7)
-    assert result.selection.k_points.provenance.source == "model"
-
-
-def test_custom_generate_backend_can_add_a_calculation_task() -> None:
-    """Let callers add tasks without changing the shared pipeline contracts."""
-
-    def custom_generate(structure, intent, advice, selection):
-        assert intent.task == "magnetic_nscf"
-        return (GeneratedFile(path="inputs/nscf.in", content="custom\n"),)
-
-    result = run_core_job(
-        CoreJobRequest(
-            structure=make_structure(),
-            intent=CalculationIntent(task="magnetic_nscf"),
-            hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
-            pseudo_metadata=(make_metadata(),),
-            mode="generate",
-        ),
-        pipeline=Pipeline(generate=custom_generate),
-    )
-
-    assert result.generated_files[0].path == "inputs/nscf.in"
 
 
 def test_run_core_job_generate_adds_generated_files() -> None:

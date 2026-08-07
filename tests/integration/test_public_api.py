@@ -2,12 +2,10 @@ from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
     CalculationHints,
-    Pipeline,
     generate,
     recommend,
     write_bundle,
 )
-from goldilocks_core.kmesh import resolve_kpoints_from_advice
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 
@@ -42,7 +40,6 @@ def test_recommend_runs_staged_core_pipeline() -> None:
     )
 
     assert result.analysis.reduced_formula == "Si"
-    assert result.advice.k_points.provenance.source == "user_hint"
     assert result.selection.k_points.grid == (3, 3, 3)
     assert result.selection.pseudopotentials[0].filename == "Si.UPF"
 
@@ -85,7 +82,7 @@ def test_core_result_serializes_to_manifest_style_dict() -> None:
 
     result = recommend(
         structure,
-        pipeline=Pipeline(kmesh=resolve_kpoints_from_advice),
+        hints=CalculationHints(k_grid=(8, 8, 8)),
     )
     manifest = result.to_dict()
 

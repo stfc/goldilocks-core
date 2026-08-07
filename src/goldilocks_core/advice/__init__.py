@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from goldilocks_core.advice.convergence import advise_convergence
-from goldilocks_core.advice.kpoints import advise_k_points
 from goldilocks_core.advice.magnetism import advise_magnetism
 from goldilocks_core.advice.pseudo import advise_pseudopotentials
 from goldilocks_core.advice.smearing import advise_smearing
@@ -41,7 +40,6 @@ def advise_parameters(
     spin_orbit = advise_spin_orbit(analysis, hints)
 
     return ParameterAdvice(
-        k_points=advise_k_points(hints),
         smearing=advise_smearing(analysis, hints),
         magnetism=advise_magnetism(analysis, hints),
         spin_orbit=spin_orbit,

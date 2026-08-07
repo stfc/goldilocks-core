@@ -24,6 +24,7 @@ from goldilocks_core.contracts.records import (
     SpinOrbitAdvice,
     StructureAnalysisRecord,
     StructureFeatureVector,
+    SymmetryUnavailable,
     VdwAdvice,
 )
 from goldilocks_core.contracts.serial import to_jsonable
@@ -81,6 +82,7 @@ __all__ = [
     "StructureAnalysisRecord",
     "StructureFeatureVector",
     "StructureInput",
+    "SymmetryUnavailable",
     "VdwAdvice",
     "VdwMethod",
     "to_jsonable",

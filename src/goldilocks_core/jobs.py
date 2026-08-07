@@ -5,44 +5,42 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from goldilocks_core.advice import advise_parameters
-from goldilocks_core.advisors import default_kmesh_advisor, ml_kmesh_advisor
-from goldilocks_core.analysis import analyze_structure
-from goldilocks_core.bundle import write_bundle_directory
 from goldilocks_core.contracts import (
-    BundleRecord,
     CalculationHints,
     CalculationIntent,
     CoreJobRequest,
     CoreResult,
-    GeneratedFile,
-    KMeshAdvisor,
-    ModelSpec,
-    ParameterAdvice,
     StructureInput,
 )
-from goldilocks_core.generation import generate_inputs
-from goldilocks_core.io.structures import load_structure
-from goldilocks_core.kmesh import resolve_kpoints
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
-from goldilocks_core.selection import select_parameters
+from goldilocks_core.runtime import CoreRuntime
 
 
-def run_core_job(request: CoreJobRequest) -> CoreResult:
+def run_core_job(
+    request: CoreJobRequest,
+    *,
+    runtime: CoreRuntime | None = None,
+) -> CoreResult:
     """Run a Core job request by dispatching on ``intent.task``.
+
+    When ``runtime`` is ``None`` a fresh :class:`CoreRuntime` is created for
+    this call and closed when it finishes (today's "fresh per call"
+    behaviour). When ``runtime`` is given it is reused and its lifetime is
+    left to the caller.
 
     Args:
         request: Serializable job data: structure input, intent, hints,
             pseudopotential metadata, mode, optional k-index model, and
             optional output directory.
+        runtime: Optional pre-owned runtime whose model state is reused
+            across calls.
 
     Returns:
         A ``CoreResult`` containing scientific records, generated files when
         requested, and a bundle record for bundle mode.
 
     Raises:
-        ValueError: If the job mode is unsupported, bundle mode lacks
-            ``output_dir``, no path is registered for ``intent.task``, or a
+        ValueError: If no path is registered for ``intent.task`` or a
             downstream stage rejects its inputs.
     """
     try:
@@ -53,90 +51,28 @@ def run_core_job(request: CoreJobRequest) -> CoreResult:
             f"No Core path registered for task={request.intent.task!r}. "
             f"Available: {available}"
         ) from None
-    return path(request)
+
+    if runtime is None:
+        with CoreRuntime() as rt:
+            return path(rt, request)
+    return path(runtime, request)
 
 
-def run_scf(request: CoreJobRequest) -> CoreResult:
-    """Run the SCF single-point path.
-
-    Load → Analyse → Advise → Kmesh → Select, then Generate and Bundle
-    according to ``request.mode``.
-    """
-    structure = load_structure(request.structure)
-    analysis = analyze_structure(structure)
-    advice = advise_parameters(analysis, request.intent, request.hints)
-    k_points = resolve_kpoints(
-        structure, request.hints, _kmesh_backend(request.kmesh_model)
-    )
-    selection = select_parameters(
-        structure, advice, k_points, tuple(request.pseudo_metadata)
-    )
-
-    warnings = _unique_warnings(
-        analysis.disorder_warnings,
-        analysis.analysis_warnings,
-        _advice_warnings(advice),
-        k_points.provenance.warnings,
-        selection.warnings,
-    )
-
-    generated_files: tuple[GeneratedFile, ...] = ()
-    bundle: BundleRecord | None = None
-
-    if request.mode in {"generate", "bundle"}:
-        generated_files = generate_inputs(structure, request.intent, advice, selection)
-
-    if request.mode == "bundle":
-        # output_dir is guaranteed non-None for bundle mode by
-        # CoreJobRequest.__post_init__.
-        in_progress = CoreResult(
-            intent=request.intent,
-            analysis=analysis,
-            advice=advice,
-            selection=selection,
-            generated_files=generated_files,
-            warnings=warnings,
-        )
-        bundle = write_bundle_directory(in_progress, request.output_dir)
-
-    return CoreResult(
-        intent=request.intent,
-        analysis=analysis,
-        advice=advice,
-        selection=selection,
-        generated_files=generated_files,
-        warnings=warnings,
-        bundle=bundle,
-    )
+def _run_scf(
+    runtime: CoreRuntime,
+    request: CoreJobRequest,
+) -> CoreResult:
+    """Dispatch an SCF request on mode to the runtime's composed entrypoints."""
+    if request.mode == "recommend":
+        return runtime.recommend(request)
+    if request.mode == "generate":
+        return runtime.generate(request)
+    return runtime.generate(request, output_dir=request.output_dir)
 
 
-_PATHS: dict[str, Callable[[CoreJobRequest], CoreResult]] = {
-    "scf_single_point": run_scf,
+_PATHS: dict[str, Callable[[CoreRuntime, CoreJobRequest], CoreResult]] = {
+    "scf_single_point": _run_scf,
 }
-
-
-def _kmesh_backend(kmesh_model: ModelSpec | None) -> KMeshAdvisor:
-    """Return the k-point backend: local k-index model when given, else QRF default."""
-    if kmesh_model is not None:
-        return ml_kmesh_advisor(kmesh_model)
-    return default_kmesh_advisor()
-
-
-def _advice_warnings(advice: ParameterAdvice) -> tuple[str, ...]:
-    """Return actionable warnings from every Advise sub-decision."""
-    return _unique_warnings(
-        advice.smearing.provenance.warnings,
-        advice.magnetism.provenance.warnings,
-        advice.spin_orbit.provenance.warnings,
-        advice.pseudopotentials.provenance.warnings,
-        advice.convergence.provenance.warnings,
-        advice.vdw.provenance.warnings,
-    )
-
-
-def _unique_warnings(*groups: tuple[str, ...]) -> tuple[str, ...]:
-    """Return warnings in first-seen order without duplicate messages."""
-    return tuple(dict.fromkeys(warning for group in groups for warning in group))
 
 
 def recommend(

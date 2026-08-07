@@ -9,10 +9,12 @@ from goldilocks_core.artifacts.cache import (
     cache_root,
     store_verified,
 )
+from goldilocks_core.artifacts.remote import HttpClient
 
 __all__ = [
     "CACHE_ENV",
     "ChecksumMismatch",
+    "HttpClient",
     "artifact_path",
     "cache_root",
     "store_verified",

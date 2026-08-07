@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from goldilocks_core.contracts import (
@@ -63,7 +64,9 @@ def main() -> None:
         _validate_backend_options(args)
         request = _request_from_args(args)
     except ValueError as error:
-        parser.error(str(error))
+        parser.print_usage(sys.stderr)
+        print(f"{parser.prog}: error: {error}", file=sys.stderr)
+        raise SystemExit(2) from error
 
     result = run_core_job(request)
 

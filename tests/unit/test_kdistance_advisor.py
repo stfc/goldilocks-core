@@ -10,7 +10,7 @@ from goldilocks_core.advisors.kdistance_advisor import (
 from goldilocks_core.contracts import StructureFeatureVector
 from goldilocks_core.kmesh.math import k_distance_to_mesh
 from goldilocks_core.ml.model_registry import load_default_qrf_config
-from goldilocks_core.ml.qrf import _predict_kdistance_quantiles
+from goldilocks_core.ml.qrf.inference import _predict_kdistance_quantiles
 
 
 class FakeQRF:

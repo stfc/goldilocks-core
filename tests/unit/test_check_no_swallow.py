@@ -2,22 +2,9 @@
 
 from __future__ import annotations
 
-import importlib.util
-import sys
-from pathlib import Path
-
 import pytest
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_MODULE_PATH = _REPO_ROOT / "scripts" / "check_no_swallow.py"
-
-_spec = importlib.util.spec_from_file_location("check_no_swallow", _MODULE_PATH)
-assert _spec and _spec.loader
-_MODULE = importlib.util.module_from_spec(_spec)
-sys.modules["check_no_swallow"] = _MODULE
-_spec.loader.exec_module(_MODULE)
-
-check_source = _MODULE.check_source
+from goldilocks_core._lint import check_source
 
 
 def test_reraise_clean():

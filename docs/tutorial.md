@@ -24,11 +24,10 @@ from goldilocks_core import recommend
 
 result = recommend("structure.cif")
 
-print(result.analysis.reduced_formula)          # e.g. "Si"
-print(result.advice.k_points.provenance.source) # "default"
+print(result.analysis.reduced_formula)              # e.g. "Si"
 print(result.selection.k_points.provenance.source)  # "model"
 print(result.selection.k_points.grid)               # concrete model grid
-print(result.to_dict())                         # full JSON-safe dict
+print(result.to_dict())                             # full JSON-safe dict
 ```
 
 ## Overriding defaults with hints
@@ -47,9 +46,9 @@ result = recommend(
 )
 
 # Check provenance: these should be user_hint
-print(result.advice.k_points.provenance.source)      # "user_hint"
-print(result.advice.magnetism.provenance.source)      # "user_hint"
-print(result.advice.smearing.provenance.source)        # "user_hint"
+print(result.selection.k_points.provenance.source)   # "user_hint"
+print(result.advice.magnetism.provenance.source)     # "user_hint"
+print(result.advice.smearing.provenance.source)       # "user_hint"
 
 # Convergence was not hinted, so it's default
 print(result.advice.convergence.provenance.source)    # "default"
@@ -60,11 +59,12 @@ print(result.advice.convergence.provenance.source)    # "default"
 For notebooks or interactive exploration, use the stage-by-stage API:
 
 ```python
-from goldilocks_core import CalculationHints, Pipeline
+from goldilocks_core import CalculationHints
 from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.advice import advise_parameters
+from goldilocks_core.advisors import default_kmesh_advisor
 from goldilocks_core.io.structures import load_structure
-from goldilocks_core.kmesh import resolve_kpoints_from_advice
+from goldilocks_core.kmesh import resolve_kpoints
 from goldilocks_core.selection import select_parameters
 
 hints = CalculationHints()
@@ -76,12 +76,10 @@ print(analysis.heavy_elements)             # ()
 
 advice = advise_parameters(analysis, hints=hints)
 print(advice.spin_orbit.consider)          # False
-print(advice.k_points.spacing)             # 0.2
 
-pipeline = Pipeline(kmesh=resolve_kpoints_from_advice)
-k_points = pipeline.kmesh(structure, hints, advice.k_points)
+k_points = resolve_kpoints(structure, hints, default_kmesh_advisor())
 selection = select_parameters(structure, advice, k_points)
-print(selection.k_points.grid)             # (8, 8, 8)
+print(selection.k_points.grid)             # concrete model grid
 ```
 
 ## Pseudopotential selection
@@ -170,12 +168,11 @@ print(result.to_dict())           # full JSON-safe output
 
 ## ML k-mesh backend
 
-Use `ml_kmesh_advisor(spec)` to plug model-backed k-point selection into the staged pipeline:
+To use a local k-index model for k-point selection, put a `ModelSpec` on the
+request:
 
 ```python
-
-from goldilocks_core import Pipeline, recommend
-from goldilocks_core.advisors import ml_kmesh_advisor
+from goldilocks_core import CoreJobRequest, run_core_job
 from goldilocks_core.contracts import ModelSpec
 
 spec = ModelSpec(
@@ -188,25 +185,28 @@ spec = ModelSpec(
     location="path/to/model.joblib",
 )
 
-pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
-result = recommend("structure.cif", pipeline=pipeline)
+result = run_core_job(
+    CoreJobRequest(structure="structure.cif", mode="recommend", kmesh_model=spec)
+)
 
 print(result.selection.k_points.grid)
 print(result.selection.k_points.provenance.source)       # "model"
 print(result.selection.k_points.provenance.data_source)  # spec.name
 ```
 
-The request remains data-only. The model is not stored on `CoreJobRequest`; it is executable backend configuration carried by `Pipeline`.
-
+The model spec is request data, so it serializes with the rest of the job.
 Operator hints still take precedence:
 
 ```python
 from goldilocks_core import CalculationHints
 
-result = recommend(
-    "structure.cif",
-    hints=CalculationHints(k_grid=(4, 4, 4)),
-    pipeline=pipeline,
+result = run_core_job(
+    CoreJobRequest(
+        structure="structure.cif",
+        mode="recommend",
+        hints=CalculationHints(k_grid=(4, 4, 4)),
+        kmesh_model=spec,
+    )
 )
 
 print(result.selection.k_points.provenance.source)  # "user_hint"

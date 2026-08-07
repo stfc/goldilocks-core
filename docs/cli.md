@@ -56,8 +56,7 @@ The directory's `README.md` explains what each example exercises. From Python, u
 | `--pseudo-type` | str | None | `CalculationHints.pseudo_type` |
 | `--relativistic-mode` | str | None | `CalculationHints.relativistic_mode` |
 | `--pseudo-root` | path | None | Loads UPF files recursively into `pseudo_metadata` |
-| `--model` | path | None | Replaces the default with a local ML Kmesh backend |
-| `--heuristic-kpoints` | flag | False | Disables ML and resolves k-points from advice |
+| `--model` | path | None | `CoreJobRequest.kmesh_model` (local k-index model) |
 | `--model-name` | str | `cli-kmesh-model` with `--model` | Model name recorded in Kmesh provenance; requires `--model` |
 | `--model-version` | str | `unknown` with `--model` | Model version recorded in `ModelSpec`; requires `--model` |
 | `--k-spacing` | float | None | `CalculationHints.k_spacing` |
@@ -126,30 +125,22 @@ warnings:
 
 ## Kmesh backend selection
 
-A bare invocation delegates to the same `Pipeline()` default used by the Python
-API. That backend lazily resolves the configured QRF model and reports model
-loading or inference errors directly. Explicit `--k-grid` and `--k-spacing`
-hints bypass model resolution entirely.
+A bare invocation delegates to the built-in QRF k-distance model, the same
+default used by the Python API. That backend lazily resolves the configured
+model and reports model loading or inference errors directly. Explicit
+`--k-grid` and `--k-spacing` hints bypass model resolution entirely.
 
-Use `--heuristic-kpoints` to disable model resolution explicitly:
-
-```bash
-goldilocks-core recommend structure.cif --heuristic-kpoints --json
-```
-
-`--model` instead replaces the default with a local CSLR model:
+`--model` selects a local CSLR k-index model instead of the default:
 
 ```bash
 goldilocks-core recommend structure.cif --model model.joblib --json
 ```
 
-The CLI builds a `ModelSpec`, creates `ml_kmesh_advisor(spec)`, replaces the default Kmesh backend in `Pipeline`, and calls:
-
-```python
-run_core_job(request, pipeline=pipeline)
-```
-
-The model path is not added to `CoreJobRequest`. Backend selection is executable configuration, not request data. `--model-name` and `--model-version` are local-model metadata and are rejected unless `--model` selects that backend.
+The CLI builds a `ModelSpec` from `--model`, `--model-name`, and
+`--model-version`, puts it on `CoreJobRequest.kmesh_model`, and calls
+`run_core_job(request)`. The model spec is request data, so it serializes with
+the rest of the job. `--model-name` and `--model-version` are local-model
+metadata and are rejected unless `--model` is set.
 
 Hint precedence still applies:
 
@@ -161,11 +152,11 @@ This uses the explicit grid and records `provenance.source="user_hint"`; the mod
 
 When no k-point hint is set, the model supplies the grid and the resulting `KPointSelection` records `provenance.source="model"`.
 
-`--model` and `--heuristic-kpoints` are mutually exclusive. Default remote
-locations and full 40-character commit revisions come from the model registry. Set
-`GOLDILOCKS_MODEL_REGISTRY` to an alternate TOML registry to replace them. Hub
-artifacts use the `huggingface_hub` cache; because joblib artifacts can execute
-code while loading, only select registries and revisions you trust.
+Default remote locations and full 40-character commit revisions come from the
+model registry. Set `GOLDILOCKS_MODEL_REGISTRY` to an alternate TOML registry to
+replace them. Hub artifacts use the `huggingface_hub` cache; because joblib
+artifacts can execute code while loading, only select registries and revisions
+you trust.
 
 ## Standalone kmesh CLI
 

@@ -283,6 +283,23 @@ class CalculationHints:
 
 
 @dataclass(frozen=True, slots=True)
+class SymmetryUnavailable:
+    """Typed marker that symmetry facts could not be determined.
+
+    Stored in ``StructureAnalysisRecord`` symmetry fields when spglib cannot
+    analyze a structure (e.g. disordered sites). Carries a ``reason`` so the
+    manifest records why the field is unavailable instead of a bare null.
+    Symmetry is reporting-only; a recommendation stays complete with one of
+    these in place of a crystal-system/space-group value.
+
+    Attributes:
+        reason: why symmetry analysis was unavailable.
+    """
+
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
 class StructureAnalysisRecord:
     """Facts reported by the Analyze stage without parameter decisions.
 
@@ -309,12 +326,12 @@ class StructureAnalysisRecord:
             occupancies.
         disordered_site_count: number of sites with partial
             occupancies.
-        space_group_symbol: Hermann-Mauguin symbol, or None for
-            disordered structures.
+        space_group_symbol: Hermann-Mauguin symbol, or
+            ``SymmetryUnavailable`` when spglib cannot analyze, or None.
         space_group_number: International space group number
-            (1–230), or None.
+            (1–230), or ``SymmetryUnavailable``, or None.
         crystal_system: crystal system name (e.g. ``cubic``), or
-            None.
+            ``SymmetryUnavailable``, or None.
         dimensionality: structure dimensionality from a bonded-cluster
             analysis (``3d``, ``2d``, ``1d``, ``molecule``), or
             ``unknown`` when detection fails.
@@ -339,9 +356,9 @@ class StructureAnalysisRecord:
     heavy_elements: tuple[str, ...]
     disorder_warnings: tuple[str, ...] = ()
     disordered_site_count: int = 0
-    space_group_symbol: str | None = None
-    space_group_number: int | None = None
-    crystal_system: str | None = None
+    space_group_symbol: str | int | SymmetryUnavailable | None = None
+    space_group_number: str | int | SymmetryUnavailable | None = None
+    crystal_system: str | int | SymmetryUnavailable | None = None
     dimensionality: Dimensionality = "unknown"
     has_vacuum: bool = False
     electronic_character: ElectronicCharacter = "unknown"

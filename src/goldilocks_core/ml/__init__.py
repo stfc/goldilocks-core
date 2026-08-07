@@ -18,16 +18,25 @@ from goldilocks_core.ml.model_registry import (
     load_default_qrf_config,
 )
 from goldilocks_core.ml.models import load_model, resolve_artifact
-from goldilocks_core.ml.qrf import KDistancePrediction, predict_kdistance
+from goldilocks_core.ml.qrf import (
+    KDistancePrediction,
+    QrfResources,
+    load_qrf_resources,
+    predict_kdistance,
+    predict_kdistance_with_resources,
+)
 
 __all__ = [
     "ArtifactSpec",
     "KDistancePrediction",
     "QrfFeatureSettings",
     "QrfKpointsConfig",
+    "QrfResources",
     "load_default_qrf_config",
     "load_model",
+    "load_qrf_resources",
     "predict_kdistance",
+    "predict_kdistance_with_resources",
     "predict_kindex",
     "resolve_artifact",
 ]

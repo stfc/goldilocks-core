@@ -13,3 +13,10 @@ repos:
         language: system
         pass_filenames: false
 
+      - id: no-swallow
+        name: no silent try/except + __init__ facade
+        entry: uv run python scripts/check_no_swallow.py
+        language: system
+        pass_filenames: false
+        files: ^src/.*\.py$
+

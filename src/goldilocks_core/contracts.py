@@ -50,7 +50,7 @@ CalcTask = str
 SmearingType = Literal["fixed", "gaussian", "mp", "cold"]
 """Canonical occupation schemes supported by the current QE target."""
 
-ModelSource = Literal["huggingface", "local"]
+ModelSource = Literal["huggingface", "local", "psdi"]
 """Where a trained model or supporting artifact is resolved from."""
 
 ModelType = Literal["random_forest", "cgcnn", "xgboost"]

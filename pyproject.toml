@@ -18,6 +18,7 @@ dependencies = [
     "numpy>=2.4.4",
     "pandas>=2.0",
     "pymatgen>=2026.3.23",
+    "requests>=2.32",
     "scikit-learn==1.7.2",
     "sklearn-quantile==0.1.1",
     # The default k-points model (QRF + CGCNN metallicity) is a core capability,

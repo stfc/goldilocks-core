@@ -6,6 +6,7 @@ from pathlib import Path
 
 import joblib
 
+from goldilocks_core.artifacts import psdi
 from goldilocks_core.contracts import ModelSpec
 from goldilocks_core.ml.model_registry import ArtifactSpec
 
@@ -21,6 +22,10 @@ def load_model(spec: ModelSpec) -> object:
         ``spec.location`` is ``"<repo_id>::<filename>"``. The file is
         downloaded from the Hub and cached locally, honoring ``spec.revision``
         when set.
+    ``psdi``
+        ``spec.location`` is ``"<record_id>::<filename>"``. The file is fetched
+        from PSDI Data Collections into the user cache and verified against the
+        digest PSDI publishes. The record id pins the record version.
 
     Returns
     -------
@@ -34,13 +39,19 @@ def load_model(spec: ModelSpec) -> object:
     NotImplementedError
         If the requested model source is not supported.
     ValueError
-        If a huggingface location is not ``"<repo_id>::<filename>"``.
+        If a huggingface or psdi location does not have the form
+        ``"<identifier>::<filename>"``.
+    goldilocks_core.artifacts.ChecksumMismatch
+        If a fetched artifact does not match its published digest.
     """
     if spec.source == "local":
         return _load_local(spec.location)
 
     if spec.source == "huggingface":
         return _load_huggingface(spec.location, spec.revision)
+
+    if spec.source == "psdi":
+        return joblib.load(_resolve_psdi(spec.location))
 
     raise NotImplementedError(f"Model source '{spec.source}' is not implemented yet.")
 
@@ -61,6 +72,9 @@ def resolve_artifact(spec: ArtifactSpec, filename: str) -> str:
             filename=filename,
             revision=spec.revision,
         )
+
+    if spec.source == "psdi":
+        return str(psdi.fetch(spec.location, filename))
 
     raise NotImplementedError(
         f"Artifact source '{spec.source}' is not implemented yet."
@@ -93,3 +107,14 @@ def _load_huggingface(location: str, revision: str | None) -> object:
         revision=revision,
     )
     return joblib.load(model_path)
+
+
+def _resolve_psdi(location: str) -> Path:
+    """Resolve a ``"<record_id>::<filename>"`` PSDI location to a cached path."""
+    record_id, separator, filename = location.partition("::")
+    if not separator or not filename:
+        raise ValueError(
+            f"PSDI model location must be '<record_id>::<filename>'; got {location!r}"
+        )
+
+    return psdi.fetch(record_id, filename)

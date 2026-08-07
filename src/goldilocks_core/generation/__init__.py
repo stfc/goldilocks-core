@@ -1,0 +1,19 @@
+"""Generate-stage input writers for completed Core recommendations."""
+
+from __future__ import annotations
+
+from goldilocks_core.generation.registry import (
+    available_codes,
+    available_tasks,
+    generate_inputs,
+    register_writer,
+    writer_for,
+)
+
+__all__ = [
+    "available_codes",
+    "available_tasks",
+    "generate_inputs",
+    "register_writer",
+    "writer_for",
+]

@@ -55,7 +55,7 @@ def test_advise_kpoints_returns_selected_mesh(monkeypatch) -> None:
     spec = make_spec()
 
     monkeypatch.setattr(
-        "goldilocks_core.advisors.kindex_advisor.load_model",
+        "goldilocks_core.ml.models.load_model",
         lambda _: DummyModel(),
     )
 
@@ -73,7 +73,7 @@ def test_ml_kmesh_advisor_uses_model_when_no_hint_is_set(monkeypatch) -> None:
     structure = make_structure()
     spec = make_spec()
     monkeypatch.setattr(
-        "goldilocks_core.advisors.kindex_advisor.load_model",
+        "goldilocks_core.ml.models.load_model",
         lambda _: DummyModel(),
     )
 
@@ -96,7 +96,7 @@ def test_ml_kmesh_advisor_prefers_explicit_grid_hint(monkeypatch) -> None:
         return DummyModel()
 
     monkeypatch.setattr(
-        "goldilocks_core.advisors.kindex_advisor.load_model",
+        "goldilocks_core.ml.models.load_model",
         fail_if_called,
     )
 
@@ -123,7 +123,7 @@ def test_ml_kmesh_advisor_prefers_spacing_hint(monkeypatch) -> None:
         return DummyModel()
 
     monkeypatch.setattr(
-        "goldilocks_core.advisors.kindex_advisor.load_model",
+        "goldilocks_core.ml.models.load_model",
         fail_if_called,
     )
 

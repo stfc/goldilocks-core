@@ -1,8 +1,7 @@
-"""Generate-stage input writers for completed Core recommendations."""
+"""Quantum ESPRESSO SCF input writer and section renderers."""
 
 from __future__ import annotations
 
-import math
 import re
 
 from pymatgen.core import Structure
@@ -31,69 +30,56 @@ _QE_SMEARING = {
 }
 
 
-def generate_inputs(
+def write_qe_scf(
     structure: Structure,
     intent: CalculationIntent,
     advice: ParameterAdvice,
     selection: SelectionRecord,
 ) -> tuple[GeneratedFile, ...]:
-    """Generate target-code input files from completed advice and selections.
+    """Write the Quantum ESPRESSO SCF input for one calculation intent.
 
     Args:
-        structure: Loaded structure for the calculation.
-        intent: Target code and task to generate.
-        advice: Completed parameter advice.
-        selection: Concrete k-points, pseudopotentials, and cutoffs.
+        structure: Ordered structure to write in QE cell/position cards.
+        intent: Calculation intent. The dispatcher is responsible for
+            selecting this writer only for compatible intents.
+        advice: Smearing, magnetism, SOC, and convergence advice.
+        selection: K-point grid plus pseudopotential and cutoff selections
+            produced by the Select stage.
 
     Returns:
-        Generated input files for the requested code/task.
+        A one-element tuple holding the rendered QE SCF input file.
 
     Raises:
-        ValueError: If the requested code or task is not implemented, or if the
-            target writer cannot generate from incomplete selections.
+        ValueError: If the structure is disordered or the advice carries an
+            unsupported smearing or vdW method for the QE target.
     """
-    if intent.code != "quantum_espresso":
-        raise ValueError("Only Quantum ESPRESSO generation is implemented")
-
-    if intent.task != "scf_single_point":
-        raise ValueError("Only SCF single-point generation is implemented")
-
     return (
         GeneratedFile(
             path="inputs/qe.in",
-            content=generate_quantum_espresso_scf_input(
-                structure=structure,
-                intent=intent,
-                advice=advice,
-                selection=selection,
-            ),
+            content=_render_qe_scf(structure, intent, advice, selection),
         ),
     )
 
 
-def generate_quantum_espresso_scf_input(
-    *,
+def _render_qe_scf(
     structure: Structure,
     intent: CalculationIntent,
     advice: ParameterAdvice,
     selection: SelectionRecord,
 ) -> str:
-    """Generate a Quantum ESPRESSO SCF input from staged Core records.
+    """Render a Quantum ESPRESSO SCF input from staged Core records.
+
+    Selection records are trusted as produced by the Select stage; this
+    renderer does not re-validate pseudopotential coverage or cutoffs.
 
     Args:
         structure: Ordered structure to write in QE cell/position cards.
-        intent: Calculation intent. The caller is responsible for selecting the
-            QE SCF writer only for compatible intents.
+        intent: Calculation intent (unused by the QE SCF renderer).
         advice: Smearing, magnetism, SOC, and convergence advice.
-        selection: K-point grid plus complete pseudopotential and cutoff
-            selections.
+        selection: K-point grid plus pseudopotential and cutoff selections.
 
     Returns:
         Complete QE input text ending with a trailing newline.
-
-    Raises:
-        ValueError: If the structure is disordered or pseudopotential selections
-            are missing or incomplete.
     """
     if not structure.is_ordered:
         raise ValueError(
@@ -106,49 +92,13 @@ def generate_quantum_espresso_scf_input(
     pseudo_by_element = {
         pseudo.element: pseudo for pseudo in selection.pseudopotentials
     }
-    if len(pseudo_by_element) != len(selection.pseudopotentials):
-        raise ValueError("Quantum ESPRESSO requires one pseudopotential per element")
-
-    missing_elements = tuple(
-        element for element in elements if element not in pseudo_by_element
-    )
-    unexpected_elements = tuple(
-        element for element in pseudo_by_element if element not in elements
-    )
-    if missing_elements or unexpected_elements:
-        problems: list[str] = []
-        if missing_elements:
-            problems.append(f"missing {', '.join(missing_elements)}")
-        if unexpected_elements:
-            problems.append(f"unexpected {', '.join(unexpected_elements)}")
-        raise ValueError(
-            "Quantum ESPRESSO pseudopotential selections must match the structure "
-            f"elements exactly ({'; '.join(problems)})"
-        )
-
     selected_pseudos = tuple(pseudo_by_element[element] for element in elements)
-    incomplete = tuple(
-        pseudo.element
-        for pseudo in selected_pseudos
-        if pseudo.filename is None
-        or pseudo.ecutwfc_ry is None
-        or pseudo.ecutrho_ry is None
-    )
-    if incomplete:
-        raise ValueError(
-            "Cannot generate Quantum ESPRESSO input without complete pseudo "
-            f"and cutoff selections for: {', '.join(incomplete)}"
-        )
+    ecutwfc = max(float(pseudo.ecutwfc_ry) for pseudo in selected_pseudos)
+    ecutrho = max(float(pseudo.ecutrho_ry) for pseudo in selected_pseudos)
 
     for pseudo in selected_pseudos:
         if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", pseudo.filename) is None:
             raise ValueError(f"Unsafe pseudopotential filename: {pseudo.filename!r}")
-        cutoffs = (float(pseudo.ecutwfc_ry), float(pseudo.ecutrho_ry))
-        if not all(math.isfinite(value) and value > 0 for value in cutoffs):
-            raise ValueError(f"Invalid pseudopotential cutoffs for {pseudo.element}")
-
-    ecutwfc = max(float(pseudo.ecutwfc_ry) for pseudo in selected_pseudos)
-    ecutrho = max(float(pseudo.ecutrho_ry) for pseudo in selected_pseudos)
 
     lines: list[str] = []
     lines.extend(_control_section())
@@ -190,61 +140,72 @@ def _system_section(
     ecutwfc: float,
     ecutrho: float,
 ) -> list[str]:
-    """Return the QE SYSTEM namelist from advice and selections."""
+    """Return the QE SYSTEM namelist from advice and cutoffs."""
     ntyp = len(structure.composition.elements)
-    lines = [
+    return [
         "&SYSTEM",
         "  ibrav = 0",
         f"  nat = {len(structure)}",
         f"  ntyp = {ntyp}",
         f"  ecutwfc = {_format_float(ecutwfc)}",
         f"  ecutrho = {_format_float(ecutrho)}",
+        *_smearing_lines(advice),
+        *_spin_lines(advice),
+        *_vdw_lines(advice),
+        "/",
+        "",
     ]
 
+
+def _smearing_lines(advice: ParameterAdvice) -> list[str]:
+    """Return SYSTEM occupation/smearing lines from smearing advice."""
     smearing_type = advice.smearing.smearing_type
     if smearing_type in (None, "fixed"):
-        lines.append("  occupations = 'fixed'")
-    else:
-        qe_smearing = _QE_SMEARING.get(smearing_type)
-        if qe_smearing is None:
-            raise ValueError(
-                "Quantum ESPRESSO smearing advice is invalid: unsupported "
-                f"method {smearing_type!r}"
-            )
-        if advice.smearing.width_ry is None:
-            raise ValueError("Smearing width is required when smearing is enabled")
-        lines.extend(
-            [
-                "  occupations = 'smearing'",
-                f"  smearing = '{qe_smearing}'",
-                f"  degauss = {_format_float(advice.smearing.width_ry)}",
-            ]
+        return ["  occupations = 'fixed'"]
+    qe_smearing = _QE_SMEARING.get(smearing_type)
+    if qe_smearing is None:
+        raise ValueError(
+            "Quantum ESPRESSO smearing advice is invalid: unsupported "
+            f"method {smearing_type!r}"
         )
+    if advice.smearing.width_ry is None:
+        raise ValueError("Smearing width is required when smearing is enabled")
+    return [
+        "  occupations = 'smearing'",
+        f"  smearing = '{qe_smearing}'",
+        f"  degauss = {_format_float(advice.smearing.width_ry)}",
+    ]
 
+
+def _spin_lines(advice: ParameterAdvice) -> list[str]:
+    """Return SYSTEM spin lines from magnetism and SOC advice."""
     if advice.spin_orbit.enabled:
-        lines.extend(["  noncolin = .true.", "  lspinorb = .true."])
-    elif advice.magnetism.spin_polarized:
-        lines.append("  nspin = 2")
+        return ["  noncolin = .true.", "  lspinorb = .true."]
+    if advice.magnetism.spin_polarized:
+        return ["  nspin = 2"]
+    return []
 
+
+def _vdw_lines(advice: ParameterAdvice) -> list[str]:
+    """Return SYSTEM vdW-corr lines from vdW advice."""
     method = advice.vdw.method
     if advice.vdw.use_vdw:
-        if not isinstance(method, str) or method not in _QE_VDW_CORR:
+        if method not in _QE_VDW_CORR:
             raise ValueError(
                 "Quantum ESPRESSO vdW advice is invalid: enabled vdW requires "
                 f"a supported method; got {method!r}"
             )
         vdw_corr, dftd3_version = _QE_VDW_CORR[method]
-        lines.append(f"  vdw_corr = '{vdw_corr}'")
+        lines = [f"  vdw_corr = '{vdw_corr}'"]
         if dftd3_version is not None:
             lines.append(f"  dftd3_version = {dftd3_version}")
-    elif method is not None:
+        return lines
+    if method is not None:
         raise ValueError(
             "Quantum ESPRESSO vdW advice is invalid: disabled vdW requires "
             f"method=None; got {method!r}"
         )
-
-    lines.extend(["/", ""])
-    return lines
+    return []
 
 
 def _electrons_section(advice: ParameterAdvice) -> list[str]:

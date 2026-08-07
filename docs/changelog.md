@@ -6,6 +6,16 @@ All notable changes to goldilocks-core are documented here.
 
 ### Added
 
+- `CoreRuntime` raw stage entrypoints: `analyze(request)`, `kmesh(request)`, `advise(request)`, and `select(request)` each run only their prerequisite sub-graph and return their record.
+- CLI `analyze`, `advise`, `kmesh`, and `select` subcommands calling the raw `CoreRuntime` entrypoints directly.
+- CLI `generate --out <dir>` option: publishes a bundle directory when given, otherwise returns in-memory files.
+- Bundle manifest now includes a top-level `k_points` field.
+
+### Changed
+
+- `k_points` moved from `SelectionRecord` to `CoreResult`. `select_parameters(structure, advice, pseudo_metadata)` no longer takes `k_points`; `generate_inputs(structure, intent, advice, selection, k_points)` now takes it as a sibling arg.
+- `CoreJobRequest.mode` is now `Literal["recommend", "generate"]`; `"bundle"` is removed. Use `mode="generate"` with `output_dir` to publish a bundle.
+- `run_core_job` dispatch: `"recommend"` → `runtime.recommend`; `"generate"` → `runtime.generate(request, output_dir=request.output_dir)`. No `bundle` branch.
 - CLI `--use-vdw` and `--vdw-method` options matching the Python hint controls.
 - Example structures (`Si`, `Fe_bcc`, `Pt_fcc`) installed with the package, reachable from `goldilocks_core.examples` and `goldilocks-core examples path`.
 - `DimensionalityClassificationError` and `SymmetryAnalysisError` (in `goldilocks_core.analysis`); `SymmetryUnavailable` typed value (in `goldilocks_core.contracts`), recorded in symmetry fields when spglib cannot analyze.
@@ -48,6 +58,9 @@ All notable changes to goldilocks-core are documented here.
 - `register_writer` and the mutable writer dispatch table; the table is now a static tuple.
 - Dead `parse_upf` dataframe layer (`metadata_to_row`/`metadata_list_to_rows`/`metadata_list_to_dataframe`) and the helpers only it used.
 - `advisors/__init__.py` `__getattr__` lazy facade; direct re-exports replace it (the facade was already defeated by `jobs.py`'s module-level advisor imports).
+- `write_bundle` top-level convenience function (from `jobs.py` and `goldilocks_core.__init__`). Use `run_core_job` with `mode="generate"` + `output_dir`, or `runtime.generate(request, output_dir=...)`.
+- `CoreJobRequest.mode="bundle"` and the CLI `bundle` subcommand. Use `mode="generate"` with `output_dir` (or `generate --out <dir>`).
+- `SelectionRecord.k_points` field; k-points now live on `CoreResult.k_points`. This is an intentional API and serialized-schema change with no compatibility alias.
 
 ## [0.1.0] - 2026-06-10
 

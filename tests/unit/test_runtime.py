@@ -12,7 +12,13 @@ from goldilocks_core import (
     CoreRuntime,
     run_core_job,
 )
-from goldilocks_core.contracts import StructureFeatureVector
+from goldilocks_core.contracts import (
+    KPointSelection,
+    ParameterAdvice,
+    SelectionRecord,
+    StructureAnalysisRecord,
+    StructureFeatureVector,
+)
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.runtime import CoreRuntime as _CoreRuntime
 
@@ -251,6 +257,123 @@ def test_explicit_k_grid_hint_does_not_load_model(monkeypatch, tmp_path) -> None
     with CoreRuntime() as rt:
         result = rt.recommend(req)
 
-    assert result.selection.k_points.grid == (2, 2, 1)
-    assert result.selection.k_points.provenance.source == "user_hint"
+    assert result.k_points.grid == (2, 2, 1)
+    assert result.k_points.provenance.source == "user_hint"
     assert loads[0] == 0
+
+
+def test_analyze_returns_analysis_record_without_prior_stages(
+    monkeypatch, tmp_path
+) -> None:
+    """analyze() runs Load → Analyse and returns a StructureAnalysisRecord."""
+    patch_qrf_inference(monkeypatch, tmp_path)
+    req = make_request()
+
+    with CoreRuntime() as rt:
+        record = rt.analyze(req)
+
+    assert isinstance(record, StructureAnalysisRecord)
+    assert record.reduced_formula == "Si"
+    assert record.elements == ("Si",)
+
+
+def test_kmesh_returns_kpoint_selection_without_prior_stages(
+    monkeypatch, tmp_path
+) -> None:
+    """kmesh() resolves k-points using the owned backend."""
+    patch_qrf_inference(monkeypatch, tmp_path)
+    req = make_request(k_grid=(3, 3, 3))
+
+    with CoreRuntime() as rt:
+        record = rt.kmesh(req)
+
+    assert isinstance(record, KPointSelection)
+    assert record.grid == (3, 3, 3)
+    assert record.provenance.source == "user_hint"
+
+
+def test_advise_returns_advice_record_without_prior_stages(
+    monkeypatch, tmp_path
+) -> None:
+    """advise() runs Load → Analyse → Advise and returns ParameterAdvice."""
+    patch_qrf_inference(monkeypatch, tmp_path)
+    req = make_request()
+
+    with CoreRuntime() as rt:
+        record = rt.advise(req)
+
+    assert isinstance(record, ParameterAdvice)
+    assert record.pseudopotentials.functional == "PBEsol"
+
+
+def test_select_returns_selection_record_without_kmesh(monkeypatch, tmp_path) -> None:
+    """select() runs Load → Analyse → Advise → Select without invoking kmesh."""
+    patch_qrf_inference(monkeypatch, tmp_path)
+    req = make_request(k_grid=(2, 2, 1))
+
+    with CoreRuntime() as rt:
+        record = rt.select(req)
+
+    assert isinstance(record, SelectionRecord)
+    assert record.pseudopotentials[0].filename == "Si.UPF"
+
+
+def test_select_does_not_invoke_kmesh_backend(monkeypatch, tmp_path) -> None:
+    """select() succeeds even when the kmesh backend would raise."""
+    patch_qrf_inference(monkeypatch, tmp_path)
+    req = make_request()
+
+    class RaisingBackend:
+        def __call__(self, structure: Structure) -> KPointSelection:
+            raise AssertionError("kmesh backend must not be called by select()")
+
+        def reset(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    rt = CoreRuntime()
+    rt._backend = RaisingBackend()
+
+    record = rt.select(req)
+
+    assert isinstance(record, SelectionRecord)
+    assert record.pseudopotentials[0].element == "Si"
+    rt.close()
+
+
+def test_recommend_stops_at_select(monkeypatch, tmp_path) -> None:
+    """recommend() returns no generated files and no bundle."""
+    patch_qrf_inference(monkeypatch, tmp_path)
+    req = make_request(k_grid=(2, 2, 1))
+
+    with CoreRuntime() as rt:
+        result = rt.recommend(req)
+
+    assert result.generated_files == ()
+    assert result.bundle is None
+
+
+def test_core_result_has_k_points_field(monkeypatch, tmp_path) -> None:
+    """CoreResult carries k_points; SelectionRecord does not."""
+    patch_qrf_inference(monkeypatch, tmp_path)
+    req = make_request(k_grid=(2, 2, 1))
+
+    with CoreRuntime() as rt:
+        result = rt.recommend(req)
+
+    assert result.k_points.grid == (2, 2, 1)
+    assert not hasattr(result.selection, "k_points")
+
+
+def test_run_core_job_rejects_bundle_mode() -> None:
+    """run_core_job rejects the removed bundle mode."""
+    with pytest.raises(ValueError, match="Unsupported Core job mode: bundle"):
+        CoreJobRequest(
+            structure=make_structure(),
+            hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+            pseudo_metadata=(make_metadata(),),
+            mode="bundle",
+            output_dir="run/",
+        )

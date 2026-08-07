@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from goldilocks_core.contracts import (
     CalculationHints,
@@ -14,10 +15,15 @@ from goldilocks_core.contracts import (
     CoreResult,
     ModelSpec,
 )
+from goldilocks_core.contracts.serial import to_jsonable
 from goldilocks_core.examples import structures_path
 from goldilocks_core.generation import available_codes, available_tasks
 from goldilocks_core.jobs import run_core_job
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
+from goldilocks_core.runtime import CoreRuntime
+
+_RAW_STAGE_COMMANDS = ("analyze", "kmesh", "advise", "select")
+_COMPOSED_COMMANDS = ("recommend", "generate")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -28,14 +34,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    for command in ("recommend", "generate", "bundle"):
+    for command in (*_RAW_STAGE_COMMANDS, *_COMPOSED_COMMANDS):
         subparser = subparsers.add_parser(command)
         _add_common_arguments(subparser)
-        if command == "bundle":
+        if command == "generate":
             subparser.add_argument(
                 "--out",
-                required=True,
-                help="Output directory for the portable Core bundle.",
+                default=None,
+                help="Output directory for a portable Core bundle.",
             )
 
     examples = subparsers.add_parser(
@@ -68,14 +74,38 @@ def main() -> None:
         print(f"{parser.prog}: error: {error}", file=sys.stderr)
         raise SystemExit(2) from error
 
-    result = run_core_job(request)
+    if args.command in _RAW_STAGE_COMMANDS:
+        result = _run_raw_stage(args.command, request)
+        _print_output(args, result)
+        return
 
+    result = run_core_job(request)
+    _print_output(args, result)
+
+
+def _run_raw_stage(command: str, request: CoreJobRequest) -> Any:
+    """Dispatch a raw stage subcommand to its CoreRuntime entrypoint."""
+    with CoreRuntime() as runtime:
+        return getattr(runtime, command)(request)
+
+
+def _print_output(args: argparse.Namespace, result: Any) -> None:
+    """Print JSON or a human-readable summary for the command output."""
     if args.json:
-        output = {"request": request.to_dict(), **result.to_dict()}
+        output = {"request": request_to_jsonable(args), **to_jsonable(result)}
         print(json.dumps(output, indent=2, sort_keys=True))
         return
 
-    _print_human_summary(result)
+    if isinstance(result, CoreResult):
+        _print_human_summary(result)
+    else:
+        _print_raw_summary(result)
+
+
+def request_to_jsonable(args: argparse.Namespace) -> Any:
+    """Serialize the request for JSON output."""
+    request = _request_from_args(args)
+    return request.to_dict()
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
@@ -182,11 +212,13 @@ def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
         tuple(load_pseudo_metadata(Path(args.pseudo_root))) if args.pseudo_root else ()
     )
 
+    mode = args.command if args.command in _COMPOSED_COMMANDS else "recommend"
+
     return CoreJobRequest(
         structure=args.structure,
         intent=intent,
         hints=hints,
-        mode=args.command,
+        mode=mode,
         pseudo_metadata=pseudo_metadata,
         output_dir=getattr(args, "out", None),
         kmesh_model=_model_spec_from_args(args),
@@ -238,7 +270,7 @@ def _parse_optional_bool(value: str | None) -> bool | None:
 
 def _print_human_summary(result: CoreResult) -> None:
     """Print a small human-readable summary from the Core result."""
-    grid = result.selection.k_points.grid
+    grid = result.k_points.grid
     print(f"formula: {result.analysis.reduced_formula}")
     print(f"code: {result.intent.code}")
     print(f"task: {result.intent.task}")
@@ -253,6 +285,30 @@ def _print_human_summary(result: CoreResult) -> None:
         print("warnings:")
         for warning in result.warnings:
             print(f"  - {warning}")
+
+
+def _print_raw_summary(record: Any) -> None:
+    """Print a small human-readable summary for a raw stage record."""
+    name = type(record).__name__
+    if hasattr(record, "reduced_formula"):
+        print(f"formula: {record.reduced_formula}")
+        if hasattr(record, "elements"):
+            print(f"elements: {' '.join(record.elements)}")
+        if hasattr(record, "electronic_character"):
+            print(f"electronic character: {record.electronic_character}")
+    elif hasattr(record, "grid"):
+        print(f"k-grid: {record.grid[0]} {record.grid[1]} {record.grid[2]}")
+        if hasattr(record, "provenance"):
+            print(f"provenance: {record.provenance.source}")
+    elif hasattr(record, "pseudopotentials"):
+        for pseudo in record.pseudopotentials:
+            print(f"pseudo: {pseudo.element} {pseudo.filename}")
+        if getattr(record, "warnings", ()):
+            print("warnings:")
+            for warning in record.warnings:
+                print(f"  - {warning}")
+    else:
+        print(name)
 
 
 if __name__ == "__main__":

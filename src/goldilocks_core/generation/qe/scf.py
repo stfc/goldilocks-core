@@ -10,6 +10,7 @@ from pymatgen.core.periodic_table import Element
 from goldilocks_core.contracts import (
     CalculationIntent,
     GeneratedFile,
+    KPointSelection,
     ParameterAdvice,
     SelectionRecord,
 )
@@ -35,6 +36,7 @@ def write_qe_scf(
     intent: CalculationIntent,
     advice: ParameterAdvice,
     selection: SelectionRecord,
+    k_points: KPointSelection,
 ) -> tuple[GeneratedFile, ...]:
     """Write the Quantum ESPRESSO SCF input for one calculation intent.
 
@@ -43,8 +45,9 @@ def write_qe_scf(
         intent: Calculation intent. The dispatcher is responsible for
             selecting this writer only for compatible intents.
         advice: Smearing, magnetism, SOC, and convergence advice.
-        selection: K-point grid plus pseudopotential and cutoff selections
-            produced by the Select stage.
+        selection: Pseudopotential and cutoff selections produced by the
+            Select stage.
+        k_points: Concrete k-point grid from the Kmesh stage.
 
     Returns:
         A one-element tuple holding the rendered QE SCF input file.
@@ -56,7 +59,7 @@ def write_qe_scf(
     return (
         GeneratedFile(
             path="inputs/qe.in",
-            content=_render_qe_scf(structure, intent, advice, selection),
+            content=_render_qe_scf(structure, intent, advice, selection, k_points),
         ),
     )
 
@@ -66,6 +69,7 @@ def _render_qe_scf(
     intent: CalculationIntent,
     advice: ParameterAdvice,
     selection: SelectionRecord,
+    k_points: KPointSelection,
 ) -> str:
     """Render a Quantum ESPRESSO SCF input from staged Core records.
 
@@ -76,7 +80,8 @@ def _render_qe_scf(
         structure: Ordered structure to write in QE cell/position cards.
         intent: Calculation intent (unused by the QE SCF renderer).
         advice: Smearing, magnetism, SOC, and convergence advice.
-        selection: K-point grid plus pseudopotential and cutoff selections.
+        selection: Pseudopotential and cutoff selections.
+        k_points: Concrete k-point grid and shift.
 
     Returns:
         Complete QE input text ending with a trailing newline.
@@ -114,7 +119,7 @@ def _render_qe_scf(
     lines.extend(_cell_parameters(structure))
     lines.extend(_atomic_species(elements, pseudo_by_element))
     lines.extend(_atomic_positions(structure))
-    lines.extend(_k_points(selection))
+    lines.extend(_k_points(k_points))
 
     return "\n".join(lines) + "\n"
 
@@ -252,10 +257,10 @@ def _atomic_positions(structure: Structure) -> list[str]:
     return lines
 
 
-def _k_points(selection: SelectionRecord) -> list[str]:
+def _k_points(k_points: KPointSelection) -> list[str]:
     """Return QE K_POINTS automatic card from selected grid and shift."""
-    grid = selection.k_points.grid
-    shift = selection.k_points.shift
+    grid = k_points.grid
+    shift = k_points.shift
     return [
         "K_POINTS automatic",
         f"  {grid[0]}  {grid[1]}  {grid[2]}  {shift[0]}  {shift[1]}  {shift[2]}",

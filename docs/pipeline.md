@@ -103,7 +103,7 @@ structure = load_structure("Fe.cif")
 analysis = analyze_structure(structure)
 advice = advise_parameters(analysis, intent, hints)
 kpoints = resolve_kpoints(structure, hints, default_kmesh_advisor())
-selection = select_parameters(structure, advice, kpoints, metadata)
+selection = select_parameters(structure, advice, metadata)
 ```
 
 Use this form to inspect intermediate records, insert project-specific work,

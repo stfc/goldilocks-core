@@ -14,7 +14,6 @@ from goldilocks_core.jobs import (
     generate,
     recommend,
     run_core_job,
-    write_bundle,
 )
 from goldilocks_core.runtime import CoreRuntime
 
@@ -29,5 +28,4 @@ __all__ = [
     "generate",
     "recommend",
     "run_core_job",
-    "write_bundle",
 ]

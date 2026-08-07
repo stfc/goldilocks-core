@@ -18,15 +18,18 @@ Runs Load → Analyze → Advise → Kmesh → Select. Outputs a recommendation 
 goldilocks-core generate structure.cif [options]
 ```
 
-Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a recommendation with generated input files.
+Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a recommendation with generated input files. Pass `--out <dir>` to write a portable bundle directory instead of returning in-memory files; the directory must not already exist.
 
-### bundle
+### Raw stage subcommands
 
 ```bash
-goldilocks-core bundle structure.cif --out run/ [options]
+goldilocks-core analyze structure.cif [options]
+goldilocks-core kmesh structure.cif [options]
+goldilocks-core advise structure.cif [options]
+goldilocks-core select structure.cif [options]
 ```
 
-Runs the full pipeline and publishes a portable bundle directory. `--out` is required and must not already exist; bundle mode has no overwrite option.
+Each runs only the sub-graph it needs and prints the corresponding record. `analyze` runs Load → Analyse; `kmesh` resolves k-points using the owned backend; `advise` runs Load → Analyse → Advise; `select` runs Load → Analyse → Advise → Select (without invoking kmesh).
 
 ### examples
 
@@ -71,6 +74,7 @@ The directory's `README.md` explains what each example exercises. From Python, u
 | `--mixing-beta` | float | None | `CalculationHints.mixing_beta` |
 | `--electron-maxstep` | int | None | `CalculationHints.electron_maxstep` |
 | `--json` | flag | False | Print full JSON output |
+| `--out` | path | None | `generate` only: write a portable bundle directory |
 
 ## Python/CLI control parity
 

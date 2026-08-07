@@ -49,7 +49,7 @@ def test_run_core_job_recommend_matches_public_recommendation_shape() -> None:
         )
     )
 
-    assert result.selection.k_points.grid == (2, 2, 1)
+    assert result.k_points.grid == (2, 2, 1)
     assert result.selection.pseudopotentials[0].filename == "Si.UPF"
     assert result.generated_files == ()
     assert result.bundle is None
@@ -124,8 +124,8 @@ def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> 
         )
     )
 
-    assert result.selection.k_points.provenance.source == "model"
-    assert result.selection.k_points.provenance.confidence == 0.9
+    assert result.k_points.provenance.source == "model"
+    assert result.k_points.provenance.confidence == 0.9
 
 
 def test_run_core_job_rejects_unknown_task() -> None:
@@ -158,15 +158,15 @@ def test_run_core_job_generate_adds_generated_files() -> None:
     assert "2  2  1  0  0  0" in result.generated_files[0].content
 
 
-def test_run_core_job_bundle_writes_output_directory(tmp_path: Path) -> None:
-    """Run the configured job graph through Bundle and write files."""
+def test_run_core_job_generate_with_output_dir_writes_bundle(tmp_path: Path) -> None:
+    """Run generate mode with output_dir and write a bundle directory."""
     output_dir = tmp_path / "bundle"
     result = run_core_job(
         CoreJobRequest(
             structure=make_structure(),
             hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
             pseudo_metadata=(make_metadata(),),
-            mode="bundle",
+            mode="generate",
             output_dir=str(output_dir),
         )
     )
@@ -175,5 +175,5 @@ def test_run_core_job_bundle_writes_output_directory(tmp_path: Path) -> None:
     assert result.bundle.path == str(output_dir)
     assert (output_dir / "inputs" / "qe.in").exists()
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["selection"]["k_points"]["grid"] == [2, 2, 1]
+    assert manifest["k_points"]["grid"] == [2, 2, 1]
     assert result.bundle.manifest == manifest

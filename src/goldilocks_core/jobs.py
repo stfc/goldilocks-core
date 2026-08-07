@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 
 from goldilocks_core.contracts import (
     CalculationHints,
@@ -37,7 +36,7 @@ def run_core_job(
 
     Returns:
         A ``CoreResult`` containing scientific records, generated files when
-        requested, and a bundle record for bundle mode.
+        requested, and a bundle record when ``generate`` writes a bundle.
 
     Raises:
         ValueError: If no path is registered for ``intent.task`` or a
@@ -65,8 +64,6 @@ def _run_scf(
     """Dispatch an SCF request on mode to the runtime's composed entrypoints."""
     if request.mode == "recommend":
         return runtime.recommend(request)
-    if request.mode == "generate":
-        return runtime.generate(request)
     return runtime.generate(request, output_dir=request.output_dir)
 
 
@@ -91,7 +88,8 @@ def recommend(
         pseudo_metadata: Available pseudopotential metadata.
 
     Returns:
-        ``CoreResult`` containing analysis, advice, selection, and warnings.
+        ``CoreResult`` containing analysis, advice, k-points, selection, and
+        warnings.
     """
     return run_core_job(
         CoreJobRequest(
@@ -133,43 +131,5 @@ def generate(
             hints=hints or CalculationHints(),
             mode="generate",
             pseudo_metadata=tuple(pseudo_metadata or ()),
-        )
-    )
-
-
-def write_bundle(
-    structure: StructureInput,
-    output_dir: str | Path,
-    *,
-    intent: CalculationIntent | None = None,
-    hints: CalculationHints | None = None,
-    pseudo_metadata: list[PseudoMetadata] | None = None,
-) -> CoreResult:
-    """Run the full Core pipeline and write a portable bundle directory.
-
-    Args:
-        structure: Structure object or structure file path.
-        output_dir: New bundle output directory. Existing destinations are
-            refused.
-        intent: Optional calculation intent.
-        hints: Optional operator hints.
-        pseudo_metadata: Available pseudopotential metadata.
-
-    Returns:
-        ``CoreResult`` with generated files, bundle record, and warnings.
-
-    Raises:
-        FileExistsError: If the bundle output directory already exists.
-        OSError: If bundle writing fails.
-        ValueError: If generation or bundle writing rejects its inputs.
-    """
-    return run_core_job(
-        CoreJobRequest(
-            structure=structure,
-            intent=intent or CalculationIntent(),
-            hints=hints or CalculationHints(),
-            mode="bundle",
-            pseudo_metadata=tuple(pseudo_metadata or ()),
-            output_dir=str(output_dir),
         )
     )

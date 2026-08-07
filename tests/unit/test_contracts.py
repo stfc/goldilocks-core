@@ -8,7 +8,6 @@ from goldilocks_core.contracts import (
     ConvergenceAdvice,
     CoreJobRequest,
     CoreResult,
-    KPointAdvice,
     KPointSelection,
     MagnetismAdvice,
     ParameterAdvice,
@@ -41,12 +40,6 @@ def _make_analysis() -> StructureAnalysisRecord:
 def _make_advice() -> ParameterAdvice:
     provenance = Provenance(source="default", reason="baseline default")
     return ParameterAdvice(
-        k_points=KPointAdvice(
-            spacing=0.2,
-            explicit_grid=None,
-            mesh_type="monkhorst-pack",
-            provenance=provenance,
-        ),
         smearing=SmearingAdvice(
             smearing_type=None,
             width_ry=None,
@@ -144,48 +137,6 @@ def test_job_records_serialize_to_json_safe_dicts() -> None:
 
     assert data["bundle"]["path"] == "run/"
     assert data["selection"]["k_points"]["grid"] == [4, 4, 4]
-
-
-def test_kpoint_advice_requires_exactly_one_k_source() -> None:
-    """KPointAdvice raises when both or neither spacing/grid are set."""
-    provenance = Provenance(source="default", reason="baseline default")
-
-    KPointAdvice(
-        spacing=0.2,
-        explicit_grid=None,
-        mesh_type="monkhorst-pack",
-        provenance=provenance,
-    )
-    KPointAdvice(
-        spacing=None,
-        explicit_grid=(2, 2, 2),
-        mesh_type="monkhorst-pack",
-        provenance=provenance,
-    )
-
-    try:
-        KPointAdvice(
-            spacing=0.2,
-            explicit_grid=(2, 2, 2),
-            mesh_type="monkhorst-pack",
-            provenance=provenance,
-        )
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("expected ValueError for both spacing and grid")
-
-    try:
-        KPointAdvice(
-            spacing=None,
-            explicit_grid=None,
-            mesh_type="monkhorst-pack",
-            provenance=provenance,
-        )
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("expected ValueError for neither spacing nor grid")
 
 
 def test_core_job_request_validates_mode_and_bundle_output_dir() -> None:

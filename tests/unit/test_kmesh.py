@@ -1,16 +1,15 @@
 import json
 import math
 
-import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.contracts import (
     CalculationHints,
-    KPointAdvice,
+    KPointSelection,
     Provenance,
     to_jsonable,
 )
-from goldilocks_core.kmesh import resolve_kpoints_from_advice
+from goldilocks_core.kmesh import resolve_kpoints
 from goldilocks_core.kmesh.math import (
     build_k_distance_intervals,
     build_kmesh_entries,
@@ -19,28 +18,23 @@ from goldilocks_core.kmesh.math import (
 )
 
 
-def test_resolve_kpoints_from_advice_prefers_explicit_grid_hint() -> None:
-    """Use explicit operator grids before advice-derived spacing."""
+def _fail_backend(structure: Structure) -> KPointSelection:
+    """A backend that fails if the resolver consults the model for hints."""
+    raise AssertionError("k-point backend should not be called when hints are set")
+
+
+def test_resolve_kpoints_prefers_explicit_grid_hint() -> None:
+    """Use explicit operator grids before the model backend."""
     structure = Structure(
         lattice=Lattice.cubic(4.0),
         species=["Si"],
         coords=[[0.0, 0.0, 0.0]],
     )
-    advice = KPointAdvice(
-        spacing=0.2,
-        explicit_grid=None,
-        mesh_type="monkhorst-pack",
-        provenance=Provenance(
-            source="user_hint",
-            reason="explicit grid",
-            warnings=("Both k_grid and k_spacing were provided; explicit grid wins.",),
-        ),
-    )
 
-    selection = resolve_kpoints_from_advice(
+    selection = resolve_kpoints(
         structure,
-        CalculationHints(k_grid=(2, 3, 4)),
-        advice,
+        CalculationHints(k_grid=(2, 3, 4), k_spacing=0.25),
+        _fail_backend,
     )
 
     assert selection.grid == (2, 3, 4)
@@ -53,24 +47,18 @@ def test_resolve_kpoints_from_advice_prefers_explicit_grid_hint() -> None:
     )
 
 
-def test_resolve_kpoints_from_advice_converts_spacing_hint() -> None:
+def test_resolve_kpoints_converts_spacing_hint() -> None:
     """Convert operator k-spacing through the Kmesh stage."""
     structure = Structure(
         lattice=Lattice.cubic(4.0),
         species=["Si"],
         coords=[[0.0, 0.0, 0.0]],
     )
-    advice = KPointAdvice(
-        spacing=0.2,
-        explicit_grid=None,
-        mesh_type="monkhorst-pack",
-        provenance=Provenance(source="default", reason="default"),
-    )
 
-    selection = resolve_kpoints_from_advice(
+    selection = resolve_kpoints(
         structure,
         CalculationHints(k_spacing=0.25),
-        advice,
+        _fail_backend,
     )
 
     assert selection.grid == (7, 7, 7)
@@ -82,40 +70,26 @@ def test_resolve_kpoints_from_advice_converts_spacing_hint() -> None:
     )
 
 
-def test_resolve_kpoints_from_advice_converts_advised_spacing() -> None:
-    """Convert default/advised spacing when no operator hint is set."""
+def test_resolve_kpoints_consults_backend_without_hints() -> None:
+    """Delegate to the model backend when no operator hint is set."""
     structure = Structure(
         lattice=Lattice.cubic(4.0),
         species=["Si"],
         coords=[[0.0, 0.0, 0.0]],
     )
-    advice = KPointAdvice(
-        spacing=0.25,
-        explicit_grid=None,
-        mesh_type="monkhorst-pack",
-        provenance=Provenance(source="default", reason="default"),
-    )
 
-    selection = resolve_kpoints_from_advice(structure, CalculationHints(), advice)
-
-    assert selection.grid == (7, 7, 7)
-    assert selection.shift == (0, 0, 0)
-    assert selection.mesh_type == "monkhorst-pack"
-    assert selection.provenance.source == advice.provenance.source
-    assert selection.provenance.data_source == (
-        "pymatgen solid-state reciprocal lattice"
-    )
-
-
-def test_resolve_kpoints_from_advice_rejects_empty_advice() -> None:
-    """Require either explicit grid or spacing when constructing k-point advice."""
-    with pytest.raises(ValueError, match="spacing or an explicit grid"):
-        KPointAdvice(
-            spacing=None,
-            explicit_grid=None,
+    def backend(structure: Structure) -> KPointSelection:
+        return KPointSelection(
+            grid=(5, 5, 5),
+            shift=(0, 0, 0),
             mesh_type="monkhorst-pack",
-            provenance=Provenance(source="default", reason="default"),
+            provenance=Provenance(source="model", reason="stub"),
         )
+
+    selection = resolve_kpoints(structure, CalculationHints(), backend)
+
+    assert selection.grid == (5, 5, 5)
+    assert selection.provenance.source == "model"
 
 
 def test_k_distance_to_mesh_matches_vasp_kspacing_for_cubic_cell() -> None:

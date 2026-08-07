@@ -58,7 +58,7 @@ def test_build_bundle_manifest_records_file_metadata_without_content() -> None:
     assert manifest["manifest_version"] == 1
     assert manifest["intent"]["code"] == "quantum_espresso"
     assert manifest["analysis"]["elements"] == ["Si"]
-    assert manifest["advice"]["k_points"]["mesh_type"] == "monkhorst-pack"
+    assert manifest["selection"]["k_points"]["mesh_type"] == "monkhorst-pack"
     assert manifest["selection"]["k_points"]["grid"] == [4, 4, 4]
     assert manifest["generated_files"] == [
         {

@@ -82,11 +82,14 @@ class CoreRuntime:
     def recommend(self, request: CoreJobRequest) -> CoreResult:
         """Run Load → Analyse → Advise → Kmesh → Select and return records."""
         self._ensure_open()
-        _, analysis, advice, _, selection, warnings = self._run_scf_stages(request)
+        _, analysis, advice, k_points, selection, warnings = self._run_scf_stages(
+            request
+        )
         return CoreResult(
             intent=request.intent,
             analysis=analysis,
             advice=advice,
+            k_points=k_points,
             selection=selection,
             generated_files=(),
             warnings=warnings,
@@ -101,16 +104,19 @@ class CoreRuntime:
     ) -> CoreResult:
         """Run the full SCF path through Generate, optionally writing a bundle."""
         self._ensure_open()
-        structure, analysis, advice, _, selection, warnings = self._run_scf_stages(
-            request
+        structure, analysis, advice, k_points, selection, warnings = (
+            self._run_scf_stages(request)
         )
-        generated_files = generate_inputs(structure, request.intent, advice, selection)
+        generated_files = generate_inputs(
+            structure, request.intent, advice, selection, k_points
+        )
         bundle: BundleRecord | None = None
         if output_dir is not None:
             in_progress = CoreResult(
                 intent=request.intent,
                 analysis=analysis,
                 advice=advice,
+                k_points=k_points,
                 selection=selection,
                 generated_files=generated_files,
                 warnings=warnings,
@@ -120,11 +126,45 @@ class CoreRuntime:
             intent=request.intent,
             analysis=analysis,
             advice=advice,
+            k_points=k_points,
             selection=selection,
             generated_files=generated_files,
             warnings=warnings,
             bundle=bundle,
         )
+
+    def analyze(self, request: CoreJobRequest) -> StructureAnalysisRecord:
+        """Run Load → Analyse and return the analysis record."""
+        self._ensure_open()
+        structure = load_structure(request.structure)
+        return analyze_structure(structure)
+
+    def kmesh(self, request: CoreJobRequest) -> KPointSelection:
+        """Run the Kmesh stage using the owned backend and return the grid."""
+        self._ensure_open()
+        structure = load_structure(request.structure)
+        return resolve_kpoints(
+            structure, request.hints, self._kmesh_backend(request.kmesh_model)
+        )
+
+    def advise(self, request: CoreJobRequest) -> ParameterAdvice:
+        """Run Load → Analyse → Advise and return the advice record."""
+        self._ensure_open()
+        structure = load_structure(request.structure)
+        analysis = analyze_structure(structure)
+        return advise_parameters(analysis, request.intent, request.hints)
+
+    def select(self, request: CoreJobRequest) -> SelectionRecord:
+        """Run Load → Analyse → Advise → Select and return the selection record.
+
+        This does **not** invoke the Kmesh stage — Select does not depend on
+        k-points.
+        """
+        self._ensure_open()
+        structure = load_structure(request.structure)
+        analysis = analyze_structure(structure)
+        advice = advise_parameters(analysis, request.intent, request.hints)
+        return select_parameters(structure, advice, tuple(request.pseudo_metadata))
 
     def reset(self) -> None:
         """Discard cached model state; the next job reloads."""
@@ -165,9 +205,7 @@ class CoreRuntime:
         k_points = resolve_kpoints(
             structure, request.hints, self._kmesh_backend(request.kmesh_model)
         )
-        selection = select_parameters(
-            structure, advice, k_points, tuple(request.pseudo_metadata)
-        )
+        selection = select_parameters(structure, advice, tuple(request.pseudo_metadata))
         warnings = _unique_warnings(
             analysis.disorder_warnings,
             analysis.analysis_warnings,

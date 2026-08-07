@@ -25,8 +25,8 @@ from goldilocks_core import recommend
 result = recommend("structure.cif")
 
 print(result.analysis.reduced_formula)              # e.g. "Si"
-print(result.selection.k_points.provenance.source)  # "model"
-print(result.selection.k_points.grid)               # concrete model grid
+print(result.k_points.provenance.source)  # "model"
+print(result.k_points.grid)               # concrete model grid
 print(result.to_dict())                             # full JSON-safe dict
 ```
 
@@ -46,7 +46,7 @@ result = recommend(
 )
 
 # Check provenance: these should be user_hint
-print(result.selection.k_points.provenance.source)   # "user_hint"
+print(result.k_points.provenance.source)   # "user_hint"
 print(result.advice.magnetism.provenance.source)     # "user_hint"
 print(result.advice.smearing.provenance.source)       # "user_hint"
 
@@ -78,8 +78,8 @@ advice = advise_parameters(analysis, hints=hints)
 print(advice.spin_orbit.consider)          # False
 
 k_points = resolve_kpoints(structure, hints, default_kmesh_advisor())
-selection = select_parameters(structure, advice, k_points)
-print(selection.k_points.grid)             # concrete model grid
+selection = select_parameters(structure, advice)
+print(k_points.grid)             # concrete model grid
 ```
 
 ## Pseudopotential selection
@@ -124,16 +124,19 @@ for generated_file in result.generated_files:
 ## Writing a portable bundle
 
 ```python
-from goldilocks_core import CalculationHints, write_bundle
+from goldilocks_core import CalculationHints, CoreJobRequest, run_core_job
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 pseudo_metadata = load_pseudo_metadata("path/to/pseudopotentials")
 
-result = write_bundle(
-    "structure.cif",
-    "run/",
-    hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
-    pseudo_metadata=pseudo_metadata,
+result = run_core_job(
+    CoreJobRequest(
+        structure="structure.cif",
+        hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
+        pseudo_metadata=tuple(pseudo_metadata),
+        mode="generate",
+        output_dir="run/",
+    )
 )
 
 print(result.bundle.path)          # "run/"
@@ -189,9 +192,9 @@ result = run_core_job(
     CoreJobRequest(structure="structure.cif", mode="recommend", kmesh_model=spec)
 )
 
-print(result.selection.k_points.grid)
-print(result.selection.k_points.provenance.source)       # "model"
-print(result.selection.k_points.provenance.data_source)  # spec.name
+print(result.k_points.grid)
+print(result.k_points.provenance.source)       # "model"
+print(result.k_points.provenance.data_source)  # spec.name
 ```
 
 The model spec is request data, so it serializes with the rest of the job.
@@ -209,7 +212,7 @@ result = run_core_job(
     )
 )
 
-print(result.selection.k_points.provenance.source)  # "user_hint"
+print(result.k_points.provenance.source)  # "user_hint"
 ```
 
 The standalone advisor remains available when you only need a `KPointSelection`:
@@ -228,7 +231,7 @@ selection = advise_kpoints(load_structure("structure.cif"), spec)
 ```python
 from goldilocks_core import recommend
 result = recommend("structure.cif")
-print(result.selection.k_points.grid)
+print(result.k_points.grid)
 ```
 
 **I want JSON for an HTTP service:**

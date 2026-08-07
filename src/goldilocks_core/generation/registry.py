@@ -11,13 +11,14 @@ from goldilocks_core.contracts import (
     CalculationIntent,
     CodeName,
     GeneratedFile,
+    KPointSelection,
     ParameterAdvice,
     SelectionRecord,
 )
 from goldilocks_core.generation.qe.scf import write_qe_scf
 
 Writer = Callable[
-    [Structure, CalculationIntent, ParameterAdvice, SelectionRecord],
+    [Structure, CalculationIntent, ParameterAdvice, SelectionRecord, KPointSelection],
     tuple[GeneratedFile, ...],
 ]
 """Generate-stage writer signature.
@@ -64,6 +65,7 @@ def generate_inputs(
     intent: CalculationIntent,
     advice: ParameterAdvice,
     selection: SelectionRecord,
+    k_points: KPointSelection,
 ) -> tuple[GeneratedFile, ...]:
     """Dispatch to the writer registered for ``intent.code``/``intent.task``.
 
@@ -71,7 +73,8 @@ def generate_inputs(
         structure: Loaded structure for the calculation.
         intent: Target code and task to generate.
         advice: Completed parameter advice.
-        selection: Concrete k-points, pseudopotentials, and cutoffs.
+        selection: Concrete pseudopotentials and cutoffs.
+        k_points: Concrete k-point grid from the Kmesh stage.
 
     Returns:
         Generated input files for the requested code/task.
@@ -80,4 +83,6 @@ def generate_inputs(
         ValueError: If no writer is registered for the requested code/task,
             or if the target writer rejects its inputs.
     """
-    return writer_for(intent.code, intent.task)(structure, intent, advice, selection)
+    return writer_for(intent.code, intent.task)(
+        structure, intent, advice, selection, k_points
+    )

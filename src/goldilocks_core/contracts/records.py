@@ -628,17 +628,17 @@ class PseudopotentialSelection:
 class SelectionRecord:
     """Complete Select-stage output.
 
-    Contains the Kmesh-stage grid, pseudopotential selections, and any
-    accumulated warnings from the selection process.
+    Contains pseudopotential selections and any accumulated warnings from
+    the selection process. K-points are resolved by the Kmesh stage and
+    carried on :class:`CoreResult`, not here — Select does not depend on
+    k-points.
 
     Attributes:
-        k_points: resolved k-point grid and shift.
         pseudopotentials: one selection per element.
         warnings: warnings from pseudo selection (e.g. missing
             pseudos, incomplete cutoffs).
     """
 
-    k_points: KPointSelection
     pseudopotentials: tuple[PseudopotentialSelection, ...]
     warnings: tuple[str, ...] = ()
 
@@ -695,28 +695,33 @@ class BundleRecord:
 class CoreResult:
     """Records produced by a recommendation or generation workflow.
 
-    Scientific records are populated as their stages run. ``generated_files``
-    is populated in generate/bundle modes. ``bundle`` is set only in bundle
-    mode. The request is not echoed here — the caller already has it;
-    CLI/HTTP layers echo it themselves in their serialized output.
+    Scientific records are populated as their stages run. ``k_points``
+    carries the Kmesh-stage grid alongside the Select-stage pseudos.
+    ``generated_files`` is populated in generate mode. ``bundle`` is set
+    only when ``generate`` is given an ``output_dir``. The request is not
+    echoed here — the caller already has it; CLI/HTTP layers echo it
+    themselves in their serialized output.
 
     Attributes:
         intent: what the operator asked for.
         analysis: structure facts from the Analyze stage.
         advice: provenance-backed recommendations from the Advise
             stage.
-        selection: concrete values from the Select stage.
+        k_points: concrete k-point grid from the Kmesh stage.
+        selection: concrete pseudopotentials and cutoffs from the
+            Select stage.
         generated_files: generated input files, populated by
-            Generate or Bundle modes.
+            Generate mode (or the bundle writer).
         warnings: aggregated warnings from analysis, Kmesh, and
             selection.
-        bundle: terminal Bundle-stage record, set only in bundle
-            mode.
+        bundle: terminal Bundle-stage record, set only when
+            ``generate`` writes a bundle directory.
     """
 
     intent: CalculationIntent
     analysis: StructureAnalysisRecord
     advice: ParameterAdvice
+    k_points: KPointSelection
     selection: SelectionRecord
     generated_files: tuple[GeneratedFile, ...] = ()
     warnings: tuple[str, ...] = ()
@@ -739,11 +744,10 @@ class CoreJobRequest:
             path to a structure file.
         intent: what to calculate.
         hints: optional operator overrides.
-        mode: pipeline mode: ``recommend``, ``generate``, or
-            ``bundle``.
+        mode: pipeline mode: ``recommend`` or ``generate``.
         pseudo_metadata: pseudopotential metadata for selection.
-        output_dir: output directory path, required when mode is
-            ``bundle``.
+        output_dir: output directory path, meaningful only with
+            ``generate`` (publishes a bundle directory).
         kmesh_model: optional local k-index model spec; when set, the
             SCF path uses it for k-point selection instead of the default
             QRF k-distance model.
@@ -759,11 +763,8 @@ class CoreJobRequest:
 
     def __post_init__(self) -> None:
         """Validate request invariants at construction."""
-        if self.mode not in {"recommend", "generate", "bundle"}:
+        if self.mode not in {"recommend", "generate"}:
             raise ValueError(f"Unsupported Core job mode: {self.mode}")
-
-        if self.mode == "bundle" and self.output_dir is None:
-            raise ValueError("output_dir is required for bundle mode")
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""

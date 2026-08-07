@@ -43,8 +43,8 @@ result = run_core_job(request)
 `mode` controls where the SCF path stops:
 
 - `recommend`: after Select
-- `generate`: after Generate
-- `bundle`: after Bundle
+- `generate`: after Generate. When `output_dir` is given, a bundle directory
+  is published.
 
 `CalculationIntent.task` describes the calculation. Task names are not closed
 in the shared contract. The built-in path currently accepts only
@@ -69,8 +69,8 @@ structure = load_structure("Fe.cif")
 analysis = analyze_structure(structure)
 advice = advise_parameters(analysis, intent, hints)
 kpoints = resolve_kpoints(structure, hints, default_kmesh_advisor())
-selection = select_parameters(structure, advice, kpoints, metadata)
-files = generate_inputs(structure, intent, advice, selection)
+selection = select_parameters(structure, advice, metadata)
+files = generate_inputs(structure, intent, advice, selection, kpoints)
 ```
 
 This supports custom ordering, extra project-specific steps, intermediate

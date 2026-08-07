@@ -26,7 +26,7 @@ def test_every_bundled_structure_runs_through_the_pipeline(name: str) -> None:
     result = recommend(structure(name), hints=CalculationHints(k_grid=(4, 4, 4)))
 
     assert result.analysis.reduced_formula
-    assert result.selection.k_points.grid == (4, 4, 4)
+    assert result.k_points.grid == (4, 4, 4)
 
 
 def test_bundled_structures_exercise_distinct_advice_branches() -> None:

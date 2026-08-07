@@ -36,6 +36,7 @@ def build_bundle_manifest(result: CoreResult) -> JsonDict:
         "intent": result.intent.to_dict(),
         "analysis": result.analysis.to_dict(),
         "advice": result.advice.to_dict(),
+        "k_points": result.k_points.to_dict(),
         "selection": result.selection.to_dict(),
         "generated_files": files,
         "warnings": list(result.warnings),

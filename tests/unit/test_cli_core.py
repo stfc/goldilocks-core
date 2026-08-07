@@ -17,6 +17,7 @@ from goldilocks_core.contracts import (
     SelectionRecord,
     StructureAnalysisRecord,
 )
+from goldilocks_core.examples import structure as example_structure
 
 _VDW_METHODS = ("d3", "d3bj", "ts", "mbd")
 
@@ -40,15 +41,13 @@ def make_result(request: CoreJobRequest) -> CoreResult:
         intent=request.intent,
         analysis=analysis,
         advice=advice,
-        selection=SelectionRecord(
-            k_points=KPointSelection(
-                grid=(2, 2, 1),
-                shift=(0, 0, 0),
-                mesh_type="monkhorst-pack",
-                provenance=Provenance(source="user_hint", reason="test"),
-            ),
-            pseudopotentials=(),
+        k_points=KPointSelection(
+            grid=(2, 2, 1),
+            shift=(0, 0, 0),
+            mesh_type="monkhorst-pack",
+            provenance=Provenance(source="user_hint", reason="test"),
         ),
+        selection=SelectionRecord(pseudopotentials=()),
     )
 
 
@@ -367,7 +366,7 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
     assert request.hints.k_grid == (2, 2, 1)
     assert request.hints.pseudo_type == "NC"
     output = json.loads(capsys.readouterr().out)
-    assert output["selection"]["k_points"]["grid"] == [2, 2, 1]
+    assert output["k_points"]["grid"] == [2, 2, 1]
     assert output["request"]["structure"] == "Si.cif"
 
 
@@ -405,8 +404,8 @@ def test_main_builds_request_with_model_backend(monkeypatch, capsys) -> None:
     assert json.loads(capsys.readouterr().out)["request"]["structure"] == "Si.cif"
 
 
-def test_main_builds_bundle_request_with_output_dir(monkeypatch, capsys) -> None:
-    """Pass bundle output path through the shared Core job request."""
+def test_main_builds_generate_request_with_output_dir(monkeypatch, capsys) -> None:
+    """Pass generate output path through the shared Core job request."""
     captured: dict[str, CoreJobRequest] = {}
 
     def fake_run_core_job(request: CoreJobRequest) -> CoreResult:
@@ -416,6 +415,7 @@ def test_main_builds_bundle_request_with_output_dir(monkeypatch, capsys) -> None
             intent=result.intent,
             analysis=result.analysis,
             advice=result.advice,
+            k_points=result.k_points,
             selection=result.selection,
             bundle=BundleRecord(path=request.output_dir, manifest={}),
         )
@@ -424,11 +424,106 @@ def test_main_builds_bundle_request_with_output_dir(monkeypatch, capsys) -> None
     monkeypatch.setattr(
         sys,
         "argv",
-        ["goldilocks-core", "bundle", "Si.cif", "--out", "run"],
+        ["goldilocks-core", "generate", "Si.cif", "--out", "run"],
     )
 
     cli_core.main()
 
-    assert captured["request"].mode == "bundle"
+    assert captured["request"].mode == "generate"
     assert captured["request"].output_dir == "run"
     assert "bundle: run" in capsys.readouterr().out
+
+
+def test_cli_has_no_bundle_subcommand() -> None:
+    """The removed bundle subcommand is rejected by the parser."""
+    parser = cli_core.build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["bundle", "Si.cif", "--out", "run"])
+
+
+def test_cli_analyze_prints_analysis(monkeypatch, capsys) -> None:
+    """The analyze subcommand prints the structure analysis."""
+    si_path = str(example_structure("Si.cif"))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["goldilocks-core", "analyze", si_path],
+    )
+
+    cli_core.main()
+
+    out = capsys.readouterr().out
+    assert "formula: Si" in out
+
+
+def test_cli_kmesh_prints_k_points(monkeypatch, capsys) -> None:
+    """The kmesh subcommand prints the resolved k-point grid."""
+    si_path = str(example_structure("Si.cif"))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "goldilocks-core",
+            "kmesh",
+            si_path,
+            "--k-grid",
+            "2",
+            "3",
+            "4",
+        ],
+    )
+
+    cli_core.main()
+
+    out = capsys.readouterr().out
+    assert "k-grid: 2 3 4" in out
+
+
+def test_cli_generate_with_out_writes_bundle(monkeypatch, capsys, tmp_path) -> None:
+    """The generate --out subcommand writes a bundle directory."""
+    from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
+
+    si_path = str(example_structure("Si.cif"))
+    output_dir = tmp_path / "bundle"
+
+    def fake_load_pseudo_metadata(root):
+        return [
+            PseudoMetadata(
+                filepath="/pseudo/Si.UPF",
+                filename="Si.UPF",
+                header_format="attr",
+                library="SSSP",
+                element="Si",
+                pseudo_type="NC",
+                functional="PBEsol",
+                relativistic="scalar",
+                sssp_recommended_cutoff={"ecutwfc_ry": 35, "ecutrho_ry": 140},
+            )
+        ]
+
+    monkeypatch.setattr(cli_core, "load_pseudo_metadata", fake_load_pseudo_metadata)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "goldilocks-core",
+            "generate",
+            si_path,
+            "--k-grid",
+            "2",
+            "2",
+            "2",
+            "--pseudo-root",
+            "/pseudo",
+            "--out",
+            str(output_dir),
+        ],
+    )
+
+    cli_core.main()
+
+    assert output_dir.exists()
+    assert (output_dir / "inputs" / "qe.in").exists()
+    assert (output_dir / "manifest.json").exists()
+    assert f"bundle: {output_dir}" in capsys.readouterr().out

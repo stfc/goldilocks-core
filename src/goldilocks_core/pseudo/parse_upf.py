@@ -42,18 +42,6 @@ def _extract_library(filepath: str) -> str | None:
     return parts[index + 1]
 
 
-def _extract_source_set(filepath: str) -> str | None:
-    """Extract the source set from the path."""
-    parts = Path(filepath).parts
-    if "pseudopotentials" not in parts:
-        return None
-
-    index = parts.index("pseudopotentials")
-    if index + 2 >= len(parts):
-        return None
-    return parts[index + 2]
-
-
 def _normalize_element(value: object) -> str | None:
     """Normalize element strings such as 'B ' -> 'B'."""
     text = _clean_string(value)
@@ -379,10 +367,3 @@ def parse_upf_metadata(path: str | Path) -> PseudoMetadata:
         source_pseudopotential=source_pseudopotential,
         sssp_recommended_cutoff=sssp_recommended_cutoff,
     )
-
-
-def parse_upf_folders(root: str | Path) -> list[PseudoMetadata]:
-    """Parse all UPF files under a root directory."""
-    root = Path(root)
-    upf_files = sorted(root.rglob("*.upf")) + sorted(root.rglob("*.UPF"))
-    return [parse_upf_metadata(path) for path in upf_files]

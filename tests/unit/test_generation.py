@@ -12,6 +12,8 @@ from goldilocks_core.contracts import (
     KPointSelection,
     ParameterAdvice,
     Provenance,
+    PseudopotentialSelection,
+    SelectionRecord,
     SmearingType,
     VdwMethod,
 )
@@ -362,3 +364,256 @@ def test_generate_inputs_rejects_unsafe_pseudopotential_filename() -> None:
 def advice_context() -> CalculationIntent:
     """Return the default intent without obscuring test expectations."""
     return CalculationIntent()
+
+
+@pytest.mark.parametrize(
+    ("smearing_type", "qe_smearing"),
+    [("gaussian", "gaussian"), ("mp", "mp"), ("cold", "cold")],
+)
+def test_generate_inputs_writes_smearing_lines(
+    smearing_type: str,
+    qe_smearing: str,
+) -> None:
+    """Emit the exact QE smearing keyword for every enabled method."""
+    structure = make_structure()
+    hints = CalculationHints(
+        k_grid=(2, 2, 2),
+        pseudo_type="NC",
+        smearing_type=smearing_type,
+        smearing_width_ry=0.02,
+    )
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+
+    content = generate_inputs(structure, advice_context(), advice, selection)[0].content
+
+    assert "  occupations = 'smearing'" in content
+    assert f"  smearing = '{qe_smearing}'" in content
+    assert "  degauss = 0.02" in content
+
+
+def test_generate_inputs_writes_nspin_2_when_spin_polarized() -> None:
+    """Emit collinear nspin=2 without SOC flags for a spin-polarized run."""
+    structure = make_structure()
+    hints = CalculationHints(
+        k_grid=(2, 2, 2),
+        pseudo_type="NC",
+        spin_polarized=True,
+    )
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+
+    content = generate_inputs(structure, advice_context(), advice, selection)[0].content
+
+    assert "  nspin = 2" in content
+    assert "noncolin" not in content
+    assert "lspinorb" not in content
+
+
+def test_generate_inputs_system_block_orders_smearing_spin_vdw() -> None:
+    """The SYSTEM namelist orders smearing, spin, then vdW lines exactly."""
+    structure = make_structure()
+    hints = CalculationHints(
+        k_grid=(2, 2, 2),
+        pseudo_type="NC",
+        smearing_type="mp",
+        smearing_width_ry=0.01,
+        spin_polarized=True,
+        use_vdw=True,
+        vdw_method="d3bj",
+    )
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+
+    content = generate_inputs(structure, advice_context(), advice, selection)[0].content
+
+    system = content.split("&SYSTEM")[1].split("/")[0]
+    assert system == (
+        "\n  ibrav = 0\n  nat = 1\n  ntyp = 1\n"
+        "  ecutwfc = 35\n  ecutrho = 140\n"
+        "  occupations = 'smearing'\n  smearing = 'mp'\n  degauss = 0.01\n"
+        "  nspin = 2\n"
+        "  vdw_corr = 'grimme-d3'\n  dftd3_version = 4\n"
+    )
+
+
+def test_generate_inputs_rejects_unsupported_smearing_method() -> None:
+    """Reject a smearing method the QE target cannot translate."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    advice = replace(
+        advice,
+        smearing=replace(
+            advice.smearing,
+            smearing_type="bogus",
+            width_ry=0.02,
+        ),
+    )
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+
+    with pytest.raises(ValueError, match="unsupported method 'bogus'"):
+        generate_inputs(structure, advice_context(), advice, selection)
+
+
+def test_generate_inputs_rejects_missing_smearing_width() -> None:
+    """Require a smearing width whenever smearing is enabled."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    advice = replace(
+        advice,
+        smearing=replace(
+            advice.smearing,
+            smearing_type="gaussian",
+            width_ry=None,
+        ),
+    )
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+
+    with pytest.raises(
+        ValueError, match="Smearing width is required when smearing is enabled"
+    ):
+        generate_inputs(structure, advice_context(), advice, selection)
+
+
+def test_generate_inputs_rejects_unsupported_vdw_method() -> None:
+    """Reject an enabled vdW method the QE target cannot translate."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    advice = replace(
+        advice,
+        vdw=replace(advice.vdw, use_vdw=True, method="bogus"),
+    )
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+
+    with pytest.raises(
+        ValueError, match="enabled vdW requires a supported method; got 'bogus'"
+    ):
+        generate_inputs(structure, advice_context(), advice, selection)
+
+
+def test_generate_inputs_rejects_disabled_vdw_with_method() -> None:
+    """Reject a method label when vdW is disabled."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    advice = replace(
+        advice,
+        vdw=replace(advice.vdw, use_vdw=False, method="d3"),
+    )
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+
+    with pytest.raises(ValueError, match="disabled vdW requires method=None; got 'd3'"):
+        generate_inputs(structure, advice_context(), advice, selection)
+
+
+def test_generate_inputs_rejects_disordered_structure() -> None:
+    """Reject disordered structures before rendering any QE text."""
+    structure = Structure(
+        lattice=Lattice.cubic(4.0),
+        species=[{"Si": 0.5, "Ge": 0.5}],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Cannot generate Quantum ESPRESSO input for disordered structures",
+    ):
+        generate_inputs(structure, advice_context(), advice, selection)
+
+
+def test_generate_inputs_raises_when_pseudo_missing_for_element() -> None:
+    """A missing pseudopotential for a structure element is not silently skipped."""
+    structure = Structure(
+        lattice=Lattice.cubic(4.0),
+        species=["Si", "Ge"],
+        coords=[[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]],
+    )
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = SelectionRecord(
+        k_points=KPointSelection(
+            grid=(2, 2, 2),
+            shift=(0, 0, 0),
+            mesh_type="monkhorst-pack",
+            provenance=Provenance(source="model", reason="stub"),
+        ),
+        pseudopotentials=(
+            PseudopotentialSelection(
+                element="Si",
+                filename="Si.UPF",
+                filepath="/pseudo/Si.UPF",
+                ecutwfc_ry=35.0,
+                ecutrho_ry=140.0,
+                provenance=Provenance(source="model", reason="stub"),
+            ),
+        ),
+    )
+
+    with pytest.raises(KeyError):
+        generate_inputs(structure, advice_context(), advice, selection)
+
+
+def test_write_qe_scf_returns_single_input_file_record() -> None:
+    """The QE writer returns exactly one input file with the canonical path."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+
+    files = generate_inputs(structure, advice_context(), advice, selection)
+
+    assert len(files) == 1
+    assert files[0].path == "inputs/qe.in"
+    assert files[0].role == "input"
+    assert files[0].content.endswith("\n")

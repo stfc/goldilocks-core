@@ -26,40 +26,37 @@ Each writer renders the input text for one ``(code, task)`` pair and owns the
 ``GeneratedFile`` records it returns, including their relative paths.
 """
 
-_WRITERS: dict[tuple[CodeName, CalcTask], Writer] = {
-    ("quantum_espresso", "scf_single_point"): write_qe_scf,
-}
-
-
-def register_writer(code: CodeName, task: CalcTask, writer: Writer) -> None:
-    """Register or replace the writer for one ``(code, task)`` dispatch key."""
-    _WRITERS[(code, task)] = writer
+# Static dispatch table: one (code, task, writer) triple per supported pair.
+_WRITERS: tuple[tuple[CodeName, CalcTask, Writer], ...] = (
+    ("quantum_espresso", "scf_single_point", write_qe_scf),
+)
 
 
 def writer_for(code: CodeName, task: CalcTask) -> Writer:
-    """Return the writer registered for ``(code, task)``.
+    """Return the writer for ``(code, task)``.
 
     Raises:
         ValueError: If no writer is registered for the requested pair.
     """
-    try:
-        return _WRITERS[(code, task)]
-    except KeyError:
-        available = ", ".join(f"{c}/{t}" for c, t in sorted(_WRITERS))
-        raise ValueError(
-            f"No input writer registered for code={code!r}, task={task!r}. "
-            f"Available: {available}"
-        ) from None
+    for entry_code, entry_task, writer in _WRITERS:
+        if entry_code == code and entry_task == task:
+            return writer
+    pairs = sorted({(code, task) for code, task, _ in _WRITERS})
+    available = ", ".join(f"{code}/{task}" for code, task in pairs)
+    raise ValueError(
+        f"No input writer registered for code={code!r}, task={task!r}. "
+        f"Available: {available}"
+    )
 
 
 def available_codes() -> tuple[CodeName, ...]:
     """Return the deduplicated, sorted codes with registered writers."""
-    return tuple(sorted({code for code, _ in _WRITERS}))
+    return tuple(sorted({code for code, _, _ in _WRITERS}))
 
 
 def available_tasks() -> tuple[CalcTask, ...]:
     """Return the deduplicated, sorted tasks with registered writers."""
-    return tuple(sorted({task for _, task in _WRITERS}))
+    return tuple(sorted({task for _, task, _ in _WRITERS}))
 
 
 def generate_inputs(

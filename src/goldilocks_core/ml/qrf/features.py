@@ -7,6 +7,8 @@ Heavy dependencies are imported lazily so importing this module stays cheap.
 
 from __future__ import annotations
 
+import inspect
+
 import numpy as np
 from pymatgen.core import Structure
 
@@ -126,9 +128,13 @@ def _composition_features(
                 impute_nan=settings.impute_nan,
             )
         else:
-            try:
+            # Featurizer constructors are heterogeneous: some (e.g.
+            # Stoichiometry) do not accept ``impute_nan``. Inspect the signature
+            # once and pass it only where supported -- explicit capability
+            # detection, not a catch-all retry.
+            if "impute_nan" in inspect.signature(featurizer_cls).parameters:
                 method = featurizer_cls(impute_nan=settings.impute_nan)
-            except TypeError:
+            else:
                 method = featurizer_cls()
         methods.append(method)
 

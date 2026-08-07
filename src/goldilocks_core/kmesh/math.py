@@ -148,10 +148,7 @@ def build_kmesh_entries(
     entries: list[KMeshEntry] = []
 
     for index, (mesh, k_distance_interval) in enumerate(intervals, start=1):
-        try:
-            k_line_density_interval = mesh_to_k_line_density_interval(structure, mesh)
-        except ValueError:
-            k_line_density_interval = None
+        k_line_density_interval = mesh_to_k_line_density_interval(structure, mesh)
 
         lower, upper = k_distance_interval
         entries.append(

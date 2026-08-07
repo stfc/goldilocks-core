@@ -1,10 +1,11 @@
-"""Inference utilities for machine-learning models."""
+"""K-index inference boundary: low-level predict + the public entry point."""
 
 from __future__ import annotations
 
 import numpy as np
+from pymatgen.core import Structure
 
-from goldilocks_core.contracts import StructureFeatureVector
+from goldilocks_core.contracts import ModelSpec, StructureFeatureVector
 
 
 def predict(model: object, features: StructureFeatureVector) -> float:
@@ -44,3 +45,13 @@ def predict(model: object, features: StructureFeatureVector) -> float:
         raise ValueError("Model prediction returned no values.")
 
     return float(predictions[0])
+
+
+def predict_kindex(structure: Structure, spec: ModelSpec) -> float:
+    """Predict a scalar k-index for ``structure`` using the model at ``spec``."""
+    from goldilocks_core.ml.kindex.features import extract_cslr_features
+    from goldilocks_core.ml.models import load_model
+
+    features = extract_cslr_features(structure)
+    model = load_model(spec)
+    return predict(model, features)

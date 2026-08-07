@@ -1,6 +1,8 @@
 # CLI reference
 
-The `goldilocks-core` command is a thin wrapper around `CoreJobRequest` and `run_core_job()`. It parses arguments, runs the staged pipeline, and prints JSON or a short human-readable summary.
+The `goldilocks-core` command is a thin wrapper around `CoreJobRequest` and the
+`CoreRuntime` entrypoints. It parses arguments, runs the staged pipeline, and
+prints JSON or a short human-readable summary.
 
 ## Commands
 
@@ -10,7 +12,8 @@ The `goldilocks-core` command is a thin wrapper around `CoreJobRequest` and `run
 goldilocks-core recommend structure.cif [options]
 ```
 
-Runs Load → Analyze → Advise → Kmesh → Select. Outputs a recommendation without generated files.
+Runs Load → Analyze → Advise → Kmesh → Select. Outputs a recommendation
+without generated files.
 
 ### generate
 
@@ -18,7 +21,10 @@ Runs Load → Analyze → Advise → Kmesh → Select. Outputs a recommendation 
 goldilocks-core generate structure.cif [options]
 ```
 
-Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a recommendation with generated input files. Pass `--out <dir>` to write a portable bundle directory instead of returning in-memory files; the directory must not already exist.
+Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a
+recommendation with generated input files. Pass `--out <dir>` to write a
+portable bundle directory instead of returning in-memory files; the directory
+must not already exist.
 
 ### Raw stage subcommands
 
@@ -29,7 +35,11 @@ goldilocks-core advise structure.cif [options]
 goldilocks-core select structure.cif [options]
 ```
 
-Each runs only the sub-graph it needs and prints the corresponding record. `analyze` runs Load → Analyse; `kmesh` resolves k-points using the owned backend; `advise` runs Load → Analyse → Advise; `select` runs Load → Analyse → Advise → Select (without invoking kmesh).
+Each runs only the sub-graph it needs and prints the corresponding record.
+`analyze` runs Load → Analyze; `kmesh` resolves k-points using the owned
+backend; `advise` runs Load → Analyze → Advise; `select` runs Load → Analyze →
+Advise → Select (without invoking Kmesh). These call the `CoreRuntime`
+entrypoints directly inside a short-lived runtime.
 
 ### examples
 
@@ -37,7 +47,8 @@ Each runs only the sub-graph it needs and prints the corresponding record. `anal
 goldilocks-core examples path
 ```
 
-Prints the directory holding the example structures installed with the package. It takes none of the common options below.
+Prints the directory holding the example structures installed with the
+package. It takes none of the common options below.
 
 Use it to run the pipeline without supplying a structure of your own:
 
@@ -45,7 +56,27 @@ Use it to run the pipeline without supplying a structure of your own:
 goldilocks-core recommend "$(goldilocks-core examples path)/Si.cif" --json
 ```
 
-The directory's `README.md` explains what each example exercises. From Python, use `goldilocks_core.examples.structure("Si.cif")` rather than building the path by hand.
+The directory's `README.md` explains what each example exercises. From Python,
+use `goldilocks_core.examples.structure("Si.cif")` rather than building the
+path by hand.
+
+### serve
+
+```bash
+goldilocks-core serve http [--host 127.0.0.1] [--port 8000]
+goldilocks-core serve mcp
+```
+
+Run an HTTP or MCP server exposing the Core pipeline. Both delegate to one
+long-lived `CoreRuntime` owned by the server process.
+
+- `serve http` — FastAPI + uvicorn server (requires the `[http]` extra).
+  `--host` defaults to loopback; `--port` defaults to 8000.
+- `serve mcp` — MCP server over stdio (requires the `[mcp]` extra).
+
+See [transport.md](transport.md) for the endpoint/tool list, request shape, and
+error semantics. The extras are installed with
+`uv sync --extra http --extra mcp`.
 
 ## Common options
 
@@ -83,9 +114,6 @@ Every `CalculationIntent` field maps directly to a CLI option. Every
 the CLI sets `CalculationIntent.pseudo_mode` with `--pseudo-mode` instead of
 exposing a second override for the same effective pseudopotential-family choice.
 
-`accuracy_level` and `--accuracy-level` were intentionally removed because no
-stage implemented different scientific behavior for the advertised levels.
-
 ## Boolean options
 
 `--spin-polarized`, `--spin-orbit-coupling`, and `--use-vdw` accept `true` or
@@ -105,7 +133,8 @@ and is rejected by the shared `CalculationHints` contract before job execution.
 
 ### JSON (`--json`)
 
-Full JSON envelope: `{"request": request.to_dict(), **result.to_dict()}` printed with `indent=2, sort_keys=True`. Suitable for piping to `jq` or HTTP services.
+Full JSON envelope: `{"request": request.to_dict(), **result.to_dict()}` printed
+with `indent=2, sort_keys=True`. Suitable for piping to `jq` or HTTP services.
 
 ### Human-readable (default)
 
@@ -123,9 +152,17 @@ warnings:
   - Electronic character is unknown from structure facts alone...
 ```
 
+Raw stage subcommands print a stage-appropriate summary (formula and elements
+for `analyze`, grid and provenance for `kmesh`, pseudos for `select`).
+
 ## Pseudo loading
 
-`--pseudo-root` recursively searches the given directory for `.upf` and `.UPF` files, parses each one with `parse_upf_metadata()`, and passes the resulting `PseudoMetadata` list to the selection stage. CLI functional intent and parsed UPF functional metadata use the same canonical labels. Supported PBEsol spellings match; unrecognized labels remain distinct rather than falling back to PBE or another functional.
+`--pseudo-root` recursively searches the given directory for `.upf` and `.UPF`
+files, parses each one with `parse_upf_metadata()`, and passes the resulting
+`PseudoMetadata` list to the selection stage. CLI functional intent and parsed
+UPF functional metadata use the same canonical labels. Supported PBEsol
+spellings match; unrecognized labels remain distinct rather than falling back to
+PBE or another functional.
 
 ## Kmesh backend selection
 
@@ -152,9 +189,11 @@ Hint precedence still applies:
 goldilocks-core recommend structure.cif --model model.joblib --k-grid 4 4 4
 ```
 
-This uses the explicit grid and records `provenance.source="user_hint"`; the model is not consulted for k-points.
+This uses the explicit grid and records `provenance.source="user_hint"`; the
+model is not consulted for k-points.
 
-When no k-point hint is set, the model supplies the grid and the resulting `KPointSelection` records `provenance.source="model"`.
+When no k-point hint is set, the model supplies the grid and the resulting
+`KPointSelection` records `provenance.source="model"`.
 
 Default remote locations and full 40-character commit revisions come from the
 model registry. Set `GOLDILOCKS_MODEL_REGISTRY` to an alternate TOML registry to
@@ -164,10 +203,11 @@ you trust.
 
 ## Standalone kmesh CLI
 
-The `goldilocks-kmesh` command continues to expose the ML advisor directly:
+The `goldilocks-kmesh` command exposes the ML advisor directly:
 
 ```bash
 goldilocks-kmesh structure.cif --model model.joblib
 ```
 
-It returns only a k-point recommendation. Use `goldilocks-core ... --model` when the prediction should be part of the staged Core pipeline.
+It returns only a k-point recommendation. Use `goldilocks-core ... --model` when
+the prediction should be part of the staged Core pipeline.

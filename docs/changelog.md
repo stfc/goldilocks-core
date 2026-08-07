@@ -4,63 +4,145 @@ All notable changes to goldilocks-core are documented here.
 
 ## Unreleased
 
+This stack ships three PRs: PR-A adds `CoreRuntime` and model lifecycle; PR-B
+splits `k_points` onto `CoreResult`, folds bundle output into `generate`, adds
+raw stage entrypoints and CLI subcommands; PR-C adds HTTP and MCP transports.
+The contract breaks are listed under **Removed** and **Changed** below.
+
 ### Added
 
-- `CoreRuntime` raw stage entrypoints: `analyze(request)`, `kmesh(request)`, `advise(request)`, and `select(request)` each run only their prerequisite sub-graph and return their record.
-- CLI `analyze`, `advise`, `kmesh`, and `select` subcommands calling the raw `CoreRuntime` entrypoints directly.
-- CLI `generate --out <dir>` option: publishes a bundle directory when given, otherwise returns in-memory files.
-- Bundle manifest now includes a top-level `k_points` field.
+- **PR-A** — `CoreRuntime` (`goldilocks_core.runtime`): owner of the composed
+  Core entrypoints (`analyze`, `kmesh`, `advise`, `select`, `recommend`,
+  `generate`) and of model lifecycle. Model resources load lazily on first use
+  and are reused across jobs on the same instance; `reset()` discards cached
+  model state and `close()` releases it. It is a context manager. There is no
+  module-global default runtime; callers create and own their own. `run_core_job`
+  creates a fresh `CoreRuntime` per call when `runtime=None` and reuses a passed
+  runtime otherwise.
+- **PR-B** — `CoreRuntime` raw stage entrypoints: `analyze(request)`,
+  `kmesh(request)`, `advise(request)`, and `select(request)` each run only their
+  prerequisite sub-graph and return their record.
+- **PR-B** — CLI `analyze`, `advise`, `kmesh`, and `select` subcommands calling
+  the raw `CoreRuntime` entrypoints directly inside a short-lived runtime.
+- **PR-B** — CLI `generate --out <dir>` option: publishes a bundle directory
+  when given, otherwise returns in-memory files.
+- **PR-B** — Bundle manifest now includes a top-level `k_points` field.
+- **PR-C** — HTTP transport (`server/http.py`): a FastAPI + uvicorn app owning
+  one long-lived `CoreRuntime`, with `/health`, `/analyze`, `/kmesh`, `/advise`,
+  `/select`, `/recommend`, and `/generate` endpoints. Install with the `[http]`
+  extra. Started via `goldilocks-core serve http` or `create_app()`/`serve()`.
+- **PR-C** — MCP transport (`server/mcp.py`): an MCP server over stdio owning
+  one long-lived `CoreRuntime`, exposing six tools (`recommend`, `generate`,
+  `analyze`, `kmesh`, `advise`, `select`) with strict Pydantic argument schemas.
+  Install with the `[mcp]` extra. Started via `goldilocks-core serve mcp` or
+  `create_server()`/`serve()`.
+- **PR-C** — `server/request.py`: a single `from_dict` parser shared by both
+  transports, turning a JSON mapping into a validated `CoreJobRequest` and
+  rejecting unknown keys and bad types with a `RequestError`.
+- **PR-C** — CLI `serve` subcommand group with `http` and `mcp` children.
+- **PR-C** — `[http]` and `[mcp]` optional-dependency extras in `pyproject.toml`.
 
 ### Changed
 
-- `k_points` moved from `SelectionRecord` to `CoreResult`. `select_parameters(structure, advice, pseudo_metadata)` no longer takes `k_points`; `generate_inputs(structure, intent, advice, selection, k_points)` now takes it as a sibling arg.
-- `CoreJobRequest.mode` is now `Literal["recommend", "generate"]`; `"bundle"` is removed. Use `mode="generate"` with `output_dir` to publish a bundle.
-- `run_core_job` dispatch: `"recommend"` → `runtime.recommend`; `"generate"` → `runtime.generate(request, output_dir=request.output_dir)`. No `bundle` branch.
-- CLI `--use-vdw` and `--vdw-method` options matching the Python hint controls.
-- Example structures (`Si`, `Fe_bcc`, `Pt_fcc`) installed with the package, reachable from `goldilocks_core.examples` and `goldilocks-core examples path`.
-- `DimensionalityClassificationError` and `SymmetryAnalysisError` (in `goldilocks_core.analysis`); `SymmetryUnavailable` typed value (in `goldilocks_core.contracts`), recorded in symmetry fields when spglib cannot analyze.
-- `allow_swallow` decorator (`goldilocks_core._lint`) and the `scripts/check_no_swallow.py` AST pre-commit hook enforcing export-only `__init__.py` and no silent `try/except` (the sole opt-in is `@allow_swallow`).
-
-### Changed
-
+- **PR-B** — `k_points` moved from `SelectionRecord` to `CoreResult`.
+  `select_parameters(structure, advice, pseudo_metadata)` no longer takes
+  `k_points`; `generate_inputs(structure, intent, advice, selection, k_points)`
+  now takes it as a sibling arg. This is an intentional API and serialized-schema
+  change with no compatibility alias.
+- **PR-B** — `CoreJobRequest.mode` is now `Literal["recommend", "generate"]`;
+  `"bundle"` is removed. Use `mode="generate"` with `output_dir` to publish a
+  bundle.
+- **PR-B** — `run_core_job` dispatch: `"recommend"` → `runtime.recommend`;
+  `"generate"` → `runtime.generate(request, output_dir=request.output_dir)`. No
+  `bundle` branch.
+- **PR-B** — CLI `--use-vdw` and `--vdw-method` options matching the Python hint
+  controls.
+- **PR-B** — Example structures (`Si`, `Fe_bcc`, `Pt_fcc`) installed with the
+  package, reachable from `goldilocks_core.examples` and `goldilocks-core
+  examples path`.
 - CLI model name/version metadata now requires the local `--model` backend.
 - Loaded-model quantiles are checked before QRF confidence is reported.
-- Job-level warnings now include de-duplicated scientific caveats from Advise as well as Analyze, Kmesh, and Select.
+- Job-level warnings now include de-duplicated scientific caveats from Advise as
+  well as Analyze, Kmesh, and Select.
 - Bundle output uses a straightforward no-overwrite directory writer.
-- Default exchange-correlation functional changed from PBE to PBEsol. This changes generated inputs and the pseudopotentials selected on a default run; pass `--functional PBE` to restore the previous behaviour.
-- `run_core_job` now dispatches `intent.task` to a path function (`run_scf` for SCF) instead of a fixed `Pipeline`. The `Pipeline` dataclass and `pipeline=` parameter are removed.
-- K-points are resolved by `resolve_kpoints(structure, hints, backend)`; the `KMeshAdvisor` signature is `(Structure) -> KPointSelection`.
-- CLI `--model` now sets `CoreJobRequest.kmesh_model` (a `ModelSpec` on the request) instead of swapping a `Pipeline` backend.
-- Every `src/**/__init__.py` is now an export-only facade; logic moved to named sibling modules (`ml/qrf/inference`, `ml/kindex/inference`, `kmesh/resolve`, `advice/parameters`, `examples/structures`). Public import paths are preserved by re-exports.
-- Dimensionality: CrystalNN/Larsen failures now raise `DimensionalityClassificationError` instead of silently degrading to `"unknown"`; disordered structures keep a conservative warned `"unknown"` default (a precondition, not an error swallow).
-- Symmetry: spglib failures raise `SymmetryAnalysisError`, caught in `analyze_structure` and recorded as typed `SymmetryUnavailable(reason=...)`; the recommendation stays complete (symmetry is reporting-only).
-- QRF composition featurizers: the catch-all `try/except TypeError` shim around `impute_nan` is replaced with explicit signature introspection (`impute_nan` is passed only where the constructor accepts it).
-- `build_kmesh_entries` no longer swallows `ValueError` from `mesh_to_k_line_density_interval` into `k_line_density_interval=None`; the error propagates.
-- CLI invalid-argument handling: `parser.error(...)` replaced with `parser.print_usage(...)` + `raise SystemExit(2)` (same exit code and message; the handler now re-raises).
-
+- Default exchange-correlation functional changed from PBE to PBEsol. This
+  changes generated inputs and the pseudopotentials selected on a default run;
+  pass `--functional PBE` to restore the previous behaviour.
+- `run_core_job` now dispatches `intent.task` to a path function (`run_scf` for
+  SCF) instead of a fixed `Pipeline`. The `Pipeline` dataclass and `pipeline=`
+  parameter are removed.
+- K-points are resolved by `resolve_kpoints(structure, hints, backend)`; the
+  `KMeshAdvisor` signature is `(Structure) -> KPointSelection`.
+- CLI `--model` now sets `CoreJobRequest.kmesh_model` (a `ModelSpec` on the
+  request) instead of swapping a `Pipeline` backend.
+- Every `src/**/__init__.py` is now an export-only facade; logic moved to named
+  sibling modules (`ml/qrf/inference`, `ml/kindex/inference`, `kmesh/resolve`,
+  `advice/parameters`, `examples/structures`). Public import paths are preserved
+  by re-exports.
+- `DimensionalityClassificationError` and `SymmetryAnalysisError` (in
+  `goldilocks_core.analysis`); `SymmetryUnavailable` typed value (in
+  `goldilocks_core.contracts`), recorded in symmetry fields when spglib cannot
+  analyze. CrystalNN/Larsen failures now raise `DimensionalityClassificationError`
+  instead of silently degrading to `"unknown"`; disordered structures keep a
+  conservative warned `"unknown"` default (a precondition, not an error
+  swallow). Symmetry: spglib failures raise `SymmetryAnalysisError`, caught in
+  `analyze_structure` and recorded as typed `SymmetryUnavailable(reason=...)`;
+  the recommendation stays complete (symmetry is reporting-only).
+- `allow_swallow` decorator (`goldilocks_core._lint`) and the
+  `scripts/check_no_swallow.py` AST pre-commit hook enforcing export-only
+  `__init__.py` and no silent `try/except` (the sole opt-in is `@allow_swallow`).
+- QRF composition featurizers: the catch-all `try/except TypeError` shim around
+  `impute_nan` is replaced with explicit signature introspection (`impute_nan`
+  is passed only where the constructor accepts it).
+- `build_kmesh_entries` no longer swallows `ValueError` from
+  `mesh_to_k_line_density_interval` into `k_line_density_interval=None`; the
+  error propagates.
+- CLI invalid-argument handling: `parser.error(...)` replaced with
+  `parser.print_usage(...)` + `raise SystemExit(2)` (same exit code and message;
+  the handler now re-raises).
 
 ### Fixed
 
-- Python requests reject unsupported target codes and calculation tasks before running QE-oriented stages.
-- QE generation rejects unsupported smearing labels, unsafe pseudopotential filenames, and duplicate, missing, or extraneous pseudopotential selections.
+- Python requests reject unsupported target codes and calculation tasks before
+  running QE-oriented stages.
+- QE generation rejects unsupported smearing labels, unsafe pseudopotential
+  filenames, and duplicate, missing, or extraneous pseudopotential selections.
 
 ### Removed
 
 - Operational stage traces from `CoreResult`.
-- Bundle content hashes, byte counts, atomic publication machinery, and platform-specific path simulation.
+- Bundle content hashes, byte counts, atomic publication machinery, and
+  platform-specific path simulation.
 - Exact runtime reconstruction and local artifact hashing from QRF provenance.
-
-- `CalculationIntent.accuracy_level` and CLI `--accuracy-level`; the advertised levels had no implemented scientific effect. This is an intentional API and serialized-schema change with no compatibility alias.
-- Heuristic k-points: `KPointAdvice` record, `ParameterAdvice.k_points` field, `advise_k_points`, `DEFAULT_K_SPACING`, `resolve_kpoints_from_advice`, and CLI `--heuristic-kpoints`. The model-free default-spacing fallback is gone; use explicit hints or the QRF model.
-- `Pipeline` dataclass and the `AnalyzeStage`/`AdviseStage`/`SelectStage`/`GenerateStage`/`BundleStage` Callable aliases.
-- `AdvicePolicies` injectable container and its policy type aliases; `advise_parameters` calls the policy functions directly.
-- `MetallicityClassifier` injection on `analyze_structure`; it always uses `heuristic_metallicity`.
-- `register_writer` and the mutable writer dispatch table; the table is now a static tuple.
-- Dead `parse_upf` dataframe layer (`metadata_to_row`/`metadata_list_to_rows`/`metadata_list_to_dataframe`) and the helpers only it used.
-- `advisors/__init__.py` `__getattr__` lazy facade; direct re-exports replace it (the facade was already defeated by `jobs.py`'s module-level advisor imports).
-- `write_bundle` top-level convenience function (from `jobs.py` and `goldilocks_core.__init__`). Use `run_core_job` with `mode="generate"` + `output_dir`, or `runtime.generate(request, output_dir=...)`.
-- `CoreJobRequest.mode="bundle"` and the CLI `bundle` subcommand. Use `mode="generate"` with `output_dir` (or `generate --out <dir>`).
-- `SelectionRecord.k_points` field; k-points now live on `CoreResult.k_points`. This is an intentional API and serialized-schema change with no compatibility alias.
+- `CalculationIntent.accuracy_level` and CLI `--accuracy-level`; the advertised
+  levels had no implemented scientific effect. This is an intentional API and
+  serialized-schema change with no compatibility alias.
+- Heuristic k-points: `KPointAdvice` record, `ParameterAdvice.k_points` field,
+  `advise_k_points`, `DEFAULT_K_SPACING`, `resolve_kpoints_from_advice`, and CLI
+  `--heuristic-kpoints`. The model-free default-spacing fallback is gone; use
+  explicit hints or the QRF model.
+- `Pipeline` dataclass and the `AnalyzeStage`/`AdviseStage`/`SelectStage`/`GenerateStage`/`BundleStage`
+  Callable aliases.
+- `AdvicePolicies` injectable container and its policy type aliases;
+  `advise_parameters` calls the policy functions directly.
+- `MetallicityClassifier` injection on `analyze_structure`; it always uses
+  `heuristic_metallicity`.
+- `register_writer` and the mutable writer dispatch table; the table is now a
+  static tuple.
+- Dead `parse_upf` dataframe layer (`metadata_to_row`/`metadata_list_to_rows`/`metadata_list_to_dataframe`)
+  and the helpers only it used.
+- `advisors/__init__.py` `__getattr__` lazy facade; direct re-exports replace it
+  (the facade was already defeated by `jobs.py`'s module-level advisor imports).
+- **PR-B** — `write_bundle` top-level convenience function (from `jobs.py` and
+  `goldilocks_core.__init__`). Use `run_core_job` with `mode="generate"` +
+  `output_dir`, or `runtime.generate(request, output_dir=...)`. This is an
+  intentional API change with no compatibility alias.
+- **PR-B** — `CoreJobRequest.mode="bundle"` and the CLI `bundle` subcommand. Use
+  `mode="generate"` with `output_dir` (or `generate --out <dir>`). This is an
+  intentional API and CLI change with no compatibility alias.
+- **PR-B** — `SelectionRecord.k_points` field; k-points now live on
+  `CoreResult.k_points`. This is an intentional API and serialized-schema change
+  with no compatibility alias.
 
 ## [0.1.0] - 2026-06-10
 

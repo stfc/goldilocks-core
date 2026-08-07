@@ -8,14 +8,6 @@ from typing import Any
 from goldilocks_core.functionals import normalize_functional_label
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
-_TRUE_VALUES = {"T", "TRUE", "Y", "YES", "1"}
-_FALSE_VALUES = {"F", "FALSE", "N", "NO", "0"}
-
-_VERSION_PATTERNS = [
-    re.compile(r"(v\d+(?:\.\d+)*)", re.IGNORECASE),
-    re.compile(r"-(\d+(?:\.\d+)*)$"),
-]
-
 
 def _read_text(path: Path) -> str:
     """Read a UPF file as text."""
@@ -28,28 +20,6 @@ def _clean_string(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
-
-
-def _to_bool(value: object) -> bool | None:
-    """Convert common UPF boolean encodings to Python bool."""
-    text = _clean_string(value)
-    if text is None:
-        return None
-
-    upper = text.upper()
-    if upper in _TRUE_VALUES:
-        return True
-    if upper in _FALSE_VALUES:
-        return False
-    return None
-
-
-def _to_int(value: object) -> int | None:
-    """Convert a value to int when possible."""
-    text = _clean_string(value)
-    if text is None:
-        return None
-    return int(text)
 
 
 def _to_float(value: object) -> float | None:
@@ -103,18 +73,6 @@ def _extract_element_from_filename(filename: str) -> str | None:
     match = re.match(r"^([a-z]{1,2})(?:[_\.-]|$)", stem)
     if match:
         return match.group(1).capitalize()
-
-    return None
-
-
-def _extract_version(filename: str) -> str | None:
-    """Extract version from a pseudo filename."""
-    stem = Path(filename).stem
-
-    for pattern in _VERSION_PATTERNS:
-        match = pattern.search(stem)
-        if match:
-            return match.group(1)
 
     return None
 
@@ -428,64 +386,3 @@ def parse_upf_folders(root: str | Path) -> list[PseudoMetadata]:
     root = Path(root)
     upf_files = sorted(root.rglob("*.upf")) + sorted(root.rglob("*.UPF"))
     return [parse_upf_metadata(path) for path in upf_files]
-
-
-def metadata_to_row(metadata: PseudoMetadata) -> dict[str, Any]:
-    """Convert one PseudoMetadata object into a normalized table row."""
-    info = metadata.pseudo_info or {}
-    filepath = metadata.filepath
-    filename = metadata.filename
-
-    element = _get_element(info, filename)
-
-    source_set = metadata.source_set
-
-    cutoff = metadata.sssp_recommended_cutoff
-    if not isinstance(cutoff, dict):
-        cutoff = None
-
-    return {
-        "filepath": filepath,
-        "filename": filename,
-        "library": _extract_library(filepath) if filepath else None,
-        "source_set": source_set,
-        "element": element,
-        "pseudo_type": _normalize_pseudo_type(info.get("pseudo_type")),
-        "functional": normalize_functional_label(info.get("functional")),
-        "relativistic": _normalize_relativistic(info.get("relativistic")),
-        "has_so": _to_bool(info.get("has_so")),
-        "version": _extract_version(filename) if filename else None,
-        "z_valence": _to_float(info.get("z_valence")),
-        "l_max": _to_int(info.get("l_max")),
-        "l_local": _to_int(info.get("l_local")),
-        "mesh_size": _to_int(info.get("mesh_size")),
-        "number_of_proj": _to_int(info.get("number_of_proj")),
-        "number_of_wfc": _to_int(info.get("number_of_wfc")),
-        "rho_cutoff": _to_float(info.get("rho_cutoff")),
-        "is_ultrasoft": _to_bool(info.get("is_ultrasoft")),
-        "is_paw": _to_bool(info.get("is_paw")),
-        "is_coulomb": _to_bool(info.get("is_coulomb")),
-        "core_correction": _to_bool(info.get("core_correction")),
-        "has_wfc": _to_bool(info.get("has_wfc")),
-        "has_gipaw": _to_bool(info.get("has_gipaw")),
-        "author": _clean_string(info.get("author")),
-        "generated": _clean_string(info.get("generated")),
-        "date": _clean_string(info.get("date")),
-        "total_psenergy": _to_float(info.get("total_psenergy")),
-        "is_sssp": metadata.is_sssp,
-        "sssp_recommended_cutoff": cutoff,
-        "sssp_ecutwfc_ry": _to_float(cutoff.get("ecutwfc_ry")) if cutoff else None,
-        "sssp_ecutrho_ry": _to_float(cutoff.get("ecutrho_ry")) if cutoff else None,
-    }
-
-
-def metadata_list_to_rows(metadata_list: list[PseudoMetadata]) -> list[dict[str, Any]]:
-    """Convert a list of PseudoMetadata objects to normalized rows."""
-    return [metadata_to_row(metadata) for metadata in metadata_list]
-
-
-def metadata_list_to_dataframe(metadata_list: list[PseudoMetadata]):
-    """Convert a list of PseudoMetadata objects to a pandas DataFrame."""
-    import pandas as pd
-
-    return pd.DataFrame(metadata_list_to_rows(metadata_list))

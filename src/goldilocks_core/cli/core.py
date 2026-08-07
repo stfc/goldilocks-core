@@ -6,7 +6,6 @@ import argparse
 import json
 from pathlib import Path
 
-from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
@@ -16,8 +15,7 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.examples import structures_path
 from goldilocks_core.generation import available_codes, available_tasks
-from goldilocks_core.jobs import Pipeline, run_core_job
-from goldilocks_core.kmesh import resolve_kpoints_from_advice
+from goldilocks_core.jobs import run_core_job
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 
@@ -64,11 +62,10 @@ def main() -> None:
     try:
         _validate_backend_options(args)
         request = _request_from_args(args)
-        pipeline = _pipeline_from_args(args)
     except ValueError as error:
         parser.error(str(error))
 
-    result = run_core_job(request, pipeline=pipeline)
+    result = run_core_job(request)
 
     if args.json:
         output = {"request": request.to_dict(), **result.to_dict()}
@@ -102,15 +99,9 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--pseudo-type")
     parser.add_argument("--relativistic-mode")
     parser.add_argument("--pseudo-root", help="Directory containing UPF files.")
-    kpoint_backend = parser.add_mutually_exclusive_group()
-    kpoint_backend.add_argument(
+    parser.add_argument(
         "--model",
-        help="Local ML model path for Kmesh-stage k-point selection.",
-    )
-    kpoint_backend.add_argument(
-        "--heuristic-kpoints",
-        action="store_true",
-        help="Use heuristic k-point advice instead of the built-in QRF model.",
+        help="Local ML k-index model path for k-point selection.",
     )
     parser.add_argument(
         "--model-name",
@@ -195,33 +186,28 @@ def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
         mode=args.command,
         pseudo_metadata=pseudo_metadata,
         output_dir=getattr(args, "out", None),
+        kmesh_model=_model_spec_from_args(args),
     )
 
 
-def _pipeline_from_args(args: argparse.Namespace) -> Pipeline | None:
-    """Build the pipeline for the requested k-point backend.
+def _model_spec_from_args(args: argparse.Namespace) -> ModelSpec | None:
+    """Build a local k-index model spec when ``--model`` is given.
 
-    An explicit ``--model`` selects a local CSLR k-index model.
-    ``--heuristic-kpoints`` selects advice-based resolution. Otherwise no
-    override is returned and ``run_core_job`` uses the shared QRF default.
-    Explicit k-point hints bypass model loading inside every built-in backend.
+    Returns ``None`` when no local model is requested, so ``run_core_job``
+    uses the shared QRF k-distance default. Explicit k-point hints bypass
+    model loading inside ``resolve_kpoints``.
     """
-    if args.model is not None:
-        spec = ModelSpec(
-            name=args.model_name or "cli-kmesh-model",
-            version=args.model_version or "unknown",
-            model_type="random_forest",
-            target="k_index",
-            feature_set="cslr",
-            source="local",
-            location=args.model,
-        )
-        return Pipeline(kmesh=ml_kmesh_advisor(spec))
-
-    if args.heuristic_kpoints:
-        return Pipeline(kmesh=resolve_kpoints_from_advice)
-
-    return None
+    if args.model is None:
+        return None
+    return ModelSpec(
+        name=args.model_name or "cli-kmesh-model",
+        version=args.model_version or "unknown",
+        model_type="random_forest",
+        target="k_index",
+        feature_set="cslr",
+        source="local",
+        location=args.model,
+    )
 
 
 def _validate_backend_options(args: argparse.Namespace) -> None:

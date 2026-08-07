@@ -1,4 +1,4 @@
-"""Kmesh stage backend: resolve k-point advice and hints into a selection."""
+"""Kmesh stage backend: resolve k-point hints into a selection, else a model."""
 
 from __future__ import annotations
 
@@ -6,28 +6,38 @@ from pymatgen.core import Structure
 
 from goldilocks_core.contracts import (
     CalculationHints,
-    KPointAdvice,
+    KMeshAdvisor,
     KPointSelection,
     Provenance,
 )
 from goldilocks_core.kmesh.math import k_distance_to_mesh
 
 
-def resolve_kpoints_from_advice(
+def resolve_kpoints(
     structure: Structure,
     hints: CalculationHints,
-    advice: KPointAdvice,
+    backend: KMeshAdvisor,
 ) -> KPointSelection:
-    """Resolve k-point advice and hints into a concrete unshifted mesh."""
+    """Resolve operator k-point hints into a mesh, else delegate to a model.
+
+    Explicit ``k_grid`` wins over ``k_spacing``; both beat the model backend.
+    The model is only consulted when no hint is set, so hint-only requests
+    never load a model.
+    """
     if hints.k_grid is not None:
+        warnings = (
+            ("Both k_grid and k_spacing were provided; explicit grid wins.",)
+            if hints.k_spacing is not None
+            else ()
+        )
         return KPointSelection(
             grid=hints.k_grid,
             shift=(0, 0, 0),
-            mesh_type=advice.mesh_type,
+            mesh_type="monkhorst-pack",
             provenance=Provenance(
                 source="user_hint",
                 reason="Use the operator-provided explicit k-point grid.",
-                warnings=advice.provenance.warnings,
+                warnings=warnings,
             ),
         )
 
@@ -35,38 +45,12 @@ def resolve_kpoints_from_advice(
         return KPointSelection(
             grid=k_distance_to_mesh(structure, hints.k_spacing),
             shift=(0, 0, 0),
-            mesh_type=advice.mesh_type,
+            mesh_type="monkhorst-pack",
             provenance=Provenance(
                 source="user_hint",
                 reason="Use the operator-provided VASP-style k-point spacing.",
                 data_source="pymatgen solid-state reciprocal lattice",
-                warnings=advice.provenance.warnings,
             ),
         )
 
-    if advice.explicit_grid is not None:
-        return KPointSelection(
-            grid=advice.explicit_grid,
-            shift=(0, 0, 0),
-            mesh_type=advice.mesh_type,
-            provenance=Provenance(
-                source=advice.provenance.source,
-                reason="Use the explicit grid from k-point advice.",
-                data_source=advice.provenance.data_source,
-                confidence=advice.provenance.confidence,
-                warnings=advice.provenance.warnings,
-            ),
-        )
-
-    # With KPointAdvice's exactly-one invariant, reaching here means spacing is set.
-    return KPointSelection(
-        grid=k_distance_to_mesh(structure, advice.spacing),
-        shift=(0, 0, 0),
-        mesh_type=advice.mesh_type,
-        provenance=Provenance(
-            source=advice.provenance.source,
-            reason="Convert advised VASP-style k-point spacing into a mesh.",
-            data_source="pymatgen solid-state reciprocal lattice",
-            warnings=advice.provenance.warnings,
-        ),
-    )
+    return backend(structure)

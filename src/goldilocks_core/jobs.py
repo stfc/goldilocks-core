@@ -1,74 +1,40 @@
-"""Fixed Core job runner shared by Python, CLI, and future HTTP surfaces."""
+"""Core job runner: dispatch a CoreJobRequest to a calculation path."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Callable
 from pathlib import Path
 
 from goldilocks_core.advice import advise_parameters
-from goldilocks_core.advisors import default_kmesh_advisor
+from goldilocks_core.advisors import default_kmesh_advisor, ml_kmesh_advisor
 from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.bundle import write_bundle_directory
 from goldilocks_core.contracts import (
-    AdviseStage,
-    AnalyzeStage,
     BundleRecord,
-    BundleStage,
     CalculationHints,
     CalculationIntent,
     CoreJobRequest,
     CoreResult,
     GeneratedFile,
-    GenerateStage,
     KMeshAdvisor,
+    ModelSpec,
     ParameterAdvice,
-    SelectStage,
     StructureInput,
 )
 from goldilocks_core.generation import generate_inputs
 from goldilocks_core.io.structures import load_structure
+from goldilocks_core.kmesh import resolve_kpoints
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.selection import select_parameters
 
 
-@dataclass(frozen=True, slots=True)
-class Pipeline:
-    """Composable stage backends for the Core pipeline.
-
-    Construct with no arguments for the built-in QRF k-point backend;
-    override any field to swap that stage's backend.
-    Backends are plain callables with the stage signature — no base class,
-    no registry.
-
-    Attributes:
-        analyze: Analyze-stage backend.
-        advise: Advise-stage backend.
-        kmesh: Kmesh-stage backend that resolves concrete k-points.
-        select: Select-stage backend that resolves concrete selections.
-        generate: Generate-stage backend that writes target-code text.
-        bundle: Bundle-stage backend that writes portable outputs.
-    """
-
-    analyze: AnalyzeStage = analyze_structure
-    advise: AdviseStage = advise_parameters
-    kmesh: KMeshAdvisor = field(default_factory=default_kmesh_advisor)
-    select: SelectStage = select_parameters
-    generate: GenerateStage = generate_inputs
-    bundle: BundleStage = write_bundle_directory
-
-
-def run_core_job(
-    request: CoreJobRequest,
-    *,
-    pipeline: Pipeline | None = None,
-) -> CoreResult:
-    """Run a Core job request through the configured staged pipeline.
+def run_core_job(request: CoreJobRequest) -> CoreResult:
+    """Run a Core job request by dispatching on ``intent.task``.
 
     Args:
         request: Serializable job data: structure input, intent, hints,
-            pseudopotential metadata, mode, and optional output directory.
-        pipeline: Optional executable stage composition. When omitted,
-            ``Pipeline()`` uses the lazy built-in QRF k-point backend.
+            pseudopotential metadata, mode, optional k-index model, and
+            optional output directory.
 
     Returns:
         A ``CoreResult`` containing scientific records, generated files when
@@ -76,39 +42,49 @@ def run_core_job(
 
     Raises:
         ValueError: If the job mode is unsupported, bundle mode lacks
-            ``output_dir``, or a downstream stage rejects its inputs.
+            ``output_dir``, no path is registered for ``intent.task``, or a
+            downstream stage rejects its inputs.
     """
-    active_pipeline = pipeline or Pipeline()
+    try:
+        path = _PATHS[request.intent.task]
+    except KeyError:
+        available = ", ".join(sorted(_PATHS))
+        raise ValueError(
+            f"No Core path registered for task={request.intent.task!r}. "
+            f"Available: {available}"
+        ) from None
+    return path(request)
 
+
+def run_scf(request: CoreJobRequest) -> CoreResult:
+    """Run the SCF single-point path.
+
+    Load → Analyse → Advise → Kmesh → Select, then Generate and Bundle
+    according to ``request.mode``.
+    """
     structure = load_structure(request.structure)
-    analysis = active_pipeline.analyze(structure)
-    advice = active_pipeline.advise(analysis, request.intent, request.hints)
-    advice_warnings = _advice_warnings(advice)
-    k_points = active_pipeline.kmesh(structure, request.hints, advice.k_points)
-    selection = active_pipeline.select(
-        structure,
-        advice,
-        k_points,
-        tuple(request.pseudo_metadata),
+    analysis = analyze_structure(structure)
+    advice = advise_parameters(analysis, request.intent, request.hints)
+    k_points = resolve_kpoints(
+        structure, request.hints, _kmesh_backend(request.kmesh_model)
+    )
+    selection = select_parameters(
+        structure, advice, k_points, tuple(request.pseudo_metadata)
     )
 
     warnings = _unique_warnings(
         analysis.disorder_warnings,
         analysis.analysis_warnings,
-        advice_warnings,
+        _advice_warnings(advice),
         k_points.provenance.warnings,
         selection.warnings,
     )
+
     generated_files: tuple[GeneratedFile, ...] = ()
     bundle: BundleRecord | None = None
 
     if request.mode in {"generate", "bundle"}:
-        generated_files = active_pipeline.generate(
-            structure,
-            request.intent,
-            advice,
-            selection,
-        )
+        generated_files = generate_inputs(structure, request.intent, advice, selection)
 
     if request.mode == "bundle":
         # output_dir is guaranteed non-None for bundle mode by
@@ -121,7 +97,7 @@ def run_core_job(
             generated_files=generated_files,
             warnings=warnings,
         )
-        bundle = active_pipeline.bundle(in_progress, request.output_dir)
+        bundle = write_bundle_directory(in_progress, request.output_dir)
 
     return CoreResult(
         intent=request.intent,
@@ -134,10 +110,21 @@ def run_core_job(
     )
 
 
+_PATHS: dict[str, Callable[[CoreJobRequest], CoreResult]] = {
+    "scf_single_point": run_scf,
+}
+
+
+def _kmesh_backend(kmesh_model: ModelSpec | None) -> KMeshAdvisor:
+    """Return the k-point backend: local k-index model when given, else QRF default."""
+    if kmesh_model is not None:
+        return ml_kmesh_advisor(kmesh_model)
+    return default_kmesh_advisor()
+
+
 def _advice_warnings(advice: ParameterAdvice) -> tuple[str, ...]:
     """Return actionable warnings from every Advise sub-decision."""
     return _unique_warnings(
-        advice.k_points.provenance.warnings,
         advice.smearing.provenance.warnings,
         advice.magnetism.provenance.warnings,
         advice.spin_orbit.provenance.warnings,
@@ -158,16 +145,14 @@ def recommend(
     intent: CalculationIntent | None = None,
     hints: CalculationHints | None = None,
     pseudo_metadata: list[PseudoMetadata] | None = None,
-    pipeline: Pipeline | None = None,
 ) -> CoreResult:
-    """Run Load → Analyze → Advise → Kmesh → Select.
+    """Run Load → Analyse → Advise → Kmesh → Select.
 
     Args:
         structure: Structure object or structure file path.
         intent: Optional calculation intent.
         hints: Optional operator hints.
         pseudo_metadata: Available pseudopotential metadata.
-        pipeline: Optional stage backend composition.
 
     Returns:
         ``CoreResult`` containing analysis, advice, selection, and warnings.
@@ -179,8 +164,7 @@ def recommend(
             hints=hints or CalculationHints(),
             mode="recommend",
             pseudo_metadata=tuple(pseudo_metadata or ()),
-        ),
-        pipeline=pipeline,
+        )
     )
 
 
@@ -190,16 +174,14 @@ def generate(
     intent: CalculationIntent | None = None,
     hints: CalculationHints | None = None,
     pseudo_metadata: list[PseudoMetadata] | None = None,
-    pipeline: Pipeline | None = None,
 ) -> CoreResult:
-    """Run Load → Analyze → Advise → Kmesh → Select → Generate.
+    """Run Load → Analyse → Advise → Kmesh → Select → Generate.
 
     Args:
         structure: Structure object or structure file path.
         intent: Optional calculation intent.
         hints: Optional operator hints.
         pseudo_metadata: Available pseudopotential metadata.
-        pipeline: Optional stage backend composition.
 
     Returns:
         ``CoreResult`` with generated files attached.
@@ -215,8 +197,7 @@ def generate(
             hints=hints or CalculationHints(),
             mode="generate",
             pseudo_metadata=tuple(pseudo_metadata or ()),
-        ),
-        pipeline=pipeline,
+        )
     )
 
 
@@ -227,7 +208,6 @@ def write_bundle(
     intent: CalculationIntent | None = None,
     hints: CalculationHints | None = None,
     pseudo_metadata: list[PseudoMetadata] | None = None,
-    pipeline: Pipeline | None = None,
 ) -> CoreResult:
     """Run the full Core pipeline and write a portable bundle directory.
 
@@ -238,7 +218,6 @@ def write_bundle(
         intent: Optional calculation intent.
         hints: Optional operator hints.
         pseudo_metadata: Available pseudopotential metadata.
-        pipeline: Optional stage backend composition.
 
     Returns:
         ``CoreResult`` with generated files, bundle record, and warnings.
@@ -256,6 +235,5 @@ def write_bundle(
             mode="bundle",
             pseudo_metadata=tuple(pseudo_metadata or ()),
             output_dir=str(output_dir),
-        ),
-        pipeline=pipeline,
+        )
     )

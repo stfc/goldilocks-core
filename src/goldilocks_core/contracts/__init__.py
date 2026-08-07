@@ -2,14 +2,7 @@
 
 from __future__ import annotations
 
-from goldilocks_core.contracts.protocols import (
-    AdviseStage,
-    AnalyzeStage,
-    BundleStage,
-    GenerateStage,
-    KMeshAdvisor,
-    SelectStage,
-)
+from goldilocks_core.contracts.protocols import KMeshAdvisor
 from goldilocks_core.contracts.records import (
     BundleRecord,
     CalculationHints,
@@ -19,7 +12,6 @@ from goldilocks_core.contracts.records import (
     CoreResult,
     GeneratedFile,
     KMeshEntry,
-    KPointAdvice,
     KPointSelection,
     MagnetismAdvice,
     ModelSpec,
@@ -54,10 +46,7 @@ from goldilocks_core.contracts.types import (
 )
 
 __all__ = [
-    "AdviseStage",
-    "AnalyzeStage",
     "BundleRecord",
-    "BundleStage",
     "CalcTask",
     "CalculationHints",
     "CalculationIntent",
@@ -67,13 +56,11 @@ __all__ = [
     "CoreResult",
     "Dimensionality",
     "ElectronicCharacter",
-    "GenerateStage",
     "GeneratedFile",
     "JobMode",
     "JsonDict",
     "KMeshAdvisor",
     "KMeshEntry",
-    "KPointAdvice",
     "KPointGrid",
     "KPointSelection",
     "KPointShift",
@@ -87,7 +74,6 @@ __all__ = [
     "ProvenanceSource",
     "PseudopotentialAdvice",
     "PseudopotentialSelection",
-    "SelectStage",
     "SelectionRecord",
     "SmearingAdvice",
     "SmearingType",

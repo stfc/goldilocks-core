@@ -7,12 +7,7 @@ from goldilocks_core.advisors.kdistance_advisor import (
     kdistance_to_selection,
     qrf_kdistance_advisor,
 )
-from goldilocks_core.contracts import (
-    CalculationHints,
-    KPointAdvice,
-    Provenance,
-    StructureFeatureVector,
-)
+from goldilocks_core.contracts import StructureFeatureVector
 from goldilocks_core.kmesh.math import k_distance_to_mesh
 from goldilocks_core.ml.model_registry import load_default_qrf_config
 from goldilocks_core.ml.qrf import _predict_kdistance_quantiles
@@ -32,15 +27,6 @@ def make_features() -> StructureFeatureVector:
 
 def make_structure() -> Structure:
     return Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
-
-
-def make_advice() -> KPointAdvice:
-    return KPointAdvice(
-        spacing=0.2,
-        explicit_grid=None,
-        mesh_type="monkhorst-pack",
-        provenance=Provenance(source="default", reason="test"),
-    )
 
 
 def patch_inference(monkeypatch, *, model=None) -> None:
@@ -105,23 +91,6 @@ def test_kdistance_selection_records_model_provenance() -> None:
     assert selection.provenance.confidence == 0.9
 
 
-def test_explicit_hint_bypasses_model_loading(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "goldilocks_core.ml.models.load_model",
-        lambda spec: pytest.fail("model should not load"),
-    )
-    advisor = qrf_kdistance_advisor(load_default_qrf_config())
-
-    selection = advisor(
-        make_structure(),
-        CalculationHints(k_grid=(2, 3, 4)),
-        make_advice(),
-    )
-
-    assert selection.grid == (2, 3, 4)
-    assert selection.provenance.source == "user_hint"
-
-
 def test_qrf_advisor_loads_lazily_and_reuses_resources(monkeypatch) -> None:
     loads = 0
 
@@ -138,8 +107,8 @@ def test_qrf_advisor_loads_lazily_and_reuses_resources(monkeypatch) -> None:
         "atom-init.json",
     )
 
-    first = advisor(make_structure(), CalculationHints(), make_advice())
-    second = advisor(make_structure(), CalculationHints(), make_advice())
+    first = advisor(make_structure())
+    second = advisor(make_structure())
 
     assert first.grid == second.grid
     assert first.provenance.source == "model"
@@ -158,10 +127,10 @@ def test_model_loading_errors_propagate(monkeypatch) -> None:
     )
 
     with pytest.raises(FileNotFoundError, match="missing model"):
-        advisor(make_structure(), CalculationHints(), make_advice())
+        advisor(make_structure())
 
 
-def test_default_advisor_loads_registry_only_when_needed(monkeypatch) -> None:
+def test_default_advisor_loads_registry_on_first_model_call(monkeypatch) -> None:
     loads = 0
 
     def load_config(path=None):
@@ -179,11 +148,9 @@ def test_default_advisor_loads_registry_only_when_needed(monkeypatch) -> None:
         metallicity_atom_init="atom-init.json",
     )
 
-    hinted = advisor(
-        make_structure(), CalculationHints(k_grid=(2, 2, 2)), make_advice()
-    )
-    modeled = advisor(make_structure(), CalculationHints(), make_advice())
+    first = advisor(make_structure())
+    second = advisor(make_structure())
 
-    assert hinted.grid == (2, 2, 2)
-    assert modeled.provenance.source == "model"
+    assert first.provenance.source == "model"
+    assert first.grid == second.grid
     assert loads == 1

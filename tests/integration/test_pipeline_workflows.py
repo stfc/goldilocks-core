@@ -77,4 +77,4 @@ def test_structure_file_to_bundle_preserves_generated_files_and_provenance(
     }
     assert manifest == result.bundle.manifest
     assert manifest["selection"]["k_points"]["grid"] == [3, 5, 7]
-    assert manifest["advice"]["k_points"]["provenance"]["source"] == "user_hint"
+    assert manifest["selection"]["k_points"]["provenance"]["source"] == "user_hint"

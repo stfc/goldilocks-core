@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from pymatgen.analysis.dimensionality import get_dimensionality_larsen
 from pymatgen.analysis.local_env import CrystalNN
 from pymatgen.core import Structure
@@ -24,13 +22,6 @@ _DIMENSIONALITY_BY_VALUE: dict[int, Dimensionality] = {
     0: "molecule",
 }
 
-MetallicityClassifier = Callable[[Structure], ElectronicCharacter]
-"""Injectable electronic-character classifier for the Analyze stage.
-
-The default, :func:`heuristic_metallicity`, is structure-only. An ML backend
-may be injected here so ``analysis`` depends on no ``ml/`` module.
-"""
-
 
 def heuristic_metallicity(structure: Structure) -> ElectronicCharacter:
     """Return a conservative structure-only electronic character heuristic.
@@ -47,11 +38,7 @@ def heuristic_metallicity(structure: Structure) -> ElectronicCharacter:
     return "unknown"
 
 
-def analyze_structure(
-    structure: Structure,
-    *,
-    metallicity: MetallicityClassifier = heuristic_metallicity,
-) -> StructureAnalysisRecord:
+def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
     """Return deterministic structure facts used by later pipeline stages.
 
     Args:
@@ -89,7 +76,7 @@ def analyze_structure(
         structure
     )
     symmetry = _analyze_symmetry(structure)
-    electronic_character = metallicity(structure)
+    electronic_character = heuristic_metallicity(structure)
     electronic_warnings = _electronic_character_warnings(electronic_character)
 
     return StructureAnalysisRecord(
@@ -198,8 +185,7 @@ def _electronic_character_warnings(
     """Return heuristic-uncertainty warnings for a given electronic character.
 
     Only the structure-only heuristics (``likely_metal``, ``unknown``) carry
-    uncertainty warnings. An injected ML classifier returning ``metal`` or
-    ``insulator`` is treated as decided and carries no heuristic warning.
+    uncertainty warnings; a decided ``metal`` or ``insulator`` carries none.
     """
     if character == "likely_metal":
         return (

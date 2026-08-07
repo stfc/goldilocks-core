@@ -353,40 +353,6 @@ class StructureAnalysisRecord:
 
 
 @dataclass(frozen=True, slots=True)
-class KPointAdvice:
-    """Advised reciprocal-space sampling intent.
-
-    Exactly one of ``spacing`` or ``explicit_grid`` is set.
-
-    Attributes:
-        spacing: VASP-style k-point spacing in Å⁻¹, or None
-            when explicit grid is used.
-        explicit_grid: explicit k-point grid, or None when
-            spacing is used.
-        mesh_type: mesh type label (e.g. ``monkhorst-pack``).
-        provenance: why this advice was chosen.
-    """
-
-    spacing: float | None
-    explicit_grid: KPointGrid | None
-    mesh_type: str
-    provenance: Provenance
-
-    def __post_init__(self) -> None:
-        """Enforce exactly one of spacing or explicit_grid."""
-        has_spacing = self.spacing is not None
-        has_grid = self.explicit_grid is not None
-        if has_spacing == has_grid:
-            raise ValueError(
-                "KPointAdvice must have exactly one of spacing or an explicit grid set"
-            )
-
-    def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary."""
-        return to_jsonable(self)
-
-
-@dataclass(frozen=True, slots=True)
 class SmearingAdvice:
     """Advised occupation smearing settings.
 
@@ -563,7 +529,6 @@ class ParameterAdvice:
     carries its own ``Provenance`` explaining why that value was chosen.
 
     Attributes:
-        k_points: reciprocal-space sampling intent.
         smearing: occupation smearing settings.
         magnetism: spin-polarization setting.
         spin_orbit: SOC relevance and setting.
@@ -572,7 +537,6 @@ class ParameterAdvice:
         vdw: VdwAdvice.
     """
 
-    k_points: KPointAdvice
     smearing: SmearingAdvice
     magnetism: MagnetismAdvice
     spin_orbit: SpinOrbitAdvice
@@ -587,17 +551,17 @@ class ParameterAdvice:
 
 @dataclass(frozen=True, slots=True)
 class KPointSelection:
-    """Concrete k-point grid selected from advice or a model.
+    """Concrete k-point grid selected from hints or a model.
 
-    Produced by the Kmesh stage from ``KPointAdvice`` and optional
-    operator hints.
+    Produced by the Kmesh stage from operator k-point hints or, when no
+    hint is set, a model backend.
 
     Attributes:
         grid: uniform k-point grid (nk1, nk2, nk3).
         shift: Monkhorst-Pack shift (s1, s2, s3), currently
             always (0, 0, 0).
         mesh_type: mesh type label (e.g. ``monkhorst-pack``).
-        provenance: how this grid was derived from advice.
+        provenance: how this grid was derived.
     """
 
     grid: KPointGrid
@@ -763,6 +727,9 @@ class CoreJobRequest:
         pseudo_metadata: pseudopotential metadata for selection.
         output_dir: output directory path, required when mode is
             ``bundle``.
+        kmesh_model: optional local k-index model spec; when set, the
+            SCF path uses it for k-point selection instead of the default
+            QRF k-distance model.
     """
 
     structure: StructureInput
@@ -771,6 +738,7 @@ class CoreJobRequest:
     mode: JobMode = "recommend"
     pseudo_metadata: tuple[PseudoMetadata, ...] = ()
     output_dir: str | None = None
+    kmesh_model: ModelSpec | None = None
 
     def __post_init__(self) -> None:
         """Validate request invariants at construction."""

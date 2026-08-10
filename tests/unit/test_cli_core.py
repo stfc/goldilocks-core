@@ -348,11 +348,11 @@ def test_main_compute_prints_requested_analysis_and_advice(monkeypatch, capsys) 
     """Resolve multiple output names and print their CoreRecords as JSON."""
     captured: dict[str, CoreJobRequest] = {}
 
-    def fake_run_core_job(request: CoreJobRequest) -> CoreRecords:
+    def fake_query_records(request: CoreJobRequest) -> CoreRecords:
         captured["request"] = request
         return make_records(request)
 
-    monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)
+    monkeypatch.setattr(cli_core, "query_records", fake_query_records)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -379,7 +379,7 @@ def test_main_compute_prints_requested_analysis_and_advice(monkeypatch, capsys) 
 
 def test_main_compute_prints_only_requested_analysis(monkeypatch, capsys) -> None:
     """Return only the single record named by a compute query."""
-    monkeypatch.setattr(cli_core, "run_core_job", make_records)
+    monkeypatch.setattr(cli_core, "query_records", make_records)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -403,9 +403,9 @@ def test_main_compute_rejects_unknown_output_type(monkeypatch, capsys) -> None:
     """Report the invalid contract name before running a compute query."""
 
     def fail_if_run(*args, **kwargs) -> CoreRecords:
-        pytest.fail("run_core_job must not be called for invalid output types")
+        pytest.fail("query_records must not be called for invalid output types")
 
-    monkeypatch.setattr(cli_core, "run_core_job", fail_if_run)
+    monkeypatch.setattr(cli_core, "query_records", fail_if_run)
     monkeypatch.setattr(
         sys,
         "argv",

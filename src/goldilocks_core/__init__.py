@@ -9,7 +9,7 @@ from goldilocks_core.contracts import (
     CoreJobRequest,
     CoreResult,
 )
-from goldilocks_core.jobs import generate, recommend, run_core_job
+from goldilocks_core.jobs import generate, query_records, recommend, run_core_job
 from goldilocks_core.runtime import CoreRuntime
 
 __all__ = [
@@ -20,6 +20,7 @@ __all__ = [
     "CoreResult",
     "CoreRuntime",
     "generate",
+    "query_records",
     "recommend",
     "run_core_job",
 ]

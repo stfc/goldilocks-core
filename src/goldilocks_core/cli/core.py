@@ -17,7 +17,7 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.examples import structures_path
 from goldilocks_core.generation import available_codes, available_tasks
-from goldilocks_core.jobs import run_core_job
+from goldilocks_core.jobs import query_records, run_core_job
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 _OUTPUT_TYPE_NAMES = (
@@ -85,11 +85,12 @@ def main() -> None:
         print(f"{parser.prog}: error: {error}", file=sys.stderr)
         raise SystemExit(2) from error
 
-    result = run_core_job(request)
-
     if args.command == "compute":
-        print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+        records = query_records(request)
+        print(json.dumps(records.to_dict(), indent=2, sort_keys=True))
         return
+
+    result = run_core_job(request)
 
     if args.json:
         output = {"request": request.to_dict(), **result.to_dict()}

@@ -20,21 +20,46 @@ def run_core_job(
     request: CoreJobRequest,
     *,
     runtime: CoreRuntime | None = None,
-) -> CoreResult | CoreRecords:
-    """Dispatch a Core query or preset through a fresh or caller-owned runtime."""
+) -> CoreResult:
+    """Run a Core preset (recommend/generate) and return a full result.
+
+    Use :func:`query_records` for an explicit record subset.
+    """
+    if request.outputs is not None:
+        raise ValueError(
+            "run_core_job runs presets; pass request.outputs to query_records "
+            "for an explicit record query."
+        )
     if runtime is None:
         with CoreRuntime() as owned_runtime:
-            return _run_with_runtime(request, owned_runtime)
-    return _run_with_runtime(request, runtime)
+            return _run_preset(request, owned_runtime)
+    return _run_preset(request, runtime)
 
 
-def _run_with_runtime(
+def query_records(
+    request: CoreJobRequest,
+    *,
+    runtime: CoreRuntime | None = None,
+) -> CoreRecords:
+    """Compute the explicit record types in ``request.outputs``.
+
+    Use :func:`run_core_job` to run a named preset instead.
+    """
+    if request.outputs is None:
+        raise ValueError(
+            "query_records requires request.outputs; use run_core_job to run a preset."
+        )
+    if runtime is None:
+        with CoreRuntime() as owned_runtime:
+            return owned_runtime.compute(request.outputs, request)
+    return runtime.compute(request.outputs, request)
+
+
+def _run_preset(
     request: CoreJobRequest,
     runtime: CoreRuntime,
-) -> CoreResult | CoreRecords:
-    """Dispatch ``request`` without taking ownership of ``runtime``."""
-    if request.outputs is not None:
-        return runtime.compute(request.outputs, request)
+) -> CoreResult:
+    """Run the preset selected by ``request.mode`` without owning ``runtime``."""
     if request.mode == "recommend":
         return runtime.recommend(request)
     if request.mode == "generate":

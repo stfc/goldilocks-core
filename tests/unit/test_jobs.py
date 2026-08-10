@@ -10,6 +10,7 @@ from goldilocks_core import (
     CalculationIntent,
     CoreJobRequest,
     CoreRuntime,
+    query_records,
     run_core_job,
 )
 from goldilocks_core.contracts import (
@@ -63,8 +64,8 @@ def test_run_core_job_recommend_matches_public_recommendation_shape() -> None:
     assert result.bundle is None
 
 
-def test_run_core_job_returns_only_requested_records() -> None:
-    """Dispatch an explicit output query instead of the selected preset."""
+def test_query_records_returns_only_requested_records() -> None:
+    """query_records computes the explicit output set, not a preset."""
     request = CoreJobRequest(
         structure=make_structure(),
         hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
@@ -72,19 +73,19 @@ def test_run_core_job_returns_only_requested_records() -> None:
         outputs=(StructureAnalysisRecord, ParameterAdvice),
     )
 
-    result = run_core_job(request)
+    records = query_records(request)
 
     assert request.to_dict()["outputs"] == [
         "StructureAnalysisRecord",
         "ParameterAdvice",
     ]
-    assert isinstance(result, CoreRecords)
-    assert tuple(result) == (StructureAnalysisRecord, ParameterAdvice)
-    assert isinstance(result[StructureAnalysisRecord], StructureAnalysisRecord)
-    assert isinstance(result[ParameterAdvice], ParameterAdvice)
+    assert isinstance(records, CoreRecords)
+    assert tuple(records) == (StructureAnalysisRecord, ParameterAdvice)
+    assert isinstance(records[StructureAnalysisRecord], StructureAnalysisRecord)
+    assert isinstance(records[ParameterAdvice], ParameterAdvice)
 
 
-def test_run_core_job_query_reuses_caller_owned_runtime() -> None:
+def test_query_records_reuses_caller_owned_runtime() -> None:
     """A query leaves its caller-provided runtime open for reuse."""
     request = CoreJobRequest(
         structure=make_structure(),
@@ -92,13 +93,34 @@ def test_run_core_job_query_reuses_caller_owned_runtime() -> None:
     )
 
     with CoreRuntime() as runtime:
-        first = run_core_job(request, runtime=runtime)
-        second = run_core_job(request, runtime=runtime)
+        first = query_records(request, runtime=runtime)
+        second = query_records(request, runtime=runtime)
         assert runtime.is_closed is False
 
     assert isinstance(first, CoreRecords)
     assert first.to_dict() == second.to_dict()
     assert runtime.is_closed is True
+
+
+def test_run_core_job_rejects_outputs_argument() -> None:
+    """run_core_job runs presets only; explicit outputs go to query_records."""
+    request = CoreJobRequest(
+        structure=make_structure(),
+        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+        outputs=(StructureAnalysisRecord,),
+    )
+    with pytest.raises(ValueError, match="query_records"):
+        run_core_job(request)
+
+
+def test_query_records_requires_outputs() -> None:
+    """query_records needs explicit outputs; presets go to run_core_job."""
+    request = CoreJobRequest(
+        structure=make_structure(),
+        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+    )
+    with pytest.raises(ValueError, match="outputs"):
+        query_records(request)
 
 
 def test_run_core_job_aggregates_kmesh_warnings() -> None:

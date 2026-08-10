@@ -3,12 +3,14 @@ from __future__ import annotations
 import gc
 import json
 import weakref
+from dataclasses import dataclass
 
 import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import CalculationHints, CoreJobRequest, CoreRuntime
 from goldilocks_core.contracts import (
+    CalculationIntent,
     CoreResult,
     KPointSelection,
     ParameterAdvice,
@@ -16,7 +18,9 @@ from goldilocks_core.contracts import (
     SelectionRecord,
     StructureAnalysisRecord,
 )
+from goldilocks_core.graph import Preset, StageSpec, TaskSpec
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
+from goldilocks_core.scf import ScfContext
 
 
 def make_structure() -> Structure:
@@ -273,3 +277,34 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     assert runtime.is_closed is True
     with pytest.raises(RuntimeError, match="CoreRuntime is closed"):
         runtime.recommend(request)
+
+
+def test_runtime_dispatches_a_registered_task(monkeypatch) -> None:
+    """A second task dispatches by intent.task without editing the runtime."""
+    monkeypatch.setattr(CoreRuntime, "_build_backend", lambda self: TrackingBackend())
+
+    @dataclass
+    class StubRecord:
+        value: str = "stub"
+
+    def make_stub(*, ctx: ScfContext) -> StubRecord:
+        return StubRecord("ran")
+
+    other_task = TaskSpec(
+        task="stub_task",
+        stages=(StageSpec(StubRecord, (), make_stub),),
+        presets=(Preset("only", (StubRecord,)),),
+    )
+
+    with CoreRuntime() as runtime:
+        runtime.register(other_task)
+        records = runtime.compute(
+            (StubRecord,),
+            CoreJobRequest(
+                structure=make_structure(),
+                intent=CalculationIntent(task="stub_task"),
+            ),
+        )
+
+    assert isinstance(records[StubRecord], StubRecord)
+    assert records[StubRecord].value == "ran"

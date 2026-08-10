@@ -1,28 +1,29 @@
-"""Type-keyed dependency graph execution for Core pipeline stages."""
+"""Type-keyed dependency graph execution for pipeline stages.
+
+The executor is deliberately stage-agnostic: it resolves a task's graph from
+each stage's declared input and output record types, runs the minimal
+subgraph for the requested outputs, and passes one opaque context object to
+every stage as ``ctx``. It knows nothing about what stages do or what services
+they need -- those belong to the task definition and the runtime that builds
+the context.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
-from pymatgen.core import Structure
-
-from goldilocks_core.contracts import (
-    CalculationHints,
-    CalculationIntent,
-    CoreRecords,
-    ElectronicCharacter,
-    KMeshAdvisor,
-    KPointSelection,
-    StructureInput,
-)
-from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
+from goldilocks_core.contracts import CoreRecords
 
 
 @dataclass(frozen=True, slots=True)
 class StageSpec:
-    """Describe one record-producing stage and its record dependencies."""
+    """One record-producing stage and its record dependencies.
+
+    ``call`` receives the matched upstream records positionally plus the run
+    context as the keyword ``ctx`` and returns its output record.
+    """
 
     output: type
     inputs: tuple[type, ...]
@@ -39,7 +40,7 @@ class Preset:
 
 @dataclass(frozen=True, slots=True)
 class TaskSpec:
-    """Describe the stages and named output sets for one task."""
+    """The stages and named output sets for one task."""
 
     task: str
     stages: tuple[StageSpec, ...]
@@ -53,38 +54,17 @@ class TaskSpec:
         raise KeyError(name)
 
 
-def _missing_kmesh_backend(structure: Structure) -> KPointSelection:
-    raise ValueError(
-        "RunContext.kmesh_backend is required for stages that resolve k-points"
-    )
-
-
-def _heuristic_metallicity(
-    structure: Structure,
-) -> tuple[ElectronicCharacter, str, float | None]:
-    return "unknown", "heuristic", None
-
-
-@dataclass(frozen=True, slots=True)
-class RunContext:
-    """Carry request data and runtime services alongside graph records."""
-
-    structure_input: StructureInput
-    intent: CalculationIntent = field(default_factory=CalculationIntent)
-    hints: CalculationHints = field(default_factory=CalculationHints)
-    pseudo_metadata: tuple[PseudoMetadata, ...] = ()
-    kmesh_backend: KMeshAdvisor = _missing_kmesh_backend
-    metallicity_classifier: Callable[
-        [Structure], tuple[ElectronicCharacter, str, float | None]
-    ] = _heuristic_metallicity
-
-
 def execute(
     task: TaskSpec,
     outputs: tuple[type, ...],
-    context: RunContext,
+    context: Any,
 ) -> CoreRecords:
-    """Resolve and execute the minimal subgraph for the requested outputs."""
+    """Resolve and execute the minimal subgraph for the requested outputs.
+
+    Stages are ordered by a topological walk over their record dependencies,
+    run once each, and memoized by output type within this call. ``context`` is
+    handed to every stage as ``ctx`` without inspection.
+    """
     producers = {stage.output: stage for stage in task.stages}
     ordered: list[StageSpec] = []
     visiting: set[type] = set()

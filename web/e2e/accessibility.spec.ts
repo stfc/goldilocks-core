@@ -9,8 +9,23 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { loadStructure } from './helpers';
 
-/** Run axe and return only the violations we gate on (serious + critical). */
+/** Run axe and return only the violations we gate on (serious + critical).
+ *
+ * Waits for a deterministic rendered-ready condition before scanning: the
+ * network idle (so the theme stylesheet is present) and any entrance
+ * animation to finish (``view-in``/``panel-in`` fade from opacity 0). axe can
+ * otherwise sample a partially-faded panel and report a false-positive
+ * contrast failure against a transient colour instead of the final theme
+ * value. These are readiness conditions, not arbitrary sleeps. */
 async function seriousViolations(page: Page) {
+  await page.waitForLoadState('networkidle');
+  await page.waitForFunction(() => {
+    const animated = Array.from(document.querySelectorAll('.view-panel, .panel-enter'));
+    return animated.every((el) => {
+      const style = getComputedStyle(el);
+      return style.animationName === 'none' || style.opacity === '1';
+    });
+  });
   const results = await new AxeBuilder({ page }).analyze();
   return results.violations.filter((v) =>
     ['serious', 'critical'].includes(v.impact ?? ''),

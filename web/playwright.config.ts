@@ -11,7 +11,12 @@ const repoRoot = resolve(here, '..');
 
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: true,
+  // The Workbench e2e runs against one real FastAPI server with a bounded
+  // compute gate. Running tests in parallel can collide on computation slots
+  // and surface retryable server_busy 503s that the specs do not retry, so the
+  // suite is serial: reliability over wall-clock here.
+  fullyParallel: false,
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: 'html',

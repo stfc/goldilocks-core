@@ -38,16 +38,19 @@ def test_codes_lists_available_codes(test_runtime) -> None:
     assert "quantum_espresso" in response.json()["codes"]
 
 
-def test_models_lists_default_qrf(test_runtime) -> None:
-    """Expose the default k-mesh model spec."""
+def test_models_lists_registered_models(test_runtime) -> None:
+    """Expose the QRF k-distance and CGCNN metallicity model specs."""
     with TestClient(create_app(test_runtime)) as client:
         response = client.get("/models")
 
     assert response.status_code == 200
     models = response.json()["models"]
-    assert len(models) == 1
-    assert models[0]["name"] == "kpoints-goldilocks-QRF"
-    assert models[0]["target"] == "k_distance"
+    assert len(models) == 2
+    qrf = next(m for m in models if m["target"] == "k_distance")
+    assert qrf["name"] == "kpoints-goldilocks-QRF"
+    cgcnn = next(m for m in models if m["target"] == "metallicity")
+    assert cgcnn["name"] == "metallicity-goldilocks-CGCNN"
+    assert cgcnn["model_type"] == "cgcnn"
 
 
 def test_recommend_returns_core_result_json(test_runtime, request_body) -> None:

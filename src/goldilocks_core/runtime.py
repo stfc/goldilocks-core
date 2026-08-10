@@ -21,6 +21,7 @@ from goldilocks_core.contracts import (
     GeneratedFiles,
     KMeshAdvisor,
     KPointSelection,
+    ModelSpec,
     ParameterAdvice,
     PathLike,
     SelectionRecord,
@@ -192,27 +193,18 @@ class CoreRuntime:
         return (describe_task(self._task),)
 
     def describe_models(self) -> list[dict[str, str | None]]:
-        """Return transport-safe descriptions of available k-mesh models.
+        """Return transport-safe descriptions of all registered ML models.
 
-        The default QRF k-distance model is always listed. Additional local
-        models are not discoverable here — they are operator-supplied per
-        request via ``kmesh_model``.
+        Lists every model in the runtime's registry: the default QRF k-distance
+        model and the CGCNN metallicity classifier it depends on. Local models
+        supplied per-request via ``kmesh_model`` are not listed here.
         """
         from goldilocks_core.ml.model_registry import load_default_qrf_config
 
         config = load_default_qrf_config(self._registry_path)
-        spec = config.model
         return [
-            {
-                "name": spec.name,
-                "version": spec.version,
-                "model_type": spec.model_type,
-                "target": spec.target,
-                "feature_set": spec.feature_set,
-                "source": spec.source,
-                "location": spec.location,
-                "revision": spec.revision,
-            }
+            _model_spec_to_dict(config.model),
+            _model_spec_to_dict(config.metallicity_model),
         ]
 
     def reset(self) -> None:
@@ -338,3 +330,17 @@ def _advice_warnings(advice: ParameterAdvice) -> tuple[str, ...]:
 def _unique_warnings(*groups: tuple[str, ...]) -> tuple[str, ...]:
     """Return warnings in first-seen order without duplicates."""
     return tuple(dict.fromkeys(warning for group in groups for warning in group))
+
+
+def _model_spec_to_dict(spec: ModelSpec) -> dict[str, str | None]:
+    """Serialize a ModelSpec to a transport-safe dictionary."""
+    return {
+        "name": spec.name,
+        "version": spec.version,
+        "model_type": spec.model_type,
+        "target": spec.target,
+        "feature_set": spec.feature_set,
+        "source": spec.source,
+        "location": spec.location,
+        "revision": spec.revision,
+    }

@@ -673,6 +673,10 @@ class GeneratedFile:
         return to_jsonable(self)
 
 
+type GeneratedFiles = tuple[GeneratedFile, ...]
+"""Immutable collection produced by the Generate stage."""
+
+
 @dataclass(frozen=True, slots=True)
 class BundleRecord:
     """Bundle publication output: where files were written and the manifest.
@@ -750,7 +754,7 @@ class CoreResult:
     advice: ParameterAdvice
     k_points: KPointSelection
     selection: SelectionRecord
-    generated_files: tuple[GeneratedFile, ...] = ()
+    generated_files: GeneratedFiles = ()
     warnings: tuple[str, ...] = ()
     bundle: BundleRecord | None = None
 

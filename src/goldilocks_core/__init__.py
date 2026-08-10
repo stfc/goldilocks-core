@@ -10,6 +10,7 @@ from goldilocks_core.contracts import (
     CoreResult,
 )
 from goldilocks_core.jobs import generate, recommend, run_core_job
+from goldilocks_core.runtime import CoreRuntime
 
 __all__ = [
     "BundleRecord",
@@ -17,6 +18,7 @@ __all__ = [
     "CalculationIntent",
     "CoreJobRequest",
     "CoreResult",
+    "CoreRuntime",
     "generate",
     "recommend",
     "run_core_job",

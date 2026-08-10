@@ -9,6 +9,7 @@ from goldilocks_core import (
     CalculationHints,
     CalculationIntent,
     CoreJobRequest,
+    CoreRuntime,
     run_core_job,
 )
 from goldilocks_core.contracts import StructureFeatureVector
@@ -131,7 +132,7 @@ def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> 
 def test_run_core_job_rejects_unknown_task() -> None:
     """Tasks without a registered path raise at dispatch."""
     with pytest.raises(
-        ValueError, match="No Core path registered for task='magnetic_nscf'"
+        ValueError, match="No Core task registered for task='magnetic_nscf'"
     ):
         run_core_job(
             CoreJobRequest(
@@ -141,6 +142,23 @@ def test_run_core_job_rejects_unknown_task() -> None:
                 pseudo_metadata=(make_metadata(),),
             )
         )
+
+
+def test_run_core_job_reuses_caller_owned_runtime() -> None:
+    """A passed runtime remains open for subsequent jobs."""
+    request = CoreJobRequest(
+        structure=make_structure(),
+        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+        pseudo_metadata=(make_metadata(),),
+    )
+
+    with CoreRuntime() as runtime:
+        first = run_core_job(request, runtime=runtime)
+        second = run_core_job(request, runtime=runtime)
+        assert runtime.is_closed is False
+
+    assert first.k_points == second.k_points
+    assert runtime.is_closed is True
 
 
 def test_run_core_job_generate_adds_generated_files() -> None:
@@ -156,6 +174,22 @@ def test_run_core_job_generate_adds_generated_files() -> None:
 
     assert result.generated_files[0].path == "inputs/qe.in"
     assert "2  2  1  0  0  0" in result.generated_files[0].content
+
+
+def test_run_core_job_generate_with_caller_owned_runtime() -> None:
+    """Generate mode dispatches through a caller-owned runtime."""
+    request = CoreJobRequest(
+        structure=make_structure(),
+        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+        pseudo_metadata=(make_metadata(),),
+        mode="generate",
+    )
+
+    with CoreRuntime() as runtime:
+        result = run_core_job(request, runtime=runtime)
+        assert runtime.is_closed is False
+
+    assert result.generated_files[0].path == "inputs/qe.in"
 
 
 def test_run_core_job_generate_with_output_dir_writes_bundle(tmp_path: Path) -> None:

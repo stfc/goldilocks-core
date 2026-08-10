@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 import pytest
+from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.contracts import CalculationHints, CalculationIntent
 from goldilocks_core.graph import (
@@ -39,6 +40,9 @@ class MissingRecord:
     pass
 
 
+STRUCTURE_INPUT = Structure(Lattice.cubic(1.0), ["H"], [[0.0, 0.0, 0.0]])
+
+
 def test_linear_graph_runs_only_requested_output_dependencies() -> None:
     ran: list[str] = []
 
@@ -64,12 +68,12 @@ def test_linear_graph_runs_only_requested_output_dependencies() -> None:
         presets=(),
     )
 
-    records = execute(task, (StubC,), RunContext())
+    records = execute(task, (StubC,), RunContext(structure_input=STRUCTURE_INPUT))
     assert records[StubC] == StubC("abc")
     assert ran == ["a", "b", "c"]
 
     ran.clear()
-    records = execute(task, (StubB,), RunContext())
+    records = execute(task, (StubB,), RunContext(structure_input=STRUCTURE_INPUT))
     assert records[StubB] == StubB("ab")
     assert ran == ["a", "b"]
 
@@ -99,11 +103,11 @@ def test_parallel_roots_share_dependencies_without_running_siblings() -> None:
         presets=(),
     )
 
-    execute(task, (StubB,), RunContext())
+    execute(task, (StubB,), RunContext(structure_input=STRUCTURE_INPUT))
     assert ran == ["a", "b"]
 
     ran.clear()
-    execute(task, (StubB, StubC), RunContext())
+    execute(task, (StubB, StubC), RunContext(structure_input=STRUCTURE_INPUT))
     assert ran == ["a", "b", "c"]
     assert ran.count("a") == 1
 
@@ -138,7 +142,7 @@ def test_partial_query_returns_only_requested_records() -> None:
         presets=(),
     )
 
-    records = execute(task, (StubB, StubD), RunContext())
+    records = execute(task, (StubB, StubD), RunContext(structure_input=STRUCTURE_INPUT))
 
     assert ran == ["a", "b", "c", "d"]
     assert ran.count("b") == 1
@@ -151,7 +155,7 @@ def test_missing_producer_raises_value_error() -> None:
     task = TaskSpec(task="missing", stages=(), presets=())
 
     with pytest.raises(ValueError, match="No stage produces.*MissingRecord"):
-        execute(task, (MissingRecord,), RunContext())
+        execute(task, (MissingRecord,), RunContext(structure_input=STRUCTURE_INPUT))
 
 
 def test_missing_dependency_producer_raises_value_error() -> None:
@@ -162,7 +166,7 @@ def test_missing_dependency_producer_raises_value_error() -> None:
     )
 
     with pytest.raises(ValueError, match="No stage produces.*MissingRecord"):
-        execute(task, (StubB,), RunContext())
+        execute(task, (StubB,), RunContext(structure_input=STRUCTURE_INPUT))
 
 
 def test_cycle_raises_value_error() -> None:
@@ -176,7 +180,7 @@ def test_cycle_raises_value_error() -> None:
     )
 
     with pytest.raises(ValueError, match="Cycle detected"):
-        execute(task, (StubA,), RunContext())
+        execute(task, (StubA,), RunContext(structure_input=STRUCTURE_INPUT))
 
 
 def test_run_context_reaches_stage_as_keyword_argument() -> None:
@@ -195,6 +199,7 @@ def test_run_context_reaches_stage_as_keyword_argument() -> None:
         return "metal", "test", 0.9
 
     context = RunContext(
+        structure_input=STRUCTURE_INPUT,
         intent=intent,
         hints=hints,
         pseudo_metadata=(metadata,),

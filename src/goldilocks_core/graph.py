@@ -15,6 +15,7 @@ from goldilocks_core.contracts import (
     ElectronicCharacter,
     KMeshAdvisor,
     KPointSelection,
+    StructureInput,
 )
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
@@ -68,6 +69,7 @@ def _heuristic_metallicity(
 class RunContext:
     """Carry request data and runtime services alongside graph records."""
 
+    structure_input: StructureInput
     intent: CalculationIntent = field(default_factory=CalculationIntent)
     hints: CalculationHints = field(default_factory=CalculationHints)
     pseudo_metadata: tuple[PseudoMetadata, ...] = ()

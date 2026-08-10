@@ -31,7 +31,11 @@ _TIMEOUT_SECONDS = 120
 
 
 def published_elements(table: str) -> tuple[set[str], int]:
-    """Return the elements a table publishes, and how many carry a cutoff hint."""
+    """Return the elements a table publishes, and how many carry a cutoff hint.
+
+    ``table`` is the upstream name, not ours: the URL is built from what the
+    provider calls the table.
+    """
     archive = requests.get(
         f"{PSEUDO_DOJO_BASE}/{table}_djrepo.tgz", timeout=_TIMEOUT_SECONDS
     ).content
@@ -70,7 +74,11 @@ def main() -> int:
 
     with ThreadPoolExecutor(max_workers=5) as pool:
         surveys = pool.map(
-            lambda t: (t, *published_elements(t.name), transfer_bytes(t.name)),
+            lambda t: (
+                t,
+                *published_elements(t.upstream_table),
+                transfer_bytes(t.upstream_table),
+            ),
             fetchable,
         )
 
@@ -90,7 +98,7 @@ def main() -> int:
 
             status = "; ".join(problems) if problems else "matches"
             drifted = drifted or bool(problems)
-            print(f"  {table.name:<32} {len(elements):>3} elements   {status}")
+            print(f"  {table.name:<34} {len(elements):>3} elements   {status}")
 
     if drifted:
         print("\nThe registry is out of date. Update it and re-run.")

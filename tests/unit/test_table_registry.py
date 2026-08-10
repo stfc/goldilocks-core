@@ -15,12 +15,12 @@ from goldilocks_core.pseudo.table_registry import (
 _MINIMAL = """
 [tables."only-one"]
 provider = "pseudodojo"
+upstream_table = "pseudodojo-pbesol-efficiency"
 version = "0.4"
 functional = "PBEsol"
 relativistic = "SR"
 accuracy = "efficiency"
 licence = "CC-BY-4.0"
-redistribution = "upstream-only"
 upstream_url = "https://example.invalid/"
 citation = "nobody"
 elements = ["Si", "Ge"]
@@ -39,12 +39,20 @@ def test_the_packaged_registry_loads(packaged):
 
 
 def test_exactly_one_table_is_the_default(packaged):
-    assert default_table(packaged).name == "nc-sr-04_pbesol_standard"
+    assert default_table(packaged).name == "pseudodojo-pbesol-efficiency"
 
 
-def test_the_default_is_fetchable_so_a_fresh_install_can_proceed(packaged):
-    """A default the user has to install by hand is not a default."""
-    assert default_table(packaged).fetchable
+def test_the_default_is_the_cheapest_clean_licence_table(packaged):
+    """It is installed most often, so it should be the smallest and least encumbered."""
+    default = default_table(packaged)
+
+    assert default.licence == "CC-BY-4.0"
+    assert default.functional == "PBEsol"
+    assert all(
+        default.transfer_bytes <= t.transfer_bytes
+        for t in packaged.values()
+        if t.functional == "PBEsol" and t.relativistic == "SR"
+    )
 
 
 def test_every_entry_declares_terms(packaged):
@@ -53,7 +61,7 @@ def test_every_entry_declares_terms(packaged):
         assert table.licence
         assert table.citation
         assert table.upstream_url
-        assert table.redistribution in {"mirrored", "upstream-only", "metadata-only"}
+        assert table.upstream_table
 
 
 def test_accuracy_uses_one_vocabulary_across_libraries(packaged):
@@ -61,15 +69,14 @@ def test_accuracy_uses_one_vocabulary_across_libraries(packaged):
     assert {t.accuracy for t in packaged.values()} <= {"efficiency", "precision"}
 
 
-def test_a_fetchable_table_declares_what_it_will_transfer(packaged):
-    """The fetch prompt quotes this; an entry without it cannot be quoted."""
+def test_every_table_declares_what_it_will_transfer(packaged):
+    """`gl download` reports this before fetching; an entry without it cannot."""
     for table in packaged.values():
-        if table.fetchable:
-            assert table.transfer_bytes and table.transfer_bytes > 0
+        assert table.transfer_bytes and table.transfer_bytes > 0
 
 
 def test_covers_and_missing_from(packaged):
-    table = packaged["nc-sr-04_pbesol_standard"]
+    table = packaged["pseudodojo-pbesol-efficiency"]
 
     assert table.covers("Si")
     assert not table.covers("U")
@@ -78,45 +85,49 @@ def test_covers_and_missing_from(packaged):
 
 def test_the_default_table_carries_almost_no_lanthanides(packaged):
     """The gap that makes the 3+ table necessary."""
-    assert packaged["nc-sr-04_pbesol_standard"].lanthanides == ("La", "Lu")
+    assert packaged["pseudodojo-pbesol-efficiency"].lanthanides == ("La", "Lu")
 
 
 def test_the_lanthanide_table_changes_the_functional(packaged):
     """Choosing it is a scientific decision, not a fallback Core may take silently."""
-    default = packaged["nc-sr-04_pbesol_standard"]
-    lanthanide = packaged["nc-sr-04-3plus_pbe_standard"]
+    default = packaged["pseudodojo-pbesol-efficiency"]
+    lanthanide = packaged["pseudodojo-pbe-lanthanides"]
 
     assert lanthanide.covers("Ce")
     assert not default.covers("Ce")
     assert lanthanide.functional != default.functional
 
 
-def test_no_fetchable_table_covers_actinides(packaged):
-    """Actinides are reachable only through a table we may not redistribute."""
-    for table in packaged.values():
-        if table.fetchable:
-            assert not table.actinides
+def test_actinides_come_only_from_the_table_with_encumbered_licensing(packaged):
+    """Reachable, but not without the user knowing what lands on their disk."""
+    with_actinides = [t for t in packaged.values() if t.actinides]
 
-    sssp = packaged["sssp-1.3_pbesol_efficiency"]
-    assert set(sssp.actinides) <= ACTINIDES
-    assert sssp.actinides
-    assert not sssp.fetchable
+    assert [t.name for t in with_actinides] == ["sssp-pbesol-efficiency"]
+    assert set(with_actinides[0].actinides) <= ACTINIDES
+    assert "GPL" in with_actinides[0].licence
+
+
+def test_no_pseudodojo_table_covers_actinides(packaged):
+    """The whole PseudoDojo catalogue stops before the actinides."""
+    for table in packaged.values():
+        if table.provider == "pseudodojo":
+            assert not table.actinides
 
 
 def test_only_a_fully_relativistic_table_can_serve_spin_orbit_coupling(packaged):
     relativistic = {t.name for t in packaged.values() if t.relativistic == "FR"}
 
     assert relativistic
-    assert all("nc-fr" in name for name in relativistic)
-    assert packaged["sssp-1.3_pbesol_efficiency"].relativistic == "SR"
+    assert all(name.endswith("-fr") for name in relativistic)
+    assert packaged["sssp-pbesol-efficiency"].relativistic == "SR"
 
 
 @pytest.mark.parametrize(
     ("element", "expected"),
     [
         ("Si", {"available everywhere"}),
-        ("Ce", {"nc-sr-04-3plus_pbe_standard", "sssp-1.3_pbesol_efficiency"}),
-        ("U", {"sssp-1.3_pbesol_efficiency"}),
+        ("Ce", {"pseudodojo-pbe-lanthanides", "sssp-pbesol-efficiency"}),
+        ("U", {"sssp-pbesol-efficiency"}),
         ("Og", set()),
     ],
 )
@@ -155,3 +166,17 @@ def test_a_registry_without_a_single_default_is_rejected(tmp_path):
 
     with pytest.raises(LookupError, match="exactly one table as default"):
         default_table(load_tables(registry_file))
+
+
+def test_every_functional_has_a_matching_table(packaged):
+    """XC consistency is enforced at generation; every functional needs a table."""
+    for functional in ("PBEsol", "PBE", "LDA"):
+        assert any(t.functional == functional for t in packaged.values())
+
+
+def test_names_encode_what_distinguishes_a_table(packaged):
+    """A user picks from `gl list pp` by reading names, not by opening the registry."""
+    for table in packaged.values():
+        assert table.functional.lower() in table.name.lower()
+        if table.relativistic == "FR":
+            assert table.name.endswith("-fr")

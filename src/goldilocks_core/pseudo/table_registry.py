@@ -33,18 +33,23 @@ class PseudoTable:
     """One registered pseudopotential table.
 
     Attributes:
-        name: table identifier, e.g. ``nc-sr-04_pbesol_standard``.
-        provider: how it is obtained. ``pseudodojo`` can be fetched;
-            ``upstream-only`` cannot be redistributed and must be installed by
-            the user from ``upstream_url``.
+        name: our identifier, e.g. ``pseudodojo-pbesol-efficiency``.
+        provider: which upstream serves it -- ``pseudodojo`` or
+            ``materialscloud``. Core never redistributes a table; it fetches
+            from the provider on the user's behalf.
+        upstream_table: what the provider calls it. The download URL is built
+            from this, not from ``name``.
+        record: provider record identifier, where the provider addresses tables
+            that way rather than by name.
         version: upstream table version.
         functional: exchange-correlation functional the table was generated for.
         relativistic: ``SR`` or ``FR``. Only ``FR`` can satisfy spin-orbit
             coupling.
         accuracy: ``efficiency`` or ``precision``. One vocabulary across
             libraries; it selects a table, never a cutoff level.
-        licence: licence of the pseudopotentials themselves.
-        redistribution: whether we may republish them.
+        licence: licence of the pseudopotentials themselves. Not always a
+            single one: an SSSP table is assembled from sources with different
+            terms, some of them GPL.
         upstream_url: where the table comes from.
         citation: what a user should cite for having used it.
         elements: element symbols the table covers.
@@ -55,23 +60,19 @@ class PseudoTable:
 
     name: str
     provider: str
+    upstream_table: str
     version: str
     functional: str
     relativistic: str
     accuracy: str
     licence: str
-    redistribution: str
     upstream_url: str
     citation: str
     elements: tuple[str, ...]
+    record: str | None = None
     transfer_bytes: int | None = None
     note: str = ""
     default: bool = False
-
-    @property
-    def fetchable(self) -> bool:
-        """Whether Core can install this table itself."""
-        return self.provider != "upstream-only"
 
     @property
     def lanthanides(self) -> tuple[str, ...]:
@@ -104,15 +105,16 @@ def load_tables(path: PathLike | None = None) -> dict[str, PseudoTable]:
         name: PseudoTable(
             name=name,
             provider=entry["provider"],
+            upstream_table=entry["upstream_table"],
             version=entry["version"],
             functional=entry["functional"],
             relativistic=entry["relativistic"],
             accuracy=entry["accuracy"],
             licence=entry["licence"],
-            redistribution=entry["redistribution"],
             upstream_url=entry["upstream_url"],
             citation=entry["citation"],
             elements=tuple(entry["elements"]),
+            record=entry.get("record"),
             transfer_bytes=entry.get("transfer_bytes"),
             note=entry.get("note", "").strip(),
             default=entry.get("default", False),

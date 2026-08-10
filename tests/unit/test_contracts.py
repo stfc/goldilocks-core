@@ -146,7 +146,7 @@ def test_job_records_serialize_to_json_safe_dicts() -> None:
         advice=_make_advice(),
         k_points=_make_k_points(),
         selection=_make_selection(),
-        bundle=BundleRecord(path="run/", manifest={"manifest_version": 1}),
+        bundle=BundleRecord(path="run/", manifest={"manifest_version": 2}),
     )
 
     data = result.to_dict()

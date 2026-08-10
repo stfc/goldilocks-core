@@ -337,7 +337,7 @@ class StructureAnalysisRecord:
         dimensionality: structure dimensionality from a bonded-cluster
             analysis (``3d``, ``2d``, ``1d``, ``molecule``), or
             ``unknown`` when detection fails.
-        has_vacuum: connectivity-derived low-dimensional/vacuum heuristic:
+        low_dimensional: connectivity-derived low-dimensional heuristic:
             True when bonded dimensionality is below 3D. This is not a
             measured cell-vacuum quantity.
         electronic_character: electronic-character classification from the
@@ -365,7 +365,7 @@ class StructureAnalysisRecord:
     space_group_number: str | int | SymmetryUnavailable | None = None
     crystal_system: str | int | SymmetryUnavailable | None = None
     dimensionality: Dimensionality = "unknown"
-    has_vacuum: bool = False
+    low_dimensional: bool = False
     electronic_character: ElectronicCharacter = "unknown"
     electronic_character_source: str = "heuristic"
     electronic_character_confidence: float | None = None
@@ -522,7 +522,7 @@ class VdwAdvice:
     ``vdw_corr='grimme-d3'`` with ``dftd3_version=4``).
 
     The built-in Advise stage treats its connectivity-derived
-    low-dimensional/vacuum heuristic as a conservative D3BJ default because
+    low-dimensional heuristic as a conservative D3BJ default because
     dispersion may be important. It does not establish that dispersion
     dominates; the operator can override the setting or method with
     ``CalculationHints``. Heavy elements only mark SOC for consideration

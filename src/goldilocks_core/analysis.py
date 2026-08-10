@@ -120,7 +120,7 @@ def analyze_structure(
     )
     magnetic_elements = tuple(sorted({*transition_metals, *lanthanides, *actinides}))
     disorder_warnings = _find_disorder_warnings(structure)
-    dimensionality, has_vacuum, dimensionality_warnings = _analyze_dimensionality(
+    dimensionality, low_dimensional, dimensionality_warnings = _analyze_dimensionality(
         structure
     )
     try:
@@ -163,7 +163,7 @@ def analyze_structure(
         space_group_number=symmetry["space_group_number"],
         crystal_system=symmetry["crystal_system"],
         dimensionality=dimensionality,
-        has_vacuum=has_vacuum,
+        low_dimensional=low_dimensional,
         electronic_character=electronic_character,
         electronic_character_source=electronic_character_source,
         electronic_character_confidence=electronic_character_confidence,
@@ -191,7 +191,7 @@ def _find_disorder_warnings(structure: Structure) -> tuple[str, ...]:
 def _analyze_dimensionality(
     structure: Structure,
 ) -> tuple[Dimensionality, bool, tuple[str, ...]]:
-    """Return dimensionality, a low-dimensional/vacuum heuristic, and warnings.
+    """Return dimensionality, a low-dimensional heuristic, and warnings.
 
     Uses pymatgen's CrystalNN graph and Larsen dimensionality algorithm. The
     heuristic is connectivity-derived, not a measurement of cell vacuum.
@@ -209,7 +209,7 @@ def _analyze_dimensionality(
             False,
             (
                 "Dimensionality detection is not supported for disordered "
-                "structures; defaulted to unknown with the low-dimensional/vacuum "
+                "structures; defaulted to unknown with the low-dimensional "
                 "heuristic disabled. Set CalculationHints(use_vdw=True) explicitly "
                 "if a vdW correction is needed.",
             ),
@@ -222,8 +222,8 @@ def _analyze_dimensionality(
         raise DimensionalityClassificationError(structure) from error
 
     dimensionality = _DIMENSIONALITY_BY_VALUE.get(dim_value, "unknown")
-    has_vacuum = bool(dimensionality != "unknown" and dim_value < 3)
-    return dimensionality, has_vacuum, ()
+    low_dimensional = bool(dimensionality != "unknown" and dim_value < 3)
+    return dimensionality, low_dimensional, ()
 
 
 def _analyze_symmetry(structure: Structure) -> dict[str, str | int]:

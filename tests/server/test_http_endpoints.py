@@ -16,6 +16,40 @@ def test_health_reports_liveness(test_runtime) -> None:
     assert response.json() == {"status": "ok"}
 
 
+def test_tasks_lists_registered_tasks(test_runtime) -> None:
+    """Expose registered task descriptions with stable ids."""
+    with TestClient(create_app(test_runtime)) as client:
+        response = client.get("/tasks")
+
+    assert response.status_code == 200
+    tasks = response.json()["tasks"]
+    assert len(tasks) == 1
+    assert tasks[0]["id"] == "scf_single_point"
+    assert tasks[0]["name"] == "Single-point SCF"
+    assert any(s["output_record_id"] == "k_points" for s in tasks[0]["stages"])
+
+
+def test_codes_lists_available_codes(test_runtime) -> None:
+    """Expose target DFT codes with registered writers."""
+    with TestClient(create_app(test_runtime)) as client:
+        response = client.get("/codes")
+
+    assert response.status_code == 200
+    assert "quantum_espresso" in response.json()["codes"]
+
+
+def test_models_lists_default_qrf(test_runtime) -> None:
+    """Expose the default k-mesh model spec."""
+    with TestClient(create_app(test_runtime)) as client:
+        response = client.get("/models")
+
+    assert response.status_code == 200
+    models = response.json()["models"]
+    assert len(models) == 1
+    assert models[0]["name"] == "kpoints-goldilocks-QRF"
+    assert models[0]["target"] == "k_distance"
+
+
 def test_recommend_returns_core_result_json(test_runtime, request_body) -> None:
     """Expose the recommend preset as CoreResult JSON."""
     with TestClient(create_app(test_runtime)) as client:
@@ -59,15 +93,15 @@ def test_compute_returns_only_requested_records(test_runtime, request_body) -> N
     """Expose arbitrary record queries through the compute endpoint."""
     body = {
         **request_body,
-        "outputs": ["StructureAnalysisRecord", "ParameterAdvice"],
+        "outputs": ["analysis", "advice"],
     }
 
     with TestClient(create_app(test_runtime)) as client:
         response = client.post("/compute", json=body)
 
     assert response.status_code == 200
-    assert set(response.json()) == {"StructureAnalysisRecord", "ParameterAdvice"}
-    assert response.json()["StructureAnalysisRecord"]["reduced_formula"] == "Si"
+    assert set(response.json()) == {"analysis", "advice"}
+    assert response.json()["analysis"]["reduced_formula"] == "Si"
 
 
 def test_request_error_maps_to_422_with_message(test_runtime, request_body) -> None:

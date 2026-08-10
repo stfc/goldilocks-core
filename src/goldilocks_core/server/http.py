@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import Any
 
+from goldilocks_core.generation.registry import available_codes
 from goldilocks_core.jobs import run_core_job
 from goldilocks_core.runtime import CoreRuntime
 from goldilocks_core.server.request import RequestError, from_dict
@@ -85,6 +86,21 @@ def create_app(runtime: CoreRuntime | None = None) -> Any:
     def health() -> dict[str, str]:
         """Report process liveness."""
         return {"status": "ok"}
+
+    @app.get("/tasks")
+    def tasks() -> dict[str, Any]:
+        """List every registered Core task with stable stage and record ids."""
+        return {"tasks": [task.to_dict() for task in state.runtime.describe_tasks()]}
+
+    @app.get("/codes")
+    def codes() -> dict[str, Any]:
+        """List target DFT codes with registered input writers."""
+        return {"codes": list(available_codes())}
+
+    @app.get("/models")
+    def models() -> dict[str, Any]:
+        """List available k-mesh models known to the runtime."""
+        return {"models": state.runtime.describe_models()}
 
     @app.post("/recommend")
     def recommend(body: dict[str, Any]) -> dict[str, Any]:

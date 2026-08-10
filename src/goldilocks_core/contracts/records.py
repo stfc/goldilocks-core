@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+from pymatgen.core import Structure
 
 from goldilocks_core.contracts.serial import to_jsonable
 from goldilocks_core.contracts.types import (
@@ -34,6 +35,127 @@ from goldilocks_core.contracts.validate import (
 )
 from goldilocks_core.functionals import normalize_functional_label
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
+
+
+@dataclass(frozen=True, slots=True)
+class StructureLattice:
+    """Canonical lattice vectors and parameters for a StructureDocument.
+
+    Attributes:
+        matrix: lattice vectors as a 3x3 matrix of Cartesian coordinates.
+        a: length of lattice vector ``a``.
+        b: length of lattice vector ``b``.
+        c: length of lattice vector ``c``.
+        alpha: angle between ``b`` and ``c`` (degrees).
+        beta: angle between ``a`` and ``c`` (degrees).
+        gamma: angle between ``a`` and ``b`` (degrees).
+        volume: cell volume.
+        pbc: periodicity along each lattice direction.
+    """
+
+    matrix: tuple[
+        tuple[float, float, float],
+        tuple[float, float, float],
+        tuple[float, float, float],
+    ]
+    a: float
+    b: float
+    c: float
+    alpha: float
+    beta: float
+    gamma: float
+    volume: float
+    pbc: tuple[bool, bool, bool]
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class StructureSpecies:
+    """One element species on a site with its fractional occupancy.
+
+    Attributes:
+        element: element symbol (e.g. ``Fe``).
+        occupancy: fractional occupancy in ``(0, 1]``.
+    """
+
+    element: str
+    occupancy: float
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class StructureSite:
+    """One crystallographic site in a canonical StructureDocument.
+
+    Attributes:
+        label: human-readable site label (e.g. ``Fe:0.5, Co:0.5``).
+        species: element species with occupancies on this site.
+        abc: fractional coordinates along the lattice vectors.
+        xyz: Cartesian coordinates.
+    """
+
+    label: str
+    species: tuple[StructureSpecies, ...]
+    abc: tuple[float, float, float]
+    xyz: tuple[float, float, float]
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class StructureSourceInfo:
+    """Origin metadata for a parsed structure.
+
+    Attributes:
+        format: source format label (e.g. ``cif``, ``poscar``), or None
+            when unknown.
+        source: how the structure was provided (currently ``inline``).
+    """
+
+    format: str | None = None
+    source: str = "inline"
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class StructureDocument:
+    """Core's canonical, transport-safe representation of a parsed structure.
+
+    Preserves lattice vectors, sites, all species and occupancies,
+    periodicity, and source metadata. It carries no pymatgen objects or
+    implementation types, so it can cross the HTTP transport unchanged and be
+    rendered by text or 3D presenters without depending on Core internals.
+
+    Attributes:
+        formula: full chemical formula.
+        reduced_formula: reduced chemical formula.
+        lattice: canonical lattice vectors, parameters, volume, and periodicity.
+        sites: crystallographic sites with species and occupancies.
+        charge: net cell charge, or None when unknown.
+        source: origin metadata for the parsed structure.
+    """
+
+    formula: str
+    reduced_formula: str
+    lattice: StructureLattice
+    sites: tuple[StructureSite, ...]
+    charge: float | None = None
+    source: StructureSourceInfo = field(default_factory=StructureSourceInfo)
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
 
 
 @dataclass(slots=True)
@@ -677,6 +799,32 @@ type GeneratedFiles = tuple[GeneratedFile, ...]
 """Immutable collection produced by the Generate stage."""
 
 
+RECORD_TYPE_IDS: dict[type, str] = {
+    Structure: "structure",
+    StructureAnalysisRecord: "analysis",
+    ParameterAdvice: "advice",
+    KPointSelection: "k_points",
+    SelectionRecord: "selection",
+    GeneratedFiles: "generated_files",
+}
+"""Authoritative stable transport id for each graph record type.
+
+These ids are backend-owned and never derived from Python class names.
+They are used consistently for task descriptions, selectable outputs, HTTP
+output literals, query resolution, and record-set serialization.
+"""
+
+
+def record_type_id(record_type: type) -> str:
+    """Return the stable transport id for a graph record type."""
+    try:
+        return RECORD_TYPE_IDS[record_type]
+    except KeyError as error:
+        raise ValueError(
+            f"No stable transport record id for record type {record_type.__name__}"
+        ) from error
+
+
 @dataclass(frozen=True, slots=True)
 class BundleRecord:
     """Bundle publication output: where files were written and the manifest.
@@ -717,10 +865,10 @@ class CoreRecords(Mapping[type, Any]):
         return len(self._records)
 
     def to_dict(self) -> JsonDict:
-        """Return records as a JSON-serializable dictionary."""
+        """Return records as a JSON-serializable dictionary keyed by stable ids."""
         return to_jsonable(
             {
-                record_type.__name__: record
+                record_type_id(record_type): record
                 for record_type, record in self._records.items()
             }
         )
@@ -803,7 +951,7 @@ class CoreJobRequest:
             raise ValueError(f"Unsupported Core job mode: {self.mode}")
 
     def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary with output type names."""
+        """Return a JSON-serializable dictionary with stable record ids."""
         return {
             "structure": to_jsonable(self.structure),
             "intent": to_jsonable(self.intent),
@@ -812,7 +960,7 @@ class CoreJobRequest:
             "outputs": (
                 None
                 if self.outputs is None
-                else [output_type.__name__ for output_type in self.outputs]
+                else [record_type_id(output_type) for output_type in self.outputs]
             ),
             "pseudo_metadata": to_jsonable(self.pseudo_metadata),
             "output_dir": self.output_dir,

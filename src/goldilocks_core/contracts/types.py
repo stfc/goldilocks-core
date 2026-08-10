@@ -34,6 +34,15 @@ PathLike = str | Path
 StructureInput = Structure | PathLike
 """Structure input: a pymatgen ``Structure`` or a path to a structure file."""
 
+TaskId = str
+"""Stable transport-safe identifier for a Core task."""
+
+StageId = str
+"""Stable transport-safe identifier for a graph stage."""
+
+RecordId = str
+"""Stable transport-safe identifier for a scientific record type."""
+
 CodeName = str
 """Target DFT code name."""
 

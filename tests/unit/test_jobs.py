@@ -75,8 +75,8 @@ def test_run_core_job_returns_only_requested_records() -> None:
     result = run_core_job(request)
 
     assert request.to_dict()["outputs"] == [
-        "StructureAnalysisRecord",
-        "ParameterAdvice",
+        "analysis",
+        "advice",
     ]
     assert isinstance(result, CoreRecords)
     assert tuple(result) == (StructureAnalysisRecord, ParameterAdvice)

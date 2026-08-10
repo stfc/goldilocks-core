@@ -36,7 +36,7 @@ def test_from_dict_resolves_output_record_names(sample_structure_path: str) -> N
     request = from_dict(
         {
             "structure": sample_structure_path,
-            "outputs": ["StructureAnalysisRecord", "ParameterAdvice"],
+            "outputs": ["analysis", "advice"],
         }
     )
 
@@ -55,7 +55,7 @@ def test_from_dict_rejects_unknown_keys(sample_structure_path: str) -> None:
         {"structure": 42},
         {"structure": "Si.cif", "intent": []},
         {"structure": "Si.cif", "hints": {"use_vdw": "yes"}},
-        {"structure": "Si.cif", "outputs": "ParameterAdvice"},
+        {"structure": "Si.cif", "outputs": "advice"},
         {"structure": "Si.cif", "outputs": [3]},
         {"structure": "Si.cif", "mode": 3},
     ],
@@ -66,8 +66,8 @@ def test_from_dict_maps_bad_types_to_request_error(body: dict[str, object]) -> N
         from_dict(body)
 
 
-def test_from_dict_rejects_unknown_output_name(sample_structure_path: str) -> None:
-    """Reject query record names outside the public output catalogue."""
+def test_from_dict_rejects_unknown_output_id(sample_structure_path: str) -> None:
+    """Reject query record ids outside the public output catalogue."""
     with pytest.raises(RequestError, match="Unknown output record type"):
         from_dict({"structure": sample_structure_path, "outputs": ["Unknown"]})
 

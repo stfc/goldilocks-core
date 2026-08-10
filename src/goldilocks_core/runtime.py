@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from dataclasses import replace
 
 from pymatgen.core import Structure
@@ -26,13 +27,24 @@ from goldilocks_core.contracts import (
     StructureAnalysisRecord,
 )
 from goldilocks_core.generation.registry import generate_inputs
-from goldilocks_core.graph import Preset, RunContext, StageSpec, TaskSpec, execute
+from goldilocks_core.graph import (
+    Preset,
+    RunContext,
+    StageSpec,
+    TaskGraphDescription,
+    TaskSpec,
+    describe_task,
+    execute,
+)
 from goldilocks_core.io.structures import load_structure
 from goldilocks_core.kmesh.resolve import resolve_kpoints
 from goldilocks_core.selection import select_parameters
 
 SCF_TASK = TaskSpec(
     task="scf_single_point",
+    name="Single-point SCF",
+    description=("Recommend and generate inputs for a single-point SCF calculation."),
+    revision="1",
     stages=(
         StageSpec(
             output=Structure,
@@ -120,6 +132,7 @@ class CoreRuntime:
         )
         self._metallicity_model: object | None = None
         self._metallicity_graph_settings: tuple[float, int] | None = None
+        self._lock = threading.RLock()
         self._backend = self._build_backend()
         self._task = SCF_TASK
         self._closed = False
@@ -163,10 +176,44 @@ class CoreRuntime:
         outputs: tuple[type, ...],
         request: CoreJobRequest,
     ) -> CoreRecords:
-        """Execute the minimal SCF subgraph for ``outputs``."""
+        """Execute the minimal SCF subgraph for ``outputs``.
+
+        Runtime execution is serialized so shared model lazy initialization and
+        inference never overlap across concurrent requests; the outer transport
+        gate bounds capacity and container scaling provides parallelism.
+        """
         self._ensure_open()
         self._ensure_scf_request(request)
-        return execute(self._task, outputs, self._context(request))
+        with self._lock:
+            return execute(self._task, outputs, self._context(request))
+
+    def describe_tasks(self) -> tuple[TaskGraphDescription, ...]:
+        """Return transport-safe descriptions of every registered task."""
+        return (describe_task(self._task),)
+
+    def describe_models(self) -> list[dict[str, str | None]]:
+        """Return transport-safe descriptions of available k-mesh models.
+
+        The default QRF k-distance model is always listed. Additional local
+        models are not discoverable here — they are operator-supplied per
+        request via ``kmesh_model``.
+        """
+        from goldilocks_core.ml.model_registry import load_default_qrf_config
+
+        config = load_default_qrf_config(self._registry_path)
+        spec = config.model
+        return [
+            {
+                "name": spec.name,
+                "version": spec.version,
+                "model_type": spec.model_type,
+                "target": spec.target,
+                "feature_set": spec.feature_set,
+                "source": spec.source,
+                "location": spec.location,
+                "revision": spec.revision,
+            }
+        ]
 
     def reset(self) -> None:
         """Discard cached model state so the next model call reloads it."""

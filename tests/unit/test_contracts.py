@@ -109,7 +109,7 @@ def test_core_records_maps_requested_types_and_serializes_record_names() -> None
     assert records[StructureAnalysisRecord] is analysis
     assert tuple(records) == (StructureAnalysisRecord,)
     assert records.to_dict() == {
-        "StructureAnalysisRecord": analysis.to_dict(),
+        "analysis": analysis.to_dict(),
     }
 
 

@@ -15,6 +15,7 @@ except ImportError as error:
     ) from error
 
 from goldilocks_core.contracts import ModelSource, ModelType, SmearingType, VdwMethod
+from goldilocks_core.generation.registry import available_codes
 from goldilocks_core.jobs import run_core_job
 from goldilocks_core.runtime import CoreRuntime
 from goldilocks_core.server.request import from_dict
@@ -22,11 +23,11 @@ from goldilocks_core.server.request import from_dict
 __all__ = ["create_server", "serve"]
 
 _OutputName = Literal[
-    "StructureAnalysisRecord",
-    "ParameterAdvice",
-    "KPointSelection",
-    "SelectionRecord",
-    "GeneratedFiles",
+    "analysis",
+    "advice",
+    "k_points",
+    "selection",
+    "generated_files",
 ]
 
 
@@ -182,6 +183,18 @@ def create_server(
         ),
         lifespan=lifespan,
     )
+
+    @server.tool(description="List every registered Core task with stages and presets.")
+    async def list_tasks() -> dict[str, Any]:
+        return {"tasks": [task.to_dict() for task in state.runtime.describe_tasks()]}
+
+    @server.tool(description="List target DFT codes with registered input writers.")
+    async def list_codes() -> dict[str, Any]:
+        return {"codes": list(available_codes())}
+
+    @server.tool(description="List available k-mesh models known to the runtime.")
+    async def list_models() -> dict[str, Any]:
+        return {"models": state.runtime.describe_models()}
 
     @server.tool(description="Run the recommend preset and return CoreResult JSON.")
     async def recommend(

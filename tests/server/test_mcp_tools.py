@@ -28,8 +28,8 @@ def test_mcp_lists_three_tools_with_constrained_outputs(test_runtime) -> None:
     assert {tool.name for tool in tools} == {"recommend", "generate", "compute"}
     compute = next(tool for tool in tools if tool.name == "compute")
     output_names = compute.input_schema["properties"]["outputs"]["items"]["enum"]
-    assert "StructureAnalysisRecord" in output_names
-    assert "ParameterAdvice" in output_names
+    assert "analysis" in output_names
+    assert "advice" in output_names
     assert compute.input_schema["$defs"]["_Hints"]["additionalProperties"] is False
 
 
@@ -71,9 +71,9 @@ def test_mcp_compute_returns_requested_records(test_runtime, request_body) -> No
         "compute",
         {
             **request_body,
-            "outputs": ["StructureAnalysisRecord", "ParameterAdvice"],
+            "outputs": ["analysis", "advice"],
         },
     )
 
-    assert set(data) == {"StructureAnalysisRecord", "ParameterAdvice"}
-    assert data["StructureAnalysisRecord"]["reduced_formula"] == "Si"
+    assert set(data) == {"analysis", "advice"}
+    assert data["analysis"]["reduced_formula"] == "Si"

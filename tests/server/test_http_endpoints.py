@@ -38,36 +38,73 @@ def test_recommend_returns_core_result_json(test_runtime, request_body) -> None:
     assert data["generated_files"] == []
 
 
-def test_generate_publishes_bundle_and_returns_core_result_json(
-    test_runtime, request_body, tmp_path
+def test_generate_returns_contents_and_writes_no_caller_path(
+    test_runtime, request_body
 ) -> None:
-    """Pass body output_dir to the generate preset."""
-    output_dir = tmp_path / "bundle"
-    body = {**request_body, "output_dir": str(output_dir)}
-
+    """Return generated contents; the browser never supplies an output path."""
     with TestClient(create_app(test_runtime)) as client:
-        response = client.post("/generate", json=body)
+        response = client.post("/generate", json=request_body)
 
     assert response.status_code == 200
     data = response.json()
     assert data["generated_files"][0]["path"] == "inputs/qe.in"
-    assert data["bundle"]["path"] == str(output_dir)
-    assert (output_dir / "inputs" / "qe.in").is_file()
+    assert data["bundle"] is None
+
+
+def test_generate_rejects_client_output_dir(test_runtime, request_body) -> None:
+    """Reject a client-supplied output_dir as a structured invalid_request."""
+    body = {**request_body, "output_dir": "/tmp/bundle"}
+
+    with TestClient(create_app(test_runtime)) as client:
+        response = client.post("/generate", json=body)
+
+    assert response.status_code == 422
+    assert response.json()["error"]["kind"] == "invalid_request"
+
+
+def test_recommend_rejects_server_path_concepts(test_runtime, request_body) -> None:
+    """Reject pseudo_root, path-shaped structure, and pseudo filepath."""
+    with TestClient(create_app(test_runtime)) as client:
+        pseudo_root = client.post(
+            "/recommend", json={**request_body, "pseudo_root": "/pseudo"}
+        )
+        structure_path = client.post("/recommend", json={"structure": "/pseudo/Si.cif"})
+        filepath = client.post(
+            "/recommend",
+            json={
+                **request_body,
+                "pseudo_metadata": [
+                    {**request_body["pseudo_metadata"][0], "filepath": "/pseudo/Si.UPF"}
+                ],
+            },
+        )
+
+    # Path-shaped structure is rejected by the inline-only schema.
+    assert structure_path.status_code == 422
+    # Server-path concepts that pass the schema are rejected as structured errors.
+    for response in (pseudo_root, filepath):
+        assert response.status_code == 422
+        assert response.json()["error"]["kind"] == "invalid_request"
 
 
 def test_compute_returns_only_requested_records(test_runtime, request_body) -> None:
     """Expose arbitrary record queries through the compute endpoint."""
     body = {
         **request_body,
-        "outputs": ["StructureAnalysisRecord", "ParameterAdvice"],
+        "outputs": ["analysis", "advice"],
     }
 
     with TestClient(create_app(test_runtime)) as client:
         response = client.post("/compute", json=body)
 
     assert response.status_code == 200
-    assert set(response.json()) == {"StructureAnalysisRecord", "ParameterAdvice"}
-    assert response.json()["StructureAnalysisRecord"]["reduced_formula"] == "Si"
+    data = response.json()
+    assert data["analysis"]["reduced_formula"] == "Si"
+    assert data["advice"]["smearing"] is not None
+    # The typed response has a stable shape: unrequested records are null.
+    assert data["k_points"] is None
+    assert data["selection"] is None
+    assert data["generated_files"] is None
 
 
 def test_request_error_maps_to_422_with_message(test_runtime, request_body) -> None:

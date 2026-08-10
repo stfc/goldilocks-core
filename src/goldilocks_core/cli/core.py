@@ -220,10 +220,10 @@ def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
 
 
 def _parse_outputs(value: str) -> tuple[type, ...]:
-    """Resolve comma-separated contract record names to output types."""
+    """Resolve comma-separated contract record ids to output types."""
     names = [name.strip() for name in value.split(",")]
     if any(not name for name in names):
-        raise ValueError("--outputs must contain comma-separated record type names")
+        raise ValueError("--outputs must contain comma-separated record type ids")
     return resolve_output_types(names)
 
 

@@ -22,11 +22,11 @@ from goldilocks_core.server.request import from_dict
 __all__ = ["create_server", "serve"]
 
 _OutputName = Literal[
-    "StructureAnalysisRecord",
-    "ParameterAdvice",
-    "KPointSelection",
-    "SelectionRecord",
-    "GeneratedFiles",
+    "analysis",
+    "advice",
+    "k_points",
+    "selection",
+    "generated_files",
 ]
 
 
@@ -76,9 +76,9 @@ class _PseudoMetadata(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    filepath: str
     filename: str
     header_format: str
+    filepath: str | None = None
     library: str | None = None
     source_set: str | None = None
     element: str | None = None

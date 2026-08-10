@@ -101,15 +101,15 @@ def test_contracts_serialize_to_json_safe_dicts() -> None:
     assert "contains_heavy_elements" not in data
 
 
-def test_core_records_maps_requested_types_and_serializes_record_names() -> None:
-    """Expose only requested DAG records and serialize their type names."""
+def test_core_records_maps_requested_types_and_serializes_stable_ids() -> None:
+    """Expose only requested DAG records and serialize their stable ids."""
     analysis = _make_analysis()
     records = CoreRecords({StructureAnalysisRecord: analysis})
 
     assert records[StructureAnalysisRecord] is analysis
     assert tuple(records) == (StructureAnalysisRecord,)
     assert records.to_dict() == {
-        "StructureAnalysisRecord": analysis.to_dict(),
+        "analysis": analysis.to_dict(),
     }
 
 

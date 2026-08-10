@@ -11,9 +11,11 @@ from goldilocks_core.graph import (
     RunContext,
     StageSpec,
     TaskSpec,
+    describe_task,
     execute,
 )
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
+from goldilocks_core.runtime import SCF_TASK
 
 
 @dataclass
@@ -231,3 +233,35 @@ def test_task_preset_lookup() -> None:
     assert task.preset("recommend") is recommend
     with pytest.raises(KeyError):
         task.preset("unknown")
+
+
+def test_describe_task_exposes_stable_ids_and_semantics() -> None:
+    """Serialize the SCF task without Python callables or class names."""
+    description = describe_task(SCF_TASK).to_dict()
+
+    assert description["id"] == "scf_single_point"
+    assert description["revision"] == "1"
+    assert description["name"] == "Single-point SCF"
+    load = next(s for s in description["stages"] if s["id"] == "load_structure")
+    assert load["input_record_ids"] == []
+    assert load["output_record_id"] == "structure"
+    analyze = next(s for s in description["stages"] if s["id"] == "analyze")
+    assert analyze["input_record_ids"] == ["structure"]
+    assert analyze["output_record_id"] == "analysis"
+
+
+def test_describe_task_serializes_presets_with_record_ids() -> None:
+    """Expose preset output record identifiers."""
+    description = describe_task(SCF_TASK).to_dict()
+
+    generate = next(p for p in description["presets"] if p["id"] == "generate")
+    assert "generated_files" in generate["output_record_ids"]
+
+
+def test_describe_task_lists_selectable_records() -> None:
+    """Expose the queryable record types as stable identifiers."""
+    description = describe_task(SCF_TASK).to_dict()
+
+    assert "analysis" in description["selectable_record_ids"]
+    assert "generated_files" in description["selectable_record_ids"]
+    assert "structure" not in description["selectable_record_ids"]

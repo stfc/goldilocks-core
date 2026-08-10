@@ -26,13 +26,24 @@ from goldilocks_core.contracts import (
     StructureAnalysisRecord,
 )
 from goldilocks_core.generation.registry import generate_inputs
-from goldilocks_core.graph import Preset, RunContext, StageSpec, TaskSpec, execute
+from goldilocks_core.graph import (
+    Preset,
+    RunContext,
+    StageSpec,
+    TaskGraphDescription,
+    TaskSpec,
+    describe_task,
+    execute,
+)
 from goldilocks_core.io.structures import load_structure
 from goldilocks_core.kmesh.resolve import resolve_kpoints
 from goldilocks_core.selection import select_parameters
 
 SCF_TASK = TaskSpec(
     task="scf_single_point",
+    name="Single-point SCF",
+    description=("Recommend and generate inputs for a single-point SCF calculation."),
+    revision="1",
     stages=(
         StageSpec(
             output=Structure,
@@ -167,6 +178,10 @@ class CoreRuntime:
         self._ensure_open()
         self._ensure_scf_request(request)
         return execute(self._task, outputs, self._context(request))
+
+    def describe_tasks(self) -> tuple[TaskGraphDescription, ...]:
+        """Return transport-safe descriptions of every registered task."""
+        return (describe_task(self._task),)
 
     def reset(self) -> None:
         """Discard cached model state so the next model call reloads it."""

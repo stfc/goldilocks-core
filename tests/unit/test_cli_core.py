@@ -361,7 +361,7 @@ def test_main_compute_prints_requested_analysis_and_advice(monkeypatch, capsys) 
             "compute",
             "Si.cif",
             "--outputs",
-            "StructureAnalysisRecord,ParameterAdvice",
+            "analysis,advice",
         ],
     )
 
@@ -372,9 +372,9 @@ def test_main_compute_prints_requested_analysis_and_advice(monkeypatch, capsys) 
         ParameterAdvice,
     )
     output = json.loads(capsys.readouterr().out)
-    assert set(output) == {"StructureAnalysisRecord", "ParameterAdvice"}
-    assert output["StructureAnalysisRecord"]["reduced_formula"] == "Si"
-    assert "smearing" in output["ParameterAdvice"]
+    assert set(output) == {"analysis", "advice"}
+    assert output["analysis"]["reduced_formula"] == "Si"
+    assert "smearing" in output["advice"]
 
 
 def test_main_compute_prints_only_requested_analysis(monkeypatch, capsys) -> None:
@@ -388,15 +388,15 @@ def test_main_compute_prints_only_requested_analysis(monkeypatch, capsys) -> Non
             "compute",
             "Si.cif",
             "--outputs",
-            "StructureAnalysisRecord",
+            "analysis",
         ],
     )
 
     cli_core.main()
 
     output = json.loads(capsys.readouterr().out)
-    assert set(output) == {"StructureAnalysisRecord"}
-    assert output["StructureAnalysisRecord"]["reduced_formula"] == "Si"
+    assert set(output) == {"analysis"}
+    assert output["analysis"]["reduced_formula"] == "Si"
 
 
 def test_main_compute_rejects_unknown_output_type(monkeypatch, capsys) -> None:
@@ -423,8 +423,8 @@ def test_main_compute_rejects_unknown_output_type(monkeypatch, capsys) -> None:
 
     assert error.value.code == 2
     message = capsys.readouterr().err
-    assert "Unknown output record type(s): UnknownRecord" in message
-    assert "StructureAnalysisRecord" in message
+    assert "Unknown output record type id(s): UnknownRecord" in message
+    assert "analysis" in message
 
 
 def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:

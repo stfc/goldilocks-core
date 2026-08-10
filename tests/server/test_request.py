@@ -32,11 +32,11 @@ def test_from_dict_parses_complete_generate_request(
 
 
 def test_from_dict_resolves_output_record_names(sample_structure_path: str) -> None:
-    """Resolve query output names through the shared contract catalogue."""
+    """Resolve query output ids through the shared contract catalogue."""
     request = from_dict(
         {
             "structure": sample_structure_path,
-            "outputs": ["StructureAnalysisRecord", "ParameterAdvice"],
+            "outputs": ["analysis", "advice"],
         }
     )
 
@@ -66,8 +66,8 @@ def test_from_dict_maps_bad_types_to_request_error(body: dict[str, object]) -> N
         from_dict(body)
 
 
-def test_from_dict_rejects_unknown_output_name(sample_structure_path: str) -> None:
-    """Reject query record names outside the public output catalogue."""
+def test_from_dict_rejects_unknown_output_id(sample_structure_path: str) -> None:
+    """Reject query record ids outside the public output catalogue."""
     with pytest.raises(RequestError, match="Unknown output record type"):
         from_dict({"structure": sample_structure_path, "outputs": ["Unknown"]})
 

@@ -17,9 +17,11 @@ class PseudoMetadata:
     synthesizing test metadata.
 
     Attributes:
-        filepath: full path to the UPF file on disk.
         filename: basename of the UPF file (e.g. ``Si.UPF``).
         header_format: UPF header format: ``attr`` or ``text``.
+        filepath: full path to the UPF file on disk, or None when the
+            metadata was supplied without a filesystem location (e.g. over the
+            Workbench transport).
         library: pseudo library name (e.g. ``SSSP``), extracted
             from the file path.
         source_set: source set within the library (e.g.
@@ -42,9 +44,9 @@ class PseudoMetadata:
             with ``ecutwfc_ry`` and ``ecutrho_ry`` in Rydberg.
     """
 
-    filepath: str
     filename: str
     header_format: str
+    filepath: str | None = None
     library: str | None = None
     source_set: str | None = None
     element: str | None = None

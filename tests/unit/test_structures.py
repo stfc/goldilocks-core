@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.io.structures import load_structure
+from goldilocks_core.io.structures import load_structure, load_structure_from_text
 
 
 def make_si_structure() -> Structure:
@@ -49,3 +49,28 @@ def test_load_structure_raises_for_unsupported_xyz(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Unsupported structure file format"):
         load_structure(xyz_file)
+
+
+def test_load_structure_from_text_parses_inline_cif() -> None:
+    """Parse inline CIF content without a file path."""
+    text = make_si_structure().to(fmt="cif")
+
+    loaded = load_structure_from_text(text, fmt="cif")
+
+    assert loaded.reduced_formula == "Si"
+    assert len(loaded) == 1
+
+
+def test_load_structure_from_text_detects_format() -> None:
+    """Try cif then poscar when no format is supplied."""
+    text = make_si_structure().to(fmt="poscar")
+
+    loaded = load_structure_from_text(text)
+
+    assert loaded.reduced_formula == "Si"
+
+
+def test_load_structure_from_text_raises_for_unparseable_content() -> None:
+    """Raise ValueError when no supported format parses the content."""
+    with pytest.raises(ValueError, match="Could not parse"):
+        load_structure_from_text("not a structure at all")

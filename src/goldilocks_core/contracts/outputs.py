@@ -1,4 +1,4 @@
-"""Record types available to Core queries."""
+"""Record types available to Core queries, keyed by stable transport ids."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from goldilocks_core.contracts.records import (
     ParameterAdvice,
     SelectionRecord,
     StructureAnalysisRecord,
+    record_type_id,
 )
 
 OUTPUT_RECORD_TYPES: tuple[type, ...] = (
@@ -19,25 +20,27 @@ OUTPUT_RECORD_TYPES: tuple[type, ...] = (
 )
 """Record types callers may request from the SCF task graph."""
 
-OUTPUT_TYPES_BY_NAME = {
-    output_type.__name__: output_type for output_type in OUTPUT_RECORD_TYPES
+OUTPUT_TYPES_BY_ID = {
+    record_type_id(record_type): record_type for record_type in OUTPUT_RECORD_TYPES
 }
-"""Query record types keyed by their public contract names."""
+"""Query record types keyed by their stable transport identifiers."""
 
 
-def resolve_output_types(names: list[str] | tuple[str, ...]) -> tuple[type, ...]:
-    """Resolve public record names to Core query output types."""
-    if not names or any(
-        not isinstance(name, str) or not name.strip() for name in names
+def resolve_output_types(ids: list[str] | tuple[str, ...]) -> tuple[type, ...]:
+    """Resolve stable transport record ids to Core query output types."""
+    if not ids or any(
+        not isinstance(record_id, str) or not record_id.strip() for record_id in ids
     ):
-        raise ValueError("outputs must contain at least one record type name")
+        raise ValueError("outputs must contain at least one record type id")
 
-    normalized = [name.strip() for name in names]
-    unknown = [name for name in normalized if name not in OUTPUT_TYPES_BY_NAME]
+    normalized = [record_id.strip() for record_id in ids]
+    unknown = [
+        record_id for record_id in normalized if record_id not in OUTPUT_TYPES_BY_ID
+    ]
     if unknown:
-        available = ", ".join(OUTPUT_TYPES_BY_NAME)
+        available = ", ".join(OUTPUT_TYPES_BY_ID)
         invalid = ", ".join(unknown)
         raise ValueError(
-            f"Unknown output record type(s): {invalid}. Available: {available}"
+            f"Unknown output record type id(s): {invalid}. Available: {available}"
         )
-    return tuple(OUTPUT_TYPES_BY_NAME[name] for name in normalized)
+    return tuple(OUTPUT_TYPES_BY_ID[record_id] for record_id in normalized)

@@ -1,12 +1,11 @@
 """FastAPI transport over one process-owned Core runtime."""
 
-from __future__ import annotations
-
 from contextlib import asynccontextmanager
 from typing import Any
 
 from goldilocks_core.jobs import run_core_job
 from goldilocks_core.runtime import CoreRuntime
+from goldilocks_core.server.errors import register_error_handlers
 from goldilocks_core.server.request import RequestError, from_dict
 
 __all__ = ["create_app", "serve"]
@@ -15,6 +14,30 @@ _MISSING_HTTP_EXTRA = (
     "The HTTP transport requires goldilocks-core[http]. "
     "Install it with `uv sync --extra http`."
 )
+
+_HTTP_FORBIDDEN_FIELDS = frozenset({"output_dir", "pseudo_root"})
+"""Server-path concepts never allowed on the Workbench HTTP surface."""
+
+
+def _reject_workbench_server_paths(raw: dict[str, Any]) -> None:
+    """Reject server-path concepts that never belong on the HTTP surface.
+
+    The browser sends inline structure content and identifies pseudos by
+    filename/library. Any path-shaped field is a misuse of the Workbench
+    transport and is surfaced as a structured invalid_request failure.
+    """
+    for name in _HTTP_FORBIDDEN_FIELDS:
+        if name in raw:
+            raise RequestError(f"Field {name!r} is not allowed on the HTTP transport.")
+    if isinstance(raw.get("structure"), str):
+        raise RequestError(
+            "Field 'structure' must be inline content, not a server path."
+        )
+    for entry in raw.get("pseudo_metadata") or ():
+        if isinstance(entry, dict) and "filepath" in entry:
+            raise RequestError(
+                "Field 'pseudo_metadata.filepath' is not allowed on the HTTP transport."
+            )
 
 
 class _AppState:
@@ -34,10 +57,25 @@ class _AppState:
 def create_app(runtime: CoreRuntime | None = None) -> Any:
     """Create the HTTP app, optionally using a caller-owned runtime."""
     try:
-        from fastapi import FastAPI, Request
-        from fastapi.responses import JSONResponse
+        from fastapi import FastAPI
+
+        from goldilocks_core.server.schemas import (
+            ComputationRequest,
+            CoreResultResponse,
+            ErrorResponse,
+            RecordQuery,
+            RecordSetResponse,
+            StructureDocumentModel,
+            StructureSource,
+            TaskCatalogueModel,
+        )
     except ImportError as error:
         raise ImportError(_MISSING_HTTP_EXTRA) from error
+
+    from goldilocks_core.io.structures import (
+        load_structure_from_text,
+        structure_to_document,
+    )
 
     state = _AppState(runtime)
 
@@ -52,61 +90,70 @@ def create_app(runtime: CoreRuntime | None = None) -> Any:
 
     app = FastAPI(title="goldilocks-core", lifespan=lifespan)
     app.state.goldilocks = state
+    register_error_handlers(app)
 
-    @app.exception_handler(RequestError)
-    async def request_error_handler(
-        request: Request, error: RequestError
-    ) -> JSONResponse:
-        del request
-        return JSONResponse(
-            status_code=422,
-            content={"error": {"kind": "invalid_request", "message": str(error)}},
-        )
+    _ERROR_RESPONSES = {
+        400: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    }
 
-    @app.exception_handler(ValueError)
-    async def value_error_handler(request: Request, error: ValueError) -> JSONResponse:
-        del request
-        return JSONResponse(
-            status_code=400,
-            content={"error": {"kind": "stage_error", "message": str(error)}},
-        )
-
-    @app.exception_handler(FileNotFoundError)
-    async def not_found_handler(
-        request: Request, error: FileNotFoundError
-    ) -> JSONResponse:
-        del request
-        return JSONResponse(
-            status_code=404,
-            content={"error": {"kind": "not_found", "message": str(error)}},
-        )
-
-    @app.get("/health")
+    @app.get("/health", responses={200: {"description": "Process liveness"}})
     def health() -> dict[str, str]:
         """Report process liveness."""
         return {"status": "ok"}
 
-    @app.post("/recommend")
-    def recommend(body: dict[str, Any]) -> dict[str, Any]:
+    @app.post(
+        "/structure/load",
+        response_model=StructureDocumentModel,
+        responses=_ERROR_RESPONSES,
+    )
+    def load_structure(body: StructureSource) -> dict[str, Any]:
+        """Validate inline structure content and return a Structure Document."""
+        try:
+            structure = load_structure_from_text(body.content, body.format)
+        except ValueError as error:
+            raise RequestError(str(error)) from error
+        return structure_to_document(structure, source_format=body.format).to_dict()
+
+    @app.get("/tasks", response_model=TaskCatalogueModel, responses=_ERROR_RESPONSES)
+    def tasks() -> dict[str, Any]:
+        """Describe every registered Core task with stable identifiers."""
+        if state.runtime is None:
+            raise RuntimeError("CoreRuntime is not initialized.")
+        return {"tasks": [task.to_dict() for task in state.runtime.describe_tasks()]}
+
+    @app.post(
+        "/recommend", response_model=CoreResultResponse, responses=_ERROR_RESPONSES
+    )
+    def recommend(body: ComputationRequest) -> dict[str, Any]:
         """Run the recommend preset."""
         return _execute("recommend", body, state)
 
-    @app.post("/generate")
-    def generate(body: dict[str, Any]) -> dict[str, Any]:
-        """Run the generate preset and optionally publish a bundle."""
+    @app.post(
+        "/generate", response_model=CoreResultResponse, responses=_ERROR_RESPONSES
+    )
+    def generate(body: ComputationRequest) -> dict[str, Any]:
+        """Run the generate preset and return generated input contents."""
         return _execute("generate", body, state)
 
-    @app.post("/compute")
-    def compute(body: dict[str, Any]) -> dict[str, Any]:
+    @app.post(
+        "/compute",
+        response_model=RecordSetResponse,
+        responses=_ERROR_RESPONSES,
+    )
+    def compute(body: RecordQuery) -> dict[str, Any]:
         """Compute only the requested record types."""
         return _execute("compute", body, state)
 
     return app
 
 
-def _execute(endpoint: str, body: dict[str, Any], state: _AppState) -> dict[str, Any]:
+def _execute(endpoint: str, body: Any, state: _AppState) -> dict[str, Any]:
     """Parse, dispatch, and serialize one transport request."""
-    raw = dict(body)
+    raw = dict(body.model_dump(exclude_none=True))
+    _reject_workbench_server_paths(raw)
     if endpoint in {"recommend", "generate"}:
         if raw.get("outputs") is not None:
             raise RequestError("Preset endpoints do not accept 'outputs'.")

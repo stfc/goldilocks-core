@@ -25,7 +25,6 @@ def sample_structure_text(sample_structure_path: str) -> str:
 def pseudo_metadata() -> dict[str, object]:
     """Return metadata sufficient to render a silicon QE input."""
     return {
-        "filepath": "/pseudo/Si.UPF",
         "filename": "Si.UPF",
         "header_format": "attr",
         "library": "SSSP",
@@ -45,11 +44,11 @@ def pseudo_metadata() -> dict[str, object]:
 
 @pytest.fixture
 def request_body(
-    sample_structure_path: str, pseudo_metadata: dict[str, object]
+    sample_structure_text: str, pseudo_metadata: dict[str, object]
 ) -> dict[str, object]:
-    """Return a model-free transport request body."""
+    """Return a browser-safe transport request body (inline, path-free)."""
     return {
-        "structure": sample_structure_path,
+        "structure": {"content": sample_structure_text, "format": "cif"},
         "hints": {"k_grid": [3, 3, 3]},
         "pseudo_metadata": [pseudo_metadata],
     }

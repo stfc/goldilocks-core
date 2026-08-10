@@ -39,6 +39,10 @@ Run `pre-commit` before committing. CI (on `main` and PRs) runs Ruff, pytest wit
 - Jupyter notebooks — `notebooks/` (gitignored); convert insights into tests.
 - Large ML model files or pseudo libraries — `local_data/` (gitignored).
 
+This is a monorepo: Core (`src/goldilocks_core/`, this package) and the
+Workbench (`web/`, a React app) are independently installable modules. Core
+must never depend on Workbench.
+
 ## Coordination layer
 
 Issues, PR descriptions, milestones, epics, labels, and the roadmap are the project's shared map. They must be accurate and minimal — slop here rots everyone's ability to coordinate. Code is clay: PR size and churn are not coordination concerns and never become slop rules. The rules below govern the map, not the code.
@@ -61,7 +65,7 @@ An issue is a shippable unit of work that someone turns into a PR — not a note
 
 - **Problem + proposed approach, not a placeholder.** State the concrete problem and a proposed approach. "Scope and design still to be worked out" means it is not ready — do the design first; an unplanned deliverable is not an issue.
 - **No roadmap mirroring.** Don't file one issue per roadmap bullet to "make the milestone reflect its real scope." A milestone tracks work being done, not populated for its own sake; an unplanned deliverable stays on the roadmap, not as an open issue.
-- **Scope gate.** Check "What doesn't belong here" first. Frontend/GUI, auth/sessions, pod management, AiiDA workflows, and pure infra/ops are not core features. An out-of-scope-layer item needs maintainer sign-off before it gets a core issue.
+- **Scope gate.** Check "What doesn't belong here" first. Auth/sessions, pod management, AiiDA workflows, and pure infra/ops are not core features. The Workbench lives in `web/` as an independent module; Core cannot depend on it. An out-of-scope-layer item needs maintainer sign-off before it gets a core issue.
 - **Reuse before creating.** Search open *and recently closed* issues first; extend rather than duplicate. If a closed issue's design is stale, fold the fresh design into the new issue and point at the closed one — don't silently re-derive.
 - **Check live state.** Read open issues, recent merged PRs, and any open decision the issue depends on. An issue filed on a premise a same-day decision overturned is stale on arrival; cite the controlling decision.
 

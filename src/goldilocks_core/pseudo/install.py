@@ -8,9 +8,10 @@ of what is missing and the command that fixes it.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from goldilocks_core.artifacts import materialscloud, pseudodojo
+from goldilocks_core.artifacts import pseudodojo, sssp
 from goldilocks_core.artifacts.cache import artifact_path
 from goldilocks_core.artifacts.remote import HttpClient
 from goldilocks_core.contracts import PathLike
@@ -60,6 +61,10 @@ def is_installed(table: PseudoTable, root: Path | None = None) -> bool:
     return any(install_path(table, root).glob("*.upf", case_sensitive=False))
 
 
+_TABLE_TO_FILE_RELATIVISTIC = {"SR": "scalar", "FR": "full"}
+"""Registry vocabulary (whole-table) to UPF vocabulary (per-file), for the stamp."""
+
+
 def install(
     table: PseudoTable,
     *,
@@ -72,23 +77,42 @@ def install(
         ProviderNotSupported: the entry names a provider with no installer.
     """
     if table.provider == "pseudodojo":
-        return pseudodojo.install(
+        destination = pseudodojo.install(
             table.upstream_table, root=root or pseudo_root(), http=http
         )
-
-    if table.provider == "materialscloud":
+    elif table.provider == "materialscloud":
         if not table.record:
             raise ProviderNotSupported(
                 f"{table.name} names no record to resolve from the Archive"
             )
-        return materialscloud.install(
+        destination = sssp.install(
             table.record, table.upstream_table, root=root or pseudo_root(), http=http
         )
+    else:
+        raise ProviderNotSupported(
+            f"{table.name} is served by {table.provider!r}, which Core cannot install "
+            f"from yet. Fetch it from {table.upstream_url} and pass --pseudo-root."
+        )
 
-    raise ProviderNotSupported(
-        f"{table.name} is served by {table.provider!r}, which Core cannot install from "
-        f"yet. Fetch it from {table.upstream_url} and pass --pseudo-root."
-    )
+    _stamp_relativistic(destination, table.relativistic)
+    return destination
+
+
+def _stamp_relativistic(destination: Path, relativistic: str) -> None:
+    """Record the table's SR/FR classification where cutoff discovery reads it.
+
+    A task selects one pseudopotential library, not a relativistic mode per
+    element. Some tables mix UPF-header labels within an otherwise consistent
+    table -- SSSP marks its lightest elements (B, Be, Li) ``non-relativistic``
+    in their own headers even though the table as a whole is scalar-relativistic
+    -- so selection has to trust the table's registered classification rather
+    than each file's own header, or it silently drops those elements from every
+    scalar-relativistic search. See stfc/goldilocks-core#150.
+    """
+    sidecar = destination.parent / f"{destination.name}.json"
+    data = json.loads(sidecar.read_text()) if sidecar.exists() else {}
+    data["_relativistic"] = _TABLE_TO_FILE_RELATIVISTIC[relativistic]
+    sidecar.write_text(json.dumps(data, indent=2))
 
 
 def installed_tables(
@@ -141,7 +165,7 @@ def _layout(table: PseudoTable) -> tuple[str, str]:
         return pseudodojo.LIBRARY, f"{table.upstream_table}_upf"
 
     if table.provider == "materialscloud":
-        return materialscloud.LIBRARY, table.upstream_table
+        return sssp.LIBRARY, table.upstream_table
 
     return table.provider, table.upstream_table
 

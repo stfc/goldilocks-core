@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 
 import pytest
 
@@ -123,6 +124,46 @@ def test_an_unknown_provider_names_the_manual_route(registry):
 
     with pytest.raises(installer.ProviderNotSupported, match="--pseudo-root"):
         installer.install(stranger)
+
+
+def test_install_stamps_the_tables_relativistic_classification(monkeypatch, registry):
+    """Selection trusts the table's registered classification, not each header."""
+    table = registry["pseudodojo-pbesol-efficiency"]
+    destination = installer.install_path(table)
+
+    def _fake_provider_install(upstream_table, *, root, http):
+        destination.mkdir(parents=True, exist_ok=True)
+        (destination / "Si.upf").write_text(_upf("Si"))
+        (destination.parent / f"{destination.name}.json").write_text(
+            json.dumps({"Si": {"cutoff_wfc": 48.0, "cutoff_rho": 192.0}})
+        )
+        return destination
+
+    monkeypatch.setattr(installer.pseudodojo, "install", _fake_provider_install)
+
+    installer.install(table)
+
+    sidecar = destination.parent / f"{destination.name}.json"
+    written = json.loads(sidecar.read_text())
+    assert written["_relativistic"] == "scalar"
+    assert written["Si"]["cutoff_wfc"] == 48.0
+
+
+def test_install_stamps_full_for_a_fully_relativistic_table(monkeypatch, registry):
+    fr_table = next(t for t in registry.values() if t.relativistic == "FR")
+    destination = installer.install_path(fr_table)
+
+    def _fake_provider_install(*_args, **_kwargs):
+        destination.mkdir(parents=True, exist_ok=True)
+        (destination.parent / f"{destination.name}.json").write_text("{}")
+        return destination
+
+    monkeypatch.setattr(installer.pseudodojo, "install", _fake_provider_install)
+
+    installer.install(fr_table)
+
+    sidecar = destination.parent / f"{destination.name}.json"
+    assert json.loads(sidecar.read_text())["_relativistic"] == "full"
 
 
 def test_every_registered_provider_has_an_installer(registry):

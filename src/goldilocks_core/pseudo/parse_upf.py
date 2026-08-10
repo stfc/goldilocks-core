@@ -362,19 +362,29 @@ def _load_sssp_json(path: Path) -> dict[str, Any] | None:
 
 def _get_sssp_info(
     path: Path, element: str | None
-) -> tuple[bool, str | None, dict[str, Any] | None]:
-    """Return the SSSP flag, the source pseudopotential, and recommended cutoffs.
+) -> tuple[bool, str | None, dict[str, Any] | None, str | None]:
+    """Return the SSSP flag, source pseudopotential, cutoffs, and table relativism.
 
     Whether a table has a cutoff sidecar and whether it is SSSP are different
     facts. The first decides whether an input can be written at all; the second
     only ranks candidates. Tying them together lost every PseudoDojo cutoff.
+
+    The relativistic classification is read the same way: a task selects one
+    pseudopotential library, not a relativistic mode per element, so the
+    sidecar's table-level ``_relativistic`` (stamped by ``gl pp install``)
+    overrides what an individual UPF header claims. SSSP marks its lightest
+    elements ``non-relativistic`` in their own headers even though the table as
+    a whole is scalar-relativistic; trusting each header individually silently
+    dropped those elements from every scalar-relativistic search.
     """
     is_sssp = _is_sssp_folder(path)
     source_pseudopotential = None if is_sssp else path.parent.name
     recommended_cutoff = None
+    sidecar = _load_sssp_json(path)
+    table_relativistic = (sidecar or {}).get("_relativistic")
 
     if element is not None:
-        entry = (_load_sssp_json(path) or {}).get(element)
+        entry = (sidecar or {}).get(element)
         if entry is not None:
             if is_sssp:
                 source_pseudopotential = entry.get("pseudopotential")
@@ -383,7 +393,7 @@ def _get_sssp_info(
                 "ecutrho_ry": entry.get("cutoff_rho"),
             }
 
-    return is_sssp, source_pseudopotential, recommended_cutoff
+    return is_sssp, source_pseudopotential, recommended_cutoff, table_relativistic
 
 
 def parse_upf_metadata(path: str | Path) -> PseudoMetadata:
@@ -402,8 +412,8 @@ def parse_upf_metadata(path: str | Path) -> PseudoMetadata:
         header_data.setdefault(key, value)
 
     element = _get_element(header_data, path.name)
-    is_sssp, source_pseudopotential, sssp_recommended_cutoff = _get_sssp_info(
-        path, element
+    is_sssp, source_pseudopotential, sssp_recommended_cutoff, table_relativistic = (
+        _get_sssp_info(path, element)
     )
 
     return PseudoMetadata(
@@ -416,7 +426,8 @@ def parse_upf_metadata(path: str | Path) -> PseudoMetadata:
         or _extract_element_from_filename(path.name),
         pseudo_type=_normalize_pseudo_type(header_data.get("pseudo_type")),
         functional=normalize_functional_label(header_data.get("functional")),
-        relativistic=_normalize_relativistic(header_data.get("relativistic")),
+        relativistic=table_relativistic
+        or _normalize_relativistic(header_data.get("relativistic")),
         z_valence=_to_float(header_data.get("z_valence")),
         pseudo_info=header_data,
         is_sssp=is_sssp,

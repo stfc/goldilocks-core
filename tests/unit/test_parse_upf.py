@@ -93,6 +93,56 @@ def test_parse_upf_metadata_parses_gbrv_text_header(tmp_path: Path) -> None:
     assert metadata.z_valence == 3.0
 
 
+def test_parse_upf_metadata_trusts_the_tables_relativistic_over_the_header(
+    tmp_path: Path,
+) -> None:
+    """A task selects one pseudopotential library, not a mode per element.
+
+    SSSP marks its lightest elements ``non-relativistic`` in their own header
+    even though the table as a whole is scalar-relativistic. The sidecar
+    ``gl pp install`` stamps with the table's registered classification wins
+    over what an individual file claims, so those elements are not silently
+    dropped from a scalar-relativistic search.
+    """
+    source_set = tmp_path / "pseudodojo" / "nc-sr-04_pbesol_standard_upf"
+    source_set.mkdir(parents=True)
+    pseudo_path = write_attr_upf(
+        source_set / "B.upf",
+        element="B",
+        pseudo_type="NC",
+        functional="PBEsol",
+        relativistic="non-relativistic",
+        z_valence="3.0",
+    )
+    (source_set.parent / f"{source_set.name}.json").write_text(
+        '{"_relativistic": "scalar"}'
+    )
+
+    metadata = parse_upf_metadata(pseudo_path)
+
+    assert metadata.relativistic == "scalar"
+
+
+def test_parse_upf_metadata_falls_back_to_the_header_without_a_sidecar(
+    tmp_path: Path,
+) -> None:
+    """A hand-installed table with no sidecar keeps the old per-file behaviour."""
+    source_set = tmp_path / "pseudodojo" / "nc-sr-04_pbesol_standard_upf"
+    source_set.mkdir(parents=True)
+    pseudo_path = write_attr_upf(
+        source_set / "B.upf",
+        element="B",
+        pseudo_type="NC",
+        functional="PBEsol",
+        relativistic="non-relativistic",
+        z_valence="3.0",
+    )
+
+    metadata = parse_upf_metadata(pseudo_path)
+
+    assert metadata.relativistic == "non-relativistic"
+
+
 def test_parse_upf_metadata_raises_for_missing_file(tmp_path: Path) -> None:
     """Raise an error when the UPF file does not exist."""
     pseudo_path = tmp_path / "missing.UPF"

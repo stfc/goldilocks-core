@@ -108,3 +108,16 @@ stfc/goldilocks-core#149.
 | `non-relativistic` | No relativistic treatment (rarely used) |
 
 When `SpinOrbitAdvice.enabled` is `True` but `CalculationHints.relativistic_mode` is not set, the Advise stage automatically sets `PseudopotentialAdvice.relativistic_mode` to `"full"` and records `analysis` provenance.
+
+**Relativistic mode is decided per table, not per element.** A task selects one
+pseudopotential library (`pseudo_registry.toml`'s `SR`/`FR` field), never a mix
+of relativistic treatments within it. `gl pp install` stamps that table-level
+classification into the same cutoff sidecar cutoff discovery already reads
+(`_relativistic`, converted to the `scalar`/`full` vocabulary above), and
+`parse_upf.py` trusts that stamp over what an individual UPF header claims.
+This matters because SSSP legitimately ships `non-relativistic` headers for
+its very lightest elements (B, Be, Li) even though the table as a whole is
+scalar-relativistic; filtering on each header individually silently dropped
+those three elements from every scalar-relativistic search. A table installed
+before this stamp existed keeps its old sidecar until reinstalled. See
+stfc/goldilocks-core#150.

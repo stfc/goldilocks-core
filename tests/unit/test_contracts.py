@@ -128,6 +128,41 @@ def test_hints_serialize_explicit_grid_as_list() -> None:
     assert data["k_grid"] == [2, 2, 1]
 
 
+def test_calculation_hints_expose_per_stage_views() -> None:
+    """CalculationHints decomposes into one narrow hint view per stage."""
+    hints = CalculationHints(
+        k_grid=(2, 2, 1),
+        k_spacing=0.25,
+        smearing_type="cold",
+        smearing_width_ry=0.01,
+        spin_polarized=True,
+        spin_orbit_coupling=False,
+        pseudo_mode="precision",
+        pseudo_type="NC",
+        relativistic_mode="full",
+        conv_thr=1e-8,
+        mixing_beta=0.2,
+        electron_maxstep=120,
+        use_vdw=True,
+        vdw_method="ts",
+    )
+
+    assert hints.kmesh.k_grid == (2, 2, 1)
+    assert hints.kmesh.k_spacing == 0.25
+    assert hints.smearing.smearing_type == "cold"
+    assert hints.smearing.smearing_width_ry == 0.01
+    assert hints.spin.spin_polarized is True
+    assert hints.spin.spin_orbit_coupling is False
+    assert hints.pseudo.pseudo_mode == "precision"
+    assert hints.pseudo.pseudo_type == "NC"
+    assert hints.pseudo.relativistic_mode == "full"
+    assert hints.convergence.conv_thr == 1e-8
+    assert hints.convergence.mixing_beta == 0.2
+    assert hints.convergence.electron_maxstep == 120
+    assert hints.vdw.use_vdw is True
+    assert hints.vdw.vdw_method == "ts"
+
+
 def test_feature_vectors_serialize_numpy_values_as_json_lists() -> None:
     """Convert NumPy arrays and scalars to JSON-safe values."""
     data = StructureFeatureVector(

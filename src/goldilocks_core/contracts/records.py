@@ -175,6 +175,61 @@ class CalculationIntent:
 
 
 @dataclass(frozen=True, slots=True)
+class KmeshHints:
+    """Kmesh-stage operator overrides for k-point selection.
+
+    A narrow view over a ``CalculationHints`` slice, owned by the Kmesh stage.
+    Constructed from a validated ``CalculationHints``; not validated itself
+    (trusted internal record).
+    """
+
+    k_grid: KPointGrid | None = None
+    k_spacing: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SmearingHints:
+    """Smearing-stage operator overrides."""
+
+    smearing_type: str | None = None
+    smearing_width_ry: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SpinHints:
+    """Spin-stage operator overrides shared by magnetism and SOC advice."""
+
+    spin_polarized: bool | None = None
+    spin_orbit_coupling: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PseudoHints:
+    """Pseudopotential-stage operator overrides."""
+
+    pseudo_mode: str | None = None
+    pseudo_type: str | None = None
+    relativistic_mode: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ConvergenceHints:
+    """Convergence-stage operator overrides."""
+
+    conv_thr: float | None = None
+    mixing_beta: float | None = None
+    electron_maxstep: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VdwHints:
+    """Van der Waals-stage operator overrides."""
+
+    use_vdw: bool | None = None
+    vdw_method: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class CalculationHints:
     """Optional operator overrides for values Core can otherwise decide.
 
@@ -278,6 +333,44 @@ class CalculationHints:
         _validate_relativistic_mode(
             self.relativistic_mode, "CalculationHints.relativistic_mode"
         )
+
+    @property
+    def kmesh(self) -> KmeshHints:
+        return KmeshHints(k_grid=self.k_grid, k_spacing=self.k_spacing)
+
+    @property
+    def smearing(self) -> SmearingHints:
+        return SmearingHints(
+            smearing_type=self.smearing_type,
+            smearing_width_ry=self.smearing_width_ry,
+        )
+
+    @property
+    def spin(self) -> SpinHints:
+        return SpinHints(
+            spin_polarized=self.spin_polarized,
+            spin_orbit_coupling=self.spin_orbit_coupling,
+        )
+
+    @property
+    def pseudo(self) -> PseudoHints:
+        return PseudoHints(
+            pseudo_mode=self.pseudo_mode,
+            pseudo_type=self.pseudo_type,
+            relativistic_mode=self.relativistic_mode,
+        )
+
+    @property
+    def convergence(self) -> ConvergenceHints:
+        return ConvergenceHints(
+            conv_thr=self.conv_thr,
+            mixing_beta=self.mixing_beta,
+            electron_maxstep=self.electron_maxstep,
+        )
+
+    @property
+    def vdw(self) -> VdwHints:
+        return VdwHints(use_vdw=self.use_vdw, vdw_method=self.vdw_method)
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""

@@ -22,6 +22,9 @@ local_data/
 # Pi harness state
 .pi/
 
+# Vault-linked project scratchpad (reports, working notes)
+scratchpad/
+
 # macOS
 .DS_Store
 

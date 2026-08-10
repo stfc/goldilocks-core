@@ -8,6 +8,7 @@ from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
     CoreJobRequest,
+    CoreRecords,
     CoreResult,
     StructureInput,
 )
@@ -19,16 +20,21 @@ def run_core_job(
     request: CoreJobRequest,
     *,
     runtime: CoreRuntime | None = None,
-) -> CoreResult:
-    """Dispatch a Core job mode through a fresh or caller-owned runtime."""
+) -> CoreResult | CoreRecords:
+    """Dispatch a Core query or preset through a fresh or caller-owned runtime."""
     if runtime is None:
         with CoreRuntime() as owned_runtime:
             return _run_with_runtime(request, owned_runtime)
     return _run_with_runtime(request, runtime)
 
 
-def _run_with_runtime(request: CoreJobRequest, runtime: CoreRuntime) -> CoreResult:
+def _run_with_runtime(
+    request: CoreJobRequest,
+    runtime: CoreRuntime,
+) -> CoreResult | CoreRecords:
     """Dispatch ``request`` without taking ownership of ``runtime``."""
+    if request.outputs is not None:
+        return runtime.compute(request.outputs, request)
     if request.mode == "recommend":
         return runtime.recommend(request)
     if request.mode == "generate":

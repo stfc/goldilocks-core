@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from goldilocks_core import contracts
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
@@ -18,6 +19,15 @@ from goldilocks_core.examples import structures_path
 from goldilocks_core.generation import available_codes, available_tasks
 from goldilocks_core.jobs import run_core_job
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
+
+_OUTPUT_TYPE_NAMES = (
+    "StructureAnalysisRecord",
+    "ParameterAdvice",
+    "KPointSelection",
+    "SelectionRecord",
+    "GeneratedFiles",
+)
+_OUTPUT_TYPES = {name: getattr(contracts, name) for name in _OUTPUT_TYPE_NAMES}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -36,6 +46,14 @@ def build_parser() -> argparse.ArgumentParser:
                 "--out",
                 help="Output directory for a portable Core bundle.",
             )
+
+    compute = subparsers.add_parser("compute")
+    _add_common_arguments(compute)
+    compute.add_argument(
+        "--outputs",
+        required=True,
+        help="Comma-separated record type names to compute.",
+    )
 
     examples = subparsers.add_parser(
         "examples",
@@ -68,6 +86,10 @@ def main() -> None:
         raise SystemExit(2) from error
 
     result = run_core_job(request)
+
+    if args.command == "compute":
+        print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+        return
 
     if args.json:
         output = {"request": request.to_dict(), **result.to_dict()}
@@ -185,11 +207,28 @@ def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
         structure=args.structure,
         intent=intent,
         hints=hints,
-        mode=args.command,
+        mode="recommend" if args.command == "compute" else args.command,
+        outputs=(_parse_outputs(args.outputs) if args.command == "compute" else None),
         pseudo_metadata=pseudo_metadata,
         output_dir=getattr(args, "out", None),
         kmesh_model=_model_spec_from_args(args),
     )
+
+
+def _parse_outputs(value: str) -> tuple[type, ...]:
+    """Resolve comma-separated contract record names to output types."""
+    names = [name.strip() for name in value.split(",")]
+    if not names or any(not name for name in names):
+        raise ValueError("--outputs must contain comma-separated record type names")
+
+    unknown = [name for name in names if name not in _OUTPUT_TYPES]
+    if unknown:
+        available = ", ".join(_OUTPUT_TYPE_NAMES)
+        invalid = ", ".join(unknown)
+        raise ValueError(
+            f"Unknown output record type(s): {invalid}. Available: {available}"
+        )
+    return tuple(_OUTPUT_TYPES[name] for name in names)
 
 
 def _model_spec_from_args(args: argparse.Namespace) -> ModelSpec | None:

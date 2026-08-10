@@ -12,7 +12,13 @@ from goldilocks_core import (
     CoreRuntime,
     run_core_job,
 )
-from goldilocks_core.contracts import StructureFeatureVector
+from goldilocks_core.contracts import (
+    CoreRecords,
+    CoreResult,
+    ParameterAdvice,
+    StructureAnalysisRecord,
+    StructureFeatureVector,
+)
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 
@@ -50,10 +56,49 @@ def test_run_core_job_recommend_matches_public_recommendation_shape() -> None:
         )
     )
 
+    assert isinstance(result, CoreResult)
     assert result.k_points.grid == (2, 2, 1)
     assert result.selection.pseudopotentials[0].filename == "Si.UPF"
     assert result.generated_files == ()
     assert result.bundle is None
+
+
+def test_run_core_job_returns_only_requested_records() -> None:
+    """Dispatch an explicit output query instead of the selected preset."""
+    request = CoreJobRequest(
+        structure=make_structure(),
+        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+        mode="generate",
+        outputs=(StructureAnalysisRecord, ParameterAdvice),
+    )
+
+    result = run_core_job(request)
+
+    assert request.to_dict()["outputs"] == [
+        "StructureAnalysisRecord",
+        "ParameterAdvice",
+    ]
+    assert isinstance(result, CoreRecords)
+    assert tuple(result) == (StructureAnalysisRecord, ParameterAdvice)
+    assert isinstance(result[StructureAnalysisRecord], StructureAnalysisRecord)
+    assert isinstance(result[ParameterAdvice], ParameterAdvice)
+
+
+def test_run_core_job_query_reuses_caller_owned_runtime() -> None:
+    """A query leaves its caller-provided runtime open for reuse."""
+    request = CoreJobRequest(
+        structure=make_structure(),
+        outputs=(StructureAnalysisRecord, ParameterAdvice),
+    )
+
+    with CoreRuntime() as runtime:
+        first = run_core_job(request, runtime=runtime)
+        second = run_core_job(request, runtime=runtime)
+        assert runtime.is_closed is False
+
+    assert isinstance(first, CoreRecords)
+    assert first.to_dict() == second.to_dict()
+    assert runtime.is_closed is True
 
 
 def test_run_core_job_aggregates_kmesh_warnings() -> None:

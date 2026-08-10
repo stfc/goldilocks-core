@@ -768,14 +768,18 @@ class CoreJobRequest:
     """Request for running the standard Core workflow.
 
     One request model shared by Python API, CLI, and future HTTP
-    wrappers. ``mode`` controls how far the pipeline runs.
+    wrappers. ``outputs`` selects a query when set; otherwise ``mode``
+    selects a preset.
 
     Attributes:
         structure: structure input — a pymatgen Structure or a
             path to a structure file.
         intent: what to calculate.
         hints: optional operator overrides.
-        mode: pipeline mode: ``recommend`` or ``generate``.
+        mode: preset mode: ``recommend`` or ``generate``. Ignored when
+            ``outputs`` is set.
+        outputs: requested DAG record types for a query. ``None`` falls back
+            to the preset selected by ``mode``.
         pseudo_metadata: pseudopotential metadata for selection.
         output_dir: optional output directory, meaningful only with
             ``generate``. The generate entrypoint handles publishing there.
@@ -788,6 +792,7 @@ class CoreJobRequest:
     intent: CalculationIntent = field(default_factory=CalculationIntent)
     hints: CalculationHints = field(default_factory=CalculationHints)
     mode: JobMode = "recommend"
+    outputs: tuple[type, ...] | None = None
     pseudo_metadata: tuple[PseudoMetadata, ...] = ()
     output_dir: str | None = None
     kmesh_model: ModelSpec | None = None
@@ -798,5 +803,18 @@ class CoreJobRequest:
             raise ValueError(f"Unsupported Core job mode: {self.mode}")
 
     def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary."""
-        return to_jsonable(self)
+        """Return a JSON-serializable dictionary with output type names."""
+        return {
+            "structure": to_jsonable(self.structure),
+            "intent": to_jsonable(self.intent),
+            "hints": to_jsonable(self.hints),
+            "mode": self.mode,
+            "outputs": (
+                None
+                if self.outputs is None
+                else [output_type.__name__ for output_type in self.outputs]
+            ),
+            "pseudo_metadata": to_jsonable(self.pseudo_metadata),
+            "output_dir": self.output_dir,
+            "kmesh_model": to_jsonable(self.kmesh_model),
+        }

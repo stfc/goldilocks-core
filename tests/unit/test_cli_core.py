@@ -11,8 +11,10 @@ from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
     CoreJobRequest,
+    CoreRecords,
     CoreResult,
     KPointSelection,
+    ParameterAdvice,
     Provenance,
     SelectionRecord,
     StructureAnalysisRecord,
@@ -47,6 +49,18 @@ def make_result(request: CoreJobRequest) -> CoreResult:
             provenance=Provenance(source="user_hint", reason="test"),
         ),
         selection=SelectionRecord(pseudopotentials=()),
+    )
+
+
+def make_records(request: CoreJobRequest) -> CoreRecords:
+    """Build the records selected by a CLI compute request."""
+    result = make_result(request)
+    available = {
+        StructureAnalysisRecord: result.analysis,
+        ParameterAdvice: result.advice,
+    }
+    return CoreRecords(
+        {output_type: available[output_type] for output_type in request.outputs or ()}
     )
 
 
@@ -328,6 +342,89 @@ def test_cli_rejects_removed_accuracy_control(capsys) -> None:
         parser.parse_args(["recommend", "Si.cif", "--accuracy-level", "high"])
 
     assert "unrecognized arguments: --accuracy-level high" in capsys.readouterr().err
+
+
+def test_main_compute_prints_requested_analysis_and_advice(monkeypatch, capsys) -> None:
+    """Resolve multiple output names and print their CoreRecords as JSON."""
+    captured: dict[str, CoreJobRequest] = {}
+
+    def fake_run_core_job(request: CoreJobRequest) -> CoreRecords:
+        captured["request"] = request
+        return make_records(request)
+
+    monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "goldilocks-core",
+            "compute",
+            "Si.cif",
+            "--outputs",
+            "StructureAnalysisRecord,ParameterAdvice",
+        ],
+    )
+
+    cli_core.main()
+
+    assert captured["request"].outputs == (
+        StructureAnalysisRecord,
+        ParameterAdvice,
+    )
+    output = json.loads(capsys.readouterr().out)
+    assert set(output) == {"StructureAnalysisRecord", "ParameterAdvice"}
+    assert output["StructureAnalysisRecord"]["reduced_formula"] == "Si"
+    assert "smearing" in output["ParameterAdvice"]
+
+
+def test_main_compute_prints_only_requested_analysis(monkeypatch, capsys) -> None:
+    """Return only the single record named by a compute query."""
+    monkeypatch.setattr(cli_core, "run_core_job", make_records)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "goldilocks-core",
+            "compute",
+            "Si.cif",
+            "--outputs",
+            "StructureAnalysisRecord",
+        ],
+    )
+
+    cli_core.main()
+
+    output = json.loads(capsys.readouterr().out)
+    assert set(output) == {"StructureAnalysisRecord"}
+    assert output["StructureAnalysisRecord"]["reduced_formula"] == "Si"
+
+
+def test_main_compute_rejects_unknown_output_type(monkeypatch, capsys) -> None:
+    """Report the invalid contract name before running a compute query."""
+
+    def fail_if_run(*args, **kwargs) -> CoreRecords:
+        pytest.fail("run_core_job must not be called for invalid output types")
+
+    monkeypatch.setattr(cli_core, "run_core_job", fail_if_run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "goldilocks-core",
+            "compute",
+            "Si.cif",
+            "--outputs",
+            "UnknownRecord",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as error:
+        cli_core.main()
+
+    assert error.value.code == 2
+    message = capsys.readouterr().err
+    assert "Unknown output record type(s): UnknownRecord" in message
+    assert "StructureAnalysisRecord" in message
 
 
 def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:

@@ -20,7 +20,7 @@ export function StructureSummary({ structure }: { structure: StructureDocument }
     <Card withBorder radius="md" p="md">
       <Stack gap="sm">
         <Group justify="space-between" align="baseline">
-          <Title order={3}>{structure.formula}</Title>
+          <Title order={2}>{structure.formula}</Title>
           <Badge variant="light" color="gold">
             {structure.reduced_formula}
           </Badge>

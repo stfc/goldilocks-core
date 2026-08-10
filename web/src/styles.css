@@ -1,5 +1,13 @@
-:root {
+:root,
+:root[data-mantine-color-scheme='light'] {
   color-scheme: light;
+  /* Mantine's default `dimmed` (gray-6) fails WCAG AA on our stone neutrals.
+     Override to a muted ink that clears 4.5:1 on white and every stone/gold
+     surface used for text. Ink-6 is still visually "dimmed", just legible. */
+  --mantine-color-dimmed: var(--mantine-color-ink-6);
+  /* Input placeholders default to gray-5, which also fails AA; match the
+     legible muted ink used for dimmed text. */
+  --mantine-color-placeholder: var(--mantine-color-ink-6);
 }
 
 body {

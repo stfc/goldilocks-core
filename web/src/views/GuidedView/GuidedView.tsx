@@ -109,7 +109,7 @@ function StructureSourcePanel() {
     >
       <Stack gap="sm">
         <div>
-          <Title order={3}>Load a structure</Title>
+          <Title order={2}>Load a structure</Title>
           <Text size="sm" c="dimmed">
             Paste CIF or POSCAR content, pick a file, or drop one anywhere on this
             panel. Your file stays in the browser and is never read from a server path.
@@ -165,7 +165,7 @@ function RecommendationPanel() {
 
   if (recordsStatus === 'running' && records === null) {
     return (
-      <Card withBorder radius="md">
+      <Card withBorder radius="md" role="status">
         <Group justify="center" gap="sm" py="lg">
           <Loader size="sm" />
           <Text size="sm" c="dimmed">
@@ -180,7 +180,7 @@ function RecommendationPanel() {
     return (
       <Card withBorder radius="md">
         <Stack gap="sm">
-          <Title order={3}>Recommendation</Title>
+          <Title order={2}>Recommendation</Title>
           {recordsFailure !== null && <ErrorReport failure={recordsFailure} />}
           <Text size="sm" c="dimmed">
             The recommendation did not complete. Your structure and any prior results
@@ -203,7 +203,7 @@ function RecommendationPanel() {
       <Stack gap="md">
         <Group justify="space-between" align="baseline">
           <Group gap="sm" align="baseline">
-            <Title order={3}>Recommendation</Title>
+            <Title order={2}>Recommendation</Title>
             <Badge variant="light" color="gold">
               {presented.reducedFormula}
             </Badge>
@@ -237,7 +237,7 @@ function RecommendationPanel() {
               bg="var(--mantine-color-stone-0)"
             >
               <Stack gap="xs">
-                <Title order={5}>{section.title}</Title>
+                <Title order={3}>{section.title}</Title>
                 {section.values.map((value) => (
                   <div key={value.label}>
                     <Group justify="space-between" gap="md" align="baseline">
@@ -372,7 +372,7 @@ function OverridesPanel() {
       <Collapse expanded={open}>
         <Stack gap="md" mt="md" id="calculation-overrides">
           <div>
-            <Title order={6}>Functional</Title>
+            <Title order={3}>Functional</Title>
             <Select
               label="Exchange–correlation functional"
               data={['PBEsol', 'PBE', 'LDA']}
@@ -384,7 +384,7 @@ function OverridesPanel() {
           <Divider />
 
           <div>
-            <Title order={6}>k-points</Title>
+            <Title order={3}>k-points</Title>
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
               <NumberHint
                 label="Spacing"
@@ -403,7 +403,7 @@ function OverridesPanel() {
           <Divider />
 
           <div>
-            <Title order={6}>Smearing</Title>
+            <Title order={3}>Smearing</Title>
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
               <Select
                 label="Smearing type"
@@ -427,7 +427,7 @@ function OverridesPanel() {
           <Divider />
 
           <div>
-            <Title order={6}>Magnetism &amp; relativity</Title>
+            <Title order={3}>Magnetism &amp; relativity</Title>
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
               <TriSelect
                 label="Spin polarised"
@@ -457,7 +457,7 @@ function OverridesPanel() {
           <Divider />
 
           <div>
-            <Title order={6}>Convergence</Title>
+            <Title order={3}>Convergence</Title>
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
               <NumberHint
                 label="Convergence threshold"
@@ -482,7 +482,7 @@ function OverridesPanel() {
           <Divider />
 
           <div>
-            <Title order={6}>Dispersion</Title>
+            <Title order={3}>Dispersion</Title>
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
               <TriSelect
                 label="Dispersion correction"
@@ -577,7 +577,7 @@ function GenerationPanel() {
       <Stack gap="md">
         <Group justify="space-between" align="baseline">
           <div>
-            <Title order={3}>Input archive</Title>
+            <Title order={2}>Input archive</Title>
             <Text size="sm" c="dimmed">
               Bundle the generated Quantum ESPRESSO inputs, the original structure, and
               a reproducibility manifest into one downloadable ZIP.

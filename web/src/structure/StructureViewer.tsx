@@ -175,7 +175,7 @@ export function StructureViewer({
       <Stack gap="sm">
         <Group justify="space-between" align="baseline" px="lg" pt="lg" pb={0}>
           <Group gap="sm" align="baseline">
-            <Title order={3}>Structure</Title>
+            <Title order={2}>Structure</Title>
             <Badge variant="light" color="gold">
               {structure.reduced_formula}
             </Badge>

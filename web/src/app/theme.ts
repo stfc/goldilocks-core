@@ -45,7 +45,11 @@ const stone: MantineColorsTuple = [
 ];
 
 export const theme = createTheme({
-  primaryColor: 'gold',
+  // Dark ink primary: filled interactive controls carry high-contrast white
+  // text. Warm gold is reserved as the accent (brand, badges, highlights,
+  // focus rings) rather than used as a fill, because white text fails WCAG AA
+  // on every warm gold shade.
+  primaryColor: 'ink',
   colors: {
     gold,
     ink,

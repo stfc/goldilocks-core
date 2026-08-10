@@ -5,7 +5,7 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { GuidedView } from '../views/GuidedView/GuidedView';
 import { GraphView } from '../views/GraphView/GraphView';
 
@@ -35,6 +35,14 @@ function BrandMark() {
  */
 export function WorkbenchShell() {
   const [view, setView] = useState<View>('guided');
+  const mainRef = useRef<HTMLDivElement | null>(null);
+
+  const switchView = (next: string) => {
+    setView(next as View);
+    // Move focus into the freshly revealed view so keyboard and screen-reader
+    // users are not left behind after a view change.
+    requestAnimationFrame(() => mainRef.current?.focus());
+  };
 
   return (
     <MantineAppShell header={{ height: 64 }} padding={{ base: 'md', sm: 'lg' }}>
@@ -48,7 +56,7 @@ export function WorkbenchShell() {
           <Group gap="sm" wrap="nowrap">
             <BrandMark />
             <div>
-              <Title order={4}>Goldilocks</Title>
+              <Title order={1}>Goldilocks</Title>
               <Text size="xs" c="dimmed" lh={1}>
                 Workbench
               </Text>
@@ -56,7 +64,7 @@ export function WorkbenchShell() {
           </Group>
           <SegmentedControl
             value={view}
-            onChange={(next) => setView(next as View)}
+            onChange={switchView}
             data={[
               { label: 'Guided', value: 'guided' },
               { label: 'Graph', value: 'graph' },
@@ -66,7 +74,13 @@ export function WorkbenchShell() {
         </Group>
       </MantineAppShell.Header>
 
-      <MantineAppShell.Main>
+      <MantineAppShell.Main
+        ref={mainRef}
+        tabIndex={-1}
+        key={view}
+        data-view={view}
+        className="view-panel"
+      >
         {view === 'guided' ? <GuidedView /> : <GraphView />}
       </MantineAppShell.Main>
     </MantineAppShell>

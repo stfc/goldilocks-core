@@ -12,6 +12,7 @@ import {
   Title,
 } from '@mantine/core';
 import { IconPlayerPlay } from '@tabler/icons-react';
+import { IconCheck, IconLink } from '@tabler/icons-react';
 import {
   Background,
   Controls,
@@ -53,7 +54,7 @@ class CanvasBoundary extends Component<
         <Box style={{ height: 520 }}>
           <Card withBorder radius="md">
             <Stack gap="sm">
-              <Title order={4}>Graph canvas unavailable</Title>
+              <Title order={3}>Graph canvas unavailable</Title>
               <Text size="sm">
                 The graph could not be rendered. Your structure, selection, and results
                 remain intact; Guided view is unaffected.
@@ -111,6 +112,25 @@ function RecordNode({ data }: NodeProps<FlowNode>) {
       : data.kind === 'required'
         ? '2px solid var(--mantine-color-ink-4)'
         : '1px solid var(--mantine-color-stone-3)';
+  // Selection/requirement is never conveyed by colour alone: each node carries
+  // a text + icon cue so screen readers and colour-blind users can tell
+  // selected, required-dependency, and unused stages apart.
+  const kindCue =
+    data.kind === 'selected' ? (
+      <Group gap={5} wrap="nowrap">
+        <IconCheck size={12} aria-hidden="true" />
+        <Text size="xs" fw={700} c="gold">
+          Selected output
+        </Text>
+      </Group>
+    ) : data.kind === 'required' ? (
+      <Group gap={5} wrap="nowrap">
+        <IconLink size={12} aria-hidden="true" />
+        <Text size="xs" fw={600} c="dimmed">
+          Required dependency
+        </Text>
+      </Group>
+    ) : null;
   return (
     <Box
       style={{
@@ -123,6 +143,7 @@ function RecordNode({ data }: NodeProps<FlowNode>) {
         opacity: data.kind === 'unused' ? 0.72 : 1,
       }}
     >
+      {kindCue}
       <Text size="sm" fw={600} lineClamp={1}>
         {data.label}
       </Text>
@@ -224,7 +245,7 @@ function SelectionPanel({ catalogue }: { catalogue: TaskCatalogue }) {
     <Card withBorder radius="md">
       <Stack gap="md">
         <div>
-          <Title order={4}>Selected records</Title>
+          <Title order={3}>Selected records</Title>
           <Text size="xs" c="dimmed">
             Choose the output records to compute. Required dependency stages are pulled
             in automatically; they are shown on the graph and are never editable.
@@ -272,7 +293,7 @@ function GraphResults() {
 
   if (graphStatus === 'running' && graphRecords === null) {
     return (
-      <Card withBorder radius="md">
+      <Card withBorder radius="md" role="status">
         <Group justify="center" gap="sm" py="lg">
           <Loader size="sm" />
           <Text size="sm" c="dimmed">
@@ -287,7 +308,7 @@ function GraphResults() {
     return (
       <Card withBorder radius="md">
         <Stack gap="sm">
-          <Title order={3}>Record results</Title>
+          <Title order={2}>Record results</Title>
           {graphFailure !== null && <ErrorReport failure={graphFailure} />}
           <Text size="sm" c="dimmed">
             The selected records did not complete. Your structure, Guided
@@ -310,7 +331,7 @@ function GraphResults() {
       <Stack gap="md">
         <Group justify="space-between" align="baseline">
           <Group gap="sm" align="baseline">
-            <Title order={3}>Record results</Title>
+            <Title order={2}>Record results</Title>
             {graphStale && (
               <Badge variant="light" color="ink">
                 Stale
@@ -333,7 +354,7 @@ function GraphResults() {
                 bg="var(--mantine-color-stone-0)"
               >
                 <Stack gap="xs">
-                  <Title order={5}>{section.title}</Title>
+                  <Title order={3}>{section.title}</Title>
                   {section.values.map((value) => (
                     <Group key={value.label} justify="space-between" gap="md">
                       <Text size="sm" c="dimmed">
@@ -376,7 +397,7 @@ export function GraphView() {
   return (
     <Stack gap="lg" maw={1200} mx="auto" w="100%">
       <Card withBorder radius="md">
-        <Title order={3}>Task Graph</Title>
+        <Title order={2}>Task Graph</Title>
         {catalogue?.tasks[0] && (
           <Text size="sm" c="dimmed">
             {catalogue.tasks[0].name} — {catalogue.tasks[0].description}
@@ -404,7 +425,7 @@ export function GraphView() {
       {catalogueStatus === 'failed' && catalogue === null && (
         <Card withBorder radius="md">
           <Stack gap="sm">
-            <Title order={3}>Task graph unavailable</Title>
+            <Title order={2}>Task graph unavailable</Title>
             {catalogueFailure !== null && <ErrorReport failure={catalogueFailure} />}
             <Text size="sm" c="dimmed">
               The task topology could not be loaded. Guided view is unaffected.
@@ -419,7 +440,7 @@ export function GraphView() {
       )}
 
       {catalogueStatus === 'running' && catalogue === null && (
-        <Card withBorder radius="md">
+        <Card withBorder radius="md" role="status">
           <Group justify="center" gap="sm" py="lg">
             <Loader size="sm" />
             <Text size="sm" c="dimmed">

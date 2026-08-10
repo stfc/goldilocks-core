@@ -7,27 +7,18 @@ import json
 import sys
 from pathlib import Path
 
-from goldilocks_core import contracts
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
     CoreJobRequest,
     CoreResult,
     ModelSpec,
+    resolve_output_types,
 )
 from goldilocks_core.examples import structures_path
 from goldilocks_core.generation import available_codes, available_tasks
 from goldilocks_core.jobs import run_core_job
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
-
-_OUTPUT_TYPE_NAMES = (
-    "StructureAnalysisRecord",
-    "ParameterAdvice",
-    "KPointSelection",
-    "SelectionRecord",
-    "GeneratedFiles",
-)
-_OUTPUT_TYPES = {name: getattr(contracts, name) for name in _OUTPUT_TYPE_NAMES}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -55,6 +46,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Comma-separated record type names to compute.",
     )
 
+    serve = subparsers.add_parser(
+        "serve",
+        help="Run an optional HTTP or MCP transport.",
+    )
+    transports = serve.add_subparsers(dest="transport", required=True)
+    http = transports.add_parser("http", help="Run the HTTP transport.")
+    http.add_argument("--host", default="127.0.0.1")
+    http.add_argument("--port", type=int, default=8000)
+    transports.add_parser("mcp", help="Run the MCP stdio transport.")
+
     examples = subparsers.add_parser(
         "examples",
         help="Inspect the example structures bundled with the package.",
@@ -75,6 +76,9 @@ def main() -> None:
 
     if args.command == "examples":
         print(structures_path())
+        return
+    if args.command == "serve":
+        _serve(args)
         return
 
     try:
@@ -218,17 +222,22 @@ def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
 def _parse_outputs(value: str) -> tuple[type, ...]:
     """Resolve comma-separated contract record names to output types."""
     names = [name.strip() for name in value.split(",")]
-    if not names or any(not name for name in names):
+    if any(not name for name in names):
         raise ValueError("--outputs must contain comma-separated record type names")
+    return resolve_output_types(names)
 
-    unknown = [name for name in names if name not in _OUTPUT_TYPES]
-    if unknown:
-        available = ", ".join(_OUTPUT_TYPE_NAMES)
-        invalid = ", ".join(unknown)
-        raise ValueError(
-            f"Unknown output record type(s): {invalid}. Available: {available}"
-        )
-    return tuple(_OUTPUT_TYPES[name] for name in names)
+
+def _serve(args: argparse.Namespace) -> None:
+    """Run the selected optional transport."""
+    if args.transport == "http":
+        from goldilocks_core.server.http import serve
+
+        serve(host=args.host, port=args.port)
+        return
+
+    from goldilocks_core.server.mcp import serve
+
+    serve()
 
 
 def _model_spec_from_args(args: argparse.Namespace) -> ModelSpec | None:

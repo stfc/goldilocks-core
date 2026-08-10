@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from goldilocks_core.contracts.outputs import (
+    OUTPUT_RECORD_TYPES,
+    OUTPUT_TYPES_BY_NAME,
+    resolve_output_types,
+)
 from goldilocks_core.contracts.protocols import KMeshAdvisor, ModelRuntime
 from goldilocks_core.contracts.records import (
     BundleRecord,
@@ -74,6 +79,8 @@ __all__ = [
     "ModelSource",
     "ModelSpec",
     "ModelType",
+    "OUTPUT_RECORD_TYPES",
+    "OUTPUT_TYPES_BY_NAME",
     "ParameterAdvice",
     "PathLike",
     "Provenance",
@@ -90,5 +97,6 @@ __all__ = [
     "SymmetryUnavailable",
     "VdwAdvice",
     "VdwMethod",
+    "resolve_output_types",
     "to_jsonable",
 ]

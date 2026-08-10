@@ -14,6 +14,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from goldilocks_core.contracts import CoreRecords, PresetRequest, QueryRequest
+from goldilocks_core.runtime.core import CoreRuntime
 from goldilocks_core.runtime.graph import TaskSpec
 
 
@@ -28,5 +30,5 @@ class TaskHandler:
     """
 
     spec: TaskSpec
-    build_context: Callable[..., Any]
-    assemble_result: Callable[..., Any]
+    build_context: Callable[[PresetRequest | QueryRequest, CoreRuntime], Any]
+    assemble_result: Callable[[PresetRequest, CoreRecords], Any]

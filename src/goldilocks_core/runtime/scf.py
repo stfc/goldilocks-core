@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
 
 from pymatgen.core import Structure
 
@@ -39,6 +38,7 @@ from goldilocks_core.generation.registry import generate_inputs
 from goldilocks_core.io.structures import load_structure
 from goldilocks_core.kmesh.resolve import resolve_kpoints
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
+from goldilocks_core.runtime.core import CoreRuntime
 from goldilocks_core.runtime.graph import Preset, StageSpec, TaskSpec
 from goldilocks_core.runtime.task import TaskHandler
 from goldilocks_core.selection import select_parameters
@@ -133,7 +133,7 @@ SCF_TASK = TaskSpec(
 
 def build_scf_context(
     request: PresetRequest | QueryRequest,
-    runtime: Any,
+    runtime: CoreRuntime,
 ) -> ScfContext:
     """Build a fresh SCF run context from a request and the runtime's services."""
     backend: KMeshAdvisor = runtime.kmesh_backend

@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import os
-
 from pymatgen.core import Structure
 
 from goldilocks_core.contracts import (
-    KMeshAdvisor,
     KPointSelection,
     PathLike,
     Provenance,
@@ -105,38 +102,3 @@ class QrfKDistanceBackend:
             metallicity_checkpoint=self._metallicity_checkpoint,
             metallicity_atom_init=self._metallicity_atom_init,
         )
-
-
-def qrf_kdistance_advisor(
-    config: QrfKpointsConfig,
-    metallicity_checkpoint: str | None = None,
-    metallicity_atom_init: str | None = None,
-) -> KMeshAdvisor:
-    """Return a stateful QRF k-point advisor backed by a fresh backend."""
-    return QrfKDistanceBackend(
-        config=config,
-        metallicity_checkpoint=metallicity_checkpoint,
-        metallicity_atom_init=metallicity_atom_init,
-    )
-
-
-def default_kmesh_advisor(
-    *,
-    registry_path: PathLike | None = None,
-    config: QrfKpointsConfig | None = None,
-    metallicity_checkpoint: str | None = None,
-    metallicity_atom_init: str | None = None,
-) -> KMeshAdvisor:
-    """Return the configured default QRF k-point advisor."""
-    checkpoint = metallicity_checkpoint or os.environ.get(
-        "GOLDILOCKS_METALLICITY_CHECKPOINT"
-    )
-    atom_init = metallicity_atom_init or os.environ.get(
-        "GOLDILOCKS_METALLICITY_ATOM_INIT"
-    )
-    return QrfKDistanceBackend(
-        registry_path=registry_path,
-        config=config,
-        metallicity_checkpoint=checkpoint,
-        metallicity_atom_init=atom_init,
-    )

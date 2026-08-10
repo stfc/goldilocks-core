@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from goldilocks_core.contracts.protocols import KMeshAdvisor, ModelRuntime
+from goldilocks_core.contracts.protocols import KMeshAdvisor
 from goldilocks_core.contracts.records import (
     BundleRecord,
     CalculationHints,
@@ -70,7 +70,6 @@ __all__ = [
     "KPointSelection",
     "KPointShift",
     "MagnetismAdvice",
-    "ModelRuntime",
     "ModelSource",
     "ModelSpec",
     "ModelType",

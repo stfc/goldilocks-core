@@ -362,26 +362,31 @@ def _load_sssp_json(path: Path) -> dict[str, Any] | None:
 
 def _get_sssp_info(
     path: Path, element: str | None
-) -> tuple[bool, str | None, dict[str, Any] | None, str | None]:
-    """Return the SSSP flag, source pseudopotential, cutoffs, and table relativism.
+) -> tuple[bool, str | None, dict[str, Any] | None, str | None, str | None]:
+    """Return the SSSP flag, source pseudopotential, cutoffs, table relativism,
+    and table accuracy.
 
     Whether a table has a cutoff sidecar and whether it is SSSP are different
     facts. The first decides whether an input can be written at all; the second
     only ranks candidates. Tying them together lost every PseudoDojo cutoff.
 
-    The relativistic classification is read the same way: a task selects one
-    pseudopotential library, not a relativistic mode per element, so the
-    sidecar's table-level ``_relativistic`` (stamped by ``gl pp install``)
-    overrides what an individual UPF header claims. SSSP marks its lightest
-    elements ``non-relativistic`` in their own headers even though the table as
-    a whole is scalar-relativistic; trusting each header individually silently
-    dropped those elements from every scalar-relativistic search.
+    The relativistic classification and accuracy tier are read the same way:
+    both are facts about the table as a whole, not about any one file in it,
+    so the sidecar's table-level ``_relativistic``/``_accuracy`` (stamped by
+    ``gl pp install``) override what an individual UPF file implies on its
+    own. SSSP marks its lightest elements ``non-relativistic`` in their own
+    headers even though the table as a whole is scalar-relativistic; trusting
+    each header individually silently dropped those elements from every
+    scalar-relativistic search (#150). PseudoDojo's on-disk names never
+    contain the literal words "efficiency"/"precision" the way SSSP's do, so
+    guessing accuracy from the path was a no-op for it (#152).
     """
     is_sssp = _is_sssp_folder(path)
     source_pseudopotential = None if is_sssp else path.parent.name
     recommended_cutoff = None
     sidecar = _load_sssp_json(path)
     table_relativistic = (sidecar or {}).get("_relativistic")
+    table_accuracy = (sidecar or {}).get("_accuracy")
 
     if element is not None:
         entry = (sidecar or {}).get(element)
@@ -393,7 +398,13 @@ def _get_sssp_info(
                 "ecutrho_ry": entry.get("cutoff_rho"),
             }
 
-    return is_sssp, source_pseudopotential, recommended_cutoff, table_relativistic
+    return (
+        is_sssp,
+        source_pseudopotential,
+        recommended_cutoff,
+        table_relativistic,
+        table_accuracy,
+    )
 
 
 def parse_upf_metadata(path: str | Path) -> PseudoMetadata:
@@ -412,9 +423,13 @@ def parse_upf_metadata(path: str | Path) -> PseudoMetadata:
         header_data.setdefault(key, value)
 
     element = _get_element(header_data, path.name)
-    is_sssp, source_pseudopotential, sssp_recommended_cutoff, table_relativistic = (
-        _get_sssp_info(path, element)
-    )
+    (
+        is_sssp,
+        source_pseudopotential,
+        sssp_recommended_cutoff,
+        table_relativistic,
+        table_accuracy,
+    ) = _get_sssp_info(path, element)
 
     return PseudoMetadata(
         filepath=str(path),
@@ -433,6 +448,7 @@ def parse_upf_metadata(path: str | Path) -> PseudoMetadata:
         is_sssp=is_sssp,
         source_pseudopotential=source_pseudopotential,
         sssp_recommended_cutoff=sssp_recommended_cutoff,
+        accuracy=table_accuracy,
     )
 
 

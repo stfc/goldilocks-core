@@ -64,6 +64,7 @@ SSSP-shaped, and every registered table now writes one):
 ```json
 {
   "_relativistic": "scalar",
+  "_accuracy": "efficiency",
   "Si": {"cutoff_wfc": 48.0, "cutoff_rho": 192.0}
 }
 ```
@@ -180,7 +181,8 @@ Under the hood (`pseudo/install.py::install()`):
    sidecar first, then the `.tar.gz`, verifying each extracted file against
    the sidecar's published MD5.
 4. Write the cutoff sidecar (see below), then stamp the table's registered
-   relativistic classification into that same sidecar (`_stamp_relativistic`).
+   relativistic classification and accuracy tier into that same sidecar
+   (`_stamp_table_facts`).
 
 Nothing here is ever redistributed by Core -- bytes travel from the publisher
 to your machine directly, every time. This is what makes an SSSP table
@@ -256,17 +258,29 @@ is not that you picked the wrong SSSP table -- SSSP has no such table at all.
 Use a PseudoDojo **NC-FR** table (`*-fr`) for spin-orbit calculations.
 
 **`pseudodojo-pbe-lanthanides-sr` freezes the 4f shell (f-in-core), assuming
-a trivalent lanthanide.** It is the only registered table covering most
-lanthanides (the default table covers only La and Lu), so selection will
-reach for it without comment whenever a structure needs one. That assumption
-is wrong for Eu²⁺/Yb²⁺ (e.g. EuO, YbAl₂), cannot represent Ce's valence, and
-drops 4f magnetism entirely -- yet the calculation still runs and converges
-to reasonable-looking numbers, so nothing about the output signals the
-problem. There is no runtime warning for this yet; it is tracked in
-[#126](https://github.com/stfc/goldilocks-core/issues/126) (P2), which
-explicitly wants the wording reviewed by a domain expert before it ships.
-Until then: **check by hand whether a lanthanide in your structure needs
-open-4f treatment before trusting this table's result.**
+a trivalent lanthanide.** That assumption is wrong for Eu²⁺/Yb²⁺ (e.g. EuO,
+YbAl₂), cannot represent Ce's valence, and drops 4f magnetism entirely -- yet
+the calculation still runs and converges to reasonable-looking numbers, so
+nothing about the output signals the problem. No PseudoDojo table covers
+actinides at all.
+
+**The rule: any lanthanide or actinide in the structure forces SSSP**,
+unconditionally, for that element -- `selection.py` filters candidates to
+`is_sssp` ones before ranking whenever the element is in `LANTHANIDES` or
+`ACTINIDES` (`table_registry.py`). If SSSP is not installed, selection
+refuses outright with an explanatory warning naming the install command,
+rather than silently falling back to the f-in-core table. This is a
+deliberate trade-off, not a technical limitation: **SSSP has no
+fully-relativistic table, so this also means no spin-orbit coupling support
+for lanthanides or actinides at all** -- avoiding a wrong valence was judged
+worse than losing SOC for these elements. It also means
+`pseudodojo-pbe-lanthanides-sr` is unreachable through automatic selection
+now, full stop -- installed or not, on the managed cache or under
+`--pseudo-root`, only SSSP candidates are ever considered for a lanthanide or
+actinide; the filter runs on `element`, not on where the metadata came from.
+Using this table means bypassing `select_parameters`/`gl generate` entirely --
+reading its UPF files and writing the QE input by hand. See
+[#126](https://github.com/stfc/goldilocks-core/issues/126).
 
 ## Selection: how a candidate is actually chosen
 
@@ -277,10 +291,16 @@ element:
    `pseudo_type`, and `relativistic` must match exactly. No candidates
    surviving this is reported as "no pseudopotential metadata matched
    `{element} / {functional} / {relativistic_mode}`", not a silent gap.
-2. **Ranking** among the survivors (`_rank_pseudo_candidate`), in order:
+2. **Lanthanides and actinides are further filtered to SSSP only** -- see
+   [Scientific caveats](#scientific-caveats-you-should-know-before-picking-a-table)
+   above.
+3. **Ranking** among the survivors (`_rank_pseudo_candidate`), in order:
    `pseudo_mode` (efficiency/precision) match, then complete cutoffs, then
-   SSSP preferred, then a deterministic tie-break by source and filename.
-3. `library`/`source_set` of the winner are recorded in the result's
+   SSSP preferred, then a deterministic tie-break by source and filename. The
+   `pseudo_mode` match reads the table's `_accuracy` sidecar stamp when one
+   exists, falling back to guessing from on-disk naming otherwise -- see
+   [#152](https://github.com/stfc/goldilocks-core/issues/152).
+4. `library`/`source_set` of the winner are recorded in the result's
    provenance.
 
 `--pseudo-root`, `--pseudo-mode`, `--pseudo-type`, `--relativistic-mode` on
@@ -374,7 +394,7 @@ Then wire it into `pseudo/install.py`:
   work for tables that are not installed yet, since `is_installed()` and
   `install_path()` depend on it.
 
-You do not need to touch `_stamp_relativistic()`: it runs centrally on
+You do not need to touch `_stamp_table_facts()`: it runs centrally on
 whatever `install()` returns, regardless of provider.
 
 ## Known gaps
@@ -388,19 +408,6 @@ whatever `install()` returns, regardless of provider.
   folded into #95 without the fix landing; confirmed still present. Currently
   low-impact only because nothing in the CLI constructs an `allowed_sources`
   policy yet -- it bites direct `apply_pseudo_policy()` callers today.
-- **`pseudo_mode` (efficiency/precision) ranking is a no-op for PseudoDojo
-  tables.** `selection.py::_metadata_matches_mode()` looks for the literal
-  words `efficiency`/`precision` in a candidate's library, source set,
-  source pseudopotential, or filename. SSSP's on-disk directory names contain
-  those words (`SSSP_1.3.0_PBEsol_efficiency`); PseudoDojo's do not -- its
-  upstream tables are named `standard`/`stringent`, which Core's registry
-  maps onto `efficiency`/`precision` only in `pseudo_registry.toml`, not on
-  disk. Verified live: for a PseudoDojo `-efficiency-sr` and `-precision-sr`
-  pair installed side by side, `_metadata_matches_mode()` returns `False` for
-  both regardless of the requested `--pseudo-mode`, so the two rank
-  identically and the accuracy preference has no effect once you are choosing
-  between two PseudoDojo tables (or between PseudoDojo and SSSP, where SSSP
-  always wins the tie-break). Not yet filed as an issue.
 - **`gl pp install` cannot force a reinstall.** A table installed before a
   sidecar-schema change (like the `_relativistic` stamp above) keeps its old
   sidecar until its directory is deleted and reinstalled by hand.
@@ -429,11 +436,15 @@ whatever `install()` returns, regardless of provider.
 
 - [#126](https://github.com/stfc/goldilocks-core/issues/126) -- this page's
   tracking issue. Its P1 (root layout, licences, the f-in-core caveat) is what
-  this rewrite covers; its P2 (a runtime f-in-core warning at selection,
-  worded by a domain expert) is still open.
+  this rewrite covers. P2 asked for a runtime warning on the f-in-core table,
+  escalating for Eu/Yb/Ce; the rule actually implemented goes further --
+  lanthanides and actinides are unconditionally routed to SSSP, so the
+  f-in-core table is never chosen automatically rather than chosen-with-a-warning.
 - [#149](https://github.com/stfc/goldilocks-core/issues/149) -- validate the
   PseudoDojo `dual=4` assumption with real convergence tests.
 - [#150](https://github.com/stfc/goldilocks-core/issues/150) -- the
   relativistic-classification fix described above.
+- [#152](https://github.com/stfc/goldilocks-core/issues/152) -- the
+  accuracy-tier fix described above, same shape as #150.
 - [#90](https://github.com/stfc/goldilocks-core/issues/90) -- the
   `_extract_library` literal-path-segment gap, still open.

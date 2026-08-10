@@ -29,22 +29,36 @@ def make_metadata(
     source_set: str | None = None,
     functional: str = "PBEsol",
     cutoffs: dict | None = None,
+    element: str = "Si",
+    library: str = "SSSP",
+    is_sssp: bool = True,
+    accuracy: str | None = None,
 ) -> PseudoMetadata:
     """Build synthetic pseudopotential metadata for selection tests."""
     return PseudoMetadata(
         filepath=f"/pseudo/{filename}",
         filename=filename,
         header_format="attr",
-        library="SSSP",
+        library=library,
         source_set=source_set,
-        element="Si",
+        element=element,
         pseudo_type="NC",
         functional=functional,
         relativistic="scalar",
-        is_sssp=True,
+        is_sssp=is_sssp,
         sssp_recommended_cutoff=(
             {"ecutwfc_ry": "30", "ecutrho_ry": 120} if cutoffs is None else cutoffs
         ),
+        accuracy=accuracy,
+    )
+
+
+def make_lanthanide_structure() -> Structure:
+    """Build a simple cubic europium structure."""
+    return Structure(
+        lattice=Lattice.cubic(4.0),
+        species=["Eu"],
+        coords=[[0.0, 0.0, 0.0]],
     )
 
 
@@ -133,6 +147,39 @@ def test_select_parameters_prefers_matching_pseudo_mode_and_cutoffs() -> None:
     assert selection.pseudopotentials[0].ecutwfc_ry == 60.0
     assert selection.pseudopotentials[0].provenance.source == "lookup"
     assert "highest-ranked" in selection.pseudopotentials[0].provenance.reason
+
+
+def test_select_parameters_uses_the_accuracy_stamp_not_path_guessing() -> None:
+    """PseudoDojo's standard/stringent naming never says efficiency/precision."""
+    structure = make_structure()
+    advice = advise_parameters(
+        analyze_structure(structure),
+        hints=CalculationHints(pseudo_type="NC", pseudo_mode="precision"),
+    )
+    standard = make_metadata(
+        filename="A-standard.upf",
+        source_set="nc-sr-04_pbesol_standard_upf",
+        library="pseudodojo",
+        is_sssp=False,
+        accuracy="efficiency",
+        cutoffs={"ecutwfc_ry": 30, "ecutrho_ry": 120},
+    )
+    stringent = make_metadata(
+        filename="Z-stringent.upf",
+        source_set="nc-sr-04_pbesol_stringent_upf",
+        library="pseudodojo",
+        is_sssp=False,
+        accuracy="precision",
+        cutoffs={"ecutwfc_ry": 60, "ecutrho_ry": 240},
+    )
+
+    selection = select_from_advice(
+        structure,
+        advice,
+        metadata_list=[standard, stringent],
+    )
+
+    assert selection.pseudopotentials[0].filename == "Z-stringent.upf"
 
 
 def test_select_parameters_prefers_complete_cutoff_metadata() -> None:
@@ -324,6 +371,57 @@ def test_select_parameters_keeps_explicit_grid_hint() -> None:
 
     assert selection.k_points.grid == (2, 2, 1)
     assert selection.k_points.provenance.source == "user_hint"
+
+
+def test_select_parameters_uses_only_sssp_for_lanthanides() -> None:
+    """PseudoDojo's f-in-core lanthanide table is never chosen automatically."""
+    structure = make_lanthanide_structure()
+    advice = advise_parameters(analyze_structure(structure))
+    pseudodojo_candidate = make_metadata(
+        filename="Eu.upf",
+        element="Eu",
+        library="pseudodojo",
+        is_sssp=False,
+        cutoffs={"ecutwfc_ry": 40, "ecutrho_ry": 160},
+    )
+    sssp_candidate = make_metadata(
+        filename="Eu.UPF",
+        element="Eu",
+        source_set="SSSP_efficiency",
+        cutoffs={"ecutwfc_ry": 50, "ecutrho_ry": 200},
+    )
+
+    selection = select_from_advice(
+        structure,
+        advice,
+        metadata_list=[pseudodojo_candidate, sssp_candidate],
+    )
+
+    assert selection.pseudopotentials[0].filename == "Eu.UPF"
+
+
+def test_select_parameters_explains_the_lanthanide_policy_without_sssp() -> None:
+    """Refuse the f-in-core table outright rather than silently falling back."""
+    structure = make_lanthanide_structure()
+    advice = advise_parameters(analyze_structure(structure))
+    pseudodojo_candidate = make_metadata(
+        filename="Eu.upf",
+        element="Eu",
+        library="pseudodojo",
+        is_sssp=False,
+        cutoffs={"ecutwfc_ry": 40, "ecutrho_ry": 160},
+    )
+
+    selection = select_from_advice(
+        structure,
+        advice,
+        metadata_list=[pseudodojo_candidate],
+    )
+
+    pseudo = selection.pseudopotentials[0]
+    assert pseudo.filename is None
+    assert any("lanthanide/actinide" in warning for warning in pseudo.warnings)
+    assert any("sssp-pbesol-efficiency-sr" in warning for warning in pseudo.warnings)
 
 
 def test_select_parameters_warns_when_pseudo_is_missing() -> None:

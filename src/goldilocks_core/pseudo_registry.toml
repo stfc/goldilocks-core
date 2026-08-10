@@ -175,8 +175,12 @@ upstream_url   = "https://www.pseudo-dojo.org/"
 citation       = "van Setten et al., Comput. Phys. Commun. 226, 39 (2018)"
 transfer_bytes = 1439256
 note = """
-Lanthanides only, f-in-core. PBE, not PBEsol: PseudoDojo publishes no PBEsol 3+ table, so
-using this changes the functional of the calculation. There is no precision counterpart."""
+Lanthanides only, f-in-core: assumes a trivalent ion, wrong for Eu/Yb/Ce. PBE, not
+PBEsol: PseudoDojo publishes no PBEsol 3+ table, so using this changes the functional
+of the calculation. There is no precision counterpart. Automatic selection never
+chooses this table, installed or not: lanthanides and actinides are routed to SSSP
+unconditionally (see docs/pseudopotentials.md). Using it means bypassing selection
+entirely -- read the UPF files yourself and write the QE input by hand."""
 elements = [
   "Ce", "Dy", "Er", "Eu", "Gd", "Ho", "Lu", "Nd", "Pm", "Pr", "Sm", "Tb",
   "Tm", "Yb",

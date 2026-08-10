@@ -146,7 +146,26 @@ def test_install_stamps_the_tables_relativistic_classification(monkeypatch, regi
     sidecar = destination.parent / f"{destination.name}.json"
     written = json.loads(sidecar.read_text())
     assert written["_relativistic"] == "scalar"
+    assert written["_accuracy"] == "efficiency"
     assert written["Si"]["cutoff_wfc"] == 48.0
+
+
+def test_install_stamps_the_tables_accuracy_tier(monkeypatch, registry):
+    """PseudoDojo's own standard/stringent naming never says efficiency/precision."""
+    table = registry["pseudodojo-pbesol-precision-sr"]
+    destination = installer.install_path(table)
+
+    def _fake_provider_install(*_args, **_kwargs):
+        destination.mkdir(parents=True, exist_ok=True)
+        (destination.parent / f"{destination.name}.json").write_text("{}")
+        return destination
+
+    monkeypatch.setattr(installer.pseudodojo, "install", _fake_provider_install)
+
+    installer.install(table)
+
+    sidecar = destination.parent / f"{destination.name}.json"
+    assert json.loads(sidecar.read_text())["_accuracy"] == "precision"
 
 
 def test_install_stamps_full_for_a_fully_relativistic_table(monkeypatch, registry):

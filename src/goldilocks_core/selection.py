@@ -18,6 +18,7 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.pseudo.pp_selector import select_pseudos
+from goldilocks_core.pseudo.table_registry import ACTINIDES, LANTHANIDES
 
 _CUTOFF_FIELDS = ("ecutwfc_ry", "ecutrho_ry")
 
@@ -87,6 +88,11 @@ def _select_pseudopotential_for_element(
         pseudo_type=pseudo_advice.pseudo_type,
         relativistic=pseudo_advice.relativistic_mode,
     )
+
+    sssp_only = element in LANTHANIDES or element in ACTINIDES
+    if sssp_only:
+        candidates = [c for c in candidates if c.is_sssp]
+
     candidates = sorted(
         candidates,
         key=lambda metadata: _rank_pseudo_candidate(
@@ -96,8 +102,19 @@ def _select_pseudopotential_for_element(
     )
 
     if not candidates:
+        reason = (
+            f"{element} is a lanthanide/actinide: only SSSP pseudopotentials are "
+            "used for these elements, because PseudoDojo's lanthanide table "
+            "freezes 4f electrons in the core assuming a trivalent ion (wrong "
+            "for Eu, Yb, and Ce) and no PseudoDojo table covers actinides at "
+            "all. This also means no spin-orbit coupling for these elements: "
+            "SSSP has no fully-relativistic table. Install SSSP with "
+            "`gl pp install sssp-pbesol-efficiency-sr`. "
+            if sssp_only
+            else ""
+        )
         warning = (
-            "No pseudopotential metadata matched "
+            f"{reason}No pseudopotential metadata matched "
             f"{element} / {pseudo_advice.functional} / "
             f"{pseudo_advice.relativistic_mode}."
         )
@@ -153,7 +170,18 @@ def _rank_pseudo_candidate(
 
 
 def _metadata_matches_mode(metadata: PseudoMetadata, pseudo_mode: str) -> bool:
-    """Return whether metadata appears to match an efficiency/precision mode."""
+    """Return whether metadata matches an efficiency/precision mode.
+
+    Prefers the table's registered accuracy tier (stamped into the
+    install-time sidecar, see stfc/goldilocks-core#152) over guessing from
+    on-disk naming: PseudoDojo's own vocabulary is standard/stringent, which
+    never contains the literal words "efficiency"/"precision" the fallback
+    below searches for. The fallback still applies to pseudopotentials with
+    no sidecar at all, e.g. hand-installed via --pseudo-root.
+    """
+    if metadata.accuracy is not None:
+        return metadata.accuracy.lower() == pseudo_mode.lower()
+
     mode = pseudo_mode.lower()
     searchable = " ".join(
         value.lower()

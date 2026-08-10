@@ -40,6 +40,11 @@ class PseudoMetadata:
             the UPF header.
         sssp_recommended_cutoff: SSSP recommended cutoffs dict
             with ``ecutwfc_ry`` and ``ecutrho_ry`` in Rydberg.
+        accuracy: the table's registered accuracy tier (``efficiency``
+            or ``precision``), read from its install-time sidecar
+            stamp when one exists. ``None`` for pseudopotentials with
+            no sidecar (e.g. hand-installed), in which case selection
+            falls back to guessing from on-disk naming.
     """
 
     filepath: str
@@ -56,6 +61,7 @@ class PseudoMetadata:
     is_sssp: bool = False
     source_pseudopotential: str | None = None
     sssp_recommended_cutoff: dict[str, Any] | None = None
+    accuracy: str | None = None
 
     def __post_init__(self) -> None:
         """Canonicalize supported functional labels from metadata producers."""

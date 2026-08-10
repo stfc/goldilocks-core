@@ -94,24 +94,34 @@ def install(
             f"from yet. Fetch it from {table.upstream_url} and pass --pseudo-root."
         )
 
-    _stamp_relativistic(destination, table.relativistic)
+    _stamp_table_facts(destination, table)
     return destination
 
 
-def _stamp_relativistic(destination: Path, relativistic: str) -> None:
-    """Record the table's SR/FR classification where cutoff discovery reads it.
+def _stamp_table_facts(destination: Path, table: PseudoTable) -> None:
+    """Record table-level facts where selection reads them, not the on-disk name.
 
-    A task selects one pseudopotential library, not a relativistic mode per
-    element. Some tables mix UPF-header labels within an otherwise consistent
-    table -- SSSP marks its lightest elements (B, Be, Li) ``non-relativistic``
-    in their own headers even though the table as a whole is scalar-relativistic
-    -- so selection has to trust the table's registered classification rather
-    than each file's own header, or it silently drops those elements from every
-    scalar-relativistic search. See stfc/goldilocks-core#150.
+    Two facts belong to the table as a whole, not to any one file in it, and
+    both were previously guessed from on-disk naming that differs by provider:
+
+    - **Relativistic mode.** A task selects one pseudopotential library, not a
+      relativistic mode per element. Some tables mix UPF-header labels within
+      an otherwise consistent table -- SSSP marks its lightest elements (B,
+      Be, Li) ``non-relativistic`` in their own headers even though the table
+      as a whole is scalar-relativistic -- so selection has to trust the
+      table's registered classification rather than each file's own header.
+      See stfc/goldilocks-core#150.
+    - **Accuracy tier.** Selection previously searched a candidate's path for
+      the literal words ``efficiency``/``precision``. SSSP's on-disk names
+      contain them; PseudoDojo's use its own upstream vocabulary
+      (``standard``/``stringent``) and never do, so the accuracy preference
+      was a no-op between two PseudoDojo tables. See
+      stfc/goldilocks-core#152.
     """
     sidecar = destination.parent / f"{destination.name}.json"
     data = json.loads(sidecar.read_text()) if sidecar.exists() else {}
-    data["_relativistic"] = _TABLE_TO_FILE_RELATIVISTIC[relativistic]
+    data["_relativistic"] = _TABLE_TO_FILE_RELATIVISTIC[table.relativistic]
+    data["_accuracy"] = table.accuracy
     sidecar.write_text(json.dumps(data, indent=2))
 
 

@@ -5,7 +5,12 @@ from pathlib import Path
 
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core import CalculationHints, CalculationIntent, generate, recommend
+from goldilocks_core import (
+    CalculationHints,
+    CalculationIntent,
+    PresetRequest,
+    run_core_job,
+)
 from goldilocks_core.advice.smearing import METALLIC_SMEARING_WIDTH_RY
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
@@ -16,10 +21,13 @@ def test_elemental_metal_uses_modest_cold_smearing_in_qe_rydberg_units(
     """Metal heuristics should produce the documented conservative QE starting point."""
     aluminium = Structure(Lattice.cubic(4.05), ["Al"], [[0.0, 0.0, 0.0]])
 
-    result = generate(
-        aluminium,
-        hints=CalculationHints(k_grid=(8, 8, 8)),
-        pseudo_metadata=[pseudo_metadata_factory("Al")],
+    result = run_core_job(
+        PresetRequest(
+            structure=aluminium,
+            mode="generate",
+            hints=CalculationHints(k_grid=(8, 8, 8)),
+            pseudo_metadata=(pseudo_metadata_factory("Al"),),
+        )
     )
 
     assert result.analysis.electronic_character == "likely_metal"
@@ -36,9 +44,11 @@ def test_heavy_element_prompts_for_soc_without_silently_enabling_it() -> None:
     """Structure-only evidence is insufficient to incur SOC cost automatically."""
     iodine = Structure(Lattice.cubic(7.0), ["I"], [[0.0, 0.0, 0.0]])
 
-    result = recommend(
-        iodine,
-        hints=CalculationHints(k_grid=(2, 2, 2)),
+    result = run_core_job(
+        PresetRequest(
+            structure=iodine,
+            hints=CalculationHints(k_grid=(2, 2, 2)),
+        )
     )
 
     assert result.analysis.heavy_elements == ("I",)
@@ -54,10 +64,13 @@ def test_explicit_soc_couples_fully_relativistic_pseudos_to_qe_noncollinear_flag
     """An explicit SOC decision must propagate through selection and generation."""
     iodine = Structure(Lattice.cubic(7.0), ["I"], [[0.0, 0.0, 0.0]])
 
-    result = generate(
-        iodine,
-        hints=CalculationHints(k_grid=(2, 2, 2), spin_orbit_coupling=True),
-        pseudo_metadata=[pseudo_metadata_factory("I", relativistic="full")],
+    result = run_core_job(
+        PresetRequest(
+            structure=iodine,
+            mode="generate",
+            hints=CalculationHints(k_grid=(2, 2, 2), spin_orbit_coupling=True),
+            pseudo_metadata=(pseudo_metadata_factory("I", relativistic="full"),),
+        )
     )
 
     assert result.advice.spin_orbit.enabled is True
@@ -78,11 +91,13 @@ def test_pseudopotential_functional_must_match_calculation_functional(
     pbe = pseudo_metadata_factory("Si", functional="PBE", root=Path("/pbe"))
     pbesol = pseudo_metadata_factory("Si", functional="PBEsol", root=Path("/pbesol"))
 
-    result = recommend(
-        silicon_structure,
-        intent=CalculationIntent(functional="PBEsol"),
-        hints=CalculationHints(k_grid=(4, 4, 4)),
-        pseudo_metadata=[pbe, pbesol],
+    result = run_core_job(
+        PresetRequest(
+            structure=silicon_structure,
+            intent=CalculationIntent(functional="PBEsol"),
+            hints=CalculationHints(k_grid=(4, 4, 4)),
+            pseudo_metadata=(pbe, pbesol),
+        )
     )
 
     assert result.advice.pseudopotentials.functional == "PBEsol"

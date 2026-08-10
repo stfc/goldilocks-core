@@ -6,12 +6,12 @@ from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
     ConvergenceAdvice,
-    CoreJobRequest,
     CoreRecords,
     CoreResult,
     KPointSelection,
     MagnetismAdvice,
     ParameterAdvice,
+    PresetRequest,
     Provenance,
     PseudopotentialAdvice,
     SelectionRecord,
@@ -155,13 +155,13 @@ def test_job_records_serialize_to_json_safe_dicts() -> None:
     assert data["k_points"]["grid"] == [4, 4, 4]
 
 
-def test_core_job_request_validates_mode() -> None:
-    """CoreJobRequest raises at construction for invalid modes."""
-    CoreJobRequest(structure="Si.cif", mode="recommend")
-    CoreJobRequest(structure="Si.cif", mode="generate")
+def test_preset_request_validates_mode() -> None:
+    """PresetRequest raises at construction for invalid modes."""
+    PresetRequest(structure="Si.cif", mode="recommend")
+    PresetRequest(structure="Si.cif", mode="generate")
 
     try:
-        CoreJobRequest(structure="Si.cif", mode="invalid")
+        PresetRequest(structure="Si.cif", mode="invalid")
     except ValueError:
         pass
     else:

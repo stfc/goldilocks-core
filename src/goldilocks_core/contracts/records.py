@@ -764,58 +764,83 @@ class CoreResult:
 
 
 @dataclass(frozen=True, slots=True)
-class CoreJobRequest:
-    """Request for running the standard Core workflow.
+class PresetRequest:
+    """Operator request for a named-preset Core run (recommend/generate).
 
-    One request model shared by Python API, CLI, and future HTTP
-    wrappers. ``mode`` selects a preset run by :func:`run_core_job`; ``outputs``
-    selects a query run by :func:`query_records`. Each entrypoint rejects the
-    other's field.
+    Passed to :func:`run_core_job` (or a dispatcher's ``recommend``/``generate``).
+    ``mode`` selects the preset; ``output_dir`` is meaningful only with
+    ``generate``.
 
     Attributes:
-        structure: structure input — a pymatgen Structure or a
-            path to a structure file.
+        structure: structure input — a pymatgen Structure or a path to a
+            structure file.
         intent: what to calculate.
         hints: optional operator overrides.
-        mode: preset mode: ``recommend`` or ``generate``. ``run_core_job`` runs
-            this preset and rejects ``outputs``.
-        outputs: requested DAG record types for a query. ``query_records`` runs
-            this set and requires it (rejecting ``mode``-based presets).
+        mode: preset mode: ``recommend`` or ``generate``.
         pseudo_metadata: pseudopotential metadata for selection.
         output_dir: optional output directory, meaningful only with
             ``generate``. The generate entrypoint handles publishing there.
-        kmesh_model: optional local k-index model spec; when set, the
-            SCF path uses it for k-point selection instead of the default
-            QRF k-distance model.
+        kmesh_model: optional local k-index model spec; when set, the SCF path
+            uses it for k-point selection instead of the default QRF model.
     """
 
     structure: StructureInput
     intent: CalculationIntent = field(default_factory=CalculationIntent)
     hints: CalculationHints = field(default_factory=CalculationHints)
     mode: JobMode = "recommend"
-    outputs: tuple[type, ...] | None = None
     pseudo_metadata: tuple[PseudoMetadata, ...] = ()
     output_dir: str | None = None
     kmesh_model: ModelSpec | None = None
 
     def __post_init__(self) -> None:
-        """Validate request invariants at construction."""
+        """Validate the preset mode at construction."""
         if self.mode not in {"recommend", "generate"}:
             raise ValueError(f"Unsupported Core job mode: {self.mode}")
 
     def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary with output type names."""
+        """Return a JSON-serializable dictionary."""
         return {
             "structure": to_jsonable(self.structure),
             "intent": to_jsonable(self.intent),
             "hints": to_jsonable(self.hints),
             "mode": self.mode,
-            "outputs": (
-                None
-                if self.outputs is None
-                else [output_type.__name__ for output_type in self.outputs]
-            ),
             "pseudo_metadata": to_jsonable(self.pseudo_metadata),
             "output_dir": self.output_dir,
+            "kmesh_model": to_jsonable(self.kmesh_model),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class QueryRequest:
+    """Operator request for an explicit record query.
+
+    Passed to :func:`query_records` (or a dispatcher's ``compute``). ``outputs``
+    is required: it names the DAG record types to compute.
+
+    Attributes:
+        structure: structure input — a pymatgen Structure or a path to a
+            structure file.
+        outputs: requested DAG record types (required, non-None).
+        intent: what to calculate.
+        hints: optional operator overrides.
+        pseudo_metadata: pseudopotential metadata for selection.
+        kmesh_model: optional local k-index model spec.
+    """
+
+    structure: StructureInput
+    outputs: tuple[type, ...]
+    intent: CalculationIntent = field(default_factory=CalculationIntent)
+    hints: CalculationHints = field(default_factory=CalculationHints)
+    pseudo_metadata: tuple[PseudoMetadata, ...] = ()
+    kmesh_model: ModelSpec | None = None
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary with output type names."""
+        return {
+            "structure": to_jsonable(self.structure),
+            "outputs": [output_type.__name__ for output_type in self.outputs],
+            "intent": to_jsonable(self.intent),
+            "hints": to_jsonable(self.hints),
+            "pseudo_metadata": to_jsonable(self.pseudo_metadata),
             "kmesh_model": to_jsonable(self.kmesh_model),
         }

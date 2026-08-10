@@ -1,0 +1,108 @@
+"""Task dispatch: run registered task graphs by intent.task.
+
+The dispatcher holds no model state; it borrows a
+:class:`~goldilocks_core.runtime.core.CoreRuntime` for services (kmesh,
+metallicity) and an open-state guard, and owns the task registry. Tasks
+register a :class:`~goldilocks_core.runtime.task.TaskHandler` (graph +
+context builder + result assembler); the SCF task is pre-registered. The
+dispatcher imports task-specific code only to pre-register the SCF default
+— the dispatch path itself is task-agnostic, so a new task (nscf, phonons)
+registers without the runtime or the executor changing.
+"""
+
+from __future__ import annotations
+
+from dataclasses import replace
+
+from goldilocks_core.bundle import write_bundle_directory
+from goldilocks_core.contracts import (
+    CoreRecords,
+    CoreResult,
+    PresetRequest,
+    QueryRequest,
+)
+from goldilocks_core.runtime.core import CoreRuntime
+from goldilocks_core.runtime.graph import execute
+from goldilocks_core.runtime.scf import SCF_HANDLER
+from goldilocks_core.runtime.task import TaskHandler
+
+
+class TaskDispatcher:
+    """Dispatch Core task graphs through registered :class:`TaskHandler`s.
+
+    Borrows a :class:`CoreRuntime` for owned services and an open-state guard;
+    owns the task registry. Register a custom task and dispatch by
+    ``intent.task`` without the runtime or the executor changing.
+    """
+
+    def __init__(self, runtime: CoreRuntime) -> None:
+        self._runtime = runtime
+        self._tasks: dict[str, TaskHandler] = {}
+        self.register(SCF_HANDLER)
+
+    def register(self, handler: TaskHandler) -> None:
+        """Register a task for dispatch by ``intent.task``."""
+        self._tasks[handler.spec.task] = handler
+
+    def recommend(self, request: PresetRequest) -> CoreResult:
+        """Execute the task's recommend preset and assemble a full result."""
+        self._ensure_open()
+        handler = self._handler_for(request)
+        task = handler.spec
+        records = execute(
+            task,
+            task.preset("recommend").outputs,
+            handler.build_context(request, self._runtime),
+        )
+        return handler.assemble_result(request, records)
+
+    def generate(
+        self,
+        request: PresetRequest,
+        *,
+        output_dir: str | None = None,
+    ) -> CoreResult:
+        """Execute the task's generate preset and optionally publish a bundle."""
+        self._ensure_open()
+        handler = self._handler_for(request)
+        task = handler.spec
+        records = execute(
+            task,
+            task.preset("generate").outputs,
+            handler.build_context(request, self._runtime),
+        )
+        result = handler.assemble_result(request, records)
+        if output_dir is None:
+            return result
+        return replace(result, bundle=write_bundle_directory(result, output_dir))
+
+    def compute(self, request: QueryRequest) -> CoreRecords:
+        """Execute the minimal subgraph for ``request.outputs`` on the task."""
+        self._ensure_open()
+        handler = self._handler_for(request)
+        return execute(
+            handler.spec,
+            request.outputs,
+            handler.build_context(request, self._runtime),
+        )
+
+    def run_preset(self, request: PresetRequest) -> CoreResult:
+        """Dispatch the preset selected by ``request.mode``."""
+        if request.mode == "recommend":
+            return self.recommend(request)
+        return self.generate(request, output_dir=request.output_dir)
+
+    def _handler_for(self, request: PresetRequest | QueryRequest) -> TaskHandler:
+        """Return the registered handler for ``request.intent.task``."""
+        handler = self._tasks.get(request.intent.task)
+        if handler is None:
+            available = ", ".join(sorted(self._tasks)) or "none"
+            raise ValueError(
+                f"No Core task registered for task={request.intent.task!r}. "
+                f"Available: {available}"
+            )
+        return handler
+
+    def _ensure_open(self) -> None:
+        if self._runtime.is_closed:
+            raise RuntimeError("CoreRuntime is closed.")

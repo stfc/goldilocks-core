@@ -2,9 +2,7 @@ from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
     CalculationHints,
-    CoreJobRequest,
-    generate,
-    recommend,
+    PresetRequest,
     run_core_job,
 )
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
@@ -34,10 +32,12 @@ def _make_si_metadata() -> PseudoMetadata:
 
 def test_recommend_runs_staged_core_pipeline() -> None:
     """Run Load → Analyze → Advise → Kmesh → Select through the public API."""
-    result = recommend(
-        _make_si_structure(),
-        hints=CalculationHints(k_grid=(3, 3, 3)),
-        pseudo_metadata=[_make_si_metadata()],
+    result = run_core_job(
+        PresetRequest(
+            structure=_make_si_structure(),
+            hints=CalculationHints(k_grid=(3, 3, 3)),
+            pseudo_metadata=(_make_si_metadata(),),
+        )
     )
 
     assert result.analysis.reduced_formula == "Si"
@@ -47,10 +47,13 @@ def test_recommend_runs_staged_core_pipeline() -> None:
 
 def test_generate_runs_pipeline_through_generated_files() -> None:
     """Generate input files through the public Python API."""
-    result = generate(
-        _make_si_structure(),
-        hints=CalculationHints(k_grid=(3, 3, 3), pseudo_type="NC"),
-        pseudo_metadata=[_make_si_metadata()],
+    result = run_core_job(
+        PresetRequest(
+            structure=_make_si_structure(),
+            mode="generate",
+            hints=CalculationHints(k_grid=(3, 3, 3), pseudo_type="NC"),
+            pseudo_metadata=(_make_si_metadata(),),
+        )
     )
 
     assert result.generated_files[0].path == "inputs/qe.in"
@@ -61,7 +64,7 @@ def test_run_core_job_generate_with_output_dir_writes_bundle(tmp_path) -> None:
     """Write a portable bundle through the shared Core job request."""
     output_dir = tmp_path / "bundle"
     result = run_core_job(
-        CoreJobRequest(
+        PresetRequest(
             structure=_make_si_structure(),
             hints=CalculationHints(k_grid=(3, 3, 3), pseudo_type="NC"),
             pseudo_metadata=(_make_si_metadata(),),
@@ -84,9 +87,11 @@ def test_core_result_serializes_to_manifest_style_dict() -> None:
         coords=[[0.0, 0.0, 0.0]],
     )
 
-    result = recommend(
-        structure,
-        hints=CalculationHints(k_grid=(8, 8, 8)),
+    result = run_core_job(
+        PresetRequest(
+            structure=structure,
+            hints=CalculationHints(k_grid=(8, 8, 8)),
+        )
     )
     manifest = result.to_dict()
 

@@ -1,39 +1,26 @@
-"""Core runtime: model lifecycle owner and task graph dispatch.
+"""Core runtime: model lifecycle owner.
 
-The runtime owns the long-lived model backends (kmesh, metallicity) with
-explicit load, reuse, reset, and close, and dispatches registered task graphs.
-Tasks register a :class:`TaskHandler` (graph + context builder + result
-assembler) and dispatch on ``intent.task``; the SCF task is pre-registered. The
-runtime hands a request and itself to the handler's context builder and the
-resulting records to the handler's assembler, so it imports no task-specific
-code on the dispatch path.
-
-New tasks register their own ``TaskHandler``; the runtime keeps owning models
-and dispatching. New model backends become owned services with the same
-lifecycle shape as the two below.
+Owns the long-lived model backends (kmesh, metallicity) with explicit load,
+reuse, reset, and close, and exposes them as read-only services for task
+handlers to read. The runtime holds no task registry and runs no graphs —
+that is :class:`~goldilocks_core.runtime.dispatch.TaskDispatcher`'s job. New
+model backends become owned services with the same lifecycle shape as the
+two below.
 """
 
 from __future__ import annotations
 
 import os
-from dataclasses import replace
 
 from pymatgen.core import Structure
 
 from goldilocks_core.advisors.kdistance_advisor import QrfKDistanceBackend
 from goldilocks_core.analysis import heuristic_metallicity
-from goldilocks_core.bundle import write_bundle_directory
 from goldilocks_core.contracts import (
-    CoreJobRequest,
-    CoreRecords,
-    CoreResult,
     ElectronicCharacter,
     KMeshAdvisor,
     PathLike,
 )
-from goldilocks_core.runtime.graph import execute
-from goldilocks_core.runtime.scf import SCF_HANDLER
-from goldilocks_core.runtime.task import TaskHandler
 
 
 class MetallicityService:
@@ -114,11 +101,12 @@ class MetallicityService:
 
 
 class CoreRuntime:
-    """Own model lifecycle and execute Core task graphs.
+    """Own the lifecycle of the kmesh and metallicity model services.
 
-    Tasks register a :class:`TaskHandler` and dispatch on ``intent.task``; the
-    built-in ``scf_single_point`` task is pre-registered. Model backends
-    (kmesh, metallicity) are owned services with explicit ``reset``/``close``.
+    Exposes ``kmesh_backend`` and ``metallicity`` as read-only services for
+    task handlers, and owns their ``reset``/``close``. Holds no task registry
+    and dispatches no graphs — use
+    :class:`~goldilocks_core.runtime.dispatch.TaskDispatcher` for that.
     """
 
     def __init__(
@@ -136,8 +124,6 @@ class CoreRuntime:
             kmesh_backend if kmesh_backend is not None else self._build_backend()
         )
         self._metallicity = self._build_metallicity()
-        self._tasks: dict[str, TaskHandler] = {}
-        self.register(SCF_HANDLER)
         self._closed = False
 
     def _build_backend(self) -> QrfKDistanceBackend:
@@ -156,10 +142,6 @@ class CoreRuntime:
             registry_path=self._registry_path,
         )
 
-    def register(self, handler: TaskHandler) -> None:
-        """Register a task for dispatch by ``intent.task``."""
-        self._tasks[handler.spec.task] = handler
-
     @property
     def kmesh_backend(self) -> KMeshAdvisor:
         """The runtime-owned kmesh backend."""
@@ -174,48 +156,6 @@ class CoreRuntime:
     def is_closed(self) -> bool:
         """Return whether this runtime has been closed."""
         return self._closed
-
-    def recommend(self, request: CoreJobRequest) -> CoreResult:
-        """Execute the task's recommend preset and assemble a full result."""
-        self._ensure_open()
-        handler = self._handler_for(request)
-        task = handler.spec
-        records = execute(
-            task,
-            task.preset("recommend").outputs,
-            handler.build_context(request, self),
-        )
-        return handler.assemble_result(request, records)
-
-    def generate(
-        self,
-        request: CoreJobRequest,
-        *,
-        output_dir: str | None = None,
-    ) -> CoreResult:
-        """Execute the task's generate preset and optionally publish a bundle."""
-        self._ensure_open()
-        handler = self._handler_for(request)
-        task = handler.spec
-        records = execute(
-            task,
-            task.preset("generate").outputs,
-            handler.build_context(request, self),
-        )
-        result = handler.assemble_result(request, records)
-        if output_dir is None:
-            return result
-        return replace(result, bundle=write_bundle_directory(result, output_dir))
-
-    def compute(
-        self,
-        outputs: tuple[type, ...],
-        request: CoreJobRequest,
-    ) -> CoreRecords:
-        """Execute the minimal subgraph for ``outputs`` on ``request``'s task."""
-        self._ensure_open()
-        handler = self._handler_for(request)
-        return execute(handler.spec, outputs, handler.build_context(request, self))
 
     def reset(self) -> None:
         """Discard cached model state so the next model call reloads it."""
@@ -235,18 +175,3 @@ class CoreRuntime:
 
     def __exit__(self, *exc: object) -> None:
         self.close()
-
-    def _handler_for(self, request: CoreJobRequest) -> TaskHandler:
-        """Return the registered handler for ``request.intent.task``."""
-        handler = self._tasks.get(request.intent.task)
-        if handler is None:
-            available = ", ".join(sorted(self._tasks)) or "none"
-            raise ValueError(
-                f"No Core task registered for task={request.intent.task!r}. "
-                f"Available: {available}"
-            )
-        return handler
-
-    def _ensure_open(self) -> None:
-        if self._closed:
-            raise RuntimeError("CoreRuntime is closed.")

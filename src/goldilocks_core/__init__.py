@@ -6,14 +6,14 @@ from goldilocks_core.contracts import (
     BundleRecord,
     CalculationHints,
     CalculationIntent,
-    CoreJobRequest,
     CoreResult,
+    PresetRequest,
+    QueryRequest,
 )
 from goldilocks_core.runtime import (
     CoreRuntime,
-    generate,
+    TaskDispatcher,
     query_records,
-    recommend,
     run_core_job,
 )
 
@@ -21,11 +21,11 @@ __all__ = [
     "BundleRecord",
     "CalculationHints",
     "CalculationIntent",
-    "CoreJobRequest",
     "CoreResult",
     "CoreRuntime",
-    "generate",
+    "PresetRequest",
+    "QueryRequest",
+    "TaskDispatcher",
     "query_records",
-    "recommend",
     "run_core_job",
 ]

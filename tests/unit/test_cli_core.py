@@ -10,12 +10,13 @@ from goldilocks_core.contracts import (
     BundleRecord,
     CalculationHints,
     CalculationIntent,
-    CoreJobRequest,
     CoreRecords,
     CoreResult,
     KPointSelection,
     ParameterAdvice,
+    PresetRequest,
     Provenance,
+    QueryRequest,
     SelectionRecord,
     StructureAnalysisRecord,
 )
@@ -23,7 +24,7 @@ from goldilocks_core.contracts import (
 _VDW_METHODS = ("d3", "d3bj", "ts", "mbd")
 
 
-def make_result(request: CoreJobRequest) -> CoreResult:
+def make_result(request: PresetRequest | QueryRequest) -> CoreResult:
     """Build a minimal Core result for CLI tests."""
     analysis = StructureAnalysisRecord(
         formula="Si1",
@@ -52,7 +53,7 @@ def make_result(request: CoreJobRequest) -> CoreResult:
     )
 
 
-def make_records(request: CoreJobRequest) -> CoreRecords:
+def make_records(request: QueryRequest) -> CoreRecords:
     """Build the records selected by a CLI compute request."""
     result = make_result(request)
     available = {
@@ -346,9 +347,9 @@ def test_cli_rejects_removed_accuracy_control(capsys) -> None:
 
 def test_main_compute_prints_requested_analysis_and_advice(monkeypatch, capsys) -> None:
     """Resolve multiple output names and print their CoreRecords as JSON."""
-    captured: dict[str, CoreJobRequest] = {}
+    captured: dict[str, QueryRequest] = {}
 
-    def fake_query_records(request: CoreJobRequest) -> CoreRecords:
+    def fake_query_records(request: QueryRequest) -> CoreRecords:
         captured["request"] = request
         return make_records(request)
 
@@ -429,9 +430,9 @@ def test_main_compute_rejects_unknown_output_type(monkeypatch, capsys) -> None:
 
 def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
     """Keep CLI main as parse -> request -> run_core_job -> print."""
-    captured: dict[str, CoreJobRequest] = {}
+    captured: dict[str, PresetRequest] = {}
 
-    def fake_run_core_job(request: CoreJobRequest) -> CoreResult:
+    def fake_run_core_job(request: PresetRequest) -> CoreResult:
         captured["request"] = request
         return make_result(request)
 
@@ -456,7 +457,7 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
     cli_core.main()
 
     request = captured["request"]
-    assert isinstance(request, CoreJobRequest)
+    assert isinstance(request, PresetRequest)
     assert request.structure == "Si.cif"
     assert request.mode == "recommend"
     assert request.hints.k_grid == (2, 2, 1)
@@ -468,9 +469,9 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
 
 def test_main_builds_request_with_model_backend(monkeypatch, capsys) -> None:
     """Resolve CLI --model into a k-index model spec on the request."""
-    captured: dict[str, CoreJobRequest] = {}
+    captured: dict[str, PresetRequest] = {}
 
-    def fake_run_core_job(request: CoreJobRequest) -> CoreResult:
+    def fake_run_core_job(request: PresetRequest) -> CoreResult:
         captured["request"] = request
         return make_result(request)
 
@@ -493,7 +494,7 @@ def test_main_builds_request_with_model_backend(monkeypatch, capsys) -> None:
     cli_core.main()
 
     request = captured["request"]
-    assert isinstance(request, CoreJobRequest)
+    assert isinstance(request, PresetRequest)
     assert request.kmesh_model is not None
     assert request.kmesh_model.location == "model.joblib"
     assert request.kmesh_model.name == "fixture-model"
@@ -502,9 +503,9 @@ def test_main_builds_request_with_model_backend(monkeypatch, capsys) -> None:
 
 def test_main_builds_generate_request_with_output_dir(monkeypatch, capsys) -> None:
     """Pass generate output path through the shared Core job request."""
-    captured: dict[str, CoreJobRequest] = {}
+    captured: dict[str, PresetRequest] = {}
 
-    def fake_run_core_job(request: CoreJobRequest) -> CoreResult:
+    def fake_run_core_job(request: PresetRequest) -> CoreResult:
         captured["request"] = request
         result = make_result(request)
         return CoreResult(

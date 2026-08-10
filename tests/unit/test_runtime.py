@@ -9,7 +9,13 @@ from types import SimpleNamespace
 import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core import CalculationHints, CoreJobRequest, CoreRuntime
+from goldilocks_core import (
+    CalculationHints,
+    CoreRuntime,
+    PresetRequest,
+    QueryRequest,
+    TaskDispatcher,
+)
 from goldilocks_core.contracts import (
     CalculationIntent,
     CoreResult,
@@ -48,13 +54,25 @@ def make_metadata() -> PseudoMetadata:
     )
 
 
-def make_request(*, mode: str = "recommend") -> CoreJobRequest:
+def make_request(*, mode: str = "recommend") -> PresetRequest:
     """Build a request that avoids loading external model artifacts."""
-    return CoreJobRequest(
+    return PresetRequest(
         structure=make_structure(),
         hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
         pseudo_metadata=(make_metadata(),),
         mode=mode,
+    )
+
+
+def make_query_request(outputs, **kw) -> QueryRequest:
+    """Build a query request with explicit outputs and the same defaults."""
+    return QueryRequest(
+        structure=kw.pop("structure", make_structure()),
+        outputs=outputs,
+        intent=kw.pop("intent", CalculationIntent()),
+        hints=kw.pop("hints", CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC")),
+        pseudo_metadata=kw.pop("pseudo_metadata", (make_metadata(),)),
+        kmesh_model=kw.pop("kmesh_model", None),
     )
 
 
@@ -87,7 +105,8 @@ class TrackingBackend:
 
 def test_recommend_returns_complete_result_without_generated_files() -> None:
     with CoreRuntime() as runtime:
-        result = runtime.recommend(make_request())
+        dispatcher = TaskDispatcher(runtime)
+        result = dispatcher.recommend(make_request())
 
     assert isinstance(result, CoreResult)
     assert isinstance(result.analysis, StructureAnalysisRecord)
@@ -103,7 +122,8 @@ def test_analyze_uses_heuristic_without_configured_metallicity_model(
     """Use the runtime heuristic service when no model artifacts are configured."""
 
     with CoreRuntime() as runtime:
-        records = runtime.compute((StructureAnalysisRecord,), make_request())
+        dispatcher = TaskDispatcher(runtime)
+        records = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
 
     analysis = records[StructureAnalysisRecord]
     assert analysis.electronic_character == "unknown"
@@ -129,7 +149,8 @@ def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
         metallicity_checkpoint="metal.ckpt",
         metallicity_atom_init="atom-init.json",
     ) as runtime:
-        records = runtime.compute((StructureAnalysisRecord,), make_request())
+        dispatcher = TaskDispatcher(runtime)
+        records = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
 
     analysis = records[StructureAnalysisRecord]
     assert analysis.electronic_character == "metal"
@@ -141,7 +162,8 @@ def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
 
 def test_generate_returns_generated_files() -> None:
     with CoreRuntime() as runtime:
-        result = runtime.generate(make_request(mode="generate"))
+        dispatcher = TaskDispatcher(runtime)
+        result = dispatcher.generate(make_request(mode="generate"))
 
     assert result.generated_files
     assert result.generated_files[0].path == "inputs/qe.in"
@@ -151,7 +173,8 @@ def test_generate_with_output_dir_writes_bundle(tmp_path) -> None:
     output_dir = tmp_path / "bundle"
 
     with CoreRuntime() as runtime:
-        result = runtime.generate(
+        dispatcher = TaskDispatcher(runtime)
+        result = dispatcher.generate(
             make_request(mode="generate"), output_dir=str(output_dir)
         )
 
@@ -174,7 +197,8 @@ def test_generate_with_output_dir_writes_bundle(tmp_path) -> None:
 def test_compute_returns_each_requested_record_type(record_type: type) -> None:
     """Query every public SCF intermediate as an isolated output."""
     with CoreRuntime() as runtime:
-        records = runtime.compute((record_type,), make_request())
+        dispatcher = TaskDispatcher(runtime)
+        records = dispatcher.compute(make_query_request((record_type,)))
 
     assert tuple(records) == (record_type,)
     assert isinstance(records[record_type], record_type)
@@ -184,7 +208,8 @@ def test_select_only_compute_does_not_invoke_kmesh(monkeypatch) -> None:
     backend = TrackingBackend(raise_on_call=True)
 
     with CoreRuntime(kmesh_backend=backend) as runtime:
-        records = runtime.compute((SelectionRecord,), make_request())
+        dispatcher = TaskDispatcher(runtime)
+        records = dispatcher.compute(make_query_request((SelectionRecord,)))
 
     assert isinstance(records[SelectionRecord], SelectionRecord)
     assert backend.calls == 0
@@ -231,7 +256,7 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
 
     monkeypatch.setattr(metallicity, "load_metallicity_model", load)
     monkeypatch.setattr(metallicity, "classify_metallicity", classify)
-    request = CoreJobRequest(
+    request = PresetRequest(
         structure=make_structure(),
         hints=CalculationHints(pseudo_type="NC"),
         pseudo_metadata=(make_metadata(),),
@@ -241,9 +266,10 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
         metallicity_checkpoint="metal.ckpt",
         metallicity_atom_init="atom-init.json",
     )
+    dispatcher = TaskDispatcher(runtime)
 
-    first = runtime.recommend(request)
-    second = runtime.recommend(request)
+    first = dispatcher.recommend(request)
+    second = dispatcher.recommend(request)
 
     assert first.k_points == second.k_points
     assert first.analysis.electronic_character == "metal"
@@ -258,7 +284,7 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     assert backend.resets == 1
     assert model_refs[0]() is None
 
-    runtime.recommend(request)
+    dispatcher.recommend(request)
     assert backend.calls == 3
     assert model_loads == 2
     assert classifications == 3
@@ -270,7 +296,7 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     assert model_refs[1]() is None
     assert runtime.is_closed is True
     with pytest.raises(RuntimeError, match="CoreRuntime is closed"):
-        runtime.recommend(request)
+        dispatcher.recommend(request)
 
 
 def test_runtime_dispatches_a_registered_task_via_compute(monkeypatch) -> None:
@@ -295,11 +321,12 @@ def test_runtime_dispatches_a_registered_task_via_compute(monkeypatch) -> None:
     )
 
     with CoreRuntime() as runtime:
-        runtime.register(handler)
-        records = runtime.compute(
-            (StubRecord,),
-            CoreJobRequest(
+        dispatcher = TaskDispatcher(runtime)
+        dispatcher.register(handler)
+        records = dispatcher.compute(
+            QueryRequest(
                 structure=make_structure(),
+                outputs=(StubRecord,),
                 intent=CalculationIntent(task="stub_task"),
             ),
         )
@@ -331,9 +358,10 @@ def test_runtime_recommend_dispatches_a_registered_task_preset(monkeypatch) -> N
     )
 
     with CoreRuntime() as runtime:
-        runtime.register(handler)
-        result = runtime.recommend(
-            CoreJobRequest(
+        dispatcher = TaskDispatcher(runtime)
+        dispatcher.register(handler)
+        result = dispatcher.recommend(
+            PresetRequest(
                 structure=make_structure(),
                 intent=CalculationIntent(task="stub_task"),
             )

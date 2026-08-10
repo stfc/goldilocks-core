@@ -5,7 +5,7 @@ from collections.abc import Callable
 
 from pymatgen.core import Structure
 
-from goldilocks_core import CalculationHints, CoreJobRequest, generate, run_core_job
+from goldilocks_core import CalculationHints, PresetRequest, run_core_job
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 
@@ -19,10 +19,13 @@ def test_generate_crosses_every_in_memory_stage_with_real_backends(
         pseudo_metadata_factory("Cl", ecutwfc_ry=45.0, ecutrho_ry=180.0),
     ]
 
-    result = generate(
-        sodium_chloride_structure,
-        hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
-        pseudo_metadata=pseudos,
+    result = run_core_job(
+        PresetRequest(
+            structure=sodium_chloride_structure,
+            mode="generate",
+            hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
+            pseudo_metadata=tuple(pseudos),
+        )
     )
 
     assert result.analysis.elements == ("Cl", "Na")
@@ -57,7 +60,7 @@ def test_structure_file_to_bundle_preserves_generated_files_and_provenance(
     ]
 
     result = run_core_job(
-        CoreJobRequest(
+        PresetRequest(
             structure=structure_path,
             hints=CalculationHints(k_grid=(3, 5, 7), pseudo_type="NC"),
             pseudo_metadata=tuple(pseudos),

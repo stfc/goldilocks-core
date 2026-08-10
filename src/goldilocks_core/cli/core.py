@@ -11,9 +11,10 @@ from goldilocks_core import contracts
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
-    CoreJobRequest,
     CoreResult,
     ModelSpec,
+    PresetRequest,
+    QueryRequest,
 )
 from goldilocks_core.examples import structures_path
 from goldilocks_core.generation import available_codes, available_tasks
@@ -177,8 +178,12 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
-    """Build a Core job request from parsed CLI arguments."""
+def _request_from_args(args: argparse.Namespace) -> PresetRequest | QueryRequest:
+    """Build a Core request from parsed CLI arguments.
+
+    Returns a :class:`QueryRequest` for the ``compute`` command and a
+    :class:`PresetRequest` (``recommend``/``generate``) otherwise.
+    """
     intent = CalculationIntent(
         code=args.code,
         task=args.task,
@@ -203,16 +208,25 @@ def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
     pseudo_metadata = (
         tuple(load_pseudo_metadata(Path(args.pseudo_root))) if args.pseudo_root else ()
     )
+    kmesh_model = _model_spec_from_args(args)
 
-    return CoreJobRequest(
+    if args.command == "compute":
+        return QueryRequest(
+            structure=args.structure,
+            outputs=_parse_outputs(args.outputs),
+            intent=intent,
+            hints=hints,
+            pseudo_metadata=pseudo_metadata,
+            kmesh_model=kmesh_model,
+        )
+    return PresetRequest(
         structure=args.structure,
         intent=intent,
         hints=hints,
-        mode="recommend" if args.command == "compute" else args.command,
-        outputs=(_parse_outputs(args.outputs) if args.command == "compute" else None),
+        mode=args.command,
         pseudo_metadata=pseudo_metadata,
         output_dir=getattr(args, "out", None),
-        kmesh_model=_model_spec_from_args(args),
+        kmesh_model=kmesh_model,
     )
 
 

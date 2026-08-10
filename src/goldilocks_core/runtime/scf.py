@@ -22,7 +22,6 @@ from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
-    CoreJobRequest,
     CoreRecords,
     CoreResult,
     ElectronicCharacter,
@@ -30,6 +29,8 @@ from goldilocks_core.contracts import (
     KMeshAdvisor,
     KPointSelection,
     ParameterAdvice,
+    PresetRequest,
+    QueryRequest,
     SelectionRecord,
     StructureAnalysisRecord,
     StructureInput,
@@ -131,7 +132,7 @@ SCF_TASK = TaskSpec(
 
 
 def build_scf_context(
-    request: CoreJobRequest,
+    request: PresetRequest | QueryRequest,
     runtime: Any,
 ) -> ScfContext:
     """Build a fresh SCF run context from a request and the runtime's services."""
@@ -149,7 +150,7 @@ def build_scf_context(
 
 
 def assemble_core_result(
-    request: CoreJobRequest,
+    request: PresetRequest,
     records: CoreRecords,
 ) -> CoreResult:
     """Assemble a full SCF preset result from type-keyed graph records."""

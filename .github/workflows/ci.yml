@@ -69,3 +69,65 @@ jobs:
 
       - name: Verify distribution contents
         run: python scripts/validate_distribution.py dist
+
+  workbench-frontend:
+    name: Workbench (web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+
+      # verify:api regenerates the OpenAPI contract via `uv run`, so the Core
+      # http extra must be present even though this job is about the Workbench.
+      - name: Install frozen Python deps (OpenAPI export)
+        run: uv sync --group dev --extra http
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Format check
+        run: npm run format:check
+        working-directory: web
+
+      - name: Lint
+        run: npm run lint
+        working-directory: web
+
+      - name: Typecheck
+        run: npm run typecheck
+        working-directory: web
+
+      - name: Generated contract clean
+        run: npm run verify:api
+        working-directory: web
+
+      - name: Unit tests
+        run: npm run test:run
+        working-directory: web
+
+      - name: Production build
+        run: npm run build
+        working-directory: web
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: web
+
+      # Runs against a real uvicorn serving the built Workbench (see
+      # web/playwright.config.ts webServer) with synthetic pseudo metadata.
+      - name: Browser workflows against real backend
+        run: npx playwright test
+        working-directory: web

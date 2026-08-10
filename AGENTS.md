@@ -17,27 +17,16 @@ Run `pre-commit` before committing. CI (on `main` and PRs) runs Ruff, pytest wit
 ## Code style
 
 - Ruff `E`, `F`, `I`. Target Python 3.12.
-- `from __future__ import annotations` at the top of every module.
-- Dataclasses: `slots=True`; frozen for immutable value objects.
 - Domain modules, not generic buckets — no `helpers/`, `utils/`, or `processing/`.
 - One clear API; no compatibility shims, legacy aliases, or duplicate import paths unless the user asks for backward compatibility.
 - `snake_case` everywhere; no `CamelCase` except string literals matching external formats.
-- Type hints on public API; internals may be looser.
 - Docstrings: factual — what it does, returns, assumes. Not essays.
-
-## Architecture
-
-- Staged workflow, but no workflow framework.
-- `Pipeline` is a convenience composition; every stage remains directly callable.
-- Calculation task names are extensible; built-in generators validate what they support.
-- Generate may return multiple linked input files for one calculation intent.
 
 ## Validation
 
 - Validate operator input, external metadata, rendered syntax, and filesystem writes.
 - Trust records produced by internal stages; do not test deliberately corrupted internals.
 - Let errors propagate; no catch-all fallbacks or failure-state machinery.
-- Alternative scientific behavior (e.g. heuristic k-points) must be selected explicitly.
 
 ## Tests
 
@@ -47,8 +36,6 @@ Run `pre-commit` before committing. CI (on `main` and PRs) runs Ruff, pytest wit
 
 ## What doesn't belong here
 
-- User auth, sessions, frontend, WebSocket, pod management — application layer.
-- AiiDA workflows, CalcJobs, execution/scheduler scripts — Runner.
 - Jupyter notebooks — `notebooks/` (gitignored); convert insights into tests.
 - Large ML model files or pseudo libraries — `local_data/` (gitignored).
 

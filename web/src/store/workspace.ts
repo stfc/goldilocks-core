@@ -15,9 +15,12 @@ import type {
   GeneratedInputSet,
   Hints,
   Intent,
+  RecordName,
+  RecordSet,
   Recommendation,
   StructureDocument,
   StructureSource,
+  TaskCatalogue,
 } from '../client/types';
 
 /** Honest operation state. `running` reflects an in-flight request only; it
@@ -56,12 +59,27 @@ export interface WorkspaceState {
   generationFailure: CoreFailure | null;
   generatedStale: boolean;
 
+  // Task catalogue (backend-owned graph topology)
+  catalogueStatus: OpStatus;
+  catalogue: TaskCatalogue | null;
+  catalogueFailure: CoreFailure | null;
+
+  // Graph view: explicit output-record selection and execution
+  selectedRecordIds: RecordName[];
+  graphStatus: OpStatus;
+  graphRecords: RecordSet | null;
+  graphFailure: CoreFailure | null;
+  graphStale: boolean;
+
   // Actions
   loadStructure(source: StructureSource): Promise<void>;
   recommend(): Promise<void>;
   generate(): Promise<void>;
   setIntent(patch: Partial<Intent>): void;
   setHints(patch: Partial<Hints>): void;
+  loadTaskCatalogue(): Promise<void>;
+  setSelectedRecords(ids: RecordName[]): void;
+  runSelectedRecords(): Promise<void>;
 }
 
 /** The store as exposed to the app: state access, selectors, and the narrow
@@ -109,6 +127,16 @@ export function createWorkspaceStore(client: CoreClient): WorkspaceStore {
     generationFailure: null,
     generatedStale: false,
 
+    catalogueStatus: 'idle',
+    catalogue: null,
+    catalogueFailure: null,
+
+    selectedRecordIds: [],
+    graphStatus: 'idle',
+    graphRecords: null,
+    graphFailure: null,
+    graphStale: false,
+
     loadStructure: async (source) => {
       // A running load keeps the previous (structure, source, records,
       // generated) pair untouched until it succeeds; a failure must never
@@ -133,6 +161,12 @@ export function createWorkspaceStore(client: CoreClient): WorkspaceStore {
           generationStatus: 'idle',
           generationFailure: null,
           generatedStale: false,
+          // Graph results describe the old structure and cannot apply. The
+          // record selection is a query preference and survives the change.
+          graphRecords: null,
+          graphStatus: 'idle',
+          graphFailure: null,
+          graphStale: false,
         });
       } catch (error) {
         set({ structureStatus: 'failed', structureFailure: toCoreFailure(error) });
@@ -145,6 +179,7 @@ export function createWorkspaceStore(client: CoreClient): WorkspaceStore {
         intent: { ...state.intent, ...patch },
         recordsStale: state.records !== null,
         generatedStale: state.generated !== null,
+        graphStale: state.graphRecords !== null,
       }));
     },
 
@@ -154,6 +189,7 @@ export function createWorkspaceStore(client: CoreClient): WorkspaceStore {
         hints: { ...state.hints, ...patch },
         recordsStale: state.records !== null,
         generatedStale: state.generated !== null,
+        graphStale: state.graphRecords !== null,
       }));
     },
 
@@ -201,6 +237,49 @@ export function createWorkspaceStore(client: CoreClient): WorkspaceStore {
         });
       } catch (error) {
         set({ generationStatus: 'failed', generationFailure: toCoreFailure(error) });
+      }
+    },
+
+    loadTaskCatalogue: async () => {
+      set({ catalogueStatus: 'running', catalogueFailure: null });
+      try {
+        const catalogue = await client.describeTasks();
+        set({ catalogue, catalogueStatus: 'complete', catalogueFailure: null });
+      } catch (error) {
+        set({ catalogueStatus: 'failed', catalogueFailure: toCoreFailure(error) });
+      }
+    },
+
+    setSelectedRecords: (ids) => {
+      set((state) => ({
+        selectedRecordIds: [...ids],
+        // A different selection means prior results describe a different query.
+        graphStale: state.graphRecords !== null,
+      }));
+    },
+
+    runSelectedRecords: async () => {
+      const state = get();
+      const source = state.source;
+      if (!state.structure || !source) return;
+      if (state.selectedRecordIds.length === 0) return;
+      const revisionAtStart = requestRevision;
+      set({ graphStatus: 'running', graphFailure: null });
+      try {
+        const result = await client.compute({
+          structure: { content: source.content, format: source.format },
+          outputs: state.selectedRecordIds,
+          intent: state.intent,
+          hints: state.hints,
+        });
+        set({
+          graphRecords: result,
+          graphStatus: 'complete',
+          graphFailure: null,
+          graphStale: requestRevision !== revisionAtStart,
+        });
+      } catch (error) {
+        set({ graphStatus: 'failed', graphFailure: toCoreFailure(error) });
       }
     },
   }));

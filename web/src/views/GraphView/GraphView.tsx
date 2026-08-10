@@ -1,45 +1,456 @@
-import { Card, Stack, Text, Title } from '@mantine/core';
+import {
+  Badge,
+  Box,
+  Button,
+  Card,
+  Checkbox,
+  Group,
+  Loader,
+  SimpleGrid,
+  Stack,
+  Text,
+  Title,
+} from '@mantine/core';
+import { IconPlayerPlay } from '@tabler/icons-react';
+import {
+  Background,
+  Controls,
+  MiniMap,
+  ReactFlow,
+  ReactFlowProvider,
+  useEdgesState,
+  useNodesState,
+  type Edge,
+  type Node,
+  type NodeProps,
+} from '@xyflow/react';
+import { Component, useEffect, useMemo, type ReactNode } from 'react';
+import type { RecordName, TaskCatalogue } from '../../client/types';
+import { ErrorReport } from '../../errors/ErrorReport';
+import { RawRecord } from '../../records/RawRecord';
+import { presentRecordSet } from '../../records/presenters';
+import { useWorkspace } from '../../store/WorkspaceContext';
+import { buildGraphPresentation, type GraphEdge, type GraphNode } from './graphModel';
 
-function NetworkGlyph() {
+/**
+ * Contains a rendering failure (e.g. the canvas library) within Graph view.
+ * The Guided view is a separate mount in the shell, so a crash here never
+ * disables it. Retrying remounts the canvas without discarding workspace state.
+ */
+class CanvasBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null; attempt: number }
+> {
+  state = { error: null as Error | null, attempt: 0 };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error, attempt: 0 };
+  }
+
+  render() {
+    if (this.state.error !== null) {
+      return (
+        <Box style={{ height: 520 }}>
+          <Card withBorder radius="md">
+            <Stack gap="sm">
+              <Title order={4}>Graph canvas unavailable</Title>
+              <Text size="sm">
+                The graph could not be rendered. Your structure, selection, and results
+                remain intact; Guided view is unaffected.
+              </Text>
+              <Box>
+                <Button
+                  variant="light"
+                  onClick={() =>
+                    this.setState((s) => ({ error: null, attempt: s.attempt + 1 }))
+                  }
+                >
+                  Retry canvas
+                </Button>
+              </Box>
+            </Stack>
+          </Card>
+        </Box>
+      );
+    }
+    return <div key={this.state.attempt}>{this.props.children}</div>;
+  }
+}
+
+const nodeTypes = { record: RecordNode };
+
+type FlowNode = Node<{ label: string; description: string; kind: string }>;
+type FlowEdge = Edge;
+
+function toFlowNodes(graphNodes: GraphNode[]): FlowNode[] {
+  return graphNodes.map((node) => ({
+    id: node.id,
+    type: 'record',
+    position: { x: node.x, y: node.y },
+    data: {
+      label: node.name,
+      description: node.description,
+      kind: node.kind,
+    },
+  }));
+}
+
+function toFlowEdges(graphEdges: GraphEdge[]): FlowEdge[] {
+  return graphEdges.map((edge) => ({
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    animated: false,
+  }));
+}
+
+function RecordNode({ data }: NodeProps<FlowNode>) {
+  const border =
+    data.kind === 'selected'
+      ? '2px solid var(--mantine-color-gold-6)'
+      : data.kind === 'required'
+        ? '2px solid var(--mantine-color-ink-4)'
+        : '1px solid var(--mantine-color-stone-3)';
   return (
-    <svg
-      width="44"
-      height="44"
-      viewBox="0 0 44 44"
-      aria-hidden="true"
-      focusable="false"
+    <Box
+      style={{
+        border,
+        borderRadius: 'var(--mantine-radius-md)',
+        background: 'var(--mantine-color-stone-0)',
+        padding: '10px 14px',
+        width: 180,
+        boxShadow: 'var(--mantine-shadow-xs)',
+        opacity: data.kind === 'unused' ? 0.72 : 1,
+      }}
     >
-      <g fill="none" stroke="var(--mantine-color-gold-6)" strokeWidth="2">
-        <circle cx="12" cy="12" r="4" />
-        <circle cx="32" cy="12" r="4" />
-        <circle cx="22" cy="32" r="4" />
-        <line x1="15" y1="14" x2="29" y2="29" />
-        <line x1="29" y1="14" x2="25" y2="29" />
-        <line x1="15" y1="14" x2="19" y2="29" />
-      </g>
-    </svg>
+      <Text size="sm" fw={600} lineClamp={1}>
+        {data.label}
+      </Text>
+      <Text size="xs" c="dimmed" lineClamp={2}>
+        {data.description}
+      </Text>
+    </Box>
   );
 }
 
-/**
- * Graph view placeholder for the foundation slice.
- *
- * The full backend-driven Graph view (automatic layout, selected-vs-required
- * records, record execution) lands in a later slice. This placeholder keeps the
- * view switch honest and the shell complete.
- */
-export function GraphView() {
+function GraphCanvas({ catalogue }: { catalogue: TaskCatalogue }) {
+  const task = catalogue.tasks[0];
+  const selectedIds = useWorkspace((s) => s.selectedRecordIds);
+  const presentation = useMemo(
+    () => buildGraphPresentation(task, selectedIds),
+    [task, selectedIds],
+  );
+
+  const nodes = useMemo(() => toFlowNodes(presentation.nodes), [presentation]);
+  const edges = useMemo(() => toFlowEdges(presentation.edges), [presentation]);
+
+  return (
+    <Box
+      style={{
+        height: 520,
+        border: '1px solid var(--mantine-color-stone-3)',
+        borderRadius: 'var(--mantine-radius-md)',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Remount on node-count change so fitView re-runs after the catalogue loads. */}
+      <ReactFlowProvider>
+        <CanvasInner key={nodes.length} nodes={nodes} edges={edges} />
+      </ReactFlowProvider>
+    </Box>
+  );
+}
+
+function CanvasInner({ nodes, edges }: { nodes: FlowNode[]; edges: FlowEdge[] }) {
+  const [rfNodes, setNodes, onNodesChange] = useNodesState(nodes);
+  const [rfEdges, setEdges, onEdgesChange] = useEdgesState(edges);
+
+  useEffect(() => {
+    setNodes(nodes);
+    setEdges(edges);
+  }, [nodes, edges, setNodes, setEdges]);
+
+  return (
+    <ReactFlow
+      nodes={rfNodes}
+      edges={rfEdges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      nodeTypes={nodeTypes}
+      nodesConnectable={false}
+      edgesReconnectable={false}
+      deleteKeyCode={null}
+      elementsSelectable
+      nodesDraggable
+      fitView
+      fitViewOptions={{ padding: 0.2 }}
+      minZoom={0.2}
+      maxZoom={2}
+      proOptions={{ hideAttribution: true }}
+    >
+      <Background />
+      <Controls showInteractive={false} />
+      <MiniMap pannable zoomable />
+    </ReactFlow>
+  );
+}
+
+function recordName(task: TaskCatalogue, id: string): string {
+  const stage = task.tasks[0].stages.find((s) => s.output_record_id === id);
+  return stage?.name ?? id;
+}
+
+/** Keyboard-accessible record selection toggles plus the run action. */
+function SelectionPanel({ catalogue }: { catalogue: TaskCatalogue }) {
+  const task = catalogue.tasks[0];
+  const selectedRecordIds = useWorkspace((s) => s.selectedRecordIds);
+  const setSelectedRecords = useWorkspace((s) => s.setSelectedRecords);
+  const runSelectedRecords = useWorkspace((s) => s.runSelectedRecords);
+  const graphStatus = useWorkspace((s) => s.graphStatus);
+  const structure = useWorkspace((s) => s.structure);
+
+  const toggle = (id: RecordName) => {
+    setSelectedRecords(
+      selectedRecordIds.includes(id)
+        ? selectedRecordIds.filter((r) => r !== id)
+        : [...selectedRecordIds, id],
+    );
+  };
+
+  const running = graphStatus === 'running';
+  const canRun = structure !== null && selectedRecordIds.length > 0 && !running;
+
   return (
     <Card withBorder radius="md">
-      <Stack align="center" justify="center" gap="sm" py="xl" ta="center">
-        <NetworkGlyph />
-        <Title order={3}>Task Graph</Title>
-        <Text size="sm" c="dimmed" maw={420}>
-          The Graph view inspects the backend-owned task topology, selects the records
-          you want computed, and distinguishes them from required dependency stages. It
-          arrives in a later slice; the Guided view is fully wired today.
-        </Text>
+      <Stack gap="md">
+        <div>
+          <Title order={4}>Selected records</Title>
+          <Text size="xs" c="dimmed">
+            Choose the output records to compute. Required dependency stages are pulled
+            in automatically; they are shown on the graph and are never editable.
+          </Text>
+        </div>
+
+        <Stack gap={4}>
+          {task.selectable_record_ids.map((id) => (
+            <Checkbox
+              key={id}
+              label={recordName(catalogue, id)}
+              checked={selectedRecordIds.includes(id as RecordName)}
+              onChange={() => toggle(id as RecordName)}
+              aria-label={`Compute record ${recordName(catalogue, id)}`}
+            />
+          ))}
+        </Stack>
+
+        {structure === null && (
+          <Text size="xs" c="dimmed">
+            Load a structure first (in Guided view) to run selected records.
+          </Text>
+        )}
+
+        <Button
+          onClick={() => void runSelectedRecords()}
+          leftSection={<IconPlayerPlay size={16} />}
+          loading={running}
+          loaderProps={{ type: 'dots' }}
+          disabled={!canRun}
+        >
+          Run selected records
+        </Button>
       </Stack>
     </Card>
+  );
+}
+
+/** Presented values and raw disclosure for the executed records. */
+function GraphResults() {
+  const graphRecords = useWorkspace((s) => s.graphRecords);
+  const graphStatus = useWorkspace((s) => s.graphStatus);
+  const graphFailure = useWorkspace((s) => s.graphFailure);
+  const graphStale = useWorkspace((s) => s.graphStale);
+
+  if (graphStatus === 'running' && graphRecords === null) {
+    return (
+      <Card withBorder radius="md">
+        <Group justify="center" gap="sm" py="lg">
+          <Loader size="sm" />
+          <Text size="sm" c="dimmed">
+            Running selected records…
+          </Text>
+        </Group>
+      </Card>
+    );
+  }
+
+  if (graphStatus === 'failed' && graphRecords === null) {
+    return (
+      <Card withBorder radius="md">
+        <Stack gap="sm">
+          <Title order={3}>Record results</Title>
+          {graphFailure !== null && <ErrorReport failure={graphFailure} />}
+          <Text size="sm" c="dimmed">
+            The selected records did not complete. Your structure, Guided
+            recommendation, and prior results remain available — adjust the selection
+            and retry.
+          </Text>
+        </Stack>
+      </Card>
+    );
+  }
+
+  if (graphRecords === null) {
+    return null;
+  }
+
+  const sections = presentRecordSet(graphRecords);
+
+  return (
+    <Card withBorder radius="md">
+      <Stack gap="md">
+        <Group justify="space-between" align="baseline">
+          <Group gap="sm" align="baseline">
+            <Title order={3}>Record results</Title>
+            {graphStale && (
+              <Badge variant="light" color="ink">
+                Stale
+              </Badge>
+            )}
+          </Group>
+        </Group>
+
+        {sections.length === 0 ? (
+          <Text size="sm" c="dimmed">
+            No records returned for the current selection.
+          </Text>
+        ) : (
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            {sections.map((section) => (
+              <Card
+                key={section.id}
+                withBorder
+                radius="md"
+                bg="var(--mantine-color-stone-0)"
+              >
+                <Stack gap="xs">
+                  <Title order={5}>{section.title}</Title>
+                  {section.values.map((value) => (
+                    <Group key={value.label} justify="space-between" gap="md">
+                      <Text size="sm" c="dimmed">
+                        {value.label}
+                      </Text>
+                      <Text size="sm" fw={600} ta="right" ff="monospace">
+                        {value.value}
+                        {value.unit ? ` ${value.unit}` : ''}
+                      </Text>
+                    </Group>
+                  ))}
+                  {section.provenance && (
+                    <Text size="xs" c="dimmed">
+                      {section.provenance.reason}
+                    </Text>
+                  )}
+                </Stack>
+              </Card>
+            ))}
+          </SimpleGrid>
+        )}
+
+        <RawRecord data={graphRecords} label="Raw records" id="graph-results" />
+      </Stack>
+    </Card>
+  );
+}
+
+/** Backend-driven Graph view: inspect immutable topology and execute records. */
+export function GraphView() {
+  const catalogue = useWorkspace((s) => s.catalogue);
+  const catalogueStatus = useWorkspace((s) => s.catalogueStatus);
+  const catalogueFailure = useWorkspace((s) => s.catalogueFailure);
+  const loadTaskCatalogue = useWorkspace((s) => s.loadTaskCatalogue);
+
+  useEffect(() => {
+    if (catalogueStatus === 'idle') void loadTaskCatalogue();
+  }, [catalogueStatus, loadTaskCatalogue]);
+
+  return (
+    <Stack gap="lg" maw={1200} mx="auto" w="100%">
+      <Card withBorder radius="md">
+        <Title order={3}>Task Graph</Title>
+        {catalogue?.tasks[0] && (
+          <Text size="sm" c="dimmed">
+            {catalogue.tasks[0].name} — {catalogue.tasks[0].description}
+          </Text>
+        )}
+        <Group gap="lg" mt="sm">
+          <Group gap={6}>
+            <Badge variant="light" color="gold">
+              Selected output
+            </Badge>
+            <Badge variant="light" color="ink">
+              Required dependency
+            </Badge>
+            <Badge variant="light" color="stone">
+              Available stage
+            </Badge>
+          </Group>
+          <Text size="xs" c="dimmed">
+            Topology is backend-owned and immutable. You may pan, zoom, fit, select, and
+            reposition nodes; adding, deleting, or reconnecting them is disabled.
+          </Text>
+        </Group>
+      </Card>
+
+      {catalogueStatus === 'failed' && catalogue === null && (
+        <Card withBorder radius="md">
+          <Stack gap="sm">
+            <Title order={3}>Task graph unavailable</Title>
+            {catalogueFailure !== null && <ErrorReport failure={catalogueFailure} />}
+            <Text size="sm" c="dimmed">
+              The task topology could not be loaded. Guided view is unaffected.
+            </Text>
+            <Box>
+              <Button onClick={() => void loadTaskCatalogue()} variant="light">
+                Retry
+              </Button>
+            </Box>
+          </Stack>
+        </Card>
+      )}
+
+      {catalogueStatus === 'running' && catalogue === null && (
+        <Card withBorder radius="md">
+          <Group justify="center" gap="sm" py="lg">
+            <Loader size="sm" />
+            <Text size="sm" c="dimmed">
+              Loading task topology…
+            </Text>
+          </Group>
+        </Card>
+      )}
+
+      {catalogue !== null && (
+        <>
+          {catalogue.tasks.length === 0 ? (
+            <Card withBorder radius="md">
+              <Text size="sm" c="dimmed">
+                No Core tasks are registered on this server.
+              </Text>
+            </Card>
+          ) : (
+            <SimpleGrid cols={{ base: 1, lg: 3 }} spacing="md">
+              <Box style={{ gridColumn: 'span 2' }}>
+                <CanvasBoundary>
+                  <GraphCanvas catalogue={catalogue} />
+                </CanvasBoundary>
+              </Box>
+              <SelectionPanel catalogue={catalogue} />
+            </SimpleGrid>
+          )}
+
+          <GraphResults />
+        </>
+      )}
+    </Stack>
   );
 }

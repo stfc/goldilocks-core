@@ -5,6 +5,7 @@ import {
   presentMagnetism,
   presentPseudopotentials,
   presentRecommendation,
+  presentRecordSet,
   presentSmearing,
   presentSpinOrbit,
   presentVdw,
@@ -96,12 +97,16 @@ describe('presentRecommendation', () => {
   });
 
   it('exposes every advice category as a reusable presented section', () => {
-    expect(presentSmearing(siRecommendation).id).toBe('smearing');
-    expect(presentMagnetism(siRecommendation).id).toBe('magnetism');
-    expect(presentSpinOrbit(siRecommendation).id).toBe('spin_orbit');
-    expect(presentPseudopotentials(siRecommendation).id).toBe('pseudopotentials');
-    expect(presentConvergence(siRecommendation).id).toBe('convergence');
-    expect(presentVdw(siRecommendation).id).toBe('vdw');
+    expect(presentSmearing(siRecommendation.advice.smearing).id).toBe('smearing');
+    expect(presentMagnetism(siRecommendation.advice.magnetism).id).toBe('magnetism');
+    expect(presentSpinOrbit(siRecommendation.advice.spin_orbit).id).toBe('spin_orbit');
+    expect(presentPseudopotentials(siRecommendation.advice.pseudopotentials).id).toBe(
+      'pseudopotentials',
+    );
+    expect(presentConvergence(siRecommendation.advice.convergence).id).toBe(
+      'convergence',
+    );
+    expect(presentVdw(siRecommendation.advice.vdw).id).toBe('vdw');
   });
 
   it('exposes a serializable raw value on every presented section', () => {
@@ -114,11 +119,13 @@ describe('presentRecommendation', () => {
   });
 
   it('keeps per-category provenance on reusable advice sections', () => {
-    expect(presentVdw(siRecommendation).provenance?.source).toBe('goldilocks:vdw');
-    expect(presentSmearing(siRecommendation).provenance?.source).toBe(
+    expect(presentVdw(siRecommendation.advice.vdw).provenance?.source).toBe(
+      'goldilocks:vdw',
+    );
+    expect(presentSmearing(siRecommendation.advice.smearing).provenance?.source).toBe(
       'goldilocks:smearing',
     );
-    expect(presentMagnetism(siRecommendation).provenance?.source).toBe(
+    expect(presentMagnetism(siRecommendation.advice.magnetism).provenance?.source).toBe(
       'goldilocks:magnetism',
     );
   });
@@ -138,14 +145,14 @@ describe('presentRecommendation', () => {
         },
       },
     };
-    const dispersion = presentVdw(withVdw).values.find(
+    const dispersion = presentVdw(withVdw.advice.vdw).values.find(
       (value) => value.label === 'Dispersion correction',
     );
     expect(dispersion?.value).toBe('d3bj');
   });
 
   it('composes every advice category into a single Advice section for Guided view', () => {
-    const advice = presentAdvice(siRecommendation);
+    const advice = presentAdvice(siRecommendation.advice);
     const labels = advice.values.map((value) => value.label);
     expect(advice.id).toBe('advice');
     expect(labels).toEqual(
@@ -158,5 +165,36 @@ describe('presentRecommendation', () => {
         'Dispersion correction',
       ]),
     );
+  });
+});
+
+describe('presentRecordSet', () => {
+  it('presents only the records present in a partial compute result', () => {
+    const sections = presentRecordSet({
+      analysis: siRecommendation.analysis,
+      k_points: siRecommendation.k_points,
+    });
+    const ids = sections.map((section) => section.id);
+    expect(ids).toEqual(['analysis', 'k_points']);
+  });
+
+  it('reuses the same values as the Guided recommendation presentation', () => {
+    const setSections = presentRecordSet({ advice: siRecommendation.advice });
+    const recSections = presentRecommendation(siRecommendation).sections;
+    const recAdvice = recSections.find((section) => section.id === 'advice');
+    expect(setSections[0].values).toEqual(recAdvice?.values);
+    expect(setSections[0].provenance).toEqual(recAdvice?.provenance);
+  });
+
+  it('presents generated input files with their paths', () => {
+    const sections = presentRecordSet({
+      generated_files: [{ path: 'inputs/qe.in', content: '', role: 'input' }],
+    });
+    expect(sections[0].id).toBe('generated_files');
+    expect(sections[0].values[0].value).toBe('inputs/qe.in');
+  });
+
+  it('returns no sections for an empty record set', () => {
+    expect(presentRecordSet({})).toEqual([]);
   });
 });

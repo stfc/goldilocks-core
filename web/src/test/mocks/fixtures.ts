@@ -2,7 +2,12 @@
 // recommendation mirror what the real backend produces for the bundled
 // silicon CIF, so tracer tests exercise realistic shapes through the seams.
 
-import type { Recommendation, StructureDocument } from '../../client/types';
+import type {
+  Recommendation,
+  StructureDocument,
+  TaskCatalogue,
+  TaskGraphDescription,
+} from '../../client/types';
 
 export const siCif = `# generated using pymatgen
 data_Si
@@ -110,6 +115,86 @@ export const siStructureDocument: StructureDocument = {
   ],
   charge: 0,
   source: { format: 'cif', source: 'inline' },
+};
+
+export const siTaskGraph: TaskGraphDescription = {
+  id: 'scf_single_point',
+  revision: '1',
+  name: 'Single-point SCF',
+  description: 'Recommend and generate inputs for a single-point SCF calculation.',
+  stages: [
+    {
+      id: 'load_structure',
+      name: 'Load structure',
+      description: 'Parse and validate the source into a canonical Structure Document.',
+      input_record_ids: [],
+      output_record_id: 'structure',
+    },
+    {
+      id: 'analyze',
+      name: 'Analyze',
+      description: 'Report structure facts without parameter decisions.',
+      input_record_ids: ['structure'],
+      output_record_id: 'analysis',
+    },
+    {
+      id: 'resolve_k_points',
+      name: 'Resolve k-points',
+      description: 'Choose the k-point grid from operator hints or a model.',
+      input_record_ids: ['structure'],
+      output_record_id: 'k_points',
+    },
+    {
+      id: 'advise',
+      name: 'Advise',
+      description: 'Recommend provenance-backed calculation parameters.',
+      input_record_ids: ['analysis'],
+      output_record_id: 'advice',
+    },
+    {
+      id: 'select_pseudopotentials',
+      name: 'Select pseudopotentials',
+      description: 'Select a concrete pseudopotential for each element.',
+      input_record_ids: ['structure', 'advice'],
+      output_record_id: 'selection',
+    },
+    {
+      id: 'generate_inputs',
+      name: 'Generate inputs',
+      description: 'Produce target-code input files.',
+      input_record_ids: ['structure', 'advice', 'selection', 'k_points'],
+      output_record_id: 'generated_files',
+    },
+  ],
+  presets: [
+    {
+      id: 'recommend',
+      name: 'recommend',
+      output_record_ids: ['analysis', 'advice', 'k_points', 'selection'],
+    },
+    {
+      id: 'generate',
+      name: 'generate',
+      output_record_ids: [
+        'analysis',
+        'advice',
+        'k_points',
+        'selection',
+        'generated_files',
+      ],
+    },
+  ],
+  selectable_record_ids: [
+    'analysis',
+    'advice',
+    'k_points',
+    'selection',
+    'generated_files',
+  ],
+};
+
+export const siTaskCatalogue: TaskCatalogue = {
+  tasks: [siTaskGraph],
 };
 
 export const siRecommendation: Recommendation = {

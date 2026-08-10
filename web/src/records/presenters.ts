@@ -3,12 +3,25 @@
 // Turns Core recommendation records into a stable, renderable shape that Guided
 // and Graph views both consume. Presenters are the single place that decides
 // what a scientific value means and how it is worded; views only lay out the
-// returned sections. Each record type has its own reusable presenter so Graph
-// view can present a single record without duplicating value formatting, and
-// every section carries the raw record so advanced "raw JSON" disclosure needs
-// no second source of truth.
+// returned sections. Each record type has its own reusable presenter, so both
+// Guided's full recommendation and Graph's per-record `presentRecordSet` reuse
+// the same value formatting and provenance, and every section carries the raw
+// record so advanced "raw JSON" disclosure needs no second source of truth.
 
-import type { Recommendation } from '../client/types';
+import type {
+  Analysis,
+  Advice,
+  ConvergenceAdvice,
+  KPointSelection,
+  MagnetismAdvice,
+  PseudopotentialAdvice,
+  Recommendation,
+  RecordSet,
+  Selection,
+  SmearingAdvice,
+  SpinOrbitAdvice,
+  VdwAdvice,
+} from '../client/types';
 
 export interface PresentedValue {
   label: string;
@@ -80,8 +93,7 @@ function asSection(
 }
 
 /** The Analysis record. */
-export function presentAnalysis(rec: Recommendation): PresentedSection {
-  const a = rec.analysis;
+export function presentAnalysis(a: Analysis): PresentedSection {
   return asSection(
     'analysis',
     'Analysis',
@@ -102,8 +114,7 @@ export function presentAnalysis(rec: Recommendation): PresentedSection {
 }
 
 /** Smearing broadening advice. */
-export function presentSmearing(rec: Recommendation): PresentedSection {
-  const s = rec.advice.smearing;
+export function presentSmearing(s: SmearingAdvice): PresentedSection {
   return asSection(
     'smearing',
     'Smearing',
@@ -123,8 +134,7 @@ export function presentSmearing(rec: Recommendation): PresentedSection {
 }
 
 /** Magnetism advice. */
-export function presentMagnetism(rec: Recommendation): PresentedSection {
-  const m = rec.advice.magnetism;
+export function presentMagnetism(m: MagnetismAdvice): PresentedSection {
   return asSection(
     'magnetism',
     'Magnetism',
@@ -137,8 +147,7 @@ export function presentMagnetism(rec: Recommendation): PresentedSection {
 }
 
 /** Spin–orbit coupling advice. */
-export function presentSpinOrbit(rec: Recommendation): PresentedSection {
-  const so = rec.advice.spin_orbit;
+export function presentSpinOrbit(so: SpinOrbitAdvice): PresentedSection {
   return asSection(
     'spin_orbit',
     'Spin–orbit',
@@ -154,8 +163,7 @@ export function presentSpinOrbit(rec: Recommendation): PresentedSection {
 }
 
 /** Pseudopotential family advice. */
-export function presentPseudopotentials(rec: Recommendation): PresentedSection {
-  const p = rec.advice.pseudopotentials;
+export function presentPseudopotentials(p: PseudopotentialAdvice): PresentedSection {
   return asSection(
     'pseudopotentials',
     'Pseudopotentials',
@@ -170,8 +178,7 @@ export function presentPseudopotentials(rec: Recommendation): PresentedSection {
 }
 
 /** SCF convergence advice. */
-export function presentConvergence(rec: Recommendation): PresentedSection {
-  const c = rec.advice.convergence;
+export function presentConvergence(c: ConvergenceAdvice): PresentedSection {
   return asSection(
     'convergence',
     'Convergence',
@@ -185,8 +192,7 @@ export function presentConvergence(rec: Recommendation): PresentedSection {
 }
 
 /** Dispersion-correction (vdW) advice. */
-export function presentVdw(rec: Recommendation): PresentedSection {
-  const v = rec.advice.vdw;
+export function presentVdw(v: VdwAdvice): PresentedSection {
   return asSection(
     'vdw',
     'Dispersion',
@@ -201,14 +207,14 @@ export function presentVdw(rec: Recommendation): PresentedSection {
 }
 
 /** Compose every advice category into the single Advice section Guided shows. */
-export function presentAdvice(rec: Recommendation): PresentedSection {
+export function presentAdvice(advice: Advice): PresentedSection {
   const categories = [
-    presentSmearing(rec),
-    presentMagnetism(rec),
-    presentSpinOrbit(rec),
-    presentPseudopotentials(rec),
-    presentConvergence(rec),
-    presentVdw(rec),
+    presentSmearing(advice.smearing),
+    presentMagnetism(advice.magnetism),
+    presentSpinOrbit(advice.spin_orbit),
+    presentPseudopotentials(advice.pseudopotentials),
+    presentConvergence(advice.convergence),
+    presentVdw(advice.vdw),
   ];
   return asSection(
     'advice',
@@ -216,14 +222,13 @@ export function presentAdvice(rec: Recommendation): PresentedSection {
     categories.flatMap((section) => section.values),
     {
       provenance: categories.find((section) => section.provenance)?.provenance,
-      raw: rec.advice,
+      raw: advice,
     },
   );
 }
 
 /** The recommended k-point mesh. */
-export function presentKPoints(rec: Recommendation): PresentedSection {
-  const k = rec.k_points;
+export function presentKPoints(k: KPointSelection): PresentedSection {
   return asSection(
     'k_points',
     'K-points',
@@ -237,9 +242,9 @@ export function presentKPoints(rec: Recommendation): PresentedSection {
 }
 
 /** Pseudopotential selection and cutoffs. */
-export function presentSelection(rec: Recommendation): PresentedSection {
+export function presentSelection(sel: Selection): PresentedSection {
   const values: PresentedValue[] = [];
-  for (const p of rec.selection.pseudopotentials) {
+  for (const p of sel.pseudopotentials) {
     values.push({ label: `${p.element} pseudo`, value: p.filename ?? '—' });
     if (p.ecutwfc_ry != null) {
       values.push({
@@ -260,18 +265,18 @@ export function presentSelection(rec: Recommendation): PresentedSection {
     values.push({ label: 'Pseudopotentials', value: '—' });
   }
   return asSection('selection', 'Selection', values, {
-    warnings: rec.selection.warnings,
-    raw: rec.selection,
+    warnings: sel.warnings,
+    raw: sel,
   });
 }
 
 /** The full guided review, composed from reusable record presenters. */
 export function presentRecommendation(rec: Recommendation): PresentedRecommendation {
   const sections: PresentedSection[] = [
-    presentAnalysis(rec),
-    presentAdvice(rec),
-    presentKPoints(rec),
-    presentSelection(rec),
+    presentAnalysis(rec.analysis),
+    presentAdvice(rec.advice),
+    presentKPoints(rec.k_points),
+    presentSelection(rec.selection),
   ];
 
   const warnings = [
@@ -287,4 +292,31 @@ export function presentRecommendation(rec: Recommendation): PresentedRecommendat
     sections,
     warnings,
   };
+}
+
+/**
+ * Present the records returned by a `compute` query. Only the records actually
+ * present in the set are presented, reusing the same per-record presenters as
+ * the Guided view so both views render identical scientific values.
+ */
+export function presentRecordSet(records: RecordSet): PresentedSection[] {
+  const sections: PresentedSection[] = [];
+  if (records.analysis) sections.push(presentAnalysis(records.analysis));
+  if (records.advice) sections.push(presentAdvice(records.advice));
+  if (records.k_points) sections.push(presentKPoints(records.k_points));
+  if (records.selection) sections.push(presentSelection(records.selection));
+  if (records.generated_files) {
+    sections.push(
+      asSection(
+        'generated_files',
+        'Generated inputs',
+        records.generated_files.map((file) => ({
+          label: file.role,
+          value: file.path,
+        })),
+        { raw: records.generated_files },
+      ),
+    );
+  }
+  return sections;
 }

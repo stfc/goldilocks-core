@@ -3,7 +3,7 @@ import math
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.contracts import (
-    CalculationHints,
+    KmeshHints,
     KPointSelection,
     Provenance,
 )
@@ -30,7 +30,7 @@ def test_resolve_kpoints_prefers_explicit_grid_hint() -> None:
 
     selection = resolve_kpoints(
         structure,
-        CalculationHints(k_grid=(2, 3, 4), k_spacing=0.25),
+        KmeshHints(k_grid=(2, 3, 4), k_spacing=0.25),
         _fail_backend,
     )
 
@@ -54,7 +54,7 @@ def test_resolve_kpoints_converts_spacing_hint() -> None:
 
     selection = resolve_kpoints(
         structure,
-        CalculationHints(k_spacing=0.25),
+        KmeshHints(k_spacing=0.25),
         _fail_backend,
     )
 
@@ -83,7 +83,7 @@ def test_resolve_kpoints_consults_backend_without_hints() -> None:
             provenance=Provenance(source="model", reason="stub"),
         )
 
-    selection = resolve_kpoints(structure, CalculationHints(), backend)
+    selection = resolve_kpoints(structure, KmeshHints(), backend)
 
     assert selection.grid == (5, 5, 5)
     assert selection.provenance.source == "model"

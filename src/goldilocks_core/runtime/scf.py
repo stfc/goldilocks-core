@@ -82,7 +82,7 @@ SCF_TASK = TaskSpec(
             output=KPointSelection,
             inputs=(Structure,),
             call=lambda structure, *, ctx: resolve_kpoints(
-                structure, ctx.hints, ctx.kmesh_backend
+                structure, ctx.hints.kmesh, ctx.kmesh_backend
             ),
         ),
         StageSpec(

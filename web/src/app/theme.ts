@@ -50,6 +50,8 @@ export const theme = createTheme({
   // focus rings) rather than used as a fill, because white text fails WCAG AA
   // on every warm gold shade.
   primaryColor: 'ink',
+  primaryShade: 7,
+  focusRing: 'auto',
   colors: {
     gold,
     ink,
@@ -76,6 +78,21 @@ export const theme = createTheme({
     Card: {
       defaultProps: {
         padding: 'lg',
+        radius: 'md',
+      },
+    },
+    Button: {
+      defaultProps: {
+        radius: 'md',
+      },
+    },
+    Badge: {
+      defaultProps: {
+        radius: 'sm',
+      },
+    },
+    Paper: {
+      defaultProps: {
         radius: 'md',
       },
     },

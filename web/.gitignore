@@ -3,5 +3,6 @@ dist
 coverage
 playwright-report
 test-results
+test-output
 *.tsbuildinfo
 node_modules/.tmp

@@ -13,8 +13,71 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--mantine-color-stone-0);
   color: var(--mantine-color-ink-9);
+  /* A restrained warm wash behind the stone base so the app reads as one
+     intentional canvas rather than a flat dashboard. Kept to a near-white
+     tint so it never competes with content or hurts contrast. */
+  background:
+    radial-gradient(
+      1200px 620px at 82% -12%,
+      var(--mantine-color-gold-0),
+      transparent 62%
+    ),
+    radial-gradient(
+      900px 520px at -12% 8%,
+      var(--mantine-color-stone-1),
+      transparent 58%
+    ),
+    var(--mantine-color-stone-0);
+  background-attachment: fixed;
+}
+
+/* Brand mark in the shell header is the page's single h1 but must read at a
+   brand, not a page-title, scale. */
+.brand-title {
+  font-size: var(--mantine-font-size-xl);
+  line-height: 1.1;
+}
+
+/* Purposeful, restrained motion for view changes: a short fade + rise when a
+   view mounts. The `prefers-reduced-motion` block below nulls it out. */
+.view-panel {
+  animation: view-in 200ms ease-out both;
+}
+
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* A gentle entrance for freshly mounted result content, used when a
+   recommendation or record set first appears. */
+.panel-enter {
+  animation: panel-in 260ms ease-out both;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Gold focus ring makes the keyboard path visually on-brand while staying
+   high-contrast (dark gold on the light canvas). */
+:where(:focus-visible) {
+  outline: 2px solid var(--mantine-color-gold-7);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

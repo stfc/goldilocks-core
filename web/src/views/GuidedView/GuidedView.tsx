@@ -1,6 +1,7 @@
 import {
   Alert,
   Badge,
+  Box,
   Button,
   Card,
   Collapse,
@@ -199,7 +200,7 @@ function RecommendationPanel() {
   const busy = recordsStatus === 'running';
 
   return (
-    <Card withBorder radius="md">
+    <Card withBorder radius="md" className="panel-enter">
       <Stack gap="md">
         <Group justify="space-between" align="baseline">
           <Group gap="sm" align="baseline">
@@ -573,7 +574,7 @@ function GenerationPanel() {
   };
 
   return (
-    <Card withBorder radius="md">
+    <Card withBorder radius="md" className="panel-enter">
       <Stack gap="md">
         <Group justify="space-between" align="baseline">
           <div>
@@ -621,6 +622,52 @@ function GenerationPanel() {
   );
 }
 
+const STEPS = [
+  { n: '1', label: 'Load a CIF or POSCAR structure' },
+  { n: '2', label: 'Review recommendations, provenance, and overrides' },
+  { n: '3', label: 'Download one reproducible input archive' },
+];
+
+/** Designed empty state: explains the three-step flow before a structure is
+ * loaded. Numbers + labels carry the order, never colour alone. */
+function GuidedWelcome() {
+  return (
+    <Card withBorder radius="md" p="xl" className="panel-enter">
+      <Stack gap="md">
+        <div>
+          <Title order={2}>Structure in, reviewed calculation input out</Title>
+          <Text size="sm" c="dimmed" mt={4}>
+            Goldilocks turns a crystal structure into a recommended, reproducible
+            Quantum ESPRESSO input — with the reasoning behind every value.
+          </Text>
+        </div>
+        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+          {STEPS.map((step) => (
+            <Group key={step.n} gap="sm" wrap="nowrap">
+              <Box
+                w={28}
+                h={28}
+                style={{
+                  borderRadius: 'var(--mantine-radius-round)',
+                  background: 'var(--mantine-color-gold-1)',
+                  color: 'var(--mantine-color-gold-9)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  fontWeight: 700,
+                  flexShrink: 0,
+                }}
+              >
+                {step.n}
+              </Box>
+              <Text size="sm">{step.label}</Text>
+            </Group>
+          ))}
+        </SimpleGrid>
+      </Stack>
+    </Card>
+  );
+}
+
 /** The primary structure → recommended-input workflow. */
 export function GuidedView() {
   const structure = useWorkspace((s) => s.structure);
@@ -631,6 +678,7 @@ export function GuidedView() {
 
   return (
     <Stack gap="lg" maw={960} mx="auto" w="100%">
+      {structure === null && <GuidedWelcome />}
       <StructureSourcePanel />
 
       {structure !== null && (

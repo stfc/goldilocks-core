@@ -11,8 +11,8 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { IconPlayerPlay } from '@tabler/icons-react';
-import { IconCheck, IconLink } from '@tabler/icons-react';
+import { useMediaQuery } from '@mantine/hooks';
+import { IconPlayerPlay, IconCheck, IconLink } from '@tabler/icons-react';
 import {
   Background,
   Controls,
@@ -31,7 +31,12 @@ import { ErrorReport } from '../../errors/ErrorReport';
 import { RawRecord } from '../../records/RawRecord';
 import { presentRecordSet } from '../../records/presenters';
 import { useWorkspace } from '../../store/WorkspaceContext';
-import { buildGraphPresentation, type GraphEdge, type GraphNode } from './graphModel';
+import {
+  buildGraphPresentation,
+  type GraphEdge,
+  type GraphNode,
+  type GraphNodeKind,
+} from './graphModel';
 
 /**
  * Contains a rendering failure (e.g. the canvas library) within Graph view.
@@ -178,6 +183,94 @@ function GraphCanvas({ catalogue }: { catalogue: TaskCatalogue }) {
       <ReactFlowProvider>
         <CanvasInner key={nodes.length} nodes={nodes} edges={edges} />
       </ReactFlowProvider>
+    </Box>
+  );
+}
+
+const KIND_ORDER: GraphNodeKind[] = ['selected', 'required', 'unused'];
+const KIND_TITLE: Record<GraphNodeKind, string> = {
+  selected: 'Selected output records',
+  required: 'Required dependency stages',
+  unused: 'Available stages',
+};
+
+/** Readable narrow-screen fallback for the Graph canvas.
+ *
+ * On small widths the pan/zoom canvas is cramped, so we render the same
+ * backend-owned topology as an accessible, grouped list instead. Selection
+ * still flows through the store, so toggles and execution behave identically;
+ * only the presentation medium changes. Never a broken canvas. */
+function StageListFallback({ catalogue }: { catalogue: TaskCatalogue }) {
+  const task = catalogue.tasks[0];
+  const selectedIds = useWorkspace((s) => s.selectedRecordIds);
+  const presentation = useMemo(
+    () => buildGraphPresentation(task, selectedIds),
+    [task, selectedIds],
+  );
+  const byOutput = useMemo(
+    () => new Map(task.stages.map((stage) => [stage.output_record_id, stage])),
+    [task],
+  );
+
+  const grouped = KIND_ORDER.map((kind) => ({
+    kind,
+    nodes: presentation.nodes
+      .filter((node) => node.kind === kind)
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  })).filter((group) => group.nodes.length > 0);
+
+  return (
+    <Box
+      style={{
+        border: '1px solid var(--mantine-color-stone-3)',
+        borderRadius: 'var(--mantine-radius-md)',
+        overflow: 'hidden',
+      }}
+      role="list"
+      aria-label="Task graph stages"
+    >
+      <Stack gap="md" p="md">
+        {grouped.map((group) => (
+          <Box key={group.kind}>
+            <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb={6}>
+              {KIND_TITLE[group.kind]}
+            </Text>
+            <Stack gap={4}>
+              {group.nodes.map((node) => {
+                const stage = byOutput.get(node.id);
+                const inputs = stage?.input_record_ids ?? [];
+                return (
+                  <Group
+                    key={node.id}
+                    role="listitem"
+                    gap="sm"
+                    align="flex-start"
+                    wrap="nowrap"
+                  >
+                    {node.kind === 'selected' ? (
+                      <IconCheck size={15} aria-hidden="true" />
+                    ) : node.kind === 'required' ? (
+                      <IconLink size={15} aria-hidden="true" />
+                    ) : (
+                      <Box w={15} h={15} />
+                    )}
+                    <Box>
+                      <Text size="sm" fw={600}>
+                        {node.name}
+                      </Text>
+                      {inputs.length > 0 && (
+                        <Text size="xs" c="dimmed">
+                          depends on {inputs.join(', ')}
+                        </Text>
+                      )}
+                    </Box>
+                  </Group>
+                );
+              })}
+            </Stack>
+          </Box>
+        ))}
+      </Stack>
     </Box>
   );
 }
@@ -389,6 +482,10 @@ export function GraphView() {
   const catalogueStatus = useWorkspace((s) => s.catalogueStatus);
   const catalogueFailure = useWorkspace((s) => s.catalogueFailure);
   const loadTaskCatalogue = useWorkspace((s) => s.loadTaskCatalogue);
+  // Below ~768px the pan/zoom canvas is too cramped; swap it for the readable
+  // grouped stage list (same topology, same store), so Graph never degrades
+  // into a broken canvas.
+  const isNarrow = useMediaQuery('(max-width: 767px)');
 
   useEffect(() => {
     if (catalogueStatus === 'idle') void loadTaskCatalogue();
@@ -461,9 +558,13 @@ export function GraphView() {
           ) : (
             <SimpleGrid cols={{ base: 1, lg: 3 }} spacing="md">
               <Box style={{ gridColumn: 'span 2' }}>
-                <CanvasBoundary>
-                  <GraphCanvas catalogue={catalogue} />
-                </CanvasBoundary>
+                {isNarrow ? (
+                  <StageListFallback catalogue={catalogue} />
+                ) : (
+                  <CanvasBoundary>
+                    <GraphCanvas catalogue={catalogue} />
+                  </CanvasBoundary>
+                )}
               </Box>
               <SelectionPanel catalogue={catalogue} />
             </SimpleGrid>

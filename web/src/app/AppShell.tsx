@@ -5,9 +5,15 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { useRef, useState } from 'react';
+import { lazy, Suspense, useRef, useState } from 'react';
 import { GuidedView } from '../views/GuidedView/GuidedView';
-import { GraphView } from '../views/GraphView/GraphView';
+
+// The Graph view pulls in React Flow (~200 kB gzip). It is split into its own
+// chunk so the Guided workflow — the ordinary path — loads without it. The
+// lazy boundary keeps the component interface identical.
+const GraphView = lazy(() =>
+  import('../views/GraphView/GraphView').then((m) => ({ default: m.GraphView })),
+);
 
 type View = 'guided' | 'graph';
 
@@ -56,7 +62,9 @@ export function WorkbenchShell() {
           <Group gap="sm" wrap="nowrap">
             <BrandMark />
             <div>
-              <Title order={1}>Goldilocks</Title>
+              <Title order={1} className="brand-title">
+                Goldilocks
+              </Title>
               <Text size="xs" c="dimmed" lh={1}>
                 Workbench
               </Text>
@@ -81,7 +89,19 @@ export function WorkbenchShell() {
         data-view={view}
         className="view-panel"
       >
-        {view === 'guided' ? <GuidedView /> : <GraphView />}
+        {view === 'guided' ? (
+          <GuidedView />
+        ) : (
+          <Suspense
+            fallback={
+              <Text size="sm" c="dimmed" mt="lg">
+                Loading Graph view…
+              </Text>
+            }
+          >
+            <GraphView />
+          </Suspense>
+        )}
       </MantineAppShell.Main>
     </MantineAppShell>
   );

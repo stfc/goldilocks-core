@@ -243,4 +243,37 @@ describe('Graph view', () => {
       expect(screen.getByTestId('react-flow-canvas')).toBeInTheDocument(),
     );
   });
+
+  it('swaps the canvas for a grouped stage-list fallback at narrow widths', async () => {
+    const original = window.matchMedia;
+    // Simulate a narrow viewport: the breakpoint query reports a match.
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('max-width'),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    try {
+      const store = createWorkspaceStore(new FakeCoreClient());
+      renderGraph(store);
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole('list', { name: /task graph stages/i }),
+        ).toBeInTheDocument(),
+      );
+      // No broken canvas; the readable grouped list replaces it.
+      expect(screen.queryByTestId('react-flow-canvas')).not.toBeInTheDocument();
+      // The selection panel still drives the same store.
+      expect(
+        screen.getByRole('checkbox', { name: /compute record analyze/i }),
+      ).toBeInTheDocument();
+    } finally {
+      window.matchMedia = original;
+    }
+  });
 });

@@ -1,62 +1,152 @@
-# Pipeline
+# DAG runtime
 
-Goldilocks provides a standard staged workflow and public functions for using
-each stage independently.
+Goldilocks executes calculation tasks as typed dependency graphs. Callers choose either a named preset or an arbitrary record query; the executor runs only the required stages.
 
-## Standard use
+## SCF graph
 
-```python
-from goldilocks_core import CalculationHints, generate
+The built-in `scf_single_point` task registers six record-producing stages:
 
-result = generate(
-    "Fe.cif",
-    hints=CalculationHints(k_grid=(6, 6, 6), spin_polarized=True),
-    pseudo_metadata=metadata,
-)
-
-for generated_file in result.generated_files:
-    print(generated_file.path)
+```text
+Load -> Structure
+Structure -> Analyze -> StructureAnalysisRecord
+Structure -> Kmesh -> KPointSelection
+StructureAnalysisRecord -> Advise -> ParameterAdvice
+Structure + ParameterAdvice -> Select -> SelectionRecord
+Structure + ParameterAdvice + SelectionRecord + KPointSelection
+    -> Generate -> GeneratedFiles
 ```
 
-The convenience functions are:
+The exact dependencies are:
 
-- `recommend(...)`: analyze, advise, resolve k-points, and select resources;
-- `generate(...)`: also generate input files and, when `output_dir` is given,
-  publish them with `manifest.json`.
+- Analyze needs `Structure`.
+- Kmesh needs `Structure` and is independent of Analyze.
+- Advise needs `StructureAnalysisRecord`.
+- Select needs `Structure` and `ParameterAdvice`; it does not need Kmesh.
+- Generate needs `Structure`, `ParameterAdvice`, `SelectionRecord`, and `KPointSelection`.
 
-Both return `CoreResult`.
+Analyze and Kmesh are parallel graph roots after Load. The executor currently evaluates the resolved graph in dependency order, but the graph does not impose an order between independent branches.
 
-## Request and dispatch
+## Stages
 
-Use `CoreJobRequest` when an application needs one serializable job object.
-`run_core_job` delegates to a fresh `CoreRuntime`, or reuses a caller-supplied
-runtime. The runtime owns model lifecycle and executes the registered SCF task
-graph.
+A stage is a pure function with one declared output type, declared upstream input types, and access to a read-only run context.
+
+- **Load** reads a `pymatgen.Structure` or structure file.
+- **Analyze** reports structure, symmetry, dimensionality, and electronic-character facts.
+- **Advise** recommends scientific and numerical settings with provenance.
+- **Kmesh** resolves operator hints or a model into a concrete grid.
+- **Select** chooses pseudopotentials and cutoffs.
+- **Generate** renders calculation input files from all required choices.
+
+The context carries request data and runtime-owned services. A stage does not own model lifecycle or transport state.
+
+## Minimal execution and memoization
+
+Outputs are identified by their contract types. The executor recursively resolves each output's producer and prerequisites, detects cycles or missing producers, and executes each resolved stage once.
+
+Examples:
+
+- `KPointSelection` runs Load and Kmesh only.
+- `SelectionRecord` runs Load, Analyze, Advise, and Select; Kmesh does not run.
+- `GeneratedFiles` resolves all six stages.
+- requesting both `ParameterAdvice` and `SelectionRecord` computes their shared prerequisites once.
+
+Only explicitly requested records are returned from a query.
+
+## Presets
+
+A preset is a named, complete `CoreResult` composition for a task:
+
+- `recommend`: `StructureAnalysisRecord`, `ParameterAdvice`, `KPointSelection`, and `SelectionRecord`;
+- `generate`: all recommendation records plus `GeneratedFiles`.
 
 ```python
-from goldilocks_core import CoreJobRequest, run_core_job
+from goldilocks_core import CalculationHints, generate, recommend
+
+recommendation = recommend(
+    "Fe.cif",
+    hints=CalculationHints(k_grid=(6, 6, 6)),
+)
+print(recommendation.k_points.grid)
+
+generated = generate(
+    "Fe.cif",
+    hints=CalculationHints(k_grid=(6, 6, 6)),
+    pseudo_metadata=metadata,
+    output_dir="run/",
+)
+print(generated.generated_files)
+print(generated.bundle.path)
+```
+
+`output_dir` does not add another graph stage or mode. It asks the generate entrypoint to publish the assembled result after graph execution.
+
+## Queries
+
+A query asks for any subset of supported output records and returns `CoreRecords`:
+
+```python
+from goldilocks_core import CalculationHints, CoreJobRequest, CoreRuntime
+from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
 
 request = CoreJobRequest(
     structure="Fe.cif",
-    mode="generate",
-    pseudo_metadata=tuple(metadata),
+    hints=CalculationHints(k_grid=(6, 6, 6)),
 )
-result = run_core_job(request)
+
+with CoreRuntime() as runtime:
+    records = runtime.compute(
+        (StructureAnalysisRecord, KPointSelection),
+        request,
+    )
+
+analysis = records[StructureAnalysisRecord]
+k_points = records[KPointSelection]
+print(records.to_dict())
 ```
 
-`mode` controls how far the SCF graph runs: `recommend` stops after Select;
-`generate` runs through Generate and publishes a bundle when `output_dir` is
-set.
+The supported query types are:
+
+- `StructureAnalysisRecord`
+- `ParameterAdvice`
+- `KPointSelection`
+- `SelectionRecord`
+- `GeneratedFiles`
+
+For serialized dispatch, put the resolved types on `CoreJobRequest.outputs`:
+
+```python
+from goldilocks_core import CoreJobRequest, run_core_job
+from goldilocks_core.contracts import KPointSelection, SelectionRecord
+
+records = run_core_job(
+    CoreJobRequest(
+        structure="Fe.cif",
+        outputs=(KPointSelection, SelectionRecord),
+    )
+)
+```
+
+`CoreJobRequest.outputs` takes precedence over `mode`. CLI, HTTP, and MCP resolve public record names to these types before execution.
+
+## Runtime reuse
+
+`run_core_job()` creates a temporary `CoreRuntime` unless a caller supplies one. Reuse a runtime for repeated jobs so lazily loaded k-mesh and metallicity models remain available:
+
+```python
+from goldilocks_core import CoreJobRequest, CoreRuntime, run_core_job
+
+with CoreRuntime() as runtime:
+    first = run_core_job(CoreJobRequest(structure="Fe.cif"), runtime=runtime)
+    second = run_core_job(CoreJobRequest(structure="Si.cif"), runtime=runtime)
+```
+
+The HTTP and MCP servers follow this pattern with one runtime per process.
 
 ## K-point backends
 
-K-points are resolved by `resolve_kpoints(structure, hints, backend)`:
-explicit `k_grid` wins over `k_spacing`, and both beat the model backend. The
-default backend is the built-in QRF k-distance model; explicit hints bypass
-model loading entirely.
+Explicit `k_grid` takes precedence over `k_spacing`; both bypass the model backend. Without either hint, the runtime uses its lazily loaded QRF k-distance backend.
 
-To use a local k-index model instead of the default, put a `ModelSpec` on the
-request:
+A request can select a local k-index model with `CoreJobRequest.kmesh_model`:
 
 ```python
 from goldilocks_core import CoreJobRequest, run_core_job
@@ -77,49 +167,4 @@ result = run_core_job(
 )
 ```
 
-The model spec is request data, so it serializes alongside the rest of the job.
-
-## Task graph
-
-`SCF_TASK` declares each stage's input and output record types and the
-`recommend` and `generate` presets. `CoreRuntime.compute(...)` asks the
-executor for arbitrary output types; the executor resolves and runs only their
-prerequisites. New calculation tasks use another `TaskSpec` rather than a
-hand-coded dispatch path.
-
-## Compose stages directly
-
-Callers are not required to use `run_core_job`:
-
-```python
-from goldilocks_core.advice import advise_parameters
-from goldilocks_core.analysis import analyze_structure
-from goldilocks_core.advisors import default_kmesh_advisor
-from goldilocks_core.io.structures import load_structure
-from goldilocks_core.kmesh import resolve_kpoints
-from goldilocks_core.selection import select_parameters
-
-structure = load_structure("Fe.cif")
-analysis = analyze_structure(structure)
-advice = advise_parameters(analysis, intent, hints)
-kpoints = resolve_kpoints(structure, hints, default_kmesh_advisor())
-selection = select_parameters(structure, advice, metadata)
-```
-
-Use this form to inspect intermediate records, insert project-specific work,
-reuse only part of the pipeline, or drive a calculation family with a different
-sequence.
-
-## Stage responsibilities
-
-- **Load** reads a `pymatgen.Structure` or structure file.
-- **Analyze** reports structure facts.
-- **Advise** recommends physics and numerical settings with provenance.
-- **Kmesh** resolves operator hints or a model into a concrete grid.
-- **Select** chooses pseudopotentials and cutoffs.
-- **Generate** creates one or more calculation input files from Advice,
-  Kmesh, and Select records.
-
-Analyze and Kmesh are parallel dependencies of the SCF task. Select depends on
-Load and Advise, not Kmesh. Bundle publication is an optional side effect of
-the `generate` preset rather than a separate mode.
+The model spec is request data and serializes with the job.

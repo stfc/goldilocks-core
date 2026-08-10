@@ -1,161 +1,190 @@
 # CLI reference
 
-The `goldilocks-core` command is a thin wrapper around `CoreJobRequest` and `run_core_job()`. It parses arguments, runs the staged pipeline, and prints JSON or a short human-readable summary.
+`goldilocks-core` is a thin transport over `CoreJobRequest` and `run_core_job()`. Preset commands return a `CoreResult`; `compute` returns `CoreRecords`.
 
-## Commands
-
-### recommend
+## recommend
 
 ```bash
-goldilocks-core recommend structure.cif [options]
+goldilocks-core recommend STRUCTURE [options]
 ```
 
-Runs Load → Analyze → Advise → Kmesh → Select. Outputs a recommendation without generated files.
-
-### generate
+Runs the `recommend` preset and returns analysis, advice, k-points, and pseudopotential selection as a complete `CoreResult`.
 
 ```bash
-goldilocks-core generate structure.cif [options]
+goldilocks-core recommend structure.cif --k-grid 4 4 4 --json
 ```
 
-Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a recommendation with generated input files. Pass `--out run/` to publish the files and manifest as a portable bundle; the destination must not already exist.
+Without `--json`, the command prints a short summary.
 
-### examples
+## generate
+
+```bash
+goldilocks-core generate STRUCTURE [--out DIR] [options]
+```
+
+Runs the `generate` preset and returns a `CoreResult` containing generated input files. `--out DIR` publishes those files and `manifest.json`; the destination must not already exist.
+
+```bash
+goldilocks-core generate structure.cif \
+    --pseudo-root path/to/pseudos \
+    --k-grid 4 4 4 \
+    --out run/ \
+    --json
+```
+
+Publication is part of the generate entrypoint. There is no separate bundle command or mode.
+
+## compute
+
+```bash
+goldilocks-core compute STRUCTURE --outputs Type1,Type2 [options]
+```
+
+Runs a query for an arbitrary subset of public record types. The executor resolves the minimal required subgraph and the command always prints a JSON `CoreRecords` object keyed by type name.
+
+```bash
+goldilocks-core compute structure.cif \
+    --outputs StructureAnalysisRecord,KPointSelection \
+    --k-grid 4 4 4
+```
+
+Example output shape:
+
+```json
+{
+  "KPointSelection": {
+    "grid": [4, 4, 4],
+    "mesh_type": "monkhorst-pack",
+    "provenance": {},
+    "shift": [0, 0, 0]
+  },
+  "StructureAnalysisRecord": {}
+}
+```
+
+Supported output names are:
+
+- `StructureAnalysisRecord`
+- `ParameterAdvice`
+- `KPointSelection`
+- `SelectionRecord`
+- `GeneratedFiles`
+
+An empty list or unknown name is rejected before execution. `--json` is accepted as a common option but is unnecessary because compute output is always JSON.
+
+## examples
 
 ```bash
 goldilocks-core examples path
 ```
 
-Prints the directory holding the example structures installed with the package. It takes none of the common options below.
-
-Use it to run the pipeline without supplying a structure of your own:
+Prints the directory holding the example structures installed with the package. It takes none of the common options.
 
 ```bash
 goldilocks-core recommend "$(goldilocks-core examples path)/Si.cif" --json
 ```
 
-The directory's `README.md` explains what each example exercises. From Python, use `goldilocks_core.examples.structure("Si.cif")` rather than building the path by hand.
+The directory's `README.md` explains what each example exercises. From Python, use `goldilocks_core.examples.structure("Si.cif")`.
 
 ## Common options
 
-| Flag | Type | Default | Maps to |
+These options apply to `recommend`, `generate`, and `compute`.
+
+| Flag | Type | Default | Request field |
 | --- | --- | --- | --- |
-| `structure` | positional | — | `CoreJobRequest.structure` |
-| `--code` | choice | `quantum_espresso` | `CalculationIntent.code` |
-| `--task` | choice | `scf_single_point` | `CalculationIntent.task` |
-| `--functional` | str | `PBEsol` | `CalculationIntent.functional` (canonicalized; e.g. `PBESOL` → `PBEsol`) |
-| `--pseudo-mode` | str | `efficiency` | `CalculationIntent.pseudo_mode` |
-| `--pseudo-type` | str | None | `CalculationHints.pseudo_type` |
-| `--relativistic-mode` | str | None | `CalculationHints.relativistic_mode` |
-| `--pseudo-root` | path | None | Loads UPF files recursively into `pseudo_metadata` |
-| `--model` | path | None | `CoreJobRequest.kmesh_model` (local k-index model) |
-| `--model-name` | str | `cli-kmesh-model` with `--model` | Model name recorded in Kmesh provenance; requires `--model` |
-| `--model-version` | str | `unknown` with `--model` | Model version recorded in `ModelSpec`; requires `--model` |
-| `--k-spacing` | float | None | `CalculationHints.k_spacing` |
-| `--k-grid` | 3 ints | None | `CalculationHints.k_grid` |
-| `--smearing-type` | `fixed`, `gaussian`, `mp`, or `cold` | None | `CalculationHints.smearing_type` |
-| `--smearing-width-ry` | float | None | `CalculationHints.smearing_width_ry` |
-| `--spin-polarized` | `true`/`false` | None | `CalculationHints.spin_polarized` |
-| `--spin-orbit-coupling` | `true`/`false` | None | `CalculationHints.spin_orbit_coupling` |
-| `--use-vdw` | `true`/`false` | None | `CalculationHints.use_vdw` |
-| `--vdw-method` | str | None | `CalculationHints.vdw_method` (`d3`, `d3bj`, `ts`, or `mbd`) |
-| `--conv-thr` | float | None | `CalculationHints.conv_thr` |
-| `--mixing-beta` | float | None | `CalculationHints.mixing_beta` |
-| `--electron-maxstep` | int | None | `CalculationHints.electron_maxstep` |
-| `--json` | flag | False | Print full JSON output |
+| `STRUCTURE` | positional path | — | `structure` |
+| `--code` | choice | `quantum_espresso` | `intent.code` |
+| `--task` | choice | `scf_single_point` | `intent.task` |
+| `--functional` | string | `PBEsol` | `intent.functional` |
+| `--pseudo-mode` | string | `efficiency` | `intent.pseudo_mode` |
+| `--pseudo-type` | string | None | `hints.pseudo_type` |
+| `--relativistic-mode` | string | None | `hints.relativistic_mode` |
+| `--pseudo-root` | path | None | loaded `pseudo_metadata` |
+| `--model` | path | None | local `kmesh_model` |
+| `--model-name` | string | `cli-kmesh-model` with `--model` | `kmesh_model.name` |
+| `--model-version` | string | `unknown` with `--model` | `kmesh_model.version` |
+| `--k-spacing` | float | None | `hints.k_spacing` |
+| `--k-grid` | 3 integers | None | `hints.k_grid` |
+| `--smearing-type` | `fixed`, `gaussian`, `mp`, `cold` | None | `hints.smearing_type` |
+| `--smearing-width-ry` | float | None | `hints.smearing_width_ry` |
+| `--spin-polarized` | `true` or `false` | None | `hints.spin_polarized` |
+| `--spin-orbit-coupling` | `true` or `false` | None | `hints.spin_orbit_coupling` |
+| `--use-vdw` | `true` or `false` | None | `hints.use_vdw` |
+| `--vdw-method` | string | None | `hints.vdw_method` |
+| `--conv-thr` | float | None | `hints.conv_thr` |
+| `--mixing-beta` | float | None | `hints.mixing_beta` |
+| `--electron-maxstep` | integer | None | `hints.electron_maxstep` |
+| `--json` | flag | false | preset output formatting |
 
-## Python/CLI control parity
+`--out` is valid only for `generate`. `--outputs` is required only for `compute`.
 
-Every `CalculationIntent` field maps directly to a CLI option. Every
-`CalculationHints` field also maps directly except `CalculationHints.pseudo_mode`:
-the CLI sets `CalculationIntent.pseudo_mode` with `--pseudo-mode` instead of
-exposing a second override for the same effective pseudopotential-family choice.
-
-`accuracy_level` and `--accuracy-level` were intentionally removed because no
-stage implemented different scientific behavior for the advertised levels.
+Functional labels are canonicalized; for example, `PBESOL` becomes `PBEsol`. `accuracy_level` and `--accuracy-level` were removed because no stage implemented different behavior for them.
 
 ## Boolean options
 
-`--spin-polarized`, `--spin-orbit-coupling`, and `--use-vdw` accept `true` or
-`false` as strings, not as bare flags. Their underlying hint fields are
-`bool | None`:
+`--spin-polarized`, `--spin-orbit-coupling`, and `--use-vdw` take explicit `true` or `false` strings:
 
-- **Omitted**: let Core decide (value is `None`).
-- `--use-vdw true`: force dispersion correction on (value is `True`).
-- `--use-vdw false`: force dispersion correction off (value is `False`).
+- omitted: leave the hint as `None` and let Core decide;
+- `true`: force the behavior on;
+- `false`: force it off.
 
-`--vdw-method` selects a preferred code-agnostic method. It can be supplied with
-`--use-vdw true`, or without `--use-vdw` so structure analysis still decides
-whether vdW applies. Combining a method with `--use-vdw false` is contradictory
-and is rejected by the shared `CalculationHints` contract before job execution.
+`--vdw-method` can accompany `--use-vdw true`, or can be supplied without `--use-vdw` so analysis decides whether vdW applies. Combining it with `--use-vdw false` is rejected.
 
 ## Output formats
 
-### JSON (`--json`)
+### Preset JSON
 
-Full JSON envelope: `{"request": request.to_dict(), **result.to_dict()}` printed with `indent=2, sort_keys=True`. Suitable for piping to `jq` or HTTP services.
-
-### Human-readable (default)
-
-Compact summary:
+For `recommend --json` and `generate --json`, the CLI prints:
 
 ```text
-formula: Si
-code: quantum_espresso
-task: scf_single_point
-k-grid: 8 8 8
-generated files:
-  inputs/qe.in
-bundle: run/
-warnings:
-  - Electronic character is unknown from structure facts alone...
+{"request": request.to_dict(), **result.to_dict()}
 ```
 
-## Pseudo loading
+The JSON is indented and key-sorted. Generated file contents are included in generate output.
 
-`--pseudo-root` recursively searches the given directory for `.upf` and `.UPF` files, parses each one with `parse_upf_metadata()`, and passes the resulting `PseudoMetadata` list to the selection stage. CLI functional intent and parsed UPF functional metadata use the same canonical labels. Supported PBEsol spellings match; unrecognized labels remain distinct rather than falling back to PBE or another functional.
+### Query JSON
 
-## Kmesh backend selection
+`compute` prints `CoreRecords.to_dict()` directly. Only requested type names are present; the request is not echoed.
 
-A bare invocation delegates to the built-in QRF k-distance model, the same
-default used by the Python API. That backend lazily resolves the configured
-model and reports model loading or inference errors directly. Explicit
-`--k-grid` and `--k-spacing` hints bypass model resolution entirely.
+### Human-readable presets
 
-`--model` selects a local CSLR k-index model instead of the default:
+Without `--json`, preset commands print formula, code, task, k-grid, generated file paths, publication path when present, and warnings.
+
+## Pseudopotential loading
+
+`--pseudo-root` recursively searches for `.upf` and `.UPF` files, parses each with `parse_upf_metadata()`, and supplies the resulting metadata to Select. Generate requires complete selections for every element.
+
+## Kmesh backend
+
+Without a k-point hint, commands use the built-in QRF k-distance model. Model loading and inference errors propagate. Explicit `--k-grid` and `--k-spacing` hints bypass model resolution.
+
+`--model` selects a local CSLR k-index model:
 
 ```bash
 goldilocks-core recommend structure.cif --model model.joblib --json
 ```
 
-The CLI builds a `ModelSpec` from `--model`, `--model-name`, and
-`--model-version`, puts it on `CoreJobRequest.kmesh_model`, and calls
-`run_core_job(request)`. The model spec is request data, so it serializes with
-the rest of the job. `--model-name` and `--model-version` are local-model
-metadata and are rejected unless `--model` is set.
+`--model-name` and `--model-version` describe that local model and are rejected without `--model`. Explicit hints still take precedence over the selected model.
 
-Hint precedence still applies:
+Default remote artifacts and immutable revisions come from the model registry. Set `GOLDILOCKS_MODEL_REGISTRY` to use another registry. Only load trusted joblib artifacts.
+
+## Transport servers
+
+Optional server commands are:
 
 ```bash
-goldilocks-core recommend structure.cif --model model.joblib --k-grid 4 4 4
+goldilocks-core serve http --host 127.0.0.1 --port 8000
+goldilocks-core serve mcp
 ```
 
-This uses the explicit grid and records `provenance.source="user_hint"`; the model is not consulted for k-points.
-
-When no k-point hint is set, the model supplies the grid and the resulting `KPointSelection` records `provenance.source="model"`.
-
-Default remote locations and full 40-character commit revisions come from the
-model registry. Set `GOLDILOCKS_MODEL_REGISTRY` to an alternate TOML registry to
-replace them. Hub artifacts use the `huggingface_hub` cache; because joblib
-artifacts can execute code while loading, only select registries and revisions
-you trust.
+Install the corresponding `http` or `mcp` extra first. See [transport.md](transport.md).
 
 ## Standalone kmesh CLI
 
-The `goldilocks-kmesh` command continues to expose the ML advisor directly:
+`goldilocks-kmesh` exposes the ML advisor directly:
 
 ```bash
 goldilocks-kmesh structure.cif --model model.joblib
 ```
 
-It returns only a k-point recommendation. Use `goldilocks-core ... --model` when the prediction should be part of the staged Core pipeline.
+It returns only a k-point recommendation. Use `goldilocks-core recommend`, `generate`, or `compute` when the prediction should participate in the Core DAG.

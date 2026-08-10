@@ -1,42 +1,53 @@
 # Tutorial
 
-A start-to-finish walkthrough of the goldilocks-core Python API.
-
-## Quick start
-
-The package ships a few small example structures, so you can run this without
-supplying a structure of your own:
+This walkthrough uses the preset and query surfaces of the DAG runtime. The package includes small example structures, so the recommendation examples run without your own file.
 
 ```python
-from goldilocks_core import recommend
 from goldilocks_core.examples import available_structures, structure
 
-print(available_structures())   # ('Fe_bcc.cif', 'Pt_fcc.cif', 'Si.cif')
-
-result = recommend(structure("Si.cif"))
+print(available_structures())  # ('Fe_bcc.cif', 'Pt_fcc.cif', 'Si.cif')
+si = structure("Si.cif")
 ```
 
-See `goldilocks_core/examples/structures/README.md` for what each example is
-for. Everywhere below, `"structure.cif"` stands for your own structure file.
+Everywhere below, `"structure.cif"` can instead be your own structure path.
 
-```python
-from goldilocks_core import recommend
+## Recommend with Python
 
-result = recommend("structure.cif")
-
-print(result.analysis.reduced_formula)              # e.g. "Si"
-print(result.selection.k_points.provenance.source)  # "model"
-print(result.selection.k_points.grid)               # concrete model grid
-print(result.to_dict())                             # full JSON-safe dict
-```
-
-## Overriding defaults with hints
+`recommend()` runs the named recommendation preset and returns a complete `CoreResult`:
 
 ```python
 from goldilocks_core import CalculationHints, recommend
 
 result = recommend(
-    "structure.cif",
+    si,
+    hints=CalculationHints(k_grid=(4, 4, 4)),
+)
+
+print(result.analysis.reduced_formula)                 # "Si"
+print(result.analysis.electronic_character)
+print(result.analysis.electronic_character_source)     # "heuristic" or "model"
+print(result.analysis.electronic_character_confidence) # None for the heuristic
+print(result.k_points.grid)                            # (4, 4, 4)
+print(result.k_points.provenance.source)               # "user_hint"
+print(result.to_dict())                                # JSON-safe dictionary
+```
+
+The recommendation preset computes:
+
+- `StructureAnalysisRecord`;
+- `ParameterAdvice`;
+- `KPointSelection`;
+- `SelectionRecord`.
+
+K-points are a sibling record at `result.k_points`; they are not part of `result.selection`.
+
+## Override scientific defaults
+
+```python
+from goldilocks_core import CalculationHints, recommend
+
+result = recommend(
+    si,
     hints=CalculationHints(
         k_grid=(4, 4, 4),
         spin_polarized=True,
@@ -45,64 +56,17 @@ result = recommend(
     ),
 )
 
-# Check provenance: these should be user_hint
-print(result.selection.k_points.provenance.source)   # "user_hint"
-print(result.advice.magnetism.provenance.source)     # "user_hint"
-print(result.advice.smearing.provenance.source)       # "user_hint"
-
-# Convergence was not hinted, so it's default
-print(result.advice.convergence.provenance.source)    # "default"
+print(result.k_points.provenance.source)          # "user_hint"
+print(result.advice.magnetism.provenance.source)  # "user_hint"
+print(result.advice.smearing.provenance.source)   # "user_hint"
+print(result.advice.convergence.provenance.source) # "default"
 ```
 
-## Inspecting intermediate stages
+Each decision records why it was made, its data source where applicable, optional confidence, structured details, and warnings.
 
-For notebooks or interactive exploration, use the stage-by-stage API:
+## Generate and publish files
 
-```python
-from goldilocks_core import CalculationHints
-from goldilocks_core.analysis import analyze_structure
-from goldilocks_core.advice import advise_parameters
-from goldilocks_core.advisors import default_kmesh_advisor
-from goldilocks_core.io.structures import load_structure
-from goldilocks_core.kmesh import resolve_kpoints
-from goldilocks_core.selection import select_parameters
-
-hints = CalculationHints()
-structure = load_structure("structure.cif")
-analysis = analyze_structure(structure)
-print(analysis.elements)                   # ("Fe", "O")
-print(analysis.electronic_character)       # "unknown"
-print(analysis.heavy_elements)             # ()
-
-advice = advise_parameters(analysis, hints=hints)
-print(advice.spin_orbit.consider)          # False
-
-k_points = resolve_kpoints(structure, hints, default_kmesh_advisor())
-selection = select_parameters(structure, advice, k_points)
-print(selection.k_points.grid)             # concrete model grid
-```
-
-## Pseudopotential selection
-
-```python
-from goldilocks_core import CalculationHints, recommend
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
-
-pseudo_metadata = load_pseudo_metadata("path/to/pseudopotentials")
-
-result = recommend(
-    "structure.cif",
-    hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
-    pseudo_metadata=pseudo_metadata,
-)
-
-for pseudo in result.selection.pseudopotentials:
-    print(f"{pseudo.element}: {pseudo.filename}")
-    if pseudo.ecutwfc_ry is not None:
-        print(f"  ecutwfc = {pseudo.ecutwfc_ry} Ry")
-```
-
-## Generating input files
+Generation needs pseudopotential metadata that covers every element. Load metadata from a local pseudopotential tree, then pass an output directory to publish the generated files and manifest:
 
 ```python
 from goldilocks_core import CalculationHints, generate
@@ -114,62 +78,95 @@ result = generate(
     "structure.cif",
     hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
     pseudo_metadata=pseudo_metadata,
+    output_dir="run/",
 )
 
 for generated_file in result.generated_files:
-    print(generated_file.path)     # "inputs/qe.in"
-    print(generated_file.content)  # full QE input text
+    print(generated_file.path)     # e.g. "inputs/qe.in"
+    print(generated_file.content)
+
+print(result.bundle.path)          # "run/"
+print(result.bundle.manifest)
 ```
 
-## Writing a portable bundle
+`run/manifest.json` and the generated input files now exist. The destination must be new. Publication is an option on generation, not a separate job mode.
+
+Omit `output_dir` to receive generated file records without writing them:
 
 ```python
-from goldilocks_core import CalculationHints, generate
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
-
-pseudo_metadata = load_pseudo_metadata("path/to/pseudopotentials")
-
 result = generate(
     "structure.cif",
-    output_dir="run/",
-    hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
+    hints=CalculationHints(k_grid=(4, 4, 4)),
     pseudo_metadata=pseudo_metadata,
 )
 
-print(result.bundle.path)          # "run/"
-print(result.bundle.manifest)      # dict with manifest content
-# run/manifest.json and run/inputs/qe.in are now on disk
+assert result.bundle is None
 ```
 
-## Using the shared job runner
+## Query partial results with compute
 
-The job runner is the same internal path that the CLI uses:
+Use `CoreRuntime.compute()` when only selected records are needed. The executor resolves the minimal subgraph and returns a type-keyed `CoreRecords` mapping:
 
 ```python
-from goldilocks_core import CoreJobRequest, CalculationHints, run_core_job
+from goldilocks_core import CalculationHints, CoreJobRequest, CoreRuntime
+from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
 
-result = run_core_job(
-    CoreJobRequest(
-        structure="structure.cif",
-        hints=CalculationHints(k_spacing=0.2),
-        mode="recommend",
-    )
+request = CoreJobRequest(
+    structure=si,
+    hints=CalculationHints(k_grid=(4, 4, 4)),
 )
 
-print(result.to_dict())           # full JSON-safe output
+with CoreRuntime() as runtime:
+    records = runtime.compute(
+        (StructureAnalysisRecord, KPointSelection),
+        request,
+    )
+
+analysis = records[StructureAnalysisRecord]
+k_points = records[KPointSelection]
+print(analysis.reduced_formula)
+print(k_points.grid)
+print(records.to_dict())
 ```
 
-## Error handling
+This query runs Load, Analyze, and Kmesh. It does not run Advise, Select, or Generate.
 
-- **Missing pseudopotentials**: selection records have `filename=None` and carry warnings. Generation raises `ValueError`.
-- **Invalid hints**: `advise_parameters()` raises `ValueError` for non-positive k_spacing, conv_thr, etc. before recording provenance.
-- **Disordered structures**: analysis reports `disorder_warnings`. Generation raises `ValueError` — disordered occupancies require manual resolution.
-- **Unsupported codes/tasks**: generation raises `ValueError` for anything other than QE SCF.
+For a serializable job request, put output types on `CoreJobRequest.outputs` and dispatch with `run_core_job()`:
 
-## ML k-mesh backend
+```python
+from goldilocks_core import CoreJobRequest, run_core_job
+from goldilocks_core.contracts import ParameterAdvice, SelectionRecord
 
-To use a local k-index model for k-point selection, put a `ModelSpec` on the
-request:
+records = run_core_job(
+    CoreJobRequest(
+        structure=si,
+        outputs=(ParameterAdvice, SelectionRecord),
+    )
+)
+```
+
+`outputs` selects a query and takes precedence over `mode`.
+
+## Reuse model state
+
+A supplied runtime remains open across calls and reuses lazily loaded model state:
+
+```python
+from goldilocks_core import CoreJobRequest, CoreRuntime, run_core_job
+
+with CoreRuntime() as runtime:
+    silicon = run_core_job(CoreJobRequest(structure=si), runtime=runtime)
+    iron = run_core_job(
+        CoreJobRequest(structure=structure("Fe_bcc.cif")),
+        runtime=runtime,
+    )
+```
+
+Without a supplied runtime, `run_core_job()` creates and closes one for the call.
+
+## Use a local k-mesh model
+
+Put a `ModelSpec` on the request to replace the default QRF k-distance backend with a local k-index model:
 
 ```python
 from goldilocks_core import CoreJobRequest, run_core_job
@@ -186,68 +183,51 @@ spec = ModelSpec(
 )
 
 result = run_core_job(
-    CoreJobRequest(structure="structure.cif", mode="recommend", kmesh_model=spec)
+    CoreJobRequest(structure=si, mode="recommend", kmesh_model=spec)
 )
 
-print(result.selection.k_points.grid)
-print(result.selection.k_points.provenance.source)       # "model"
-print(result.selection.k_points.provenance.data_source)  # spec.name
+print(result.k_points.grid)
+print(result.k_points.provenance.source)       # "model"
+print(result.k_points.provenance.data_source)  # spec.name
 ```
 
-The model spec is request data, so it serializes with the rest of the job.
-Operator hints still take precedence:
+Explicit k-point hints take precedence and bypass model inference.
 
-```python
-from goldilocks_core import CalculationHints
+## CLI equivalents
 
-result = run_core_job(
-    CoreJobRequest(
-        structure="structure.cif",
-        mode="recommend",
-        hints=CalculationHints(k_grid=(4, 4, 4)),
-        kmesh_model=spec,
-    )
-)
+Recommendation preset:
 
-print(result.selection.k_points.provenance.source)  # "user_hint"
+```bash
+goldilocks-core recommend structure.cif --k-grid 4 4 4 --json
 ```
 
-The standalone advisor remains available when you only need a `KPointSelection`:
+Generation preset with publication:
 
-```python
-from goldilocks_core.advisors import advise_kpoints
-from goldilocks_core.io.structures import load_structure
-
-selection = advise_kpoints(load_structure("structure.cif"), spec)
+```bash
+goldilocks-core generate structure.cif \
+    --pseudo-root path/to/pseudopotentials \
+    --pseudo-type NC \
+    --k-grid 4 4 4 \
+    --out run/ \
+    --json
 ```
 
-## Common patterns
+Partial query:
 
-**I just need a k-grid:**
-
-```python
-from goldilocks_core import recommend
-result = recommend("structure.cif")
-print(result.selection.k_points.grid)
+```bash
+goldilocks-core compute structure.cif \
+    --outputs StructureAnalysisRecord,KPointSelection \
+    --k-grid 4 4 4
 ```
 
-**I want JSON for an HTTP service:**
+The compute command always emits a JSON object containing only the requested record names.
 
-```python
-from goldilocks_core import recommend
-result = recommend("structure.cif")
-return result.to_dict()
-```
+## Error handling
 
-**I want SOC on for a heavy-element compound:**
-
-```python
-from goldilocks_core import CalculationHints, recommend
-result = recommend(
-    "structure.cif",
-    hints=CalculationHints(
-        spin_orbit_coupling=True,
-        relativistic_mode="full",
-    ),
-)
-```
+- Invalid hints fail when `CalculationHints` is constructed.
+- Unsupported tasks fail before graph execution.
+- Unknown query output names fail during output-type resolution.
+- Missing pseudopotentials appear as warned selections; Generate rejects incomplete selections.
+- Disordered structures carry analysis warnings; Generate rejects unresolved occupancies.
+- Model loading and inference errors propagate.
+- Publication rejects an existing destination or paths that escape it.

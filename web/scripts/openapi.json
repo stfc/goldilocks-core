@@ -1,0 +1,2131 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "goldilocks-core",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "description": "Report process liveness.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Process liveness",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/structure/load": {
+      "post": {
+        "summary": "Load Structure",
+        "description": "Validate inline structure content and return a Structure Document.",
+        "operationId": "load_structure_structure_load_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StructureSource"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructureDocumentModel"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks": {
+      "get": {
+        "summary": "Tasks",
+        "description": "Describe every registered Core task with stable identifiers.",
+        "operationId": "tasks_tasks_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskCatalogueModel"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recommend": {
+      "post": {
+        "summary": "Recommend",
+        "description": "Run the recommend preset.",
+        "operationId": "recommend_recommend_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComputationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoreResultResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/generate": {
+      "post": {
+        "summary": "Generate",
+        "description": "Run the generate preset and return generated input contents.",
+        "operationId": "generate_generate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComputationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoreResultResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/compute": {
+      "post": {
+        "summary": "Compute",
+        "description": "Compute only the requested record types.",
+        "operationId": "compute_compute_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordSetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdviceModel": {
+        "properties": {
+          "smearing": {
+            "$ref": "#/components/schemas/SmearingAdviceModel"
+          },
+          "magnetism": {
+            "$ref": "#/components/schemas/MagnetismAdviceModel"
+          },
+          "spin_orbit": {
+            "$ref": "#/components/schemas/SpinOrbitAdviceModel"
+          },
+          "pseudopotentials": {
+            "$ref": "#/components/schemas/PseudopotentialAdviceModel"
+          },
+          "convergence": {
+            "$ref": "#/components/schemas/ConvergenceAdviceModel"
+          },
+          "vdw": {
+            "$ref": "#/components/schemas/VdwAdviceModel"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "smearing",
+          "magnetism",
+          "spin_orbit",
+          "pseudopotentials",
+          "convergence",
+          "vdw"
+        ],
+        "title": "AdviceModel",
+        "description": "Serialized ParameterAdvice."
+      },
+      "AnalysisModel": {
+        "properties": {
+          "formula": {
+            "type": "string",
+            "title": "Formula"
+          },
+          "reduced_formula": {
+            "type": "string",
+            "title": "Reduced Formula"
+          },
+          "site_count": {
+            "type": "integer",
+            "title": "Site Count"
+          },
+          "elements": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Elements"
+          },
+          "contains_transition_metals": {
+            "type": "boolean",
+            "title": "Contains Transition Metals"
+          },
+          "contains_lanthanides": {
+            "type": "boolean",
+            "title": "Contains Lanthanides"
+          },
+          "contains_actinides": {
+            "type": "boolean",
+            "title": "Contains Actinides"
+          },
+          "contains_heavy_elements": {
+            "type": "boolean",
+            "title": "Contains Heavy Elements"
+          },
+          "magnetic_elements": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Magnetic Elements"
+          },
+          "heavy_elements": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Heavy Elements"
+          },
+          "disorder_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Disorder Warnings"
+          },
+          "disordered_site_count": {
+            "type": "integer",
+            "title": "Disordered Site Count",
+            "default": 0
+          },
+          "space_group_symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Space Group Symbol"
+          },
+          "space_group_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Space Group Number"
+          },
+          "crystal_system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crystal System"
+          },
+          "dimensionality": {
+            "type": "string",
+            "title": "Dimensionality",
+            "default": "unknown"
+          },
+          "has_vacuum": {
+            "type": "boolean",
+            "title": "Has Vacuum",
+            "default": false
+          },
+          "electronic_character": {
+            "type": "string",
+            "title": "Electronic Character",
+            "default": "unknown"
+          },
+          "electronic_character_source": {
+            "type": "string",
+            "title": "Electronic Character Source",
+            "default": "heuristic"
+          },
+          "electronic_character_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Electronic Character Confidence"
+          },
+          "analysis_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Analysis Warnings"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "formula",
+          "reduced_formula",
+          "site_count",
+          "elements",
+          "contains_transition_metals",
+          "contains_lanthanides",
+          "contains_actinides",
+          "contains_heavy_elements",
+          "magnetic_elements",
+          "heavy_elements"
+        ],
+        "title": "AnalysisModel",
+        "description": "Serialized StructureAnalysisRecord."
+      },
+      "BundleModel": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "manifest": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Manifest"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "path",
+          "manifest"
+        ],
+        "title": "BundleModel",
+        "description": "Serialized BundleRecord."
+      },
+      "ComputationRequest": {
+        "properties": {
+          "structure": {
+            "$ref": "#/components/schemas/StructureSource"
+          },
+          "intent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Intent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hints": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Hints"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "recommend",
+                  "generate"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "pseudo_metadata": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PseudoMetadata"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pseudo Metadata"
+          },
+          "kmesh_model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KmeshModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "structure"
+        ],
+        "title": "ComputationRequest",
+        "description": "Request for the recommend or generate preset.\n\nThe Workbench sends inline structure content and identifies pseudos by\nfilename/library; it never supplies server paths. ``output_dir`` and\n``pseudo_root`` are rejected at the HTTP boundary."
+      },
+      "ConvergenceAdviceModel": {
+        "properties": {
+          "conv_thr": {
+            "type": "number",
+            "title": "Conv Thr"
+          },
+          "mixing_beta": {
+            "type": "number",
+            "title": "Mixing Beta",
+            "default": 0.4
+          },
+          "electron_maxstep": {
+            "type": "integer",
+            "title": "Electron Maxstep",
+            "default": 80
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvenanceModel"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "conv_thr",
+          "provenance"
+        ],
+        "title": "ConvergenceAdviceModel",
+        "description": "Serialized ConvergenceAdvice."
+      },
+      "CoreResultResponse": {
+        "properties": {
+          "intent": {
+            "$ref": "#/components/schemas/IntentModel"
+          },
+          "analysis": {
+            "$ref": "#/components/schemas/AnalysisModel"
+          },
+          "advice": {
+            "$ref": "#/components/schemas/AdviceModel"
+          },
+          "k_points": {
+            "$ref": "#/components/schemas/KPointSelectionModel"
+          },
+          "selection": {
+            "$ref": "#/components/schemas/SelectionModel"
+          },
+          "generated_files": {
+            "items": {
+              "$ref": "#/components/schemas/GeneratedFileModel"
+            },
+            "type": "array",
+            "title": "Generated Files"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "bundle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BundleModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "intent",
+          "analysis",
+          "advice",
+          "k_points",
+          "selection"
+        ],
+        "title": "CoreResultResponse",
+        "description": "Response of the recommend and generate presets."
+      },
+      "ErrorDetail": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "status": {
+            "type": "integer",
+            "title": "Status"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "kind",
+          "message",
+          "status"
+        ],
+        "title": "ErrorDetail",
+        "description": "One structured transport failure."
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "description": "Structured failure envelope returned by the transport."
+      },
+      "GeneratedFileModel": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "default": "input"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "path",
+          "content"
+        ],
+        "title": "GeneratedFileModel",
+        "description": "Serialized GeneratedFile."
+      },
+      "Hints": {
+        "properties": {
+          "k_spacing": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "K Spacing"
+          },
+          "k_grid": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "K Grid"
+          },
+          "smearing_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "fixed",
+                  "gaussian",
+                  "mp",
+                  "cold"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smearing Type"
+          },
+          "smearing_width_ry": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smearing Width Ry"
+          },
+          "spin_polarized": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spin Polarized"
+          },
+          "spin_orbit_coupling": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spin Orbit Coupling"
+          },
+          "pseudo_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pseudo Mode"
+          },
+          "pseudo_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pseudo Type"
+          },
+          "relativistic_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relativistic Mode"
+          },
+          "conv_thr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conv Thr"
+          },
+          "mixing_beta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mixing Beta"
+          },
+          "electron_maxstep": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Electron Maxstep"
+          },
+          "use_vdw": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Vdw"
+          },
+          "vdw_method": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "d3",
+                  "d3bj",
+                  "ts",
+                  "mbd"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vdw Method"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "Hints",
+        "description": "Operator hint fields."
+      },
+      "Intent": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "default": "quantum_espresso"
+          },
+          "task": {
+            "type": "string",
+            "title": "Task",
+            "default": "scf_single_point"
+          },
+          "functional": {
+            "type": "string",
+            "title": "Functional",
+            "default": "PBEsol"
+          },
+          "pseudo_mode": {
+            "type": "string",
+            "title": "Pseudo Mode",
+            "default": "efficiency"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "Intent",
+        "description": "Calculation intent fields."
+      },
+      "IntentModel": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "task": {
+            "type": "string",
+            "title": "Task"
+          },
+          "functional": {
+            "type": "string",
+            "title": "Functional"
+          },
+          "pseudo_mode": {
+            "type": "string",
+            "title": "Pseudo Mode"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "code",
+          "task",
+          "functional",
+          "pseudo_mode"
+        ],
+        "title": "IntentModel",
+        "description": "Serialized CalculationIntent."
+      },
+      "KPointSelectionModel": {
+        "properties": {
+          "grid": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Grid"
+          },
+          "shift": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Shift"
+          },
+          "mesh_type": {
+            "type": "string",
+            "title": "Mesh Type"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvenanceModel"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "grid",
+          "shift",
+          "mesh_type",
+          "provenance"
+        ],
+        "title": "KPointSelectionModel",
+        "description": "Serialized KPointSelection."
+      },
+      "KmeshModel": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "model_type": {
+            "type": "string",
+            "enum": [
+              "random_forest",
+              "cgcnn",
+              "xgboost"
+            ],
+            "title": "Model Type"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "feature_set": {
+            "type": "string",
+            "title": "Feature Set"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "huggingface",
+              "local"
+            ],
+            "title": "Source"
+          },
+          "location": {
+            "type": "string",
+            "title": "Location"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "model_type",
+          "target",
+          "feature_set",
+          "source",
+          "location"
+        ],
+        "title": "KmeshModel",
+        "description": "Optional local k-mesh model specification."
+      },
+      "MagnetismAdviceModel": {
+        "properties": {
+          "spin_polarized": {
+            "type": "boolean",
+            "title": "Spin Polarized"
+          },
+          "magnetic_elements": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Magnetic Elements"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvenanceModel"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "spin_polarized",
+          "magnetic_elements",
+          "provenance"
+        ],
+        "title": "MagnetismAdviceModel",
+        "description": "Serialized MagnetismAdvice."
+      },
+      "PresetDescriptionModel": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "output_record_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Output Record Ids"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "output_record_ids"
+        ],
+        "title": "PresetDescriptionModel",
+        "description": "Transport-safe description of one named output preset."
+      },
+      "ProvenanceModel": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "data_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Source"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "source",
+          "reason"
+        ],
+        "title": "ProvenanceModel",
+        "description": "Reason and source for a scientific recommendation or selection."
+      },
+      "PseudoMetadata": {
+        "properties": {
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "header_format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Header Format"
+          },
+          "library": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Library"
+          },
+          "source_set": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Set"
+          },
+          "element": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Element"
+          },
+          "pseudo_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pseudo Type"
+          },
+          "functional": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Functional"
+          },
+          "relativistic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relativistic"
+          },
+          "z_valence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Z Valence"
+          },
+          "pseudo_info": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Pseudo Info"
+          },
+          "is_sssp": {
+            "type": "boolean",
+            "title": "Is Sssp",
+            "default": false
+          },
+          "source_pseudopotential": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Pseudopotential"
+          },
+          "sssp_recommended_cutoff": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sssp Recommended Cutoff"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "PseudoMetadata",
+        "description": "Pseudopotential metadata accepted over the Workbench surface.\n\nIdentifies a configured pseudo by its library and filename rather than a\nserver filesystem path; ``filepath`` is never accepted from a browser."
+      },
+      "PseudopotentialAdviceModel": {
+        "properties": {
+          "functional": {
+            "type": "string",
+            "title": "Functional"
+          },
+          "pseudo_mode": {
+            "type": "string",
+            "title": "Pseudo Mode"
+          },
+          "pseudo_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pseudo Type"
+          },
+          "relativistic_mode": {
+            "type": "string",
+            "title": "Relativistic Mode"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvenanceModel"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "functional",
+          "pseudo_mode",
+          "relativistic_mode",
+          "provenance"
+        ],
+        "title": "PseudopotentialAdviceModel",
+        "description": "Serialized PseudopotentialAdvice."
+      },
+      "PseudopotentialSelectionModel": {
+        "properties": {
+          "element": {
+            "type": "string",
+            "title": "Element"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "ecutwfc_ry": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ecutwfc Ry"
+          },
+          "ecutrho_ry": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ecutrho Ry"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvenanceModel"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "element",
+          "provenance"
+        ],
+        "title": "PseudopotentialSelectionModel",
+        "description": "Serialized PseudopotentialSelection on the Workbench surface.\n\n``filepath`` stays on the Python/CLI record and is deliberately stripped\nhere: the browser must never encounter a server filesystem path."
+      },
+      "RecordQuery": {
+        "properties": {
+          "structure": {
+            "$ref": "#/components/schemas/StructureSource"
+          },
+          "outputs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "analysis",
+                    "advice",
+                    "k_points",
+                    "selection",
+                    "generated_files"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outputs"
+          },
+          "intent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Intent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hints": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Hints"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pseudo_metadata": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PseudoMetadata"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pseudo Metadata"
+          },
+          "kmesh_model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KmeshModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "structure"
+        ],
+        "title": "RecordQuery",
+        "description": "Request selecting Core records to compute.\n\n``outputs`` is structurally optional so the shared parser can reject a\nmissing selection with a structured failure."
+      },
+      "RecordSetResponse": {
+        "properties": {
+          "analysis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalysisModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "advice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdviceModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "k_points": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KPointSelectionModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SelectionModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "generated_files": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/GeneratedFileModel"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated Files"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "RecordSetResponse",
+        "description": "Response of the compute operation, keyed by stable record ids."
+      },
+      "SelectionModel": {
+        "properties": {
+          "pseudopotentials": {
+            "items": {
+              "$ref": "#/components/schemas/PseudopotentialSelectionModel"
+            },
+            "type": "array",
+            "title": "Pseudopotentials"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "SelectionModel",
+        "description": "Serialized SelectionRecord."
+      },
+      "SmearingAdviceModel": {
+        "properties": {
+          "smearing_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smearing Type"
+          },
+          "width_ry": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width Ry"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvenanceModel"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "provenance"
+        ],
+        "title": "SmearingAdviceModel",
+        "description": "Serialized SmearingAdvice."
+      },
+      "SpinOrbitAdviceModel": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "consider": {
+            "type": "boolean",
+            "title": "Consider"
+          },
+          "heavy_elements": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Heavy Elements"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvenanceModel"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "enabled",
+          "consider",
+          "heavy_elements",
+          "provenance"
+        ],
+        "title": "SpinOrbitAdviceModel",
+        "description": "Serialized SpinOrbitAdvice."
+      },
+      "StageDescriptionModel": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "input_record_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Input Record Ids"
+          },
+          "output_record_id": {
+            "type": "string",
+            "title": "Output Record Id"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "input_record_ids",
+          "output_record_id"
+        ],
+        "title": "StageDescriptionModel",
+        "description": "Transport-safe description of one graph stage."
+      },
+      "StructureDocumentModel": {
+        "properties": {
+          "formula": {
+            "type": "string",
+            "title": "Formula"
+          },
+          "reduced_formula": {
+            "type": "string",
+            "title": "Reduced Formula"
+          },
+          "lattice": {
+            "$ref": "#/components/schemas/StructureLatticeModel"
+          },
+          "sites": {
+            "items": {
+              "$ref": "#/components/schemas/StructureSiteModel"
+            },
+            "type": "array",
+            "title": "Sites"
+          },
+          "charge": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Charge"
+          },
+          "source": {
+            "$ref": "#/components/schemas/StructureSourceInfoModel"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "formula",
+          "reduced_formula",
+          "lattice",
+          "sites",
+          "source"
+        ],
+        "title": "StructureDocumentModel",
+        "description": "Canonical, transport-safe representation of a parsed structure."
+      },
+      "StructureLatticeModel": {
+        "properties": {
+          "matrix": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Matrix"
+          },
+          "a": {
+            "type": "number",
+            "title": "A"
+          },
+          "b": {
+            "type": "number",
+            "title": "B"
+          },
+          "c": {
+            "type": "number",
+            "title": "C"
+          },
+          "alpha": {
+            "type": "number",
+            "title": "Alpha"
+          },
+          "beta": {
+            "type": "number",
+            "title": "Beta"
+          },
+          "gamma": {
+            "type": "number",
+            "title": "Gamma"
+          },
+          "volume": {
+            "type": "number",
+            "title": "Volume"
+          },
+          "pbc": {
+            "items": {
+              "type": "boolean"
+            },
+            "type": "array",
+            "title": "Pbc"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "matrix",
+          "a",
+          "b",
+          "c",
+          "alpha",
+          "beta",
+          "gamma",
+          "volume",
+          "pbc"
+        ],
+        "title": "StructureLatticeModel",
+        "description": "Canonical lattice vectors, parameters, and periodicity."
+      },
+      "StructureSiteModel": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "species": {
+            "items": {
+              "$ref": "#/components/schemas/StructureSpeciesModel"
+            },
+            "type": "array",
+            "title": "Species"
+          },
+          "abc": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Abc"
+          },
+          "xyz": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Xyz"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "label",
+          "species",
+          "abc",
+          "xyz"
+        ],
+        "title": "StructureSiteModel",
+        "description": "One crystallographic site in a canonical Structure Document."
+      },
+      "StructureSource": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "cif",
+                  "poscar"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "StructureSource",
+        "description": "Inline structure content; never a client server path."
+      },
+      "StructureSourceInfoModel": {
+        "properties": {
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "inline"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "StructureSourceInfoModel",
+        "description": "Origin metadata for a parsed structure."
+      },
+      "StructureSpeciesModel": {
+        "properties": {
+          "element": {
+            "type": "string",
+            "title": "Element"
+          },
+          "occupancy": {
+            "type": "number",
+            "title": "Occupancy"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "element",
+          "occupancy"
+        ],
+        "title": "StructureSpeciesModel",
+        "description": "One element species on a site with its fractional occupancy."
+      },
+      "TaskCatalogueModel": {
+        "properties": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskGraphDescriptionModel"
+            },
+            "type": "array",
+            "title": "Tasks"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "tasks"
+        ],
+        "title": "TaskCatalogueModel",
+        "description": "Catalogue of every registered task description."
+      },
+      "TaskGraphDescriptionModel": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/StageDescriptionModel"
+            },
+            "type": "array",
+            "title": "Stages"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/PresetDescriptionModel"
+            },
+            "type": "array",
+            "title": "Presets"
+          },
+          "selectable_record_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Selectable Record Ids"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "revision",
+          "name",
+          "description",
+          "stages",
+          "presets",
+          "selectable_record_ids"
+        ],
+        "title": "TaskGraphDescriptionModel",
+        "description": "Backend-owned, transport-safe description of one task."
+      },
+      "VdwAdviceModel": {
+        "properties": {
+          "use_vdw": {
+            "type": "boolean",
+            "title": "Use Vdw"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvenanceModel"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "use_vdw",
+          "provenance"
+        ],
+        "title": "VdwAdviceModel",
+        "description": "Serialized VdwAdvice."
+      }
+    }
+  }
+}

@@ -34,10 +34,10 @@ jobs:
         run: uv sync --group dev
 
       - name: Ruff check
-        run: uv run ruff check src tests scripts
+        run: uv run ruff check src tests scripts web/scripts
 
       - name: Ruff format check
-        run: uv run ruff format --check src tests scripts
+        run: uv run ruff format --check src tests scripts web/scripts
 
       - name: Pytest with branch coverage
         run: >-

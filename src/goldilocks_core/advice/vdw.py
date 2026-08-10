@@ -5,17 +5,17 @@ from __future__ import annotations
 from typing import cast
 
 from goldilocks_core.contracts import (
-    CalculationHints,
     Provenance,
     StructureAnalysisRecord,
     VdwAdvice,
+    VdwHints,
     VdwMethod,
 )
 
 
 def advise_vdw(
     analysis: StructureAnalysisRecord,
-    hints: CalculationHints,
+    hints: VdwHints,
 ) -> VdwAdvice:
     """Return vdW dispersion advice.
 
@@ -82,7 +82,7 @@ def advise_vdw(
     )
 
 
-def _resolve_vdw_method(hints: CalculationHints) -> VdwMethod:
+def _resolve_vdw_method(hints: VdwHints) -> VdwMethod:
     """Return the validated vdW method, defaulting to D3BJ.
 
     ``CalculationHints`` validates ``vdw_method`` at construction, so the cast

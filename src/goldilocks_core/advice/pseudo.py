@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from goldilocks_core.contracts import (
-    CalculationHints,
     CalculationIntent,
     Provenance,
+    PseudoHints,
     PseudopotentialAdvice,
     SpinOrbitAdvice,
 )
@@ -13,7 +13,7 @@ from goldilocks_core.contracts import (
 
 def advise_pseudopotentials(
     intent: CalculationIntent,
-    hints: CalculationHints,
+    hints: PseudoHints,
     spin_orbit: SpinOrbitAdvice,
 ) -> PseudopotentialAdvice:
     pseudo_mode = hints.pseudo_mode or intent.pseudo_mode
@@ -44,7 +44,7 @@ def advise_pseudopotentials(
     )
 
 
-def _has_pseudo_hint(hints: CalculationHints) -> bool:
+def _has_pseudo_hint(hints: PseudoHints) -> bool:
     """Return whether any pseudopotential-specific hint was provided."""
     return any(
         hint is not None

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from goldilocks_core.contracts import (
-    CalculationHints,
     ConvergenceAdvice,
+    ConvergenceHints,
     Provenance,
 )
 
@@ -13,7 +13,7 @@ DEFAULT_MIXING_BETA = 0.4
 DEFAULT_ELECTRON_MAXSTEP = 80
 
 
-def advise_convergence(hints: CalculationHints) -> ConvergenceAdvice:
+def advise_convergence(hints: ConvergenceHints) -> ConvergenceAdvice:
     """Return SCF convergence advice with user hints applied.
 
     ``None`` means "let Core decide"; a non-None value overrides. The
@@ -46,7 +46,7 @@ def advise_convergence(hints: CalculationHints) -> ConvergenceAdvice:
     )
 
 
-def _has_convergence_hint(hints: CalculationHints) -> bool:
+def _has_convergence_hint(hints: ConvergenceHints) -> bool:
     """Return whether any convergence-specific hint was provided."""
     return any(
         hint is not None

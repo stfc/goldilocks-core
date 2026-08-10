@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from goldilocks_core.contracts import (
-    CalculationHints,
     Provenance,
     SmearingAdvice,
+    SmearingHints,
     StructureAnalysisRecord,
 )
 
@@ -14,7 +14,7 @@ METALLIC_SMEARING_WIDTH_RY = 0.01
 
 def advise_smearing(
     analysis: StructureAnalysisRecord,
-    hints: CalculationHints,
+    hints: SmearingHints,
 ) -> SmearingAdvice:
     if hints.smearing_type is not None or hints.smearing_width_ry is not None:
         return SmearingAdvice(

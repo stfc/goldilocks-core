@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from goldilocks_core.advice._hints import has_hint
 from goldilocks_core.contracts import (
     CalculationIntent,
     Provenance,
@@ -20,7 +21,7 @@ def advise_pseudopotentials(
     relativistic_mode = hints.relativistic_mode or (
         "full" if spin_orbit.enabled else "scalar"
     )
-    source = "user_hint" if _has_pseudo_hint(hints) else "default"
+    source = "user_hint" if has_hint(hints) else "default"
     warnings: tuple[str, ...] = ()
 
     if spin_orbit.enabled and hints.relativistic_mode is None:
@@ -41,12 +42,4 @@ def advise_pseudopotentials(
             reason="Resolve pseudopotential intent from calculation intent and hints.",
             warnings=warnings,
         ),
-    )
-
-
-def _has_pseudo_hint(hints: PseudoHints) -> bool:
-    """Return whether any pseudopotential-specific hint was provided."""
-    return any(
-        hint is not None
-        for hint in (hints.pseudo_mode, hints.pseudo_type, hints.relativistic_mode)
     )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from goldilocks_core.advice._hints import has_hint
 from goldilocks_core.contracts import (
     Provenance,
     SmearingAdvice,
@@ -16,7 +17,7 @@ def advise_smearing(
     analysis: StructureAnalysisRecord,
     hints: SmearingHints,
 ) -> SmearingAdvice:
-    if hints.smearing_type is not None or hints.smearing_width_ry is not None:
+    if has_hint(hints):
         return SmearingAdvice(
             smearing_type=hints.smearing_type,
             width_ry=hints.smearing_width_ry,

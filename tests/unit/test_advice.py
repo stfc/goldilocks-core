@@ -128,6 +128,24 @@ def test_calculation_hints_validate_before_advice() -> None:
         CalculationHints(conv_thr=0.0)
 
 
+def test_calculation_hints_validate_pseudo_fields() -> None:
+    """Reject invalid pseudo/relativistic hint values at the boundary."""
+    with pytest.raises(ValueError, match="relativistic_mode"):
+        CalculationHints(relativistic_mode="garbage")
+
+    with pytest.raises(ValueError, match="pseudo_mode"):
+        CalculationHints(pseudo_mode="")
+
+    with pytest.raises(ValueError, match="pseudo_type"):
+        CalculationHints(pseudo_type="   ")
+
+
+def test_calculation_intent_validates_pseudo_mode() -> None:
+    """Reject an empty pseudo_mode on calculation intent at the boundary."""
+    with pytest.raises(ValueError, match="pseudo_mode"):
+        CalculationIntent(pseudo_mode="")
+
+
 def test_advise_parameters_vdw_defaults_off() -> None:
     """Leave vdW off by default for unknown dimensionality."""
     advice = advise_parameters(make_analysis())

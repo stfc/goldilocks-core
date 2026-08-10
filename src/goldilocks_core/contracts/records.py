@@ -28,7 +28,9 @@ from goldilocks_core.contracts.validate import (
     _validate_finite_positive,
     _validate_kpoint_grid,
     _validate_optional_boolean,
+    _validate_optional_nonempty_str,
     _validate_positive_integer,
+    _validate_relativistic_mode,
     _validate_smearing,
     _validate_vdw_method,
 )
@@ -151,7 +153,7 @@ class CalculationIntent:
 
     def __post_init__(self) -> None:
         """Require named targets and normalize the functional."""
-        for field_name in ("code", "task"):
+        for field_name in ("code", "task", "pseudo_mode"):
             value = getattr(self, field_name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(
@@ -267,6 +269,15 @@ class CalculationHints:
             raise ValueError(
                 "CalculationHints.vdw_method must be None when use_vdw is False"
             )
+        _validate_optional_nonempty_str(
+            self.pseudo_mode, "CalculationHints.pseudo_mode"
+        )
+        _validate_optional_nonempty_str(
+            self.pseudo_type, "CalculationHints.pseudo_type"
+        )
+        _validate_relativistic_mode(
+            self.relativistic_mode, "CalculationHints.relativistic_mode"
+        )
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""

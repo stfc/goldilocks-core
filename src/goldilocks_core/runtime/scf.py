@@ -33,10 +33,10 @@ from goldilocks_core.contracts import (
     StructureInput,
 )
 from goldilocks_core.generation.registry import generate_inputs
-from goldilocks_core.graph import Preset, StageSpec, TaskSpec
 from goldilocks_core.io.structures import load_structure
 from goldilocks_core.kmesh.resolve import resolve_kpoints
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
+from goldilocks_core.runtime.graph import Preset, StageSpec, TaskSpec
 from goldilocks_core.selection import select_parameters
 
 

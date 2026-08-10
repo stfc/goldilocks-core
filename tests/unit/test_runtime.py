@@ -18,9 +18,8 @@ from goldilocks_core.contracts import (
     SelectionRecord,
     StructureAnalysisRecord,
 )
-from goldilocks_core.graph import Preset, StageSpec, TaskSpec
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
-from goldilocks_core.scf import ScfContext
+from goldilocks_core.runtime import Preset, ScfContext, StageSpec, TaskSpec
 
 
 def make_structure() -> Structure:

@@ -13,7 +13,7 @@ from goldilocks_core.contracts import (
     StructureInput,
 )
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
-from goldilocks_core.runtime import CoreRuntime
+from goldilocks_core.runtime.core import CoreRuntime
 
 
 def run_core_job(

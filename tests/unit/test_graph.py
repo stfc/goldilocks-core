@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from goldilocks_core.graph import Preset, StageSpec, TaskSpec, execute
+from goldilocks_core.runtime import Preset, StageSpec, TaskSpec, execute
 
 
 @dataclass

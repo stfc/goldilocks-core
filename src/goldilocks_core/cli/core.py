@@ -17,8 +17,8 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.examples import structures_path
 from goldilocks_core.generation import available_codes, available_tasks
-from goldilocks_core.jobs import query_records, run_core_job
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
+from goldilocks_core.runtime import query_records, run_core_job
 
 _OUTPUT_TYPE_NAMES = (
     "StructureAnalysisRecord",

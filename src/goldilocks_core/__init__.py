@@ -9,8 +9,13 @@ from goldilocks_core.contracts import (
     CoreJobRequest,
     CoreResult,
 )
-from goldilocks_core.jobs import generate, query_records, recommend, run_core_job
-from goldilocks_core.runtime import CoreRuntime
+from goldilocks_core.runtime import (
+    CoreRuntime,
+    generate,
+    query_records,
+    recommend,
+    run_core_job,
+)
 
 __all__ = [
     "BundleRecord",

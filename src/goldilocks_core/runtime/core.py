@@ -30,8 +30,8 @@ from goldilocks_core.contracts import (
     KMeshAdvisor,
     PathLike,
 )
-from goldilocks_core.graph import TaskSpec, execute
-from goldilocks_core.scf import SCF_TASK, ScfContext, assemble_core_result
+from goldilocks_core.runtime.graph import TaskSpec, execute
+from goldilocks_core.runtime.scf import SCF_TASK, ScfContext, assemble_core_result
 
 
 class MetallicityService:

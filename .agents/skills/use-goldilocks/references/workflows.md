@@ -139,7 +139,7 @@ print(result.bundle.manifest)
 CLI equivalent:
 
 ```bash
-uv run goldilocks-core bundle structure.cif \
+uv run gl bundle structure.cif \
     --pseudo-root pseudos \
     --functional PBE \
     --k-spacing 0.2 \

@@ -7,7 +7,7 @@ The `goldilocks-core` command is a thin wrapper around `CoreJobRequest` and `run
 ### recommend
 
 ```bash
-goldilocks-core recommend structure.cif [options]
+gl recommend structure.cif [options]
 ```
 
 Runs Load → Analyze → Advise → Kmesh → Select. Outputs a recommendation without generated files.
@@ -15,7 +15,7 @@ Runs Load → Analyze → Advise → Kmesh → Select. Outputs a recommendation 
 ### generate
 
 ```bash
-goldilocks-core generate structure.cif [options]
+gl generate structure.cif [options]
 ```
 
 Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a recommendation with generated input files.
@@ -23,7 +23,7 @@ Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a re
 ### bundle
 
 ```bash
-goldilocks-core bundle structure.cif --out run/ [options]
+gl bundle structure.cif --out run/ [options]
 ```
 
 Runs the full pipeline and publishes a portable bundle directory. `--out` is required and must not already exist; bundle mode has no overwrite option.
@@ -31,7 +31,7 @@ Runs the full pipeline and publishes a portable bundle directory. `--out` is req
 ### examples
 
 ```bash
-goldilocks-core examples path
+gl examples path
 ```
 
 Prints the directory holding the example structures installed with the package. It takes none of the common options below.
@@ -39,7 +39,7 @@ Prints the directory holding the example structures installed with the package. 
 Use it to run the pipeline without supplying a structure of your own:
 
 ```bash
-goldilocks-core recommend "$(goldilocks-core examples path)/Si.cif" --json
+gl recommend "$(gl examples path)/Si.cif" --json
 ```
 
 The directory's `README.md` explains what each example exercises. From Python, use `goldilocks_core.examples.structure("Si.cif")` rather than building the path by hand.
@@ -134,13 +134,13 @@ hints bypass model resolution entirely.
 Use `--heuristic-kpoints` to disable model resolution explicitly:
 
 ```bash
-goldilocks-core recommend structure.cif --heuristic-kpoints --json
+gl recommend structure.cif --heuristic-kpoints --json
 ```
 
 `--model` instead replaces the default with a local CSLR model:
 
 ```bash
-goldilocks-core recommend structure.cif --model model.joblib --json
+gl recommend structure.cif --model model.joblib --json
 ```
 
 The CLI builds a `ModelSpec`, creates `ml_kmesh_advisor(spec)`, replaces the default Kmesh backend in `Pipeline`, and calls:
@@ -154,7 +154,7 @@ The model path is not added to `CoreJobRequest`. Backend selection is executable
 Hint precedence still applies:
 
 ```bash
-goldilocks-core recommend structure.cif --model model.joblib --k-grid 4 4 4
+gl recommend structure.cif --model model.joblib --k-grid 4 4 4
 ```
 
 This uses the explicit grid and records `provenance.source="user_hint"`; the model is not consulted for k-points.
@@ -172,7 +172,7 @@ code while loading, only select registries and revisions you trust.
 The `goldilocks-kmesh` command continues to expose the ML advisor directly:
 
 ```bash
-goldilocks-kmesh structure.cif --model model.joblib
+gl-kmesh structure.cif --model model.joblib
 ```
 
 It returns only a k-point recommendation. Use `goldilocks-core ... --model` when the prediction should be part of the staged Core pipeline.

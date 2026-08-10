@@ -123,7 +123,7 @@ def install(
     upf_directory = pseudo_root / LIBRARY / f"{table}_upf"
     djrepo_directory = pseudo_root / LIBRARY / f"{table}_djrepo"
 
-    if any(upf_directory.glob("*.upf")):
+    if any(upf_directory.glob("*.upf", case_sensitive=False)):
         return upf_directory
 
     upf_url, djrepo_url = archive_urls(table, base=base)

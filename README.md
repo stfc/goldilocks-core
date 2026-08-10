@@ -58,10 +58,10 @@ See the [tutorial](docs/tutorial.md) and [pipeline reference](docs/pipeline.md) 
 ## CLI
 
 ```bash
-uv run goldilocks-core recommend structure.cif --json
-uv run goldilocks-core generate structure.cif \
+uv run gl recommend structure.cif --json
+uv run gl generate structure.cif \
     --pseudo-root path/to/pseudos --k-grid 4 4 4 --json
-uv run goldilocks-core bundle structure.cif \
+uv run gl bundle structure.cif \
     --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
 ```
 
@@ -70,13 +70,13 @@ Bundle output requires a new destination directory. See the [CLI reference](docs
 Example structures are installed with the package, so there is something to run straight away:
 
 ```bash
-uv run goldilocks-core recommend "$(uv run goldilocks-core examples path)/Si.cif" --json
+uv run gl recommend "$(uv run gl examples path)/Si.cif" --json
 ```
 
 The standalone model-oriented entry point remains available:
 
 ```bash
-uv run goldilocks-kmesh structure.cif --model path/to/model.joblib
+uv run gl-kmesh structure.cif --model path/to/model.joblib
 ```
 
 ## Documentation

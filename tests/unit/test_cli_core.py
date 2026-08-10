@@ -275,7 +275,7 @@ def test_main_rejects_disabled_vdw_method_before_job_execution(
         sys,
         "argv",
         [
-            "goldilocks-core",
+            "gl",
             "recommend",
             "Si.cif",
             "--use-vdw",
@@ -342,7 +342,7 @@ def test_main_rejects_model_metadata_without_model_before_job_execution(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["goldilocks-core", "recommend", "Si.cif", option, "metadata"],
+        ["gl", "recommend", "Si.cif", option, "metadata"],
     )
 
     with pytest.raises(SystemExit) as error:
@@ -380,7 +380,7 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
         sys,
         "argv",
         [
-            "goldilocks-core",
+            "gl",
             "recommend",
             "Si.cif",
             "--k-grid",
@@ -425,7 +425,7 @@ def test_main_builds_pipeline_for_model_backend(monkeypatch, capsys) -> None:
         sys,
         "argv",
         [
-            "goldilocks-core",
+            "gl",
             "recommend",
             "Si.cif",
             "--model",
@@ -470,7 +470,7 @@ def test_main_builds_bundle_request_with_output_dir(monkeypatch, capsys) -> None
     monkeypatch.setattr(
         sys,
         "argv",
-        ["goldilocks-core", "bundle", "Si.cif", "--out", "run"],
+        ["gl", "bundle", "Si.cif", "--out", "run"],
     )
 
     cli_core.main()

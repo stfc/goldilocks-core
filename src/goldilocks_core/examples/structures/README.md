@@ -5,7 +5,7 @@ integration tests. They ship with the package, so `goldilocks-core` can be run
 end to end straight after `pip install`:
 
 ```bash
-goldilocks-core recommend "$(goldilocks-core examples path)/Si.cif"
+gl recommend "$(gl examples path)/Si.cif"
 ```
 
 From Python:

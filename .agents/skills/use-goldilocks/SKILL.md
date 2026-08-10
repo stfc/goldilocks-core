@@ -75,9 +75,9 @@ from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 The CLI entry point is:
 
 ```bash
-uv run goldilocks-core recommend STRUCTURE --json
-uv run goldilocks-core generate STRUCTURE --pseudo-root PSEUDOS --json
-uv run goldilocks-core bundle STRUCTURE --pseudo-root PSEUDOS --out RUN_DIR --json
+uv run gl recommend STRUCTURE --json
+uv run gl generate STRUCTURE --pseudo-root PSEUDOS --json
+uv run gl bundle STRUCTURE --pseudo-root PSEUDOS --out RUN_DIR --json
 ```
 
 ## Common pitfalls

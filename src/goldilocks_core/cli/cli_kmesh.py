@@ -12,7 +12,7 @@ from goldilocks_core.io.structures import load_structure
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI parser for k-mesh recommendation."""
     parser = argparse.ArgumentParser(
-        prog="goldilocks",
+        prog="gl-kmesh",
         description="Recommend a k-mesh for a structure.",
     )
     parser.add_argument(

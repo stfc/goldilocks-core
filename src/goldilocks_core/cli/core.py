@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from goldilocks_core.advisors import ml_kmesh_advisor
+from goldilocks_core.cli import pseudos
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
@@ -23,7 +24,7 @@ from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 def build_parser() -> argparse.ArgumentParser:
     """Build the staged Core CLI parser."""
     parser = argparse.ArgumentParser(
-        prog="goldilocks-core",
+        prog="gl",
         description="Run the staged Goldilocks Core pipeline.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -37,6 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
                 required=True,
                 help="Output directory for the portable Core bundle.",
             )
+
+    pseudos.add_parsers(subparsers)
 
     examples = subparsers.add_parser(
         "examples",
@@ -59,6 +62,12 @@ def main() -> None:
     if args.command == "examples":
         print(structures_path())
         return
+
+    if args.command == "list":
+        raise SystemExit(pseudos.run_list(args))
+
+    if args.command == "download":
+        raise SystemExit(pseudos.run_download(args))
 
     try:
         _validate_backend_options(args)

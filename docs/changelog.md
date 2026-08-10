@@ -7,7 +7,7 @@ All notable changes to goldilocks-core are documented here.
 ### Added
 
 - CLI `--use-vdw` and `--vdw-method` options matching the Python hint controls.
-- Example structures (`Si`, `Fe_bcc`, `Pt_fcc`) installed with the package, reachable from `goldilocks_core.examples` and `goldilocks-core examples path`.
+- Example structures (`Si`, `Fe_bcc`, `Pt_fcc`) installed with the package, reachable from `goldilocks_core.examples` and `gl examples path`.
 
 ### Changed
 

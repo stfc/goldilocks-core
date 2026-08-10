@@ -82,8 +82,8 @@ def test_require_installed_explains_how_to_get_a_table(registry):
         installer.require_installed(registry)
 
     message = str(raised.value)
-    assert installer.DOWNLOAD_COMMAND in message
-    assert installer.LIST_COMMAND in message
+    assert installer.INSTALL_COMMAND in message
+    assert installer.AVAILABLE_COMMAND in message
     assert "--pseudo-root" in message
 
 

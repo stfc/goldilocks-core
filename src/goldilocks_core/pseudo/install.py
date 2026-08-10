@@ -19,11 +19,14 @@ from goldilocks_core.pseudo.table_registry import (
     load_tables,
 )
 
-DOWNLOAD_COMMAND = "gl download pp"
+INSTALL_COMMAND = "gl pp install"
 """What a user runs to install the default table."""
 
-LIST_COMMAND = "gl list pp"
-"""What a user runs to see every table."""
+AVAILABLE_COMMAND = "gl pp available"
+"""What a user runs to see every table Core can install."""
+
+LIST_COMMAND = "gl pp list"
+"""What a user runs to see the tables already on disk."""
 
 
 class NoPseudopotentials(RuntimeError):
@@ -116,11 +119,11 @@ def require_installed(
     raise NoPseudopotentials(
         "no pseudopotential table is installed.\n\n"
         "  Nothing is downloaded unless you ask. To install the default table:\n\n"
-        f"      {DOWNLOAD_COMMAND}\n\n"
+        f"      {INSTALL_COMMAND}\n\n"
         f"  That fetches {default.name}\n"
         f"  ({megabytes:.1f} MB, {default.licence}, from {default.upstream_url}).\n"
         f"  Cite: {default.citation}\n\n"
-        f"  To see every table:      {LIST_COMMAND}\n"
+        f"  To see every table:      {AVAILABLE_COMMAND}\n"
         "  To use one you already have:  --pseudo-root PATH"
     )
 

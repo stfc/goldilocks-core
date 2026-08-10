@@ -39,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
                 help="Output directory for the portable Core bundle.",
             )
 
-    pseudos.add_parsers(subparsers)
+    pseudos.add_parser(subparsers)
 
     examples = subparsers.add_parser(
         "examples",
@@ -63,11 +63,8 @@ def main() -> None:
         print(structures_path())
         return
 
-    if args.command == "list":
-        raise SystemExit(pseudos.run_list(args))
-
-    if args.command == "download":
-        raise SystemExit(pseudos.run_download(args))
+    if args.command == "pp":
+        raise SystemExit(pseudos.run(args))
 
     try:
         _validate_backend_options(args)

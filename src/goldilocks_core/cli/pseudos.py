@@ -1,4 +1,4 @@
-"""The ``gl list pp`` and ``gl download pp`` commands."""
+"""The ``gl pp`` commands: what can be installed, what is, and installing it."""
 
 from __future__ import annotations
 
@@ -13,40 +13,45 @@ from goldilocks_core.pseudo.table_registry import (
     load_tables,
 )
 
-_HEADER = (
+_AVAILABLE_HEADER = (
     f"{'NAME':<32}{'XC':<8}{'REL':<5}{'ACCURACY':<12}"
     f"{'ELEMENTS':>9}{'Ln':>4}{'An':>4}{'SIZE':>9}  STATE"
 )
 
 
-def add_parsers(subparsers: argparse._SubParsersAction) -> None:
-    """Register ``list`` and ``download`` on the top-level parser."""
-    listing = subparsers.add_parser("list", help="Show what Core can install.")
-    listing.add_argument(
-        "kind",
-        nargs="?",
-        default="pp",
-        choices=("pp",),
-        help="What to list. Only pseudopotential tables for now.",
+def add_parser(subparsers: argparse._SubParsersAction) -> None:
+    """Register the ``pp`` command group."""
+    pseudos = subparsers.add_parser(
+        "pp", help="Pseudopotential tables: what exists, what is installed."
     )
+    commands = pseudos.add_subparsers(dest="pp_command", required=True)
 
-    download = subparsers.add_parser(
-        "download", help="Install a pseudopotential table."
-    )
-    download.add_argument("kind", choices=("pp",), help="What to install.")
-    download.add_argument(
+    commands.add_parser("available", help="Show every table Core can install.")
+    commands.add_parser("list", help="Show installed tables and where they are.")
+
+    install = commands.add_parser("install", help="Install one or more tables.")
+    install.add_argument(
         "tables",
         nargs="*",
-        help="Table names. Defaults to the one table Core uses unprompted.",
+        help="Table names. Defaults to the one Core uses unprompted.",
     )
 
 
-def run_list(args: argparse.Namespace) -> int:
-    """Print every registered table and whether it is installed."""
+def run(args: argparse.Namespace) -> int:
+    """Dispatch a ``gl pp`` subcommand."""
+    if args.pp_command == "available":
+        return _available()
+    if args.pp_command == "list":
+        return _installed()
+    return _install(args.tables)
+
+
+def _available() -> int:
+    """Print the catalogue: everything Core knows how to install."""
     registry = load_tables()
     default = default_table(registry)
 
-    print(_HEADER)
+    print(_AVAILABLE_HEADER)
     for table in registry.values():
         marker = " *" if table is default else ""
         state = "installed" if installer.is_installed(table) else "-"
@@ -56,26 +61,49 @@ def run_list(args: argparse.Namespace) -> int:
             f"{len(table.actinides):>4}{_megabytes(table):>9}  {state}"
         )
 
-    print(f"\n  * installed unprompted by `{installer.DOWNLOAD_COMMAND}`")
-    print(f"  pseudopotentials live in {installer.pseudo_root()}")
+    print(f"\n  * installed by `{installer.INSTALL_COMMAND}` when no table is named")
+    print(f"  install one with `{installer.INSTALL_COMMAND} NAME`")
     return 0
 
 
-def run_download(args: argparse.Namespace) -> int:
+def _installed() -> int:
+    """Print what is on disk, and where, so it can be pointed at."""
+    registry = load_tables()
+    installed = installer.installed_tables(registry)
+
+    if not installed:
+        print("No pseudopotential table is installed.\n")
+        print(f"  see what exists:  {installer.AVAILABLE_COMMAND}")
+        print(f"  install the default:  {installer.INSTALL_COMMAND}")
+        return 0
+
+    for table in installed:
+        path = installer.install_path(table)
+        count = len(list(path.glob("*.upf", case_sensitive=False)))
+        print(f"{table.name}")
+        print(f"  {count} pseudopotentials, {table.functional}, {table.accuracy}")
+        print(f"  {path}")
+
+    print(f"\n  pseudopotentials live under {installer.pseudo_root()}")
+    print("  pass that to --pseudo-root to use a table Core did not install")
+    return 0
+
+
+def _install(names: list[str]) -> int:
     """Install the named tables, or the default when none are named."""
     registry = load_tables()
-    names = args.tables or [default_table(registry).name]
+    wanted = names or [default_table(registry).name]
 
-    unknown = [name for name in names if name not in registry]
+    unknown = [name for name in wanted if name not in registry]
     if unknown:
         print(
             f"error: no such table: {', '.join(unknown)}\n"
-            f"       run `{installer.LIST_COMMAND}` to see the names",
+            f"       run `{installer.AVAILABLE_COMMAND}` to see the names",
             file=sys.stderr,
         )
         return 2
 
-    for name in names:
+    for name in wanted:
         table = registry[name]
         if installer.is_installed(table):
             print(
@@ -103,13 +131,14 @@ def _announce(table: PseudoTable) -> None:
     print(f"  from {table.upstream_url}")
     print(f"  cite {table.citation}")
     if table.note:
-        wrapped = textwrap.fill(
-            " ".join(table.note.split()),
-            76,
-            initial_indent="  note ",
-            subsequent_indent="       ",
+        print(
+            textwrap.fill(
+                " ".join(table.note.split()),
+                76,
+                initial_indent="  note ",
+                subsequent_indent="       ",
+            )
         )
-        print(wrapped)
 
 
 def _megabytes(table: PseudoTable) -> str:

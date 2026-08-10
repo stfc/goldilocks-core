@@ -22,7 +22,11 @@
 #
 # PseudoDojo also publishes nc-sr-05_pbe_{standard,stringent}. They are not
 # registered: both ship 72 pseudopotentials but publish cutoff hints for only
-# 61 of them, so 11 elements would install and then fail at generation.
+# 61 of them, so 11 elements would install and then fail at generation. Not
+# arbitrary: fetching both djrepo archives directly shows the 11 missing
+# elements are Ba, Bi, I, Pb, Po, Rb, Rn, S, Te, Tl, Xe -- exactly the set
+# PseudoDojo's own v0.5 site warns was updated for PBE ("use 0.4.1 for LDA or
+# PBEsol xc"), which is consistent with those hints simply not existing yet.
 
 [tables."pseudodojo-pbesol-efficiency-sr"]
 provider       = "pseudodojo"

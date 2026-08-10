@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -339,7 +341,10 @@ class StructureAnalysisRecord:
             True when bonded dimensionality is below 3D. This is not a
             measured cell-vacuum quantity.
         electronic_character: conservative electronic-character
-            heuristic.
+            classification.
+        electronic_character_source: origin of the classification, currently
+            ``heuristic``.
+        electronic_character_confidence: optional confidence score in [0, 1].
         analysis_warnings: warnings about heuristic limitations
             (e.g. metallicity uncertainty).
     """
@@ -362,6 +367,8 @@ class StructureAnalysisRecord:
     dimensionality: Dimensionality = "unknown"
     has_vacuum: bool = False
     electronic_character: ElectronicCharacter = "unknown"
+    electronic_character_source: str = "heuristic"
+    electronic_character_confidence: float | None = None
     analysis_warnings: tuple[str, ...] = ()
 
     def to_dict(self) -> JsonDict:
@@ -626,19 +633,14 @@ class PseudopotentialSelection:
 
 @dataclass(frozen=True, slots=True)
 class SelectionRecord:
-    """Complete Select-stage output.
-
-    Contains the Kmesh-stage grid, pseudopotential selections, and any
-    accumulated warnings from the selection process.
+    """Complete Select-stage pseudopotential output.
 
     Attributes:
-        k_points: resolved k-point grid and shift.
         pseudopotentials: one selection per element.
         warnings: warnings from pseudo selection (e.g. missing
             pseudos, incomplete cutoffs).
     """
 
-    k_points: KPointSelection
     pseudopotentials: tuple[PseudopotentialSelection, ...]
     warnings: tuple[str, ...] = ()
 
@@ -673,10 +675,9 @@ class GeneratedFile:
 
 @dataclass(frozen=True, slots=True)
 class BundleRecord:
-    """Terminal Bundle-stage output: where files were written and the manifest.
+    """Bundle publication output: where files were written and the manifest.
 
-    This is a stage record like every other: one stage produces one record.
-    It is only populated in bundle mode.
+    It is populated when generate publishes files to an output directory.
 
     Attributes:
         path: bundle root directory path.
@@ -691,32 +692,63 @@ class BundleRecord:
         return to_jsonable(self)
 
 
+class CoreRecords(Mapping[type, Any]):
+    """Requested DAG records keyed by their record types.
+
+    Only explicitly requested record types are present.
+    """
+
+    __slots__ = ("_records",)
+
+    def __init__(self, records: Mapping[type, Any] | None = None) -> None:
+        self._records = dict(records or {})
+
+    def __getitem__(self, record_type: type) -> Any:
+        return self._records[record_type]
+
+    def __iter__(self) -> Iterator[type]:
+        return iter(self._records)
+
+    def __len__(self) -> int:
+        return len(self._records)
+
+    def to_dict(self) -> JsonDict:
+        """Return records as a JSON-serializable dictionary."""
+        return to_jsonable(
+            {
+                record_type.__name__: record
+                for record_type, record in self._records.items()
+            }
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class CoreResult:
     """Records produced by a recommendation or generation workflow.
 
-    Scientific records are populated as their stages run. ``generated_files``
-    is populated in generate/bundle modes. ``bundle`` is set only in bundle
-    mode. The request is not echoed here — the caller already has it;
-    CLI/HTTP layers echo it themselves in their serialized output.
+    Scientific records are populated as their stages run. ``k_points`` is the
+    Kmesh-stage output alongside the Select-stage pseudopotentials.
+    ``generated_files`` is populated in generate mode. ``bundle`` is set only
+    when generate is given an output directory. The request is not echoed here
+    — the caller already has it; CLI/HTTP layers echo it themselves.
 
     Attributes:
         intent: what the operator asked for.
         analysis: structure facts from the Analyze stage.
         advice: provenance-backed recommendations from the Advise
             stage.
-        selection: concrete values from the Select stage.
-        generated_files: generated input files, populated by
-            Generate or Bundle modes.
+        k_points: concrete grid and shift from the Kmesh stage.
+        selection: concrete pseudopotentials from the Select stage.
+        generated_files: generated input files, populated by Generate mode.
         warnings: aggregated warnings from analysis, Kmesh, and
             selection.
-        bundle: terminal Bundle-stage record, set only in bundle
-            mode.
+        bundle: output bundle record, set only when generate writes files.
     """
 
     intent: CalculationIntent
     analysis: StructureAnalysisRecord
     advice: ParameterAdvice
+    k_points: KPointSelection
     selection: SelectionRecord
     generated_files: tuple[GeneratedFile, ...] = ()
     warnings: tuple[str, ...] = ()
@@ -739,11 +771,10 @@ class CoreJobRequest:
             path to a structure file.
         intent: what to calculate.
         hints: optional operator overrides.
-        mode: pipeline mode: ``recommend``, ``generate``, or
-            ``bundle``.
+        mode: pipeline mode: ``recommend`` or ``generate``.
         pseudo_metadata: pseudopotential metadata for selection.
-        output_dir: output directory path, required when mode is
-            ``bundle``.
+        output_dir: optional output directory, meaningful only with
+            ``generate``. The generate entrypoint handles publishing there.
         kmesh_model: optional local k-index model spec; when set, the
             SCF path uses it for k-point selection instead of the default
             QRF k-distance model.
@@ -759,11 +790,8 @@ class CoreJobRequest:
 
     def __post_init__(self) -> None:
         """Validate request invariants at construction."""
-        if self.mode not in {"recommend", "generate", "bundle"}:
+        if self.mode not in {"recommend", "generate"}:
             raise ValueError(f"Unsupported Core job mode: {self.mode}")
-
-        if self.mode == "bundle" and self.output_dir is None:
-            raise ValueError("output_dir is required for bundle mode")
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""

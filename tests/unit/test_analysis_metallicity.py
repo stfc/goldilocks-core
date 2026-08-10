@@ -16,6 +16,8 @@ def test_default_heuristic_marks_all_metal_as_likely_metal() -> None:
     analysis = analyze_structure(structure)
 
     assert analysis.electronic_character == "likely_metal"
+    assert analysis.electronic_character_source == "heuristic"
+    assert analysis.electronic_character_confidence is None
     assert any(
         "treat metallicity as likely" in warning
         for warning in analysis.analysis_warnings
@@ -33,6 +35,8 @@ def test_default_heuristic_marks_non_metal_as_unknown() -> None:
     analysis = analyze_structure(structure)
 
     assert analysis.electronic_character == "unknown"
+    assert analysis.electronic_character_source == "heuristic"
+    assert analysis.electronic_character_confidence is None
     assert any("verify smearing" in warning for warning in analysis.analysis_warnings)
 
 

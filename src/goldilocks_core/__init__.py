@@ -9,12 +9,7 @@ from goldilocks_core.contracts import (
     CoreJobRequest,
     CoreResult,
 )
-from goldilocks_core.jobs import (
-    generate,
-    recommend,
-    run_core_job,
-    write_bundle,
-)
+from goldilocks_core.jobs import generate, recommend, run_core_job
 
 __all__ = [
     "BundleRecord",
@@ -25,5 +20,4 @@ __all__ = [
     "generate",
     "recommend",
     "run_core_job",
-    "write_bundle",
 ]

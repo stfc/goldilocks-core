@@ -2,9 +2,10 @@ from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
     CalculationHints,
+    CoreJobRequest,
     generate,
     recommend,
-    write_bundle,
+    run_core_job,
 )
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
@@ -40,7 +41,7 @@ def test_recommend_runs_staged_core_pipeline() -> None:
     )
 
     assert result.analysis.reduced_formula == "Si"
-    assert result.selection.k_points.grid == (3, 3, 3)
+    assert result.k_points.grid == (3, 3, 3)
     assert result.selection.pseudopotentials[0].filename == "Si.UPF"
 
 
@@ -56,14 +57,17 @@ def test_generate_runs_pipeline_through_generated_files() -> None:
     assert "3  3  3  0  0  0" in result.generated_files[0].content
 
 
-def test_write_bundle_runs_pipeline_and_writes_directory(tmp_path) -> None:
-    """Write a portable bundle through the public Python API."""
+def test_run_core_job_generate_with_output_dir_writes_bundle(tmp_path) -> None:
+    """Write a portable bundle through the shared Core job request."""
     output_dir = tmp_path / "bundle"
-    result = write_bundle(
-        _make_si_structure(),
-        str(output_dir),
-        hints=CalculationHints(k_grid=(3, 3, 3), pseudo_type="NC"),
-        pseudo_metadata=[_make_si_metadata()],
+    result = run_core_job(
+        CoreJobRequest(
+            structure=_make_si_structure(),
+            hints=CalculationHints(k_grid=(3, 3, 3), pseudo_type="NC"),
+            pseudo_metadata=(_make_si_metadata(),),
+            mode="generate",
+            output_dir=str(output_dir),
+        )
     )
 
     assert result.bundle is not None
@@ -88,5 +92,5 @@ def test_core_result_serializes_to_manifest_style_dict() -> None:
 
     assert manifest["analysis"]["heavy_elements"] == ["I"]
     assert manifest["advice"]["spin_orbit"]["consider"] is True
-    assert manifest["selection"]["k_points"]["grid"] == [8, 8, 8]
+    assert manifest["k_points"]["grid"] == [8, 8, 8]
     assert "contains_heavy_elements" not in manifest

@@ -141,6 +141,8 @@ def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
         dimensionality=dimensionality,
         has_vacuum=has_vacuum,
         electronic_character=electronic_character,
+        electronic_character_source="heuristic",
+        electronic_character_confidence=None,
         analysis_warnings=(*electronic_warnings, *dimensionality_warnings),
     )
 

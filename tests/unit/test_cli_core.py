@@ -40,15 +40,13 @@ def make_result(request: CoreJobRequest) -> CoreResult:
         intent=request.intent,
         analysis=analysis,
         advice=advice,
-        selection=SelectionRecord(
-            k_points=KPointSelection(
-                grid=(2, 2, 1),
-                shift=(0, 0, 0),
-                mesh_type="monkhorst-pack",
-                provenance=Provenance(source="user_hint", reason="test"),
-            ),
-            pseudopotentials=(),
+        k_points=KPointSelection(
+            grid=(2, 2, 1),
+            shift=(0, 0, 0),
+            mesh_type="monkhorst-pack",
+            provenance=Provenance(source="user_hint", reason="test"),
         ),
+        selection=SelectionRecord(pseudopotentials=()),
     )
 
 
@@ -367,7 +365,7 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
     assert request.hints.k_grid == (2, 2, 1)
     assert request.hints.pseudo_type == "NC"
     output = json.loads(capsys.readouterr().out)
-    assert output["selection"]["k_points"]["grid"] == [2, 2, 1]
+    assert output["k_points"]["grid"] == [2, 2, 1]
     assert output["request"]["structure"] == "Si.cif"
 
 
@@ -405,8 +403,8 @@ def test_main_builds_request_with_model_backend(monkeypatch, capsys) -> None:
     assert json.loads(capsys.readouterr().out)["request"]["structure"] == "Si.cif"
 
 
-def test_main_builds_bundle_request_with_output_dir(monkeypatch, capsys) -> None:
-    """Pass bundle output path through the shared Core job request."""
+def test_main_builds_generate_request_with_output_dir(monkeypatch, capsys) -> None:
+    """Pass generate output path through the shared Core job request."""
     captured: dict[str, CoreJobRequest] = {}
 
     def fake_run_core_job(request: CoreJobRequest) -> CoreResult:
@@ -416,6 +414,7 @@ def test_main_builds_bundle_request_with_output_dir(monkeypatch, capsys) -> None
             intent=result.intent,
             analysis=result.analysis,
             advice=result.advice,
+            k_points=result.k_points,
             selection=result.selection,
             bundle=BundleRecord(path=request.output_dir, manifest={}),
         )
@@ -424,11 +423,11 @@ def test_main_builds_bundle_request_with_output_dir(monkeypatch, capsys) -> None
     monkeypatch.setattr(
         sys,
         "argv",
-        ["goldilocks-core", "bundle", "Si.cif", "--out", "run"],
+        ["goldilocks-core", "generate", "Si.cif", "--out", "run"],
     )
 
     cli_core.main()
 
-    assert captured["request"].mode == "bundle"
+    assert captured["request"].mode == "generate"
     assert captured["request"].output_dir == "run"
     assert "bundle: run" in capsys.readouterr().out

@@ -7,6 +7,7 @@ from goldilocks_core.contracts import (
     CalculationIntent,
     ConvergenceAdvice,
     CoreJobRequest,
+    CoreRecords,
     CoreResult,
     KPointSelection,
     MagnetismAdvice,
@@ -68,17 +69,18 @@ def _make_advice() -> ParameterAdvice:
     )
 
 
-def _make_selection() -> SelectionRecord:
+def _make_k_points() -> KPointSelection:
     provenance = Provenance(source="default", reason="baseline default")
-    return SelectionRecord(
-        k_points=KPointSelection(
-            grid=(4, 4, 4),
-            shift=(0, 0, 0),
-            mesh_type="monkhorst-pack",
-            provenance=provenance,
-        ),
-        pseudopotentials=(),
+    return KPointSelection(
+        grid=(4, 4, 4),
+        shift=(0, 0, 0),
+        mesh_type="monkhorst-pack",
+        provenance=provenance,
     )
+
+
+def _make_selection() -> SelectionRecord:
+    return SelectionRecord(pseudopotentials=())
 
 
 def test_contracts_serialize_to_json_safe_dicts() -> None:
@@ -87,15 +89,28 @@ def test_contracts_serialize_to_json_safe_dicts() -> None:
         intent=CalculationIntent(),
         analysis=_make_analysis(),
         advice=_make_advice(),
+        k_points=_make_k_points(),
         selection=_make_selection(),
     )
 
     data = result.to_dict()
 
     assert data["analysis"]["elements"] == ["Si"]
-    assert data["selection"]["k_points"]["grid"] == [4, 4, 4]
+    assert data["k_points"]["grid"] == [4, 4, 4]
     assert "grid" not in data
     assert "contains_heavy_elements" not in data
+
+
+def test_core_records_maps_requested_types_and_serializes_record_names() -> None:
+    """Expose only requested DAG records and serialize their type names."""
+    analysis = _make_analysis()
+    records = CoreRecords({StructureAnalysisRecord: analysis})
+
+    assert records[StructureAnalysisRecord] is analysis
+    assert tuple(records) == (StructureAnalysisRecord,)
+    assert records.to_dict() == {
+        "StructureAnalysisRecord": analysis.to_dict(),
+    }
 
 
 def test_calculation_intent_omits_removed_accuracy_control() -> None:
@@ -129,6 +144,7 @@ def test_job_records_serialize_to_json_safe_dicts() -> None:
         intent=CalculationIntent(),
         analysis=_make_analysis(),
         advice=_make_advice(),
+        k_points=_make_k_points(),
         selection=_make_selection(),
         bundle=BundleRecord(path="run/", manifest={"manifest_version": 1}),
     )
@@ -136,14 +152,13 @@ def test_job_records_serialize_to_json_safe_dicts() -> None:
     data = result.to_dict()
 
     assert data["bundle"]["path"] == "run/"
-    assert data["selection"]["k_points"]["grid"] == [4, 4, 4]
+    assert data["k_points"]["grid"] == [4, 4, 4]
 
 
-def test_core_job_request_validates_mode_and_bundle_output_dir() -> None:
-    """CoreJobRequest raises at construction for invalid mode or missing output_dir."""
+def test_core_job_request_validates_mode() -> None:
+    """CoreJobRequest raises at construction for invalid modes."""
     CoreJobRequest(structure="Si.cif", mode="recommend")
     CoreJobRequest(structure="Si.cif", mode="generate")
-    CoreJobRequest(structure="Si.cif", mode="bundle", output_dir="run/")
 
     try:
         CoreJobRequest(structure="Si.cif", mode="invalid")
@@ -151,13 +166,6 @@ def test_core_job_request_validates_mode_and_bundle_output_dir() -> None:
         pass
     else:
         raise AssertionError("expected ValueError for invalid mode")
-
-    try:
-        CoreJobRequest(structure="Si.cif", mode="bundle")
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("expected ValueError for bundle mode without output_dir")
 
 
 def test_calculation_intent_defaults_to_pbesol() -> None:

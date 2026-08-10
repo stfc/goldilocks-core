@@ -7,9 +7,7 @@ from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
-    KPointSelection,
     ParameterAdvice,
-    Provenance,
 )
 from goldilocks_core.kmesh import resolve_kpoints
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
@@ -58,29 +56,16 @@ def make_metadata(
     )
 
 
-def _stub_backend(structure: Structure) -> KPointSelection:
-    """Deterministic k-point backend for selection unit tests."""
-    return KPointSelection(
-        grid=(4, 4, 4),
-        shift=(0, 0, 0),
-        mesh_type="monkhorst-pack",
-        provenance=Provenance(source="model", reason="stub"),
-    )
-
-
 def select_from_advice(
     structure: Structure,
     advice: ParameterAdvice,
     *,
-    hints: CalculationHints | None = None,
     metadata_list: list[PseudoMetadata] | None = None,
 ):
-    """Resolve k-points through Kmesh before running Select."""
-    hints = hints or CalculationHints()
+    """Run Select on advice without k-points (Select no longer takes them)."""
     return select_parameters(
         structure,
         advice,
-        resolve_kpoints(structure, hints, _stub_backend),
         metadata_list=metadata_list,
     )
 
@@ -94,12 +79,9 @@ def test_select_parameters_resolves_pseudos_with_kmesh_selection() -> None:
     selection = select_from_advice(
         structure,
         advice,
-        hints=hints,
         metadata_list=[make_metadata()],
     )
 
-    assert selection.k_points.grid == (7, 7, 7)
-    assert selection.k_points.shift == (0, 0, 0)
     pseudo = selection.pseudopotentials[0]
     assert pseudo.element == "Si"
     assert pseudo.filename == "Si.UPF"
@@ -353,12 +335,11 @@ def test_select_parameters_keeps_explicit_grid_hint() -> None:
     """Use a Kmesh-stage explicit grid without recalculating spacing."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 1))
-    advice = advise_parameters(analyze_structure(structure), hints=hints)
 
-    selection = select_from_advice(structure, advice, hints=hints)
+    k_points = resolve_kpoints(structure, hints, lambda s: None)
 
-    assert selection.k_points.grid == (2, 2, 1)
-    assert selection.k_points.provenance.source == "user_hint"
+    assert k_points.grid == (2, 2, 1)
+    assert k_points.provenance.source == "user_hint"
 
 
 def test_select_parameters_warns_when_pseudo_is_missing() -> None:

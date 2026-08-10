@@ -28,14 +28,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    for command in ("recommend", "generate", "bundle"):
+    for command in ("recommend", "generate"):
         subparser = subparsers.add_parser(command)
         _add_common_arguments(subparser)
-        if command == "bundle":
+        if command == "generate":
             subparser.add_argument(
                 "--out",
-                required=True,
-                help="Output directory for the portable Core bundle.",
+                help="Output directory for a portable Core bundle.",
             )
 
     examples = subparsers.add_parser(
@@ -238,7 +237,7 @@ def _parse_optional_bool(value: str | None) -> bool | None:
 
 def _print_human_summary(result: CoreResult) -> None:
     """Print a small human-readable summary from the Core result."""
-    grid = result.selection.k_points.grid
+    grid = result.k_points.grid
     print(f"formula: {result.analysis.reduced_formula}")
     print(f"code: {result.intent.code}")
     print(f"task: {result.intent.task}")

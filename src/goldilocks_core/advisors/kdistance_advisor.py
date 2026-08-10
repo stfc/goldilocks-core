@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 
 from pymatgen.core import Structure
 
@@ -67,14 +68,16 @@ class QrfKDistanceBackend:
         self._metallicity_checkpoint = metallicity_checkpoint
         self._metallicity_atom_init = metallicity_atom_init
         self._resources: QrfResources | None = None
+        self._lock = threading.Lock()
         self._closed = False
 
     def __call__(self, structure: Structure) -> KPointSelection:
         """Predict a k-point selection for ``structure`` using the QRF model."""
         if self._closed:
             raise RuntimeError("QrfKDistanceBackend is closed.")
-        if self._resources is None:
-            self._resources = self._load_resources()
+        with self._lock:
+            if self._resources is None:
+                self._resources = self._load_resources()
         prediction = predict_kdistance_with_resources(
             structure, self._config, self._resources
         )

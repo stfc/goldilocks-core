@@ -75,6 +75,29 @@ def test_pseudo_metadata_loads_from_json_manifest(tmp_path) -> None:
     assert meta.filename == "Si.UPF"
 
 
+def test_malformed_pseudo_manifest_fails_with_clear_error(tmp_path) -> None:
+    """A non-JSON manifest fails with a locating message, not a cryptic parse error."""
+    path = tmp_path / "pseudo.json"
+    path.write_text("{ this is not json", encoding="utf-8")
+
+    with pytest.raises(ValueError) as error:
+        DeploymentConfig.from_environ({PSEUDO_METADATA_ENV: str(path)})
+
+    message = str(error.value)
+    assert "not valid JSON" in message
+    assert str(path) in message
+    assert "line" in message
+
+
+def test_non_object_pseudo_entry_fails_with_clear_error(tmp_path) -> None:
+    """A non-object manifest entry names the offending entry."""
+    path = tmp_path / "pseudo.json"
+    path.write_text("[42]", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="entry 0 must be a JSON object"):
+        DeploymentConfig.from_environ({PSEUDO_METADATA_ENV: str(path)})
+
+
 def test_injected_pseudo_metadata_drives_selection(
     test_runtime, sample_structure_text
 ) -> None:

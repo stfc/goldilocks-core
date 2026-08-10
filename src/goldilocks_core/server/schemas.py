@@ -12,16 +12,15 @@ from typing import Any, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from goldilocks_core.contracts import ModelSource, ModelType, SmearingType, VdwMethod
+from goldilocks_core.contracts import SmearingType, VdwMethod
+from goldilocks_core.contracts.outputs import OUTPUT_TYPES_BY_ID
 
-_OutputName = Literal[
-    "analysis",
-    "advice",
-    "k_points",
-    "selection",
-    "generated_files",
-]
-"""Stable record ids accepted by the compute operation."""
+_OutputName = Literal[*tuple(OUTPUT_TYPES_BY_ID)]
+"""Stable record ids accepted by the compute operation.
+
+Derived from the authoritative output-record registry so the HTTP transport
+cannot drift from Core's record ids.
+"""
 
 StructureFormat = Literal["cif", "poscar"]
 """Inline structure formats the Workbench transport accepts."""
@@ -150,21 +149,6 @@ class PseudoMetadata(BaseModel):
     sssp_recommended_cutoff: dict[str, Any] | None = None
 
 
-class KmeshModel(BaseModel):
-    """Optional local k-mesh model specification."""
-
-    model_config = ConfigDict(extra="allow")
-
-    name: str
-    version: str
-    model_type: ModelType
-    target: str
-    feature_set: str
-    source: ModelSource
-    location: str
-    revision: str | None = None
-
-
 class ComputationRequest(BaseModel):
     """Request for the recommend or generate preset.
 
@@ -180,7 +164,6 @@ class ComputationRequest(BaseModel):
     hints: Hints | None = None
     mode: Literal["recommend", "generate"] | None = None
     pseudo_metadata: list[PseudoMetadata] | None = None
-    kmesh_model: KmeshModel | None = None
 
 
 class RecordQuery(BaseModel):
@@ -197,7 +180,6 @@ class RecordQuery(BaseModel):
     intent: Intent | None = None
     hints: Hints | None = None
     pseudo_metadata: list[PseudoMetadata] | None = None
-    kmesh_model: KmeshModel | None = None
 
 
 class ProvenanceModel(BaseModel):
@@ -398,6 +380,7 @@ class CoreResultResponse(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    core_version: str
     intent: IntentModel
     analysis: AnalysisModel
     advice: AdviceModel

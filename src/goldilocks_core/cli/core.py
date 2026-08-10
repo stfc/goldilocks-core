@@ -43,7 +43,10 @@ def build_parser() -> argparse.ArgumentParser:
     compute.add_argument(
         "--outputs",
         required=True,
-        help="Comma-separated record type names to compute.",
+        help=(
+            "Comma-separated stable record ids to compute: "
+            "analysis, advice, k_points, selection, generated_files."
+        ),
     )
 
     serve = subparsers.add_parser(

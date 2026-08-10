@@ -9,6 +9,7 @@ from goldilocks_core.server.concurrency import ComputeGate
 from goldilocks_core.server.config import DeploymentConfig
 from goldilocks_core.server.errors import register_error_handlers
 from goldilocks_core.server.request import RequestError, from_dict
+from goldilocks_core.version import package_version
 
 __all__ = ["create_app", "serve"]
 
@@ -17,8 +18,13 @@ _MISSING_HTTP_EXTRA = (
     "Install it with `uv sync --extra http`."
 )
 
-_HTTP_FORBIDDEN_FIELDS = frozenset({"output_dir", "pseudo_root"})
-"""Server-path concepts never allowed on the Workbench HTTP surface."""
+_HTTP_FORBIDDEN_FIELDS = frozenset({"output_dir", "pseudo_root", "kmesh_model"})
+"""Server-path and model-selection concepts never allowed on the Workbench HTTP surface.
+
+The browser sends inline structure content and identifies pseudos by
+filename/library; it never chooses a server-side model or output location.
+Python/CLI/MCP retain those capabilities through the shared parser.
+"""
 
 
 def _reject_workbench_server_paths(raw: dict[str, Any]) -> None:
@@ -109,8 +115,8 @@ def create_app(
     }
 
     @app.get("/health", responses={200: {"description": "Process liveness"}})
-    def health() -> dict[str, str]:
-        """Report process liveness."""
+    async def health() -> dict[str, str]:
+        """Report process liveness without occupying a compute thread."""
         return {"status": "ok"}
 
     @app.post(
@@ -127,7 +133,7 @@ def create_app(
         return structure_to_document(structure, source_format=body.format).to_dict()
 
     @app.get("/tasks", response_model=TaskCatalogueModel, responses=_ERROR_RESPONSES)
-    def tasks() -> dict[str, Any]:
+    async def tasks() -> dict[str, Any]:
         """Describe every registered Core task with stable identifiers."""
         if state.runtime is None:
             raise RuntimeError("CoreRuntime is not initialized.")
@@ -184,7 +190,10 @@ def _execute(endpoint: str, body: Any, state: _AppState) -> dict[str, Any]:
     if state.runtime is None:
         raise RuntimeError("CoreRuntime is not initialized.")
     with state.gate:
-        return run_core_job(request, runtime=state.runtime).to_dict()
+        result = run_core_job(request, runtime=state.runtime).to_dict()
+    if endpoint in {"recommend", "generate"}:
+        result["core_version"] = package_version()
+    return result
 
 
 def _inject_server_pseudo_metadata(raw: dict[str, Any], state: _AppState) -> None:

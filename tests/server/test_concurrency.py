@@ -85,3 +85,45 @@ def test_computation_succeeds_when_a_slot_is_free(test_runtime, request_body) ->
 
     assert response.status_code == 200
     assert response.json()["analysis"]["reduced_formula"] == "Si"
+
+
+def test_parallel_http_computations_do_not_corrupt_shared_runtime(
+    test_runtime, request_body
+) -> None:
+    """Concurrent HTTP computations serialize through the shared runtime seam.
+
+    Fires many parallel /recommend requests over the ASGI transport against one
+    runtime and asserts every result is complete and correct, proving shared
+    runtime execution and lazy initialization cannot overlap or corrupt state.
+    """
+    import asyncio
+
+    import httpx
+
+    app = create_app(
+        test_runtime,
+        config=DeploymentConfig(compute_limit=8, compute_wait_seconds=30.0),
+    )
+
+    async def run():
+        async with app.router.lifespan_context(app):
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+
+                async def fire(_: int):
+                    return await client.post("/recommend", json=request_body)
+
+                responses = await asyncio.gather(*(fire(i) for i in range(8)))
+                return responses
+
+    responses = asyncio.run(run())
+    assert len(responses) == 8
+    for response in responses:
+        assert response.status_code == 200
+        data = response.json()
+        assert data["analysis"]["reduced_formula"] == "Si"
+        assert data["k_points"]["grid"] == [3, 3, 3]
+        assert data["core_version"]
+        assert data["selection"]["pseudopotentials"][0]["element"] == "Si"

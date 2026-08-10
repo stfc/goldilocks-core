@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from goldilocks_core.server.http import create_app
+from goldilocks_core.version import package_version
 
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
 
@@ -24,6 +27,7 @@ def test_recommend_returns_core_result_json(test_runtime, request_body) -> None:
     assert response.status_code == 200
     data = response.json()
     assert set(data) == {
+        "core_version",
         "intent",
         "analysis",
         "advice",
@@ -33,6 +37,7 @@ def test_recommend_returns_core_result_json(test_runtime, request_body) -> None:
         "warnings",
         "bundle",
     }
+    assert data["core_version"]
     assert data["analysis"]["reduced_formula"] == "Si"
     assert data["k_points"]["grid"] == [3, 3, 3]
     assert data["generated_files"] == []
@@ -97,6 +102,67 @@ def test_recommend_rejects_server_path_concepts(test_runtime, request_body) -> N
     for response in (pseudo_root, filepath):
         assert response.status_code == 422
         assert response.json()["error"]["kind"] == "invalid_request"
+
+
+def test_reject_kmesh_model_on_every_workbench_endpoint(
+    test_runtime, request_body
+) -> None:
+    """The browser never selects a server-side model: kmesh_model is rejected."""
+    body = {
+        **request_body,
+        "kmesh_model": {
+            "name": "x",
+            "version": "1",
+            "model_type": "random_forest",
+            "target": "k_index",
+            "feature_set": "cslr",
+            "source": "local",
+            "location": "/etc/passwd",
+        },
+    }
+
+    with TestClient(create_app(test_runtime)) as client:
+        recommend = client.post("/recommend", json=body)
+        generate = client.post("/generate", json=body)
+        compute = client.post("/compute", json={**body, "outputs": ["analysis"]})
+
+    for response in (recommend, generate, compute):
+        assert response.status_code == 422
+        error = response.json()["error"]
+        assert error["kind"] == "invalid_request"
+        assert "kmesh_model" in error["message"]
+
+
+def test_recommend_and_generate_report_core_version(test_runtime, request_body) -> None:
+    """Recommend/generate responses expose the centralized Core version."""
+    for path in ("/recommend", "/generate"):
+        with TestClient(create_app(test_runtime)) as client:
+            response = client.post(path, json=request_body)
+        assert response.status_code == 200
+        assert response.json()["core_version"] == package_version()
+
+
+def test_compute_response_carries_no_core_version(test_runtime, request_body) -> None:
+    """The compute query response is not a preset and reports no preset version."""
+    with TestClient(create_app(test_runtime)) as client:
+        response = client.post(
+            "/compute", json={**request_body, "outputs": ["analysis"]}
+        )
+    assert response.status_code == 200
+    assert "core_version" not in response.json()
+
+
+def test_health_and_tasks_run_on_the_event_loop(test_runtime) -> None:
+    """health and tasks are async, so a saturated threadpool can't starve them."""
+    app = create_app(test_runtime)
+    endpoints = {
+        route.path: route.endpoint
+        for route in app.routes
+        if getattr(route, "path", None) in {"/health", "/tasks"}
+    }
+    assert asyncio.iscoroutinefunction(endpoints["/health"])
+    assert asyncio.iscoroutinefunction(endpoints["/tasks"])
+    assert package_version()
 
 
 def test_compute_returns_only_requested_records(test_runtime, request_body) -> None:

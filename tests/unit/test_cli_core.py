@@ -1,3 +1,4 @@
+import argparse
 import json
 import sys
 from dataclasses import fields
@@ -375,6 +376,25 @@ def test_main_compute_prints_requested_analysis_and_advice(monkeypatch, capsys) 
     assert set(output) == {"analysis", "advice"}
     assert output["analysis"]["reduced_formula"] == "Si"
     assert "smearing" in output["advice"]
+
+
+def test_compute_outputs_help_lists_stable_record_ids() -> None:
+    """The compute --outputs help names stable record ids, not generic types."""
+    parser = cli_core.build_parser()
+    compute_parser = next(
+        sub
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)
+        for name, sub in action.choices.items()
+        if name == "compute"
+    )
+    outputs_help = next(
+        action.help for action in compute_parser._actions if action.dest == "outputs"
+    )
+    assert outputs_help is not None
+    assert "stable record ids" in outputs_help
+    assert "analysis" in outputs_help
+    assert "generated_files" in outputs_help
 
 
 def test_main_compute_prints_only_requested_analysis(monkeypatch, capsys) -> None:

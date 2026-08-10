@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Health
-         * @description Report process liveness.
+         * @description Report process liveness without occupying a compute thread.
          */
         get: operations["health_health_get"];
         put?: never;
@@ -243,7 +243,6 @@ export interface components {
             mode?: ("recommend" | "generate") | null;
             /** Pseudo Metadata */
             pseudo_metadata?: components["schemas"]["PseudoMetadata"][] | null;
-            kmesh_model?: components["schemas"]["KmeshModel"] | null;
         } & {
             [key: string]: unknown;
         };
@@ -273,6 +272,8 @@ export interface components {
          * @description Response of the recommend and generate presets.
          */
         CoreResultResponse: {
+            /** Core Version */
+            core_version: string;
             intent: components["schemas"]["IntentModel"];
             analysis: components["schemas"]["AnalysisModel"];
             advice: components["schemas"]["AdviceModel"];
@@ -424,36 +425,6 @@ export interface components {
             [key: string]: unknown;
         };
         /**
-         * KmeshModel
-         * @description Optional local k-mesh model specification.
-         */
-        KmeshModel: {
-            /** Name */
-            name: string;
-            /** Version */
-            version: string;
-            /**
-             * Model Type
-             * @enum {string}
-             */
-            model_type: "random_forest" | "cgcnn" | "xgboost";
-            /** Target */
-            target: string;
-            /** Feature Set */
-            feature_set: string;
-            /**
-             * Source
-             * @enum {string}
-             */
-            source: "huggingface" | "local";
-            /** Location */
-            location: string;
-            /** Revision */
-            revision?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
          * MagnetismAdviceModel
          * @description Serialized MagnetismAdvice.
          */
@@ -600,7 +571,6 @@ export interface components {
             hints?: components["schemas"]["Hints"] | null;
             /** Pseudo Metadata */
             pseudo_metadata?: components["schemas"]["PseudoMetadata"][] | null;
-            kmesh_model?: components["schemas"]["KmeshModel"] | null;
         } & {
             [key: string]: unknown;
         };

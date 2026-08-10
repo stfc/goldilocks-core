@@ -6,6 +6,7 @@ from pathlib import Path
 
 from pymatgen.core import Composition, Structure
 
+from goldilocks_core._lint import allow_swallow
 from goldilocks_core.contracts import (
     StructureDocument,
     StructureInput,
@@ -60,6 +61,7 @@ def load_structure(structure: StructureInput) -> Structure:
     )
 
 
+@allow_swallow
 def load_structure_from_text(content: str, fmt: str | None = None) -> Structure:
     """Parse inline structure text into a pymatgen Structure.
 

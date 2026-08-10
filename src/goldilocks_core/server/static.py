@@ -2,8 +2,9 @@
 
 The static mount is optional: it activates only when a configured or default
 build directory containing ``index.html`` exists, and it is registered after
-every API route so it never shadows API/health paths. A catch-all GET returns
-``index.html`` for any other path (SPA fallback) and is excluded from OpenAPI.
+every API route so it never shadows API/health paths. The application has no
+client-side router, so only ``/`` (the shell) and hashed ``/assets`` files are
+served; any other GET path is a genuine 404 rather than a masked SPA fallback.
 """
 
 from __future__ import annotations
@@ -51,11 +52,10 @@ def mount_workbench(app: Any) -> bool:
     if assets.is_dir():
         app.mount("/assets", StaticFiles(directory=str(assets)), name="assets")
 
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def spa_fallback(full_path: str) -> Any:
+    @app.get("/", include_in_schema=False)
+    async def index() -> Any:
         from fastapi.responses import FileResponse
 
-        del full_path
         return FileResponse(build_dir / "index.html")
 
     return True

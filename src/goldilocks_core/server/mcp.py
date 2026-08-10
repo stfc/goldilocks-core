@@ -15,19 +15,15 @@ except ImportError as error:
     ) from error
 
 from goldilocks_core.contracts import ModelSource, ModelType, SmearingType, VdwMethod
+from goldilocks_core.contracts.outputs import OUTPUT_TYPES_BY_ID
 from goldilocks_core.jobs import run_core_job
 from goldilocks_core.runtime import CoreRuntime
 from goldilocks_core.server.request import from_dict
+from goldilocks_core.version import package_version
 
 __all__ = ["create_server", "serve"]
 
-_OutputName = Literal[
-    "analysis",
-    "advice",
-    "k_points",
-    "selection",
-    "generated_files",
-]
+_OutputName = Literal[*tuple(OUTPUT_TYPES_BY_ID)]
 
 
 class _InlineStructure(BaseModel):
@@ -176,7 +172,7 @@ def create_server(
 
     server = MCPServer(
         name=name,
-        version="0.1.0",
+        version=package_version(),
         instructions=(
             "Recommend or generate DFT inputs, or compute selected Core records."
         ),

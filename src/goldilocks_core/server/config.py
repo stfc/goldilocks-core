@@ -107,22 +107,41 @@ def _read_pseudo_metadata(env: Mapping[str, str]) -> tuple[PseudoMetadata, ...]:
 
 def _load_pseudo_json(path: Path) -> tuple[PseudoMetadata, ...]:
     """Load ``PseudoMetadata`` entries from an administrator JSON manifest."""
-    data = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise ValueError(
+            f"{PSEUDO_METADATA_ENV} file {path} is not valid JSON: "
+            f"line {error.lineno}, column {error.colno}: {error.msg}"
+        ) from error
+    except OSError as error:
+        raise ValueError(
+            f"Could not read {PSEUDO_METADATA_ENV} file {path}: {error}"
+        ) from error
     if isinstance(data, Mapping):
         entries: list[Any] = list(data.values())
     elif isinstance(data, list):
         entries = data
     else:
         raise ValueError(
-            f"{PSEUDO_METADATA_ENV} file must contain a list or object of "
+            f"{PSEUDO_METADATA_ENV} file {path} must contain a list or object of "
             "pseudopotential metadata."
         )
-    return tuple(_coerce_pseudo(entry) for entry in entries)
+    return tuple(_coerce_pseudo(entry, index) for index, entry in enumerate(entries))
 
 
-def _coerce_pseudo(value: Any) -> PseudoMetadata:
+def _coerce_pseudo(value: Any, index: int) -> PseudoMetadata:
     if isinstance(value, PseudoMetadata):
         return value
     if not isinstance(value, Mapping):
-        raise ValueError("Each pseudopotential metadata entry must be a JSON object.")
-    return PseudoMetadata(**dict(value))
+        raise ValueError(
+            f"{PSEUDO_METADATA_ENV} entry {index} must be a JSON object; "
+            f"got {type(value).__name__}."
+        )
+    try:
+        return PseudoMetadata(**dict(value))
+    except (TypeError, ValueError) as error:
+        raise ValueError(
+            f"{PSEUDO_METADATA_ENV} entry {index} is invalid "
+            f"({getattr(value, 'get', lambda *_: '')('element') or 'unknown'}): {error}"
+        ) from error

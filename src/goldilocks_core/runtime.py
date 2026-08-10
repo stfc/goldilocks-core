@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from dataclasses import replace
 
 from pymatgen.core import Structure
@@ -131,6 +132,7 @@ class CoreRuntime:
         )
         self._metallicity_model: object | None = None
         self._metallicity_graph_settings: tuple[float, int] | None = None
+        self._lock = threading.RLock()
         self._backend = self._build_backend()
         self._task = SCF_TASK
         self._closed = False
@@ -174,10 +176,16 @@ class CoreRuntime:
         outputs: tuple[type, ...],
         request: CoreJobRequest,
     ) -> CoreRecords:
-        """Execute the minimal SCF subgraph for ``outputs``."""
+        """Execute the minimal SCF subgraph for ``outputs``.
+
+        Runtime execution is serialized so shared model lazy initialization and
+        inference never overlap across concurrent requests; the outer transport
+        gate bounds capacity and container scaling provides parallelism.
+        """
         self._ensure_open()
         self._ensure_scf_request(request)
-        return execute(self._task, outputs, self._context(request))
+        with self._lock:
+            return execute(self._task, outputs, self._context(request))
 
     def describe_tasks(self) -> tuple[TaskGraphDescription, ...]:
         """Return transport-safe descriptions of every registered task."""

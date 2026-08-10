@@ -8,7 +8,7 @@
     "/health": {
       "get": {
         "summary": "Health",
-        "description": "Report process liveness.",
+        "description": "Report process liveness without occupying a compute thread.",
         "operationId": "health_health_get",
         "responses": {
           "200": {
@@ -647,16 +647,6 @@
               }
             ],
             "title": "Pseudo Metadata"
-          },
-          "kmesh_model": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/KmeshModel"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "additionalProperties": true,
@@ -698,6 +688,10 @@
       },
       "CoreResultResponse": {
         "properties": {
+          "core_version": {
+            "type": "string",
+            "title": "Core Version"
+          },
           "intent": {
             "$ref": "#/components/schemas/IntentModel"
           },
@@ -741,6 +735,7 @@
         "additionalProperties": true,
         "type": "object",
         "required": [
+          "core_version",
           "intent",
           "analysis",
           "advice",
@@ -1110,71 +1105,6 @@
         ],
         "title": "KPointSelectionModel",
         "description": "Serialized KPointSelection."
-      },
-      "KmeshModel": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "version": {
-            "type": "string",
-            "title": "Version"
-          },
-          "model_type": {
-            "type": "string",
-            "enum": [
-              "random_forest",
-              "cgcnn",
-              "xgboost"
-            ],
-            "title": "Model Type"
-          },
-          "target": {
-            "type": "string",
-            "title": "Target"
-          },
-          "feature_set": {
-            "type": "string",
-            "title": "Feature Set"
-          },
-          "source": {
-            "type": "string",
-            "enum": [
-              "huggingface",
-              "local"
-            ],
-            "title": "Source"
-          },
-          "location": {
-            "type": "string",
-            "title": "Location"
-          },
-          "revision": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Revision"
-          }
-        },
-        "additionalProperties": true,
-        "type": "object",
-        "required": [
-          "name",
-          "version",
-          "model_type",
-          "target",
-          "feature_set",
-          "source",
-          "location"
-        ],
-        "title": "KmeshModel",
-        "description": "Optional local k-mesh model specification."
       },
       "MagnetismAdviceModel": {
         "properties": {
@@ -1590,16 +1520,6 @@
               }
             ],
             "title": "Pseudo Metadata"
-          },
-          "kmesh_model": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/KmeshModel"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "additionalProperties": true,

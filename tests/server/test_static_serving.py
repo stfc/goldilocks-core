@@ -44,19 +44,21 @@ def test_static_serves_index_and_assets(tmp_path, monkeypatch) -> None:
 
 
 def test_static_mount_does_not_shadow_api_routes(tmp_path, monkeypatch) -> None:
-    """API and health routes keep precedence over the static fallback."""
+    """API and health routes keep precedence; unknown GET paths are a real 404."""
     _write_build(tmp_path, index="<html>goldilocks</html>")
     monkeypatch.setenv(WEB_DIST_ENV, str(tmp_path))
 
     with TestClient(create_app()) as client:
         health = client.get("/health")
         tasks = client.get("/tasks")
-        fallback = client.get("/some/client/route")
+        root = client.get("/")
+        missing = client.get("/some/client/route")
 
     assert health.status_code == 200
     assert health.json() == {"status": "ok"}
     assert tasks.status_code == 200
     assert tasks.json()["tasks"]
-    # Any other GET path falls back to the SPA shell.
-    assert fallback.status_code == 200
-    assert fallback.text == "<html>goldilocks</html>"
+    # The app has no client router: `/` serves the shell, anything else 404s.
+    assert root.status_code == 200
+    assert root.text == "<html>goldilocks</html>"
+    assert missing.status_code == 404

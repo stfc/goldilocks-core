@@ -94,6 +94,47 @@ def test_openapi_request_schemas_advertise_no_server_paths(test_runtime) -> None
     assert "filename" in pseudo_props
 
 
+def test_openapi_request_schemas_do_not_declare_kmesh_model(test_runtime) -> None:
+    """The Workbench surface has no kmesh_model schema or field at all."""
+    spec = _openapi(test_runtime)
+    components = spec["components"]["schemas"]
+    assert "KmeshModel" not in components
+    for name, schema in components.items():
+        assert "kmesh_model" not in schema.get("properties", {}), name
+
+
+def test_openapi_core_result_response_carries_core_version(test_runtime) -> None:
+    """Recommend/generate responses document the Core version for the manifest."""
+    spec = _openapi(test_runtime)
+    props = spec["components"]["schemas"]["CoreResultResponse"]["properties"]
+    assert props["core_version"]["type"] == "string"
+
+
+def test_http_output_literal_matches_authoritative_registry(test_runtime) -> None:
+    """The compute output literal derives from Core's record-id registry."""
+    from goldilocks_core.contracts.outputs import OUTPUT_TYPES_BY_ID
+    from goldilocks_core.contracts.records import RECORD_TYPE_IDS
+    from goldilocks_core.server.schemas import _OutputName
+
+    assert set(_OutputName.__args__) == set(OUTPUT_TYPES_BY_ID)
+    assert set(_OutputName.__args__) <= set(RECORD_TYPE_IDS.values())
+
+
+def test_openapi_compute_outputs_accept_only_registered_record_ids(
+    test_runtime,
+) -> None:
+    """The compute outputs enum is the authoritative output record ids."""
+    from goldilocks_core.contracts.outputs import OUTPUT_TYPES_BY_ID
+
+    spec = _openapi(test_runtime)
+    name = spec["paths"]["/compute"]["post"]["requestBody"]["content"][
+        "application/json"
+    ]["schema"]["$ref"].split("/")[-1]
+    outputs = spec["components"]["schemas"][name]["properties"]["outputs"]
+    enum = outputs["anyOf"][0]["items"]["enum"]
+    assert set(enum) == set(OUTPUT_TYPES_BY_ID)
+
+
 def test_openapi_response_selection_has_no_server_path(test_runtime) -> None:
     """The Workbench selection response never exposes a server filesystem path."""
     spec = _openapi(test_runtime)

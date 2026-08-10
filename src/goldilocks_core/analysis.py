@@ -20,12 +20,15 @@ from goldilocks_core.contracts import (
 
 
 class DimensionalityClassificationError(Exception):
-    """Dimensionality could not be classified for a structure.
+    """Dimensionality could not be classified for an ordered structure.
 
-    Raised when CrystalNN bonding or the Larsen dimensionality algorithm fails.
-    The recommendation cannot proceed: ``advise_vdw`` depends on dimensionality,
-    so a silent fallback to ``"unknown"`` would produce a partial recommendation.
-    The real fix is a goldilocks-side classifier (see #133).
+    Raised when CrystalNN bonding or the Larsen dimensionality algorithm fails
+    on a structure it is expected to handle. Disordered structures take a
+    conservative ``"unknown"`` default instead (see ``_analyze_dimensionality``):
+    CrystalNN cannot analyze them, so a hard error would make goldilocks
+    unusable for legitimate disordered inputs. An ordered-structure failure is
+    unexpected, so it surfaces hard rather than silently degrading the
+    recommendation. The real fix is a goldilocks-side classifier (see #133).
     """
 
     def __init__(self, structure: Structure, /) -> None:
@@ -194,9 +197,11 @@ def _analyze_dimensionality(
     heuristic is connectivity-derived, not a measurement of cell vacuum.
     Disordered structures are not passed to CrystalNN because its graph path
     does not support them; they get a conservative ``"unknown"`` default with a
-    warning. When CrystalNN or Larsen fails on an ordered structure,
-    :class:`DimensionalityClassificationError` propagates -- the recommendation
-    cannot proceed without dimensionality (see #133).
+    warning (disordered is a known limitation, not an unexpected failure). When
+    CrystalNN or Larsen fails on an ordered structure,
+    :class:`DimensionalityClassificationError` propagates -- an ordered-structure
+    failure is unexpected, so it surfaces hard rather than silently degrading
+    the recommendation (see #133).
     """
     if not structure.is_ordered:
         return (

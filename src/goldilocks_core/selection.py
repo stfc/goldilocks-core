@@ -9,7 +9,6 @@ from typing import Any, Sequence
 import numpy as np
 from pymatgen.core import Structure
 
-from goldilocks_core._lint import allow_swallow
 from goldilocks_core.contracts import (
     ParameterAdvice,
     Provenance,
@@ -176,7 +175,6 @@ def _has_complete_cutoffs(metadata: PseudoMetadata) -> bool:
     return all(_read_cutoff(metadata, field)[1] is None for field in _CUTOFF_FIELDS)
 
 
-@allow_swallow
 def _read_cutoff(
     metadata: PseudoMetadata,
     field: str,

@@ -9,7 +9,6 @@ All notable changes to goldilocks-core are documented here.
 - CLI `--use-vdw` and `--vdw-method` options matching the Python hint controls.
 - Example structures (`Si`, `Fe_bcc`, `Pt_fcc`) installed with the package, reachable from `goldilocks_core.examples` and `goldilocks-core examples path`.
 - `DimensionalityClassificationError` and `SymmetryAnalysisError` (in `goldilocks_core.analysis`); `SymmetryUnavailable` typed value (in `goldilocks_core.contracts`), recorded in symmetry fields when spglib cannot analyze.
-- `allow_swallow` decorator (`goldilocks_core._lint`) and the `scripts/check_no_swallow.py` AST pre-commit hook enforcing export-only `__init__.py` and no silent `try/except` (the sole opt-in is `@allow_swallow`).
 - A typed DAG executor with frozen stage/task/preset specifications, registered SCF presets, and `CoreRecords` query results.
 - `CoreRuntime` as the explicit lifecycle owner for reusable kmesh and metallicity models.
 

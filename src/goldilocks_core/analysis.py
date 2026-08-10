@@ -11,7 +11,6 @@ from pymatgen.core.graphs import StructureGraph
 from pymatgen.core.periodic_table import Element
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
-from goldilocks_core._lint import allow_swallow
 from goldilocks_core.contracts import (
     Dimensionality,
     ElectronicCharacter,
@@ -74,7 +73,6 @@ def heuristic_metallicity(structure: Structure) -> ElectronicCharacter:
     return "unknown"
 
 
-@allow_swallow
 def analyze_structure(
     structure: Structure,
     *,

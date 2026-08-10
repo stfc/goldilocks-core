@@ -66,6 +66,24 @@ describe('toCoreFailure', () => {
     expect(failure.raw).toMatchObject({ detail: expect.any(Array) });
   });
 
+  it('passes an already-mapped CoreFailure through unchanged (idempotent)', () => {
+    // The Workspace store re-normalises a thrown failure; an already-mapped
+    // structured failure must not be degraded to opaque `unavailable`.
+    const mapped = toCoreFailure({
+      error: {
+        kind: 'invalid_request',
+        message: 'Field content is required.',
+        status: 422,
+        details: null,
+      },
+    });
+    const again = toCoreFailure(mapped);
+    expect(again).toBe(mapped);
+    expect(again.kind).toBe('invalid_request');
+    expect(again.message).toBe('Field content is required.');
+    expect(again.status).toBe(422);
+  });
+
   it('localFailure carries an explicit kind and message', () => {
     const failure = localFailure('unavailable', 'Empty response.');
     expect(failure.kind).toBe('unavailable');

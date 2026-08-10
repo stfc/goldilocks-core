@@ -45,6 +45,17 @@ function isFailureEnvelope(value: unknown): value is FailureEnvelope {
   );
 }
 
+/** True when a value is already a mapped ``CoreFailure``. */
+function isCoreFailure(value: unknown): value is CoreFailure {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Partial<CoreFailure>;
+  return (
+    typeof candidate.kind === 'string' &&
+    typeof candidate.message === 'string' &&
+    typeof candidate.status === 'number'
+  );
+}
+
 function isValidationDetail(value: unknown): value is ValidationDetailBody {
   if (typeof value !== 'object' || value === null) return false;
   const detail = (value as ValidationDetailBody).detail;
@@ -82,6 +93,13 @@ function messageOf(error: unknown): string {
  * the original value preserved in `raw`.
  */
 export function toCoreFailure(value: unknown): CoreFailure {
+  // Idempotent: an already-mapped CoreFailure is passed through unchanged. The
+  // adapter maps a transport failure once and throws it; a caller that catches
+  // and re-normalises (e.g. the Workspace store) must not degrade a structured
+  // failure into an opaque `unavailable`.
+  if (isCoreFailure(value)) {
+    return value;
+  }
   if (isFailureEnvelope(value)) {
     const detail = value.error;
     return {

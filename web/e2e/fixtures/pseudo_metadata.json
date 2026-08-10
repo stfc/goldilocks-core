@@ -1,0 +1,15 @@
+[
+  {
+    "filename": "Si.UPF",
+    "header_format": "attr",
+    "library": "SSSP",
+    "source_set": "efficiency",
+    "element": "Si",
+    "pseudo_type": "NC",
+    "functional": "PBEsol",
+    "relativistic": "scalar",
+    "z_valence": 4.0,
+    "is_sssp": true,
+    "sssp_recommended_cutoff": { "ecutwfc_ry": 30.0, "ecutrho_ry": 120.0 }
+  }
+]

@@ -90,21 +90,10 @@ class KMeshEntry:
     Attributes:
         k_index: 1-based index into the ordered k-mesh table.
         mesh: uniform k-point grid for this entry.
-        k_distance_interval: VASP-style k-distance range (Å⁻¹)
-            that maps to this mesh. ``None`` as the upper endpoint means
-            the interval is unbounded above.
-        k_line_density_interval: k-line-density range, or None if
-            mesh is invalid for a scalar density.
-        k_pra: k-points-per-reciprocal-atom for this mesh.
-        n_reduced_kpoints: number of symmetry-reduced k-points.
     """
 
     k_index: int
     mesh: KPointGrid
-    k_distance_interval: tuple[float, float | None]
-    k_line_density_interval: tuple[float, float] | None
-    k_pra: float
-    n_reduced_kpoints: int
 
 
 @dataclass(frozen=True, slots=True)

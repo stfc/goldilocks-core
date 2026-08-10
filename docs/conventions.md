@@ -67,6 +67,38 @@ Rationale: enabling SOC significantly changes calculation cost, convergence beha
 
 This differs intentionally from the vdW policy: a connectivity-derived low-dimensional classification makes D3BJ a conservative package default because dispersion may be important to weak interlayer, surface, and intermolecular interactions and the correction adds relatively little setup and cost. It does not establish that dispersion dominates; the operator can override the setting or method with `CalculationHints(use_vdw=..., vdw_method=...)`. Heavy elements only trigger SOC consideration because SOC has broader cost and setup consequences.
 
+## PseudoDojo cutoff derivation
+
+PseudoDojo UPF files carry no recommended plane-wave cutoff. The convergence
+data instead lives in the `.djrepo` report published beside each table, which
+`gl pp install` fetches and converts into the same sidecar schema SSSP already
+uses, so cutoff discovery needs no PseudoDojo-specific code.
+
+**A UPF header's own `rho_cutoff` is not that number.** It is a generation
+parameter, recorded next to `mesh_size` and `l_max`, not a converged-basis
+recommendation. Measured against PseudoDojo's PBEsol standard table, it moves
+in the wrong direction: Si is 15.1, O is 9.3, yet Si converges at half the
+plane-wave cutoff O needs (48 Ry against 96 Ry).
+
+**Two conversions, both easy to get wrong the other way round:**
+
+1. **Which hint.** A `.djrepo` publishes three: `low`, `normal`, `high` — three
+   cutoffs for the *same* pseudopotential, not the `efficiency`/`precision`
+   split (that is two different pseudopotentials; see `pseudo_registry.toml`).
+   Core always takes `high`, so a recommended cutoff is the converged one
+   rather than the cheapest that might do. Measured cost: `high` runs about
+   1.16× `normal` in `ecutwfc`, roughly 1.25× in plane-wave count.
+2. **Units.** `.djrepo` hints are in **Hartree** (the ABINIT convention);
+   `ecutwfc` is in **Rydberg**. Factor of 2 — Si `high` = 24 Ha → 48 Ry.
+
+**The charge-density cutoff is not published at all.** `ecutrho` is derived as
+`ecutrho = dual × ecutwfc`, `dual = 4` (`goldilocks_core.artifacts.pseudodojo.DEFAULT_DUAL`).
+4 is the usual quoted value for norm-conserving pseudopotentials and QE's own
+default. This is provisional, not settled: `aiida-pseudo` uses 8 for the same
+tables, and SSSP's own published dual (measured, not norm-conserving, so not a
+like-for-like check) is 240/30 = 8. Revisiting this is tracked in
+stfc/goldilocks-core#149.
+
 ## Pseudopotential relativistic modes
 
 | Mode | Meaning |

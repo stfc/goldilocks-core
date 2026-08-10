@@ -10,9 +10,13 @@ element. The reports carry the digest of every UPF file, so integrity comes
 from upstream even though we host nothing -- and because each file is checked
 individually, a corrupt member is caught rather than only a corrupt download.
 
-The reports also carry the recommended cutoffs, which the UPF files do not.
-Both archives are unpacked into the cache; converting hints into cutoffs is
-separate work (#125).
+The reports also carry the recommended cutoffs, which the UPF files do not --
+confirmed by inspecting a UPF header directly: ``rho_cutoff`` is a generation
+parameter recorded alongside ``mesh_size`` and ``l_max``, not a converged-basis
+recommendation, and it does not even move in the right direction (Si's is
+larger than O's while Si needs the smaller basis). ``install`` writes those
+cutoffs out as a sidecar next to the installed table, in the schema cutoff
+discovery already reads, so PseudoDojo tables need no parser change.
 """
 
 from __future__ import annotations
@@ -33,7 +37,29 @@ PSEUDO_DOJO_BASE = "https://www.pseudo-dojo.org/pseudos"
 LIBRARY = "pseudodojo"
 """Library directory name. Load-bearing: selection derives it from the path."""
 
+HARTREE_TO_RYDBERG = 2.0
+"""djrepo hints are in Hartree (the ABINIT convention); QE cutoffs are in Ry."""
+
+DEFAULT_DUAL = 4
+"""``ecutrho = DEFAULT_DUAL * ecutwfc``, for norm-conserving pseudopotentials.
+
+djrepo publishes no charge-density cutoff at all, so this has to be chosen.
+4 is the value norm-conserving pseudopotentials are usually quoted at and QE's
+own default; ``aiida-pseudo`` uses 8 for the same PseudoDojo tables. Measured
+on SSSP's ultrasoft Si (a different pseudopotential formalism, not a like-for-
+like check), the published dual is 240/30 = 8. Picked provisionally rather
+than settled: see stfc/goldilocks-core#149 for the follow-up.
+"""
+
 _UPF_DIGEST_KEY = "md5_upf"
+
+
+@dataclass(frozen=True, slots=True)
+class _ReportedPseudo:
+    """What one element's dojo report says about its UPF file."""
+
+    digest: str
+    ecutwfc_ry: float | None
 
 
 class TableIncomplete(RuntimeError):
@@ -122,6 +148,7 @@ def install(
     pseudo_root = root or artifact_path("pseudopotentials")
     upf_directory = pseudo_root / LIBRARY / f"{table}_upf"
     djrepo_directory = pseudo_root / LIBRARY / f"{table}_djrepo"
+    sidecar = pseudo_root / LIBRARY / f"{table}_upf.json"
 
     if any(upf_directory.glob("*.upf", case_sensitive=False)):
         return upf_directory
@@ -129,6 +156,7 @@ def install(
     upf_url, djrepo_url = archive_urls(table, base=base)
     reports = _install_reports(djrepo_url, djrepo_directory, http=http)
     _install_pseudos(upf_url, upf_directory, reports, http=http)
+    _write_cutoff_sidecar(sidecar, reports)
 
     return upf_directory
 
@@ -138,9 +166,9 @@ def _install_reports(
     destination: Path,
     *,
     http: HttpClient | None,
-) -> dict[str, str]:
-    """Unpack the dojo reports and return each element's expected UPF digest."""
-    digests: dict[str, str] = {}
+) -> dict[str, _ReportedPseudo]:
+    """Unpack the dojo reports and return each element's digest and cutoff."""
+    reports: dict[str, _ReportedPseudo] = {}
     destination.mkdir(parents=True, exist_ok=True)
 
     for name, payload in _archive_members(url, ".djrepo", http=http):
@@ -152,18 +180,23 @@ def _install_reports(
             raise TableIncomplete(
                 f"dojo report for {element} publishes no {_UPF_DIGEST_KEY}"
             )
-        digests[element] = report[_UPF_DIGEST_KEY]
 
-    if not digests:
+        ecut_ha = (report.get("hints") or {}).get("high", {}).get("ecut")
+        reports[element] = _ReportedPseudo(
+            digest=report[_UPF_DIGEST_KEY],
+            ecutwfc_ry=ecut_ha * HARTREE_TO_RYDBERG if ecut_ha is not None else None,
+        )
+
+    if not reports:
         raise TableIncomplete(f"no dojo reports found in {url}")
 
-    return digests
+    return reports
 
 
 def _install_pseudos(
     url: str,
     destination: Path,
-    digests: dict[str, str],
+    reports: dict[str, _ReportedPseudo],
     *,
     http: HttpClient | None,
 ) -> None:
@@ -172,18 +205,40 @@ def _install_pseudos(
 
     for name, payload in _archive_members(url, ".upf", http=http):
         element = Path(name).stem
-        expected = digests.get(element)
-        if expected is None:
+        reported = reports.get(element)
+        if reported is None:
             raise TableIncomplete(f"{element}.upf has no dojo report to verify it")
 
-        store_verified([payload], destination / f"{element}.upf", "md5", expected)
+        store_verified(
+            [payload], destination / f"{element}.upf", "md5", reported.digest
+        )
         seen.add(element)
 
-    missing = ", ".join(sorted(set(digests) - seen))
+    missing = ", ".join(sorted(set(reports) - seen))
     if missing:
         raise TableIncomplete(
             f"dojo reports describe elements absent from the table: {missing}"
         )
+
+
+def _write_cutoff_sidecar(
+    destination: Path, reports: dict[str, _ReportedPseudo]
+) -> None:
+    """Write recommended cutoffs in the schema cutoff discovery already reads.
+
+    Elements whose report carries no ``high`` hint are omitted rather than
+    given a fabricated cutoff; selection then reports them as uncovered
+    instead of silently under-converged.
+    """
+    sidecar = {
+        element: {
+            "cutoff_wfc": reported.ecutwfc_ry,
+            "cutoff_rho": reported.ecutwfc_ry * DEFAULT_DUAL,
+        }
+        for element, reported in reports.items()
+        if reported.ecutwfc_ry is not None
+    }
+    destination.write_text(json.dumps(sidecar, indent=2))
 
 
 def _archive_members(

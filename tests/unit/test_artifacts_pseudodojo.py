@@ -34,7 +34,11 @@ def _reports(pseudos=None, hints=True, digest_key="md5_upf") -> dict[str, bytes]
         if digest_key:
             report[digest_key] = hashlib.md5(payload).hexdigest()
         if hints:
-            report["hints"] = {"low": {"ecut": 14.0}, "normal": {"ecut": 18.0}}
+            report["hints"] = {
+                "low": {"ecut": 14.0},
+                "normal": {"ecut": 18.0},
+                "high": {"ecut": 24.0},
+            }
         reports[f"{element}.djrepo"] = json.dumps(report).encode()
     return reports
 
@@ -188,3 +192,76 @@ def test_install_honours_an_explicit_root(tmp_path):
     installed = pseudodojo.install(TABLE, root=root, http=site)
 
     assert installed == root / pseudodojo.LIBRARY / f"{TABLE}_upf"
+
+
+def test_install_writes_a_cutoff_sidecar_where_discovery_looks_for_it():
+    """Selection finds `<source_set>.json` beside the UPF directory it names."""
+    site = _FakeSite()
+
+    installed = pseudodojo.install(TABLE, http=site)
+    sidecar = installed.parent / f"{TABLE}_upf.json"
+
+    assert sidecar.exists()
+
+
+def test_the_sidecar_converts_hartree_to_rydberg_at_the_default_dual():
+    site = _FakeSite()
+
+    installed = pseudodojo.install(TABLE, http=site)
+    sidecar = json.loads((installed.parent / f"{TABLE}_upf.json").read_text())
+
+    assert sidecar["Si"]["cutoff_wfc"] == 24.0 * pseudodojo.HARTREE_TO_RYDBERG
+    assert sidecar["Si"]["cutoff_rho"] == (
+        24.0 * pseudodojo.HARTREE_TO_RYDBERG * pseudodojo.DEFAULT_DUAL
+    )
+
+
+def test_the_sidecar_takes_the_high_hint_not_normal_or_low():
+    """Core always recommends the converged cutoff, not the cheapest that might do."""
+    site = _FakeSite()
+
+    installed = pseudodojo.install(TABLE, http=site)
+    sidecar = json.loads((installed.parent / f"{TABLE}_upf.json").read_text())
+
+    assert sidecar["Si"]["cutoff_wfc"] != 14.0 * pseudodojo.HARTREE_TO_RYDBERG
+    assert sidecar["Si"]["cutoff_wfc"] != 18.0 * pseudodojo.HARTREE_TO_RYDBERG
+
+
+def test_an_element_with_no_high_hint_is_omitted_rather_than_fabricated():
+    """Missing from the sidecar reads as uncovered; a fabricated cutoff would not."""
+    reports = _reports()
+    without_high = json.loads(reports["Ge.djrepo"])
+    del without_high["hints"]["high"]
+    reports["Ge.djrepo"] = json.dumps(without_high).encode()
+    site = _FakeSite(report_members=reports)
+
+    installed = pseudodojo.install(TABLE, http=site)
+    sidecar = json.loads((installed.parent / f"{TABLE}_upf.json").read_text())
+
+    assert "Si" in sidecar
+    assert "Ge" not in sidecar
+
+
+def test_the_sidecar_makes_the_installed_table_generate_a_usable_input():
+    """End-to-end: cutoff discovery reads what install() just wrote."""
+    from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
+
+    real_upf = (
+        '<UPF><PP_HEADER element="Si" pseudo_type="NC" functional="PBEsol" '
+        'relativistic="scalar" z_valence="4.0" /></UPF>'
+    ).encode()
+    by_element = {"Si": real_upf, "Ge": real_upf}
+    upf_members = {f"{element}.upf": payload for element, payload in by_element.items()}
+    site = _FakeSite(
+        upf_members=upf_members, report_members=_reports(pseudos=by_element)
+    )
+    installed = pseudodojo.install(TABLE, http=site)
+
+    metadata = load_pseudo_metadata(installed.parent.parent)
+    si = next(m for m in metadata if m.element == "Si")
+
+    assert si.is_sssp is False
+    assert si.sssp_recommended_cutoff == {
+        "ecutwfc_ry": 24.0 * pseudodojo.HARTREE_TO_RYDBERG,
+        "ecutrho_ry": 24.0 * pseudodojo.HARTREE_TO_RYDBERG * pseudodojo.DEFAULT_DUAL,
+    }

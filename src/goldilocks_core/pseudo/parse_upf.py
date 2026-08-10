@@ -345,7 +345,12 @@ def _is_sssp_folder(path: Path) -> bool:
 
 
 def _load_sssp_json(path: Path) -> dict[str, Any] | None:
-    """Load the SSSP sidecar JSON when available."""
+    """Load the cutoff sidecar beside a table directory, when there is one.
+
+    Not specific to SSSP despite the schema's origin: PseudoDojo tables are
+    installed with a sidecar in the same shape, because the cutoffs a table
+    recommends are the same kind of fact whichever library published them.
+    """
     folder_name = path.parent.name
     json_path = path.parent.parent / f"{folder_name}.json"
 
@@ -358,30 +363,27 @@ def _load_sssp_json(path: Path) -> dict[str, Any] | None:
 def _get_sssp_info(
     path: Path, element: str | None
 ) -> tuple[bool, str | None, dict[str, Any] | None]:
-    """Return SSSP-specific metadata derived from the sidecar JSON."""
+    """Return the SSSP flag, the source pseudopotential, and recommended cutoffs.
+
+    Whether a table has a cutoff sidecar and whether it is SSSP are different
+    facts. The first decides whether an input can be written at all; the second
+    only ranks candidates. Tying them together lost every PseudoDojo cutoff.
+    """
     is_sssp = _is_sssp_folder(path)
+    source_pseudopotential = None if is_sssp else path.parent.name
+    recommended_cutoff = None
 
-    if not is_sssp:
-        return False, path.parent.name, None
+    if element is not None:
+        entry = (_load_sssp_json(path) or {}).get(element)
+        if entry is not None:
+            if is_sssp:
+                source_pseudopotential = entry.get("pseudopotential")
+            recommended_cutoff = {
+                "ecutwfc_ry": entry.get("cutoff_wfc"),
+                "ecutrho_ry": entry.get("cutoff_rho"),
+            }
 
-    if element is None:
-        return True, None, None
-
-    data = _load_sssp_json(path)
-    if data is None:
-        return True, None, None
-
-    entry = data.get(element)
-    if entry is None:
-        return True, None, None
-
-    source_pseudopotential = entry.get("pseudopotential")
-    sssp_recommended_cutoff = {
-        "ecutwfc_ry": entry.get("cutoff_wfc"),
-        "ecutrho_ry": entry.get("cutoff_rho"),
-    }
-
-    return True, source_pseudopotential, sssp_recommended_cutoff
+    return is_sssp, source_pseudopotential, recommended_cutoff
 
 
 def parse_upf_metadata(path: str | Path) -> PseudoMetadata:

@@ -18,15 +18,7 @@ Runs Load → Analyze → Advise → Kmesh → Select. Outputs a recommendation 
 goldilocks-core generate structure.cif [options]
 ```
 
-Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a recommendation with generated input files.
-
-### bundle
-
-```bash
-goldilocks-core bundle structure.cif --out run/ [options]
-```
-
-Runs the full pipeline and publishes a portable bundle directory. `--out` is required and must not already exist; bundle mode has no overwrite option.
+Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a recommendation with generated input files. Pass `--out run/` to publish the files and manifest as a portable bundle; the destination must not already exist.
 
 ### examples
 

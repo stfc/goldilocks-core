@@ -13,7 +13,6 @@ from goldilocks_core.advisors.kdistance_advisor import QrfKDistanceBackend
 from goldilocks_core.analysis import analyze_structure, heuristic_metallicity
 from goldilocks_core.bundle import write_bundle_directory
 from goldilocks_core.contracts import (
-    BundleRecord,
     CoreJobRequest,
     CoreRecords,
     CoreResult,
@@ -242,8 +241,6 @@ class CoreRuntime:
         self,
         request: CoreJobRequest,
         records: CoreRecords,
-        *,
-        bundle: BundleRecord | None = None,
     ) -> CoreResult:
         """Assemble a preset result from type-keyed graph records."""
         analysis = records[StructureAnalysisRecord]
@@ -265,7 +262,6 @@ class CoreRuntime:
             selection=selection,
             generated_files=records.get(GeneratedFiles, ()),
             warnings=warnings,
-            bundle=bundle,
         )
 
     def _ensure_open(self) -> None:

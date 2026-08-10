@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import gc
 import json
+import weakref
 
+import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import CalculationHints, CoreJobRequest, CoreRuntime
@@ -129,36 +132,6 @@ def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
     assert calls[0][1:3] == (model, "atom-init.json")
 
 
-def test_reset_reloads_metallicity_model_on_next_analyze(monkeypatch) -> None:
-    """Discard the loaded classifier model while retaining its configuration."""
-    from goldilocks_core.ml.qrf import metallicity
-
-    loaded_models = []
-
-    def load(path):
-        model = object()
-        loaded_models.append(model)
-        return model
-
-    monkeypatch.setattr(metallicity, "load_metallicity_model", load)
-    monkeypatch.setattr(
-        metallicity,
-        "classify_metallicity",
-        lambda structure, model, atom_init, **settings: ("insulator", 0.8),
-    )
-
-    with CoreRuntime(
-        metallicity_checkpoint="metal.ckpt",
-        metallicity_atom_init="atom-init.json",
-    ) as runtime:
-        runtime.compute((StructureAnalysisRecord,), make_request())
-        runtime.compute((StructureAnalysisRecord,), make_request())
-        runtime.reset()
-        runtime.compute((StructureAnalysisRecord,), make_request())
-
-    assert len(loaded_models) == 2
-
-
 def test_generate_returns_generated_files() -> None:
     with CoreRuntime() as runtime:
         result = runtime.generate(make_request(mode="generate"))
@@ -182,17 +155,22 @@ def test_generate_with_output_dir_writes_bundle(tmp_path) -> None:
     assert manifest == result.bundle.manifest
 
 
-def test_compute_returns_only_requested_record_types() -> None:
+@pytest.mark.parametrize(
+    "record_type",
+    (
+        StructureAnalysisRecord,
+        KPointSelection,
+        ParameterAdvice,
+        SelectionRecord,
+    ),
+)
+def test_compute_returns_each_requested_record_type(record_type: type) -> None:
+    """Query every public SCF intermediate as an isolated output."""
     with CoreRuntime() as runtime:
-        records = runtime.compute(
-            (StructureAnalysisRecord, ParameterAdvice), make_request()
-        )
+        records = runtime.compute((record_type,), make_request())
 
-    assert tuple(records) == (StructureAnalysisRecord, ParameterAdvice)
-    assert isinstance(records[StructureAnalysisRecord], StructureAnalysisRecord)
-    assert isinstance(records[ParameterAdvice], ParameterAdvice)
-    assert SelectionRecord not in records
-    assert KPointSelection not in records
+    assert tuple(records) == (record_type,)
+    assert isinstance(records[record_type], record_type)
 
 
 def test_select_only_compute_does_not_invoke_kmesh(monkeypatch) -> None:
@@ -222,26 +200,76 @@ def test_reset_close_and_context_manager_delegate_to_backend(monkeypatch) -> Non
     assert backend.closes == 1
 
 
-def test_multiple_jobs_reuse_one_backend(monkeypatch) -> None:
+def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
+    """Exercise model lifecycle across jobs through one runtime."""
+    from goldilocks_core.ml.qrf import metallicity
+
     backend = TrackingBackend()
-    builds = 0
+    backend_builds = 0
+    model_loads = 0
+    model_refs = []
+    classifications = 0
+
+    class StubMetallicityModel:
+        pass
 
     def build(runtime):
-        nonlocal builds
-        builds += 1
+        nonlocal backend_builds
+        backend_builds += 1
         return backend
 
+    def load(path):
+        nonlocal model_loads
+        model_loads += 1
+        model = StubMetallicityModel()
+        model_refs.append(weakref.ref(model))
+        return model
+
+    def classify(structure, model, atom_init, **settings):
+        nonlocal classifications
+        classifications += 1
+        return "metal", 0.9
+
     monkeypatch.setattr(CoreRuntime, "_build_backend", build)
+    monkeypatch.setattr(metallicity, "load_metallicity_model", load)
+    monkeypatch.setattr(metallicity, "classify_metallicity", classify)
     request = CoreJobRequest(
         structure=make_structure(),
         hints=CalculationHints(pseudo_type="NC"),
         pseudo_metadata=(make_metadata(),),
     )
+    runtime = CoreRuntime(
+        metallicity_checkpoint="metal.ckpt",
+        metallicity_atom_init="atom-init.json",
+    )
 
-    with CoreRuntime() as runtime:
-        first = runtime.recommend(request)
-        second = runtime.recommend(request)
+    first = runtime.recommend(request)
+    second = runtime.recommend(request)
 
     assert first.k_points == second.k_points
-    assert builds == 1
+    assert first.analysis.electronic_character == "metal"
+    assert second.analysis.electronic_character == "metal"
+    assert backend_builds == 1
     assert backend.calls == 2
+    assert model_loads == 1
+    assert classifications == 2
+    assert model_refs[0]() is not None
+
+    runtime.reset()
+    gc.collect()
+    assert backend.resets == 1
+    assert model_refs[0]() is None
+
+    runtime.recommend(request)
+    assert backend.calls == 3
+    assert model_loads == 2
+    assert classifications == 3
+    assert model_refs[1]() is not None
+
+    runtime.close()
+    gc.collect()
+    assert backend.closes == 1
+    assert model_refs[1]() is None
+    assert runtime.is_closed is True
+    with pytest.raises(RuntimeError, match="CoreRuntime is closed"):
+        runtime.recommend(request)

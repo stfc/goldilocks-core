@@ -6,18 +6,22 @@ flow is staged so later calculation types can reuse analysis, advice, resource
 selection, and output handling.
 
 ```text
-Load -> Analyze -> Advise -> Kmesh -> Select -> Generate -> Bundle
+Load -> Analyze -> Advise -> Select
+Load -> Kmesh
+Load + Advice + Select + Kmesh -> Generate
 ```
 
-This is the default workflow, not a workflow engine. Core has no DAG scheduler,
-plugin registry, service container, or stage base classes.
+The executor resolves this dependency graph from typed stage inputs and
+outputs. Stages remain pure functions with no stage base classes.
 
 ## Modules
 
 | Module | Responsibility |
 | --- | --- |
 | `contracts/` | Data records and serialization shared between stages. |
-| `jobs.py` | `run_core_job` path dispatch and convenience functions. |
+| `graph.py` | Frozen task specifications and type-keyed DAG execution. |
+| `runtime.py` | SCF task registration and model lifecycle. |
+| `jobs.py` | `run_core_job` and public convenience functions. |
 | `io/structures.py` | Structure loading. |
 | `analysis.py` | Structure facts. |
 | `advice/` | Scientific and numerical recommendations. |
@@ -31,25 +35,23 @@ class, and callers can invoke any stage function directly.
 
 ## Standard workflow
 
-`CoreJobRequest` carries serializable job data. `run_core_job` dispatches on
-`intent.task` to a path function (the built-in SCF path is `run_scf`) that
-composes the stages for that calculation.
+`CoreJobRequest` carries serializable job data. `run_core_job` delegates to a
+fresh `CoreRuntime` unless the caller supplies one for model reuse. The runtime
+executes the registered `scf_single_point` task.
 
 ```python
 request = CoreJobRequest(structure="Fe.cif", mode="generate")
 result = run_core_job(request)
 ```
 
-`mode` controls where the SCF path stops:
+`mode` selects a task preset:
 
-- `recommend`: after Select
-- `generate`: after Generate
-- `bundle`: after Bundle
+- `recommend`: request Analyze, Advise, Kmesh, and Select records
+- `generate`: additionally request GeneratedFiles and optionally publish them
+  when `output_dir` is set
 
-`CalculationIntent.task` describes the calculation. Task names are not closed
-in the shared contract. The built-in path currently accepts only
-`scf_single_point`; another path may support additional tasks and emit
-multiple `GeneratedFile` records.
+`CalculationIntent.task` describes the calculation. The built-in runtime
+currently accepts only `scf_single_point`.
 
 ## Flexible Python use
 
@@ -69,8 +71,8 @@ structure = load_structure("Fe.cif")
 analysis = analyze_structure(structure)
 advice = advise_parameters(analysis, intent, hints)
 kpoints = resolve_kpoints(structure, hints, default_kmesh_advisor())
-selection = select_parameters(structure, advice, kpoints, metadata)
-files = generate_inputs(structure, intent, advice, selection)
+selection = select_parameters(structure, advice, metadata)
+files = generate_inputs(structure, intent, advice, selection, kpoints)
 ```
 
 This supports custom ordering, extra project-specific steps, intermediate
@@ -90,8 +92,8 @@ responsible for returning coherent records; Core does not defensively re-check
 every possible malformed internal object.
 
 Scientific choices belong in Analyze, Advise, Kmesh, and Select. Generate maps
-completed choices to calculation syntax. Bundle writes files but does not run
-calculations or copy pseudopotential libraries.
+completed choices to calculation syntax. Optional bundle publication writes
+files but does not run calculations or copy pseudopotential libraries.
 
 Runner/AiiDA workflows, schedulers, auth, HTTP transport, frontend state, and
 completed-output analysis are outside this package.

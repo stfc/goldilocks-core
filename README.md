@@ -46,10 +46,12 @@ print(result.warnings)
 The public workflows are:
 
 - `recommend(...)` — return analysis, advice, and concrete selections;
-- `generate(...)` — also return generated QE input files;
-- `write_bundle(...)` — write generated files and `manifest.json` to a new directory.
+- `generate(...)` — also return generated QE input files and, when
+  `output_dir` is given, publish them with `manifest.json`.
 
-Use `CoreJobRequest` with `run_core_job()` when you need a single request model. `run_core_job` dispatches `intent.task` to a path function (the built-in SCF path is `run_scf`).
+Use `CoreJobRequest` with `run_core_job()` when you need a single request model.
+`run_core_job` delegates to a fresh `CoreRuntime`, or reuses a caller-supplied
+runtime for model lifecycle across jobs.
 
 The default k-point backend loads the configured QRF model lazily. Model errors are reported directly. Explicit `k_grid` and `k_spacing` hints bypass model loading; use `--model` (or `CoreJobRequest.kmesh_model`) to select a local k-index model instead.
 
@@ -60,8 +62,6 @@ See the [tutorial](docs/tutorial.md) and [pipeline reference](docs/pipeline.md) 
 ```bash
 uv run goldilocks-core recommend structure.cif --json
 uv run goldilocks-core generate structure.cif \
-    --pseudo-root path/to/pseudos --k-grid 4 4 4 --json
-uv run goldilocks-core bundle structure.cif \
     --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
 ```
 

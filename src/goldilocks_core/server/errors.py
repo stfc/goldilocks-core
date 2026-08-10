@@ -14,6 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from goldilocks_core.server.concurrency import ComputeBusyError
 from goldilocks_core.server.request import RequestError
 
 logger = logging.getLogger("goldilocks_core.server.http")
@@ -21,6 +22,7 @@ logger = logging.getLogger("goldilocks_core.server.http")
 KIND_INVALID_REQUEST = "invalid_request"
 KIND_STAGE_ERROR = "stage_error"
 KIND_NOT_FOUND = "not_found"
+KIND_SERVER_BUSY = "server_busy"
 KIND_UNEXPECTED = "unexpected"
 
 
@@ -89,6 +91,21 @@ def register_error_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         del request
         return error_response(KIND_NOT_FOUND, str(error), status=404)
+
+    @app.exception_handler(ComputeBusyError)
+    async def server_busy_handler(
+        request: Request, error: ComputeBusyError
+    ) -> JSONResponse:
+        """Surface a saturated computation gate as a retryable 503."""
+        del request
+        response = error_response(
+            KIND_SERVER_BUSY,
+            str(error),
+            status=503,
+            details={"retryable": True},
+        )
+        response.headers["Retry-After"] = str(error.retry_after)
+        return response
 
     @app.exception_handler(Exception)
     async def unexpected_handler(request: Request, error: Exception) -> JSONResponse:

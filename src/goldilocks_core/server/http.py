@@ -5,6 +5,8 @@ from typing import Any
 
 from goldilocks_core.jobs import run_core_job
 from goldilocks_core.runtime import CoreRuntime
+from goldilocks_core.server.concurrency import ComputeGate
+from goldilocks_core.server.config import DeploymentConfig
 from goldilocks_core.server.errors import register_error_handlers
 from goldilocks_core.server.request import RequestError, from_dict
 
@@ -43,10 +45,12 @@ def _reject_workbench_server_paths(raw: dict[str, Any]) -> None:
 class _AppState:
     """Runtime state shared by every request to an application."""
 
-    def __init__(self, runtime: CoreRuntime | None) -> None:
+    def __init__(self, runtime: CoreRuntime | None, config: DeploymentConfig) -> None:
         self.provided_runtime = runtime
         self.runtime: CoreRuntime | None = None
         self.owns_runtime = runtime is None
+        self.gate = ComputeGate(config.compute_limit, config.compute_wait_seconds)
+        self.pseudo_metadata = config.pseudo_metadata
 
     def close(self) -> None:
         """Close an application-owned runtime."""
@@ -54,8 +58,11 @@ class _AppState:
             self.runtime.close()
 
 
-def create_app(runtime: CoreRuntime | None = None) -> Any:
-    """Create the HTTP app, optionally using a caller-owned runtime."""
+def create_app(
+    runtime: CoreRuntime | None = None,
+    config: DeploymentConfig | None = None,
+) -> Any:
+    """Create the HTTP app, optionally using a caller-owned runtime/config."""
     try:
         from fastapi import FastAPI
 
@@ -77,7 +84,8 @@ def create_app(runtime: CoreRuntime | None = None) -> Any:
         structure_to_document,
     )
 
-    state = _AppState(runtime)
+    config = config if config is not None else DeploymentConfig.from_environ()
+    state = _AppState(runtime, config)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -166,10 +174,28 @@ def _execute(endpoint: str, body: Any, state: _AppState) -> dict[str, Any]:
     elif raw.get("outputs") is None:
         raise RequestError("POST /compute requires 'outputs'.")
 
+    _inject_server_pseudo_metadata(raw, state)
     request = from_dict(raw)
     if state.runtime is None:
         raise RuntimeError("CoreRuntime is not initialized.")
-    return run_core_job(request, runtime=state.runtime).to_dict()
+    with state.gate:
+        return run_core_job(request, runtime=state.runtime).to_dict()
+
+
+def _inject_server_pseudo_metadata(raw: dict[str, Any], state: _AppState) -> None:
+    """Inject administrator-configured pseudo metadata when none is supplied.
+
+    The browser never submits server paths; instead the operator configures
+    pseudo metadata on the server (JSON manifest or mounted UPF root). When a
+    request carries neither ``pseudo_metadata`` nor ``pseudo_root``, the
+    configured metadata is added so recommendation/generation receive it.
+    A request that supplies its own metadata is never overridden.
+    """
+    if not state.pseudo_metadata:
+        return
+    if "pseudo_metadata" in raw or "pseudo_root" in raw:
+        return
+    raw["pseudo_metadata"] = [metadata.to_dict() for metadata in state.pseudo_metadata]
 
 
 def serve(*, host: str = "127.0.0.1", port: int = 8000) -> None:

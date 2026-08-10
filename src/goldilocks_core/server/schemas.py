@@ -8,9 +8,9 @@ they never add client-controlled server paths to the Workbench surface.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, Mapping
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from goldilocks_core.contracts import ModelSource, ModelType, SmearingType, VdwMethod
 
@@ -341,17 +341,28 @@ class KPointSelectionModel(BaseModel):
 
 
 class PseudopotentialSelectionModel(BaseModel):
-    """Serialized PseudopotentialSelection."""
+    """Serialized PseudopotentialSelection on the Workbench surface.
+
+    ``filepath`` stays on the Python/CLI record and is deliberately stripped
+    here: the browser must never encounter a server filesystem path.
+    """
 
     model_config = ConfigDict(extra="allow")
 
     element: str
     filename: str | None = None
-    filepath: str | None = None
     ecutwfc_ry: float | None = None
     ecutrho_ry: float | None = None
     provenance: ProvenanceModel
     warnings: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _strip_filepath(cls, value: Any) -> Any:
+        if isinstance(value, Mapping):
+            value = dict(value)
+            value.pop("filepath", None)
+        return value
 
 
 class SelectionModel(BaseModel):

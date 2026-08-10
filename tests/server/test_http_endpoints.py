@@ -38,6 +38,18 @@ def test_recommend_returns_core_result_json(test_runtime, request_body) -> None:
     assert data["generated_files"] == []
 
 
+def test_recommend_response_contains_no_server_path(test_runtime, request_body) -> None:
+    """The recommend response never leaks a filesystem path into the browser."""
+    with TestClient(create_app(test_runtime)) as client:
+        response = client.post("/recommend", json=request_body)
+
+    assert response.status_code == 200
+    raw = response.text
+    assert "filepath" not in raw
+    for selection in response.json()["selection"]["pseudopotentials"]:
+        assert "filepath" not in selection
+
+
 def test_generate_returns_contents_and_writes_no_caller_path(
     test_runtime, request_body
 ) -> None:

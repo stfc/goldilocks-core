@@ -35,6 +35,29 @@ def test_request_error_carries_kind_status_message_details(
     assert "details" in error
 
 
+def test_pydantic_validation_error_maps_to_invalid_request_envelope(
+    test_runtime,
+) -> None:
+    """Return a structured invalid_request envelope, not a bare detail list."""
+    # A genuine Pydantic validation failure (wrong type) must not fall through
+    # to FastAPI's default `{"detail": [...]}` shape, which the Workbench
+    # would classify as an opaque failure and discard the useful diagnostics.
+    body = {"structure": {"content": 123}}
+    with TestClient(create_app(test_runtime)) as client:
+        status, error = _error_of(client, "post", "/recommend", json=body)
+
+    assert status == 422
+    assert error["kind"] == "invalid_request"
+    assert error["status"] == 422
+    assert "detail" not in error
+    assert "content" in error["message"]
+    details = error["details"]
+    assert isinstance(details, list) and details
+    assert details[0]["loc"] == ["body", "structure", "content"]
+    assert details[0]["msg"]
+    assert details[0]["type"] == "string_type"
+
+
 def test_stage_error_carries_kind_status_message(test_runtime, request_body) -> None:
     """Return a stable stage_error envelope for a domain failure."""
     body = {**request_body, "intent": {"task": "unsupported"}}

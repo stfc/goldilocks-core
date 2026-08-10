@@ -11,6 +11,7 @@ import logging
 from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from goldilocks_core.server.request import RequestError
@@ -49,6 +50,33 @@ def register_error_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         del request
         return error_response(KIND_INVALID_REQUEST, str(error), status=422)
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_handler(
+        request: Request, error: RequestValidationError
+    ) -> JSONResponse:
+        """Map FastAPI/Pydantic body validation failures to the structured
+        invalid_request envelope so the Workbench never sees an ambiguous
+        `{"detail": [...]}` shape."""
+        del request
+        details = [
+            {
+                "loc": list(raw.get("loc", ())),
+                "msg": str(raw.get("msg", "Invalid value")),
+                "type": str(raw.get("type", "value_error")),
+            }
+            for raw in error.errors()
+        ]
+        first = details[0] if details else {}
+        location = ".".join(str(part) for part in first.get("loc", []))
+        suffix = f" at {location}" if location else ""
+        message = first.get("msg", "Invalid request body.") + suffix
+        return error_response(
+            KIND_INVALID_REQUEST,
+            message,
+            status=422,
+            details=details,
+        )
 
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, error: ValueError) -> JSONResponse:

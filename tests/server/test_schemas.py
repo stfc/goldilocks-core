@@ -92,3 +92,13 @@ def test_openapi_request_schemas_advertise_no_server_paths(test_runtime) -> None
     pseudo_props = spec["components"]["schemas"]["PseudoMetadata"]["properties"]
     assert "filepath" not in pseudo_props
     assert "filename" in pseudo_props
+
+
+def test_openapi_response_selection_has_no_server_path(test_runtime) -> None:
+    """The Workbench selection response never exposes a server filesystem path."""
+    spec = _openapi(test_runtime)
+    selection = spec["components"]["schemas"]["PseudopotentialSelectionModel"][
+        "properties"
+    ]
+    assert "filepath" not in selection
+    assert "filename" in selection

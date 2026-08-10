@@ -14,10 +14,26 @@ import type {
 } from '../client/types';
 
 export interface ManifestMeta {
-  coreVersion: string;
+  /** Core version, when Core reports one; omitted rather than invented. */
+  coreVersion?: string;
   model?: string;
   generatedBy: 'goldilocks-workbench';
   createdAt: string;
+}
+
+function sourceReason(p: {
+  source: string;
+  reason: string;
+  confidence?: number | null;
+  data_source?: string | null;
+}): { source: string; reason: string } {
+  return { source: p.source, reason: p.reason };
+}
+
+/** The archive's downloadable filename, named after the structure formula. */
+export function inputArchiveName(structure: StructureDocument): string {
+  const base = structure.reduced_formula || structure.formula || 'goldilocks-inputs';
+  return `${base}-inputs.zip`;
 }
 
 export interface InputArchiveInput {
@@ -60,11 +76,14 @@ function manifest(input: InputArchiveInput): Record<string, unknown> {
       selection: rec.selection,
     },
     provenance: {
-      k_points: {
-        source: rec.k_points.provenance.source,
-        reason: rec.k_points.provenance.reason,
-      },
-      pseudopotentials: rec.selection.pseudopotentials.map((p) => ({
+      smearing: sourceReason(rec.advice.smearing.provenance),
+      magnetism: sourceReason(rec.advice.magnetism.provenance),
+      spin_orbit: sourceReason(rec.advice.spin_orbit.provenance),
+      pseudopotentials: sourceReason(rec.advice.pseudopotentials.provenance),
+      convergence: sourceReason(rec.advice.convergence.provenance),
+      vdw: sourceReason(rec.advice.vdw.provenance),
+      k_points: sourceReason(rec.k_points.provenance),
+      selection: rec.selection.pseudopotentials.map((p) => ({
         element: p.element,
         filename: p.filename,
         source: p.provenance.source,
@@ -97,4 +116,23 @@ export function buildInputArchive(input: InputArchiveInput): Blob {
 
   const bytes = zipSync(entries, { level: 6 });
   return new Blob([bytes], { type: 'application/zip' });
+}
+
+/**
+ * Build and trigger a browser download of the formula-named input archive.
+ * Returns the filename used, so tests can assert it without a real download.
+ */
+export function downloadInputArchive(input: InputArchiveInput): string {
+  const blob = buildInputArchive(input);
+  const name = inputArchiveName(input.structure);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = name;
+  anchor.rel = 'noopener';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  return name;
 }

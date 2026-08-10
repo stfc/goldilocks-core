@@ -188,4 +188,72 @@ describe('Workspace store', () => {
     expect(store.getState().recordsStatus).toBe('complete');
     expect(client.calls.loadStructure).toBe(loadsAfterLoad);
   });
+
+  it('completes generation and exposes the generated input set', async () => {
+    const store = createWorkspaceStore(new FakeCoreClient());
+    await store.getState().loadStructure(cif);
+    await store.getState().recommend();
+    await store.getState().generate();
+
+    const state = store.getState();
+    expect(state.generationStatus).toBe('complete');
+    expect(state.generated).not.toBeNull();
+    expect(state.generated?.generated_files.length).toBeGreaterThan(0);
+    expect(state.generationFailure).toBeNull();
+    expect(state.generatedStale).toBe(false);
+  });
+
+  it('retains the recommendation and prior archive when generation fails, then retries', async () => {
+    const client = new FakeCoreClient();
+    const store = createWorkspaceStore(client);
+    await store.getState().loadStructure(cif);
+    await store.getState().recommend();
+    await store.getState().generate();
+    const priorGenerated = store.getState().generated;
+    const priorRecords = store.getState().records;
+
+    client.failGenerate = true;
+    await store.getState().generate();
+    const failed = store.getState();
+    expect(failed.generationStatus).toBe('failed');
+    expect(failed.generationFailure?.kind).toBe('unavailable');
+    // The recommendation and any prior archive survive the failed generation.
+    expect(failed.generated).toBe(priorGenerated);
+    expect(failed.records).toBe(priorRecords);
+
+    client.failGenerate = false;
+    await store.getState().generate();
+    expect(store.getState().generationStatus).toBe('complete');
+    expect(store.getState().generated).not.toBeNull();
+    expect(store.getState().generationFailure).toBeNull();
+  });
+
+  it('clears the stale flag when the archive is regenerated for the current request', async () => {
+    const store = createWorkspaceStore(new FakeCoreClient());
+    await store.getState().loadStructure(cif);
+    await store.getState().recommend();
+    await store.getState().generate();
+    expect(store.getState().generatedStale).toBe(false);
+
+    store.getState().setHints({ k_grid: [6, 6, 6] });
+    expect(store.getState().generatedStale).toBe(true);
+
+    await store.getState().generate();
+    expect(store.getState().generationStatus).toBe('complete');
+    expect(store.getState().generatedStale).toBe(false);
+  });
+
+  it('marks the archive stale when intent changes and recomputation does not refresh it', async () => {
+    const store = createWorkspaceStore(new FakeCoreClient());
+    await store.getState().loadStructure(cif);
+    await store.getState().recommend();
+    await store.getState().generate();
+
+    store.getState().setIntent({ functional: 'PBE' });
+    expect(store.getState().generatedStale).toBe(true);
+    await store.getState().recommend();
+    // Re-running the recommendation refreshes records but not the archive.
+    expect(store.getState().recordsStale).toBe(false);
+    expect(store.getState().generatedStale).toBe(true);
+  });
 });

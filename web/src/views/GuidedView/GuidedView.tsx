@@ -4,23 +4,28 @@ import {
   Button,
   Card,
   Collapse,
+  Divider,
   FileInput,
   Group,
   Loader,
+  NumberInput,
   Select,
   SimpleGrid,
   Stack,
   Text,
   Textarea,
+  TextInput,
   Title,
   UnstyledButton,
 } from '@mantine/core';
-import { IconArrowRight } from '@tabler/icons-react';
+import { IconArrowRight, IconFileZip } from '@tabler/icons-react';
 import { useState } from 'react';
 import { ErrorReport } from '../../errors/ErrorReport';
-import { useWorkspace } from '../../store/WorkspaceContext';
-import type { StructureFormat } from '../../client/types';
+import { useWorkspace, useWorkspaceStore } from '../../store/WorkspaceContext';
+import type { SmearingType, StructureFormat, VdwMethod } from '../../client/types';
 import { presentRecommendation } from '../../records/presenters';
+import { RawJson } from '../../records/RawJson';
+import { downloadInputArchive } from '../../archive/InputArchive';
 import { StructureSummary } from '../../structure/StructureSummary';
 import { StructureViewer } from '../../structure/StructureViewer';
 
@@ -234,21 +239,30 @@ function RecommendationPanel() {
               <Stack gap="xs">
                 <Title order={5}>{section.title}</Title>
                 {section.values.map((value) => (
-                  <Group key={value.label} justify="space-between" gap="md">
-                    <Text size="sm" c="dimmed">
-                      {value.label}
-                    </Text>
-                    <Text size="sm" fw={600} ta="right" ff="monospace">
-                      {value.value}
-                      {value.unit ? ` ${value.unit}` : ''}
-                    </Text>
-                  </Group>
+                  <div key={value.label}>
+                    <Group justify="space-between" gap="md" align="baseline">
+                      <Text size="sm" c="dimmed">
+                        {value.label}
+                      </Text>
+                      <Text size="sm" fw={600} ta="right" ff="monospace">
+                        {value.value}
+                        {value.unit ? ` ${value.unit}` : ''}
+                      </Text>
+                    </Group>
+                    {value.provenance?.reason && (
+                      <Text size="xs" c="dimmed" mt={2}>
+                        {value.provenance.reason}
+                      </Text>
+                    )}
+                  </div>
                 ))}
                 {section.provenance && (
                   <Text size="xs" c="dimmed">
                     {section.provenance.reason}
                   </Text>
                 )}
+                <Divider mt="xs" />
+                <RawJson name={section.id} value={section.raw} />
               </Stack>
             </Card>
           ))}
@@ -258,7 +272,81 @@ function RecommendationPanel() {
   );
 }
 
-/** Minimal supported overrides; edits mark records/generated output stale. */
+const SMEARING_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'Let Goldilocks decide' },
+  { value: 'cold', label: 'cold' },
+  { value: 'gaussian', label: 'gaussian' },
+  { value: 'mp', label: 'mp' },
+  { value: 'fixed', label: 'fixed' },
+];
+
+const VDW_METHOD_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'Let Goldilocks decide' },
+  { value: 'd3', label: 'DFT-D3' },
+  { value: 'd3bj', label: 'DFT-D3(BJ)' },
+  { value: 'ts', label: 'TS' },
+  { value: 'mbd', label: 'MBD' },
+];
+
+/** A three-way boolean override: decide, force on, or force off. */
+function TriSelect({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean | null | undefined;
+  onChange: (value: boolean | null) => void;
+}) {
+  return (
+    <Select
+      label={label}
+      allowDeselect
+      data={[
+        { value: '', label: 'Let Goldilocks decide' },
+        { value: 'true', label: 'Yes' },
+        { value: 'false', label: 'No' },
+      ]}
+      value={value === null || value === undefined ? '' : String(value)}
+      onChange={(next) => onChange(next === '' ? null : next === 'true')}
+    />
+  );
+}
+
+/** A numeric hint with a scientific unit; blank leaves it to Core. */
+function NumberHint({
+  label,
+  unit,
+  value,
+  onChange,
+  integer = false,
+}: {
+  label: string;
+  unit?: string;
+  value: number | null | undefined;
+  onChange: (value: number | null) => void;
+  integer?: boolean;
+}) {
+  return (
+    <NumberInput
+      label={unit ? `${label} (${unit})` : label}
+      value={value ?? ''}
+      onChange={(next) => {
+        if (next === '' || next === null) {
+          onChange(null);
+          return;
+        }
+        const parsed = typeof next === 'number' ? next : Number(next);
+        onChange(
+          Number.isFinite(parsed) ? (integer ? Math.round(parsed) : parsed) : null,
+        );
+      }}
+      placeholder="Let Goldilocks decide"
+    />
+  );
+}
+
+/** Supported overrides on Intent and Calculation Hints. */
 function OverridesPanel() {
   const intent = useWorkspace((s) => s.intent);
   const hints = useWorkspace((s) => s.hints);
@@ -282,30 +370,253 @@ function OverridesPanel() {
         </Group>
       </UnstyledButton>
       <Collapse expanded={open}>
-        <Stack gap="sm" mt="md" id="calculation-overrides">
-          <Select
-            label="Functional"
-            data={['PBEsol', 'PBE', 'LDA']}
-            value={intent.functional}
-            onChange={(value) => value && setIntent({ functional: value })}
-          />
-          <Select
-            label="k-point grid"
-            placeholder="Let Goldilocks choose"
-            data={['3 3 3', '4 4 4', '6 6 6']}
-            value={hints.k_grid ? hints.k_grid.join(' ') : ''}
-            onChange={(value) =>
-              setHints({
-                k_grid: value ? value.split(' ').map(Number) : null,
-              })
-            }
-          />
+        <Stack gap="md" mt="md" id="calculation-overrides">
+          <div>
+            <Title order={6}>Functional</Title>
+            <Select
+              label="Exchange–correlation functional"
+              data={['PBEsol', 'PBE', 'LDA']}
+              value={intent.functional}
+              onChange={(value) => value && setIntent({ functional: value })}
+            />
+          </div>
+
+          <Divider />
+
+          <div>
+            <Title order={6}>k-points</Title>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+              <NumberHint
+                label="Spacing"
+                unit="Å⁻¹"
+                value={hints.k_spacing}
+                onChange={(value) => setHints({ k_spacing: value })}
+              />
+              <TextInputGrid
+                label="Grid"
+                value={hints.k_grid}
+                onChange={(value) => setHints({ k_grid: value })}
+              />
+            </SimpleGrid>
+          </div>
+
+          <Divider />
+
+          <div>
+            <Title order={6}>Smearing</Title>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+              <Select
+                label="Smearing type"
+                data={SMEARING_OPTIONS}
+                value={hints.smearing_type ?? ''}
+                onChange={(next) =>
+                  setHints({
+                    smearing_type: next ? (next as SmearingType) : null,
+                  })
+                }
+              />
+              <NumberHint
+                label="Smearing width"
+                unit="Ry"
+                value={hints.smearing_width_ry}
+                onChange={(value) => setHints({ smearing_width_ry: value })}
+              />
+            </SimpleGrid>
+          </div>
+
+          <Divider />
+
+          <div>
+            <Title order={6}>Magnetism &amp; relativity</Title>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+              <TriSelect
+                label="Spin polarised"
+                value={hints.spin_polarized}
+                onChange={(value) => setHints({ spin_polarized: value })}
+              />
+              <TriSelect
+                label="Spin–orbit coupling"
+                value={hints.spin_orbit_coupling}
+                onChange={(value) => setHints({ spin_orbit_coupling: value })}
+              />
+              <Select
+                label="Relativistic treatment"
+                allowDeselect
+                data={[
+                  { value: '', label: 'Let Goldilocks decide' },
+                  { value: 'scalar', label: 'Scalar' },
+                  { value: 'full', label: 'Full' },
+                  { value: 'non-relativistic', label: 'Non-relativistic' },
+                ]}
+                value={hints.relativistic_mode ?? ''}
+                onChange={(next) => setHints({ relativistic_mode: next || null })}
+              />
+            </SimpleGrid>
+          </div>
+
+          <Divider />
+
+          <div>
+            <Title order={6}>Convergence</Title>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+              <NumberHint
+                label="Convergence threshold"
+                unit="Ry"
+                value={hints.conv_thr}
+                onChange={(value) => setHints({ conv_thr: value })}
+              />
+              <NumberHint
+                label="Mixing beta"
+                value={hints.mixing_beta}
+                onChange={(value) => setHints({ mixing_beta: value })}
+              />
+              <NumberHint
+                label="Max SCF steps"
+                value={hints.electron_maxstep}
+                integer
+                onChange={(value) => setHints({ electron_maxstep: value })}
+              />
+            </SimpleGrid>
+          </div>
+
+          <Divider />
+
+          <div>
+            <Title order={6}>Dispersion</Title>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+              <TriSelect
+                label="Dispersion correction"
+                value={hints.use_vdw}
+                onChange={(value) => setHints({ use_vdw: value })}
+              />
+              <Select
+                label="Dispersion method"
+                data={VDW_METHOD_OPTIONS}
+                value={hints.vdw_method ?? ''}
+                onChange={(next) =>
+                  setHints({ vdw_method: next ? (next as VdwMethod) : null })
+                }
+              />
+            </SimpleGrid>
+          </div>
+
           <Text size="xs" c="dimmed">
             Changing a value marks existing recommendations and generated inputs stale
-            until you re-run the recommendation.
+            until you re-run the recommendation and regenerate the archive.
           </Text>
         </Stack>
       </Collapse>
+    </Card>
+  );
+}
+
+/** A space-separated k-point grid override, e.g. `4 4 4`. */
+function TextInputGrid({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number[] | null | undefined;
+  onChange: (value: number[] | null) => void;
+}) {
+  return (
+    <TextInput
+      label={label}
+      placeholder="e.g. 4 4 4"
+      value={value ? value.join(' ') : ''}
+      onChange={(event) => {
+        const parts = event.currentTarget.value.trim().split(/\s+/).filter(Boolean);
+        const parsed = parts.map(Number);
+        const valid = parts.length > 0 && parsed.every((n) => Number.isFinite(n));
+        onChange(valid ? parsed : null);
+      }}
+    />
+  );
+}
+
+/** Explicit generate action after recommendation review: builds and downloads
+ * the formula-named input archive, keeping failures local. */
+function GenerationPanel() {
+  const store = useWorkspaceStore();
+  const records = useWorkspace((s) => s.records);
+  const generationStatus = useWorkspace((s) => s.generationStatus);
+  const generationFailure = useWorkspace((s) => s.generationFailure);
+  const generatedStale = useWorkspace((s) => s.generatedStale);
+
+  if (records === null) return null;
+
+  const busy = generationStatus === 'running';
+
+  const handleGenerate = async () => {
+    await store.getState().generate();
+    const s = store.getState();
+    if (
+      s.generationStatus !== 'complete' ||
+      !s.generated ||
+      !s.structure ||
+      !s.source ||
+      !s.records
+    ) {
+      return;
+    }
+    downloadInputArchive({
+      files: s.generated.generated_files,
+      structure: s.structure,
+      request: { structure: s.source, intent: s.intent, hints: s.hints },
+      recommendation: s.records,
+      meta: {
+        generatedBy: 'goldilocks-workbench',
+        createdAt: new Date().toISOString(),
+      },
+    });
+  };
+
+  return (
+    <Card withBorder radius="md">
+      <Stack gap="md">
+        <Group justify="space-between" align="baseline">
+          <div>
+            <Title order={3}>Input archive</Title>
+            <Text size="sm" c="dimmed">
+              Bundle the generated Quantum ESPRESSO inputs, the original structure, and
+              a reproducibility manifest into one downloadable ZIP.
+            </Text>
+          </div>
+          {generatedStale && (
+            <Badge variant="light" color="ink">
+              Stale
+            </Badge>
+          )}
+          {busy && <Loader size="sm" />}
+        </Group>
+
+        {generationStatus === 'failed' && generationFailure !== null && (
+          <Stack gap="sm">
+            <ErrorReport failure={generationFailure} />
+            <Text size="sm" c="dimmed">
+              Generation did not complete. Your recommendation and structure remain
+              available — fix the inputs and retry without re-uploading.
+            </Text>
+          </Stack>
+        )}
+
+        <Group>
+          <Button
+            onClick={() => void handleGenerate()}
+            leftSection={<IconFileZip size={16} />}
+            loading={busy}
+            loaderProps={{ type: 'dots' }}
+          >
+            Generate input archive
+          </Button>
+          {busy && (
+            <Text size="sm" c="dimmed">
+              Bundling inputs…
+            </Text>
+          )}
+        </Group>
+      </Stack>
     </Card>
   );
 }
@@ -345,6 +656,7 @@ export function GuidedView() {
       )}
 
       <RecommendationPanel />
+      <GenerationPanel />
     </Stack>
   );
 }

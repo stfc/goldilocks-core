@@ -37,3 +37,11 @@ if (!('fonts' in document)) {
     value: { addEventListener: vi.fn(), removeEventListener: vi.fn() },
   });
 }
+
+// jsdom lacks a Clipboard API; tests stub the methods they assert on.
+if (!navigator.clipboard) {
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: {},
+  });
+}

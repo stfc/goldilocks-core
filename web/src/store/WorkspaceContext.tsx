@@ -29,3 +29,16 @@ export function useWorkspace<U>(selector: (state: WorkspaceState) => U): U {
   }
   return useStore(store, selector);
 }
+
+/**
+ * Return the store instance itself (no subscription). Use for one-off action
+ * sequences where you must read the freshest state after awaiting an action,
+ * e.g. reading the just-completed generation output to build an archive.
+ */
+export function useWorkspaceStore(): WorkspaceStore {
+  const store = useContext(WorkspaceContext);
+  if (store === null) {
+    throw new Error('useWorkspaceStore must be used within a WorkspaceProvider');
+  }
+  return store;
+}

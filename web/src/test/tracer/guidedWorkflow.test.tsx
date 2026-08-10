@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import App from '../../App';
+import { clipboard } from '../../records/RawJson';
 import { createWorkspaceStore } from '../../store/workspace';
 import { FakeCoreClient } from '../mocks/FakeCoreClient';
 import { siCif } from '../mocks/fixtures';
@@ -68,5 +69,119 @@ describe('Guided workflow tracer', () => {
 
     await waitFor(() => expect(screen.getByText(/8 sites/i)).toBeInTheDocument());
     expect(screen.getByText('Volume (Å³)')).toBeInTheDocument();
+  });
+
+  it('generates and downloads a formula-named input archive after recommendation', async () => {
+    const createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:goldilocks');
+    const revokeObjectURL = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation(() => {});
+    let downloadedName = '';
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      downloadedName = this.download;
+    });
+
+    const user = userEvent.setup();
+    const store = createWorkspaceStore(new FakeCoreClient());
+    render(<App store={store} />);
+
+    await user.click(screen.getByLabelText(/structure content/i));
+    await user.paste(siCif);
+    await user.click(screen.getByRole('button', { name: /load structure/i }));
+    await waitFor(() => expect(screen.getByText(/8 sites/i)).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /recommend parameters/i }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: /recommendation/i }),
+      ).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole('button', { name: /generate input archive/i }));
+
+    await waitFor(() => expect(downloadedName).toBe('Si-inputs.zip'));
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it('overrides a hint, re-runs the recommendation, and regenerates the archive', async () => {
+    const user = userEvent.setup();
+    const store = createWorkspaceStore(new FakeCoreClient());
+    render(<App store={store} />);
+
+    await user.click(screen.getByLabelText(/structure content/i));
+    await user.paste(siCif);
+    await user.click(screen.getByRole('button', { name: /load structure/i }));
+    await waitFor(() => expect(screen.getByText(/8 sites/i)).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /recommend parameters/i }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: /recommendation/i }),
+      ).toBeInTheDocument(),
+    );
+
+    // Override the k-point grid via progressive disclosure.
+    await user.click(screen.getByRole('button', { name: /calculation overrides/i }));
+    const grid = await screen.findByLabelText('Grid');
+    await user.clear(grid);
+    await user.type(grid, '6 6 6');
+    await waitFor(() => expect(screen.getByText('Stale')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /re-run recommendation/i }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: /recommendation/i }),
+      ).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole('button', { name: /generate input archive/i }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /generate input archive/i }),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it('shows raw record JSON with copy and download controls', async () => {
+    const writeText = vi.spyOn(clipboard, 'write').mockResolvedValue(undefined);
+    let rawDownloadName = '';
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:raw');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      rawDownloadName = this.download;
+    });
+
+    const user = userEvent.setup();
+    const store = createWorkspaceStore(new FakeCoreClient());
+    render(<App store={store} />);
+
+    await user.click(screen.getByLabelText(/structure content/i));
+    await user.paste(siCif);
+    await user.click(screen.getByRole('button', { name: /load structure/i }));
+    await waitFor(() => expect(screen.getByText(/8 sites/i)).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /recommend parameters/i }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: /recommendation/i }),
+      ).toBeInTheDocument(),
+    );
+
+    // Open the first section's raw disclosure.
+    await user.click(screen.getByRole('button', { name: /raw analysis/i }));
+    expect(await screen.findByText(/".*reduced_formula.*Si"/s)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /copy/i }));
+    expect(writeText).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole('button', { name: /download json/i }));
+    expect(rawDownloadName).toBe('analysis-record.json');
   });
 });

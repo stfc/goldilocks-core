@@ -67,6 +67,12 @@ export type Intent = {
   pseudo_mode: string;
 };
 
+/** Smearing schemes Core accepts for SCF broadening. */
+export type SmearingType = 'fixed' | 'gaussian' | 'mp' | 'cold';
+
+/** Dispersion-correction methods Core accepts. */
+export type VdwMethod = 'd3' | 'd3bj' | 'ts' | 'mbd';
+
 /** Operator hint fields the Workbench may override. */
 export type Hints = {
   k_spacing?: number | null;
@@ -75,13 +81,15 @@ export type Hints = {
   smearing_width_ry?: number | null;
   spin_polarized?: boolean | null;
   spin_orbit_coupling?: boolean | null;
+  pseudo_mode?: string | null;
+  pseudo_type?: string | null;
+  relativistic_mode?: string | null;
   conv_thr?: number | null;
   mixing_beta?: number | null;
   electron_maxstep?: number | null;
+  use_vdw?: boolean | null;
+  vdw_method?: VdwMethod | null;
 };
-
-/** Smearing schemes Core accepts for SCF broadening. */
-export type SmearingType = 'fixed' | 'gaussian' | 'mp' | 'cold';
 
 export type ComputationRequest = {
   structure: StructureSource;

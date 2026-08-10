@@ -41,7 +41,7 @@ def _pretend_installed(table, contents=("Si.upf",)):
 
 
 def test_install_path_uses_the_layout_selection_derives_from(registry):
-    table = registry["pseudodojo-pbesol-efficiency"]
+    table = registry["pseudodojo-pbesol-efficiency-sr"]
 
     path = installer.install_path(table)
 
@@ -52,7 +52,7 @@ def test_install_path_uses_the_layout_selection_derives_from(registry):
 
 def test_install_path_uses_the_upstream_name_not_ours(registry):
     """The directory has to match what a hand-installed table would look like."""
-    table = registry["pseudodojo-pbesol-efficiency"]
+    table = registry["pseudodojo-pbesol-efficiency-sr"]
 
     assert table.name not in str(installer.install_path(table))
     assert table.upstream_table in str(installer.install_path(table))
@@ -60,7 +60,7 @@ def test_install_path_uses_the_upstream_name_not_ours(registry):
 
 def test_an_sssp_table_installs_where_cutoff_discovery_looks(registry):
     """The parser wants `SSSP*` directories with a sidecar named after them."""
-    table = registry["sssp-pbesol-efficiency"]
+    table = registry["sssp-pbesol-efficiency-sr"]
 
     path = installer.install_path(table)
 
@@ -70,7 +70,7 @@ def test_an_sssp_table_installs_where_cutoff_discovery_looks(registry):
 
 def test_is_installed_sees_uppercase_extensions(registry):
     """SSSP ships a mix of .upf and .UPF; half the table is invisible otherwise."""
-    table = registry["sssp-pbesol-efficiency"]
+    table = registry["sssp-pbesol-efficiency-sr"]
     _pretend_installed(table, contents=("Si.UPF", "Ge.UPF"))
 
     assert installer.is_installed(table)
@@ -81,11 +81,11 @@ def test_nothing_is_installed_on_a_fresh_cache(registry):
 
 
 def test_installed_tables_reports_only_what_is_present(registry):
-    _pretend_installed(registry["pseudodojo-pbe-lanthanides"])
+    _pretend_installed(registry["pseudodojo-pbe-lanthanides-sr"])
 
     installed = installer.installed_tables(registry)
 
-    assert [t.name for t in installed] == ["pseudodojo-pbe-lanthanides"]
+    assert [t.name for t in installed] == ["pseudodojo-pbe-lanthanides-sr"]
 
 
 def test_require_installed_explains_how_to_get_a_table(registry):
@@ -103,7 +103,7 @@ def test_the_missing_table_message_carries_terms_and_a_citation(registry):
     with pytest.raises(installer.NoPseudopotentials) as raised:
         installer.require_installed(registry)
 
-    default = registry["pseudodojo-pbesol-efficiency"]
+    default = registry["pseudodojo-pbesol-efficiency-sr"]
     message = str(raised.value)
     assert default.name in message
     assert default.licence in message
@@ -112,14 +112,14 @@ def test_the_missing_table_message_carries_terms_and_a_citation(registry):
 
 
 def test_require_installed_is_silent_once_a_table_is_present(registry):
-    _pretend_installed(registry["pseudodojo-pbesol-efficiency"])
+    _pretend_installed(registry["pseudodojo-pbesol-efficiency-sr"])
 
     assert installer.require_installed(registry)
 
 
 def test_an_unknown_provider_names_the_manual_route(registry):
     stranger = dataclasses.replace(
-        registry["pseudodojo-pbesol-efficiency"], provider="somewhere-else"
+        registry["pseudodojo-pbesol-efficiency-sr"], provider="somewhere-else"
     )
 
     with pytest.raises(installer.ProviderNotSupported, match="--pseudo-root"):
@@ -128,7 +128,7 @@ def test_an_unknown_provider_names_the_manual_route(registry):
 
 def test_install_stamps_the_tables_relativistic_classification(monkeypatch, registry):
     """Selection trusts the table's registered classification, not each header."""
-    table = registry["pseudodojo-pbesol-efficiency"]
+    table = registry["pseudodojo-pbesol-efficiency-sr"]
     destination = installer.install_path(table)
 
     def _fake_provider_install(upstream_table, *, root, http):
@@ -174,7 +174,7 @@ def test_every_registered_provider_has_an_installer(registry):
 
 def test_resolve_pseudos_prefers_an_explicit_root(registry, tmp_path):
     """A user who names a directory means that directory."""
-    _pretend_installed(registry["pseudodojo-pbesol-efficiency"])
+    _pretend_installed(registry["pseudodojo-pbesol-efficiency-sr"])
     elsewhere = tmp_path / "mine"
     elsewhere.mkdir()
 
@@ -182,7 +182,7 @@ def test_resolve_pseudos_prefers_an_explicit_root(registry, tmp_path):
 
 
 def test_resolve_pseudos_reads_the_installed_tables(registry):
-    _pretend_installed(registry["pseudodojo-pbesol-efficiency"], ("Si.upf",))
+    _pretend_installed(registry["pseudodojo-pbesol-efficiency-sr"], ("Si.upf",))
 
     resolved = installer.resolve_pseudos()
 

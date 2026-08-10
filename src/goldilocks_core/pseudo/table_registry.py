@@ -33,7 +33,8 @@ class PseudoTable:
     """One registered pseudopotential table.
 
     Attributes:
-        name: our identifier, e.g. ``pseudodojo-pbesol-efficiency``.
+        name: our identifier, e.g. ``pseudodojo-pbesol-efficiency-sr``. Always
+            ends in ``-sr``, ``-fr``, or ``-nr``, matching ``relativistic``.
         provider: which upstream serves it -- ``pseudodojo`` or
             ``materialscloud``. Core never redistributes a table; it fetches
             from the provider on the user's behalf.
@@ -43,8 +44,11 @@ class PseudoTable:
             that way rather than by name.
         version: upstream table version.
         functional: exchange-correlation functional the table was generated for.
-        relativistic: ``SR`` or ``FR``. Only ``FR`` can satisfy spin-orbit
-            coupling.
+        relativistic: ``SR``, ``FR``, or ``NR``. Only ``FR`` can satisfy
+            spin-orbit coupling. No table is registered ``NR`` today -- SSSP's
+            per-element non-relativistic pseudopotentials (B, Be, Li) sit
+            inside an ``SR`` table, since a task selects one table, not a
+            relativistic mode per element.
         accuracy: ``efficiency`` or ``precision``. One vocabulary across
             libraries; it selects a table, never a cutoff level.
         licence: licence of the pseudopotentials themselves. Not always a

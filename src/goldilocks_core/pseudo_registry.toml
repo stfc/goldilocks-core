@@ -10,7 +10,9 @@
 # scripts/survey_pseudo_tables.py.
 #
 # Entry keys are ours; `upstream_table` is what the provider calls it and what
-# the download URL is built from.
+# the download URL is built from. Every key ends in -sr, -fr, or -nr, matching
+# `relativistic`, so a user can tell SR from FR from `gl pp available` without
+# opening this file.
 #
 # accuracy: "efficiency" | "precision" -- one vocabulary across libraries.
 #   PseudoDojo standard -> efficiency, stringent -> precision; SSSP already uses
@@ -22,7 +24,7 @@
 # registered: both ship 72 pseudopotentials but publish cutoff hints for only
 # 61 of them, so 11 elements would install and then fail at generation.
 
-[tables."pseudodojo-pbesol-efficiency"]
+[tables."pseudodojo-pbesol-efficiency-sr"]
 provider       = "pseudodojo"
 upstream_table = "nc-sr-04_pbesol_standard"
 version        = "0.4"
@@ -45,7 +47,7 @@ elements = [
   "Sr", "Ta", "Tc", "Te", "Ti", "Tl", "V", "W", "Xe", "Y", "Zn", "Zr",
 ]
 
-[tables."pseudodojo-pbesol-precision"]
+[tables."pseudodojo-pbesol-precision-sr"]
 provider       = "pseudodojo"
 upstream_table = "nc-sr-04_pbesol_stringent"
 version        = "0.4"
@@ -68,7 +70,7 @@ elements = [
   "Sr", "Ta", "Tc", "Te", "Ti", "Tl", "V", "W", "Xe", "Y", "Zn", "Zr",
 ]
 
-[tables."pseudodojo-pbe-efficiency"]
+[tables."pseudodojo-pbe-efficiency-sr"]
 provider       = "pseudodojo"
 upstream_table = "nc-sr-04_pbe_standard"
 version        = "0.4"
@@ -91,7 +93,7 @@ elements = [
   "Sr", "Ta", "Tc", "Te", "Ti", "Tl", "V", "W", "Xe", "Y", "Zn", "Zr",
 ]
 
-[tables."pseudodojo-pbe-precision"]
+[tables."pseudodojo-pbe-precision-sr"]
 provider       = "pseudodojo"
 upstream_table = "nc-sr-04_pbe_stringent"
 version        = "0.4"
@@ -113,7 +115,7 @@ elements = [
   "Sr", "Ta", "Tc", "Te", "Ti", "Tl", "V", "W", "Xe", "Y", "Zn", "Zr",
 ]
 
-[tables."pseudodojo-lda-efficiency"]
+[tables."pseudodojo-lda-efficiency-sr"]
 provider       = "pseudodojo"
 upstream_table = "nc-sr-04_pw_standard"
 version        = "0.4"
@@ -135,7 +137,7 @@ elements = [
   "Tc", "Te", "Ti", "Tl", "V", "W", "Xe", "Y", "Zn", "Zr",
 ]
 
-[tables."pseudodojo-lda-precision"]
+[tables."pseudodojo-lda-precision-sr"]
 provider       = "pseudodojo"
 upstream_table = "nc-sr-04_pw_stringent"
 version        = "0.4"
@@ -157,7 +159,7 @@ elements = [
   "Tc", "Te", "Ti", "Tl", "V", "W", "Xe", "Y", "Zn", "Zr",
 ]
 
-[tables."pseudodojo-pbe-lanthanides"]
+[tables."pseudodojo-pbe-lanthanides-sr"]
 provider       = "pseudodojo"
 upstream_table = "nc-sr-04-3plus_pbe_standard"
 version        = "0.4"
@@ -266,7 +268,7 @@ elements = [
   "Sr", "Ta", "Tc", "Te", "Ti", "Tl", "V", "W", "Xe", "Y", "Zn", "Zr",
 ]
 
-[tables."sssp-pbesol-efficiency"]
+[tables."sssp-pbesol-efficiency-sr"]
 provider       = "materialscloud"
 upstream_table = "SSSP_1.3.0_PBEsol_efficiency"
 record         = "rcyfm-68h65"

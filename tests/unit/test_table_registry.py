@@ -39,7 +39,7 @@ def test_the_packaged_registry_loads(packaged):
 
 
 def test_exactly_one_table_is_the_default(packaged):
-    assert default_table(packaged).name == "pseudodojo-pbesol-efficiency"
+    assert default_table(packaged).name == "pseudodojo-pbesol-efficiency-sr"
 
 
 def test_the_default_is_the_cheapest_clean_licence_table(packaged):
@@ -76,7 +76,7 @@ def test_every_table_declares_what_it_will_transfer(packaged):
 
 
 def test_covers_and_missing_from(packaged):
-    table = packaged["pseudodojo-pbesol-efficiency"]
+    table = packaged["pseudodojo-pbesol-efficiency-sr"]
 
     assert table.covers("Si")
     assert not table.covers("U")
@@ -85,13 +85,13 @@ def test_covers_and_missing_from(packaged):
 
 def test_the_default_table_carries_almost_no_lanthanides(packaged):
     """The gap that makes the 3+ table necessary."""
-    assert packaged["pseudodojo-pbesol-efficiency"].lanthanides == ("La", "Lu")
+    assert packaged["pseudodojo-pbesol-efficiency-sr"].lanthanides == ("La", "Lu")
 
 
 def test_the_lanthanide_table_changes_the_functional(packaged):
     """Choosing it is a scientific decision, not a fallback Core may take silently."""
-    default = packaged["pseudodojo-pbesol-efficiency"]
-    lanthanide = packaged["pseudodojo-pbe-lanthanides"]
+    default = packaged["pseudodojo-pbesol-efficiency-sr"]
+    lanthanide = packaged["pseudodojo-pbe-lanthanides-sr"]
 
     assert lanthanide.covers("Ce")
     assert not default.covers("Ce")
@@ -102,7 +102,7 @@ def test_actinides_come_only_from_the_table_with_encumbered_licensing(packaged):
     """Reachable, but not without the user knowing what lands on their disk."""
     with_actinides = [t for t in packaged.values() if t.actinides]
 
-    assert [t.name for t in with_actinides] == ["sssp-pbesol-efficiency"]
+    assert [t.name for t in with_actinides] == ["sssp-pbesol-efficiency-sr"]
     assert set(with_actinides[0].actinides) <= ACTINIDES
     assert "GPL" in with_actinides[0].licence
 
@@ -118,16 +118,15 @@ def test_only_a_fully_relativistic_table_can_serve_spin_orbit_coupling(packaged)
     relativistic = {t.name for t in packaged.values() if t.relativistic == "FR"}
 
     assert relativistic
-    assert all(name.endswith("-fr") for name in relativistic)
-    assert packaged["sssp-pbesol-efficiency"].relativistic == "SR"
+    assert packaged["sssp-pbesol-efficiency-sr"].relativistic == "SR"
 
 
 @pytest.mark.parametrize(
     ("element", "expected"),
     [
         ("Si", {"available everywhere"}),
-        ("Ce", {"pseudodojo-pbe-lanthanides", "sssp-pbesol-efficiency"}),
-        ("U", {"sssp-pbesol-efficiency"}),
+        ("Ce", {"pseudodojo-pbe-lanthanides-sr", "sssp-pbesol-efficiency-sr"}),
+        ("U", {"sssp-pbesol-efficiency-sr"}),
         ("Og", set()),
     ],
 )
@@ -175,8 +174,8 @@ def test_every_functional_has_a_matching_table(packaged):
 
 
 def test_names_encode_what_distinguishes_a_table(packaged):
-    """A user picks from `gl list pp` by reading names, not by opening the registry."""
+    """A user picks from `gl pp available` by reading names, not the registry."""
+    suffix = {"SR": "-sr", "FR": "-fr", "NR": "-nr"}
     for table in packaged.values():
         assert table.functional.lower() in table.name.lower()
-        if table.relativistic == "FR":
-            assert table.name.endswith("-fr")
+        assert table.name.endswith(suffix[table.relativistic])

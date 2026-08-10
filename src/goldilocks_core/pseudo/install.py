@@ -61,7 +61,7 @@ def is_installed(table: PseudoTable, root: Path | None = None) -> bool:
     return any(install_path(table, root).glob("*.upf", case_sensitive=False))
 
 
-_TABLE_TO_FILE_RELATIVISTIC = {"SR": "scalar", "FR": "full"}
+_TABLE_TO_FILE_RELATIVISTIC = {"SR": "scalar", "FR": "full", "NR": "non-relativistic"}
 """Registry vocabulary (whole-table) to UPF vocabulary (per-file), for the stamp."""
 
 

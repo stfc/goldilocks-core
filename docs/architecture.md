@@ -1,99 +1,142 @@
 # Architecture
 
-Goldilocks Core turns a structure and calculation intent into DFT input files.
-The built-in workflow currently generates Quantum ESPRESSO SCF input. The data
-flow is staged so later calculation types can reuse analysis, advice, resource
-selection, and output handling.
-
-```text
-Load -> Analyze -> Advise -> Select
-Load -> Kmesh
-Load + Advice + Select + Kmesh -> Generate
-```
-
-The executor resolves this dependency graph from typed stage inputs and
-outputs. Stages remain pure functions with no stage base classes.
+Goldilocks Core turns a structure and calculation intent into typed recommendation records and DFT input files. The built-in calculation task generates Quantum ESPRESSO SCF input.
 
 ## Modules
 
 | Module | Responsibility |
 | --- | --- |
-| `contracts/` | Data records and serialization shared between stages. |
-| `graph.py` | Frozen task specifications and type-keyed DAG execution. |
-| `runtime.py` | SCF task registration and model lifecycle. |
-| `jobs.py` | `run_core_job` and public convenience functions. |
+| `contracts/` | Boundary dataclasses, query output registry, and serialization. |
+| `graph.py` | Stage, task, and preset specifications; type-keyed DAG execution. |
+| `runtime.py` | SCF task registration, run-context construction, and model lifecycle. |
+| `jobs.py` | `run_core_job` dispatch and `recommend`/`generate` convenience functions. |
 | `io/structures.py` | Structure loading. |
-| `analysis.py` | Structure facts. |
+| `analysis.py` | Structure facts and metallicity fallback. |
 | `advice/` | Scientific and numerical recommendations. |
 | `kmesh/`, `advisors/` | Concrete k-point selection. |
-| `selection.py` | Pseudopotentials and cutoffs. |
+| `selection.py` | Pseudopotential and cutoff selection. |
 | `generation/` | Calculation-specific file generation. |
-| `bundle.py` | Generated files and manifest output. |
+| `bundle.py` | Optional publication of generated files and a manifest. |
+| `server/` | Shared request deserialization and optional HTTP/MCP transports. |
+| `cli/` | Thin command-line transport. |
 
-Stages communicate through dataclasses. They do not need to inherit from a Core
-class, and callers can invoke any stage function directly.
+## DAG executor
 
-## Standard workflow
+`StageSpec` declares three things:
 
-`CoreJobRequest` carries serializable job data. `run_core_job` delegates to a
-fresh `CoreRuntime` unless the caller supplies one for model reuse. The runtime
-executes the registered `scf_single_point` task.
+- the record type it produces;
+- the upstream record types it consumes;
+- the pure callable that produces it.
 
-```python
-request = CoreJobRequest(structure="Fe.cif", mode="generate")
-result = run_core_job(request)
+The callable receives upstream records as positional arguments and a `RunContext` as `ctx`. Stages do not inherit from a framework class. Their dependency structure is inferred from declared input and output types.
+
+`TaskSpec` groups the stages for one calculation type and its named `Preset` output sets. To execute a task, `execute()`:
+
+1. indexes each stage by its output type;
+2. recursively visits the producers required by the requested output types;
+3. detects missing producers and dependency cycles;
+4. orders prerequisites before consumers;
+5. executes each required stage once and memoizes its output by type;
+6. returns only the explicitly requested records in `CoreRecords`.
+
+Memoization is per execution. Shared prerequisites such as `Structure` or `ParameterAdvice` are computed once even when several requested records depend on them. Unrelated stages are not run.
+
+## CoreRuntime
+
+`CoreRuntime` is the stateful owner around the otherwise pure graph:
+
+- owns the default QRF k-mesh backend and optional metallicity model;
+- lazily loads model artifacts and reuses them across jobs;
+- validates that a request has a registered task;
+- builds a fresh `RunContext` for each request;
+- delegates minimal-subgraph execution to the graph executor;
+- assembles preset outputs into `CoreResult`;
+- resets or closes runtime-owned model resources.
+
+The run context separates request data from runtime services:
+
+- request data: structure input, calculation intent, hints, and pseudopotential metadata;
+- services: k-mesh backend and metallicity classifier.
+
+A request-level `kmesh_model` replaces the default k-mesh service for that run. `CoreRuntime.reset()` discards cached model state. `close()` releases owned resources and prevents further computation.
+
+Runtime entrypoints are:
+
+- `recommend(request) -> CoreResult` for the `recommend` preset;
+- `generate(request, output_dir=...) -> CoreResult` for the `generate` preset;
+- `compute(outputs, request) -> CoreRecords` for an arbitrary record query.
+
+`run_core_job()` dispatches a `CoreJobRequest` to one of these operations. It creates and closes a runtime when none is supplied. Long-lived CLI servers, HTTP applications, and MCP servers retain one runtime per process.
+
+## SCF task
+
+The only registered task is `scf_single_point`. Its graph is:
+
+```text
+Structure input -> Structure
+Structure -> StructureAnalysisRecord
+Structure -> KPointSelection
+StructureAnalysisRecord -> ParameterAdvice
+Structure + ParameterAdvice -> SelectionRecord
+Structure + ParameterAdvice + SelectionRecord + KPointSelection -> GeneratedFiles
 ```
 
-`mode` selects a task preset:
+In dependency terms:
 
-- `recommend`: request Analyze, Advise, Kmesh, and Select records
-- `generate`: additionally request GeneratedFiles and optionally publish them
-  when `output_dir` is set
+- **Load** produces `pymatgen.Structure` from the run context.
+- **Analyze** consumes `Structure` and produces `StructureAnalysisRecord`.
+- **Kmesh** consumes `Structure` and produces `KPointSelection`.
+- **Advise** consumes `StructureAnalysisRecord` and produces `ParameterAdvice`.
+- **Select** consumes `Structure` and `ParameterAdvice`; it produces `SelectionRecord` without depending on Kmesh.
+- **Generate** consumes `Structure`, `ParameterAdvice`, `SelectionRecord`, and `KPointSelection`; it produces `GeneratedFiles`.
 
-`CalculationIntent.task` describes the calculation. The built-in runtime
-currently accepts only `scf_single_point`.
+Analyze and Kmesh are sibling roots after Load. A `SelectionRecord` query does not execute Kmesh. A `GeneratedFiles` query resolves every scientific branch.
 
-## Flexible Python use
+The task has two named presets:
 
-`run_core_job` is optional convenience, not an access restriction. Advanced
-callers can import stage functions and compose them themselves:
+- `recommend`: analysis, advice, k-points, and selection;
+- `generate`: the recommendation records plus generated files.
 
-```python
-from goldilocks_core.advice import advise_parameters
-from goldilocks_core.analysis import analyze_structure
-from goldilocks_core.advisors import default_kmesh_advisor
-from goldilocks_core.generation import generate_inputs
-from goldilocks_core.io.structures import load_structure
-from goldilocks_core.kmesh import resolve_kpoints
-from goldilocks_core.selection import select_parameters
+Preset entrypoints compose these records into `CoreResult`. Queries return the requested type-keyed `CoreRecords` without filling a result accumulator.
 
-structure = load_structure("Fe.cif")
-analysis = analyze_structure(structure)
-advice = advise_parameters(analysis, intent, hints)
-kpoints = resolve_kpoints(structure, hints, default_kmesh_advisor())
-selection = select_parameters(structure, advice, metadata)
-files = generate_inputs(structure, intent, advice, selection, kpoints)
-```
+## Metallicity service
 
-This supports custom ordering, extra project-specific steps, intermediate
-inspection, and calculation-specific generation without extending a framework.
+Analyze receives metallicity classification through `RunContext` rather than loading a model itself. This keeps the stage pure and gives `CoreRuntime` ownership of model lifecycle.
+
+When both `GOLDILOCKS_METALLICITY_CHECKPOINT` and `GOLDILOCKS_METALLICITY_ATOM_INIT` are configured, the runtime lazily loads the CGCNN classifier and returns its electronic character and confidence. Without both artifacts, it uses the structure heuristic. `StructureAnalysisRecord` records:
+
+- `electronic_character`;
+- `electronic_character_source` (`model` or `heuristic`);
+- `electronic_character_confidence` when the model supplies one;
+- analysis warnings describing limitations.
+
+The same model can be configured through `CoreRuntime` constructor arguments. Graph settings come from the QRF model registry.
+
+## Contracts
+
+The public contracts reflect independent graph outputs:
+
+- `KPointSelection` is a sibling record, not part of `SelectionRecord`.
+- `CoreResult.k_points` holds the concrete grid for presets.
+- `SelectionRecord` contains pseudopotential selections and their warnings.
+- `CoreRecords` is a mapping keyed by record type and serializes with type names as JSON keys.
+- `CoreJobRequest.outputs` selects a query; when it is `None`, `mode` selects `recommend` or `generate`.
+- `StructureAnalysisRecord` carries electronic-character source and confidence alongside the value.
+- standalone bundle mode was removed; publication is an optional side effect of `generate` when `output_dir` is set.
+
+Supported query output names are `StructureAnalysisRecord`, `ParameterAdvice`, `KPointSelection`, `SelectionRecord`, and `GeneratedFiles`.
 
 ## Boundaries
 
 Validate where data enters or causes side effects:
 
-- request records validate operator controls;
+- request records and shared transport deserialization validate operator input;
 - pseudopotential selection treats metadata as untrusted;
 - generators reject unsupported or incomplete inputs before rendering;
-- bundle writing confines paths to a new output directory.
+- bundle publication confines paths to a new output directory.
 
-Intermediate records remain ordinary Python data. Custom stage authors are
-responsible for returning coherent records; Core does not defensively re-check
-every possible malformed internal object.
+Intermediate records remain ordinary Python data. Stage authors are responsible for returning coherent records; Core does not revalidate deliberately corrupted internal values.
 
-Scientific choices belong in Analyze, Advise, Kmesh, and Select. Generate maps
-completed choices to calculation syntax. Optional bundle publication writes
-files but does not run calculations or copy pseudopotential libraries.
+Scientific choices belong in Analyze, Advise, Kmesh, and Select. Generate maps completed choices to calculation syntax. Publication writes generated files but does not run calculations or copy pseudopotential libraries.
 
-Runner/AiiDA workflows, schedulers, auth, HTTP transport, frontend state, and
-completed-output analysis are outside this package.
+Runner/AiiDA workflows, schedulers, auth, frontend state, and completed-output analysis are outside this package.

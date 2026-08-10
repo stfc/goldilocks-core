@@ -10,8 +10,14 @@ All notable changes to goldilocks-core are documented here.
 - Example structures (`Si`, `Fe_bcc`, `Pt_fcc`) installed with the package, reachable from `goldilocks_core.examples` and `goldilocks-core examples path`.
 - `DimensionalityClassificationError` and `SymmetryAnalysisError` (in `goldilocks_core.analysis`); `SymmetryUnavailable` typed value (in `goldilocks_core.contracts`), recorded in symmetry fields when spglib cannot analyze.
 - `allow_swallow` decorator (`goldilocks_core._lint`) and the `scripts/check_no_swallow.py` AST pre-commit hook enforcing export-only `__init__.py` and no silent `try/except` (the sole opt-in is `@allow_swallow`).
-- A typed DAG executor with frozen stage/task/preset specifications, registered SCF presets, and `CoreRecords` query results.
-- `CoreRuntime` as the explicit lifecycle owner for reusable kmesh and metallicity models.
+- A typed DAG executor with frozen stage, task, and preset registries. It resolves the minimal subgraph for requested record types and memoizes shared prerequisites within each run.
+- The registered `scf_single_point` task, with `recommend` and `generate` presets over independent Analyze and Kmesh branches.
+- `CoreRuntime` as the explicit lifecycle owner for the executor, run-context construction, reusable kmesh backends, and the optional metallicity model.
+- `CoreRecords`, a type-keyed mapping returned by arbitrary record queries.
+- `CoreJobRequest.outputs` and the `goldilocks-core compute --outputs ...` query surface.
+- Optional HTTP transport with `POST /recommend`, `POST /generate`, `POST /compute`, and `GET /health`.
+- Optional MCP stdio transport with `recommend`, `generate`, and `compute` tools.
+- Shared `from_dict` request deserialization for HTTP and MCP.
 
 ### Changed
 
@@ -20,7 +26,8 @@ All notable changes to goldilocks-core are documented here.
 - Job-level warnings now include de-duplicated scientific caveats from Advise as well as Analyze, Kmesh, and Select.
 - Bundle output uses a straightforward no-overwrite directory writer.
 - Default exchange-correlation functional changed from PBE to PBEsol. This changes generated inputs and the pseudopotentials selected on a default run; pass `--functional PBE` to restore the previous behaviour.
-- `run_core_job` now delegates to `CoreRuntime`; the runtime executes the minimal SCF subgraph needed by the selected preset or record query.
+- `run_core_job` now delegates to `CoreRuntime`; `mode` selects a full-result preset and `outputs` selects a `CoreRecords` query. The runtime executes only the required SCF subgraph.
+- HTTP and MCP servers retain one `CoreRuntime` per process so lazily loaded model state is reused across calls.
 - K-points are resolved by `resolve_kpoints(structure, hints, backend)`; the `KMeshAdvisor` signature is `(Structure) -> KPointSelection`.
 - CLI `--model` now sets `CoreJobRequest.kmesh_model` (a `ModelSpec` on the request) instead of swapping a `Pipeline` backend.
 - Every `src/**/__init__.py` is now an export-only facade; logic moved to named sibling modules (`ml/qrf/inference`, `ml/kindex/inference`, `kmesh/resolve`, `advice/parameters`, `examples/structures`). Public import paths are preserved by re-exports.
@@ -29,9 +36,9 @@ All notable changes to goldilocks-core are documented here.
 - QRF composition featurizers: the catch-all `try/except TypeError` shim around `impute_nan` is replaced with explicit signature introspection (`impute_nan` is passed only where the constructor accepts it).
 - `build_kmesh_entries` no longer swallows `ValueError` from `mesh_to_k_line_density_interval` into `k_line_density_interval=None`; the error propagates.
 - CLI invalid-argument handling: `parser.error(...)` replaced with `parser.print_usage(...)` + `raise SystemExit(2)` (same exit code and message; the handler now re-raises).
-- Analyze uses the runtime-owned CGCNN metallicity model when configured and records provenance and confidence; the structure heuristic remains the fallback.
+- Metallicity classification is a runtime service supplied to Analyze. The runtime-owned CGCNN model is used when configured; otherwise the structure heuristic is used. `electronic_character_source` and `electronic_character_confidence` record the provenance and confidence.
 - K-point selection is a sibling record: `SelectionRecord` contains pseudopotentials and warnings, while `CoreResult`, input generation, and the QE writer receive `k_points` separately.
-
+- Preset responses remain `CoreResult`; query responses serialize only their requested records through `CoreRecords`.
 
 ### Fixed
 
@@ -51,7 +58,7 @@ All notable changes to goldilocks-core are documented here.
 - `register_writer` and the mutable writer dispatch table; the table is now a static tuple.
 - Dead `parse_upf` dataframe layer (`metadata_to_row`/`metadata_list_to_rows`/`metadata_list_to_dataframe`) and the helpers only it used.
 - `advisors/__init__.py` `__getattr__` lazy facade; direct re-exports replace it (the facade was already defeated by `jobs.py`'s module-level advisor imports).
-- The standalone `bundle` job mode and `write_bundle` convenience function; `generate(..., output_dir=...)` now handles publication.
+- The standalone `bundle` job mode, CLI subcommand, and `write_bundle` convenience function; `generate(..., output_dir=...)` now handles publication.
 
 ## [0.1.0] - 2026-06-10
 

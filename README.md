@@ -4,11 +4,11 @@
 
 It provides:
 
-- structure analysis and scientific warnings;
-- advice for k-points, smearing, magnetism, SOC, convergence, vdW, and pseudopotentials;
-- a default Quantile Random Forest k-point model;
+- structure analysis and provenance-backed scientific advice;
+- model- or hint-driven k-point selection;
 - deterministic pseudopotential selection and QE input generation;
-- Python and CLI entry points over the same staged pipeline.
+- a typed DAG runtime that computes only the records a caller requests;
+- preset and query APIs exposed through Python, CLI, HTTP, and MCP.
 
 ## Install
 
@@ -24,67 +24,122 @@ For development dependencies:
 uv sync --group dev
 ```
 
+The HTTP and MCP servers are optional:
+
+```bash
+uv sync --extra http
+uv sync --extra mcp
+```
+
+## Runtime model
+
+A **stage** is a pure function that produces one typed record from upstream records and a per-run context. A **task** selects the stages for a calculation type. The built-in `scf_single_point` task is a dependency graph rather than a fixed sequence:
+
+```text
+Structure ─┬─> Analyze ─> Advise ─> Select ─┐
+           └─> Kmesh ───────────────────────┼─> Generate
+Structure ──────────────────────────────────┘
+```
+
+Analyze and Kmesh can run as independent roots after structure loading. Select depends on Structure and Advice, not Kmesh. Generate depends on Structure, Advice, Select, and Kmesh.
+
+The executor infers dependencies from stage input and output types, resolves the minimal subgraph for requested outputs, and memoizes each record within the run. `CoreRuntime` owns the executor and reusable model state, builds the run context from request data and runtime services, and exposes preset and query entrypoints.
+
 ## Python API
+
+Named **presets** return a complete `CoreResult`:
+
+```python
+from goldilocks_core import CalculationHints, recommend
+
+result = recommend(
+    "structure.cif",
+    hints=CalculationHints(k_grid=(4, 4, 4)),
+)
+
+print(result.analysis.reduced_formula)
+print(result.k_points.grid)
+print(result.k_points.provenance.source)
+```
+
+- `recommend(...)` computes analysis, advice, k-points, and pseudopotential selection.
+- `generate(...)` adds generated files and can publish them when `output_dir` is set.
 
 ```python
 from goldilocks_core import CalculationHints, generate
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 result = generate(
-    "path/to/structure.cif",
-    hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
+    "structure.cif",
+    hints=CalculationHints(k_grid=(4, 4, 4)),
     pseudo_metadata=load_pseudo_metadata("path/to/pseudopotentials"),
+    output_dir="run/",
 )
 
-for generated_file in result.generated_files:
-    print(generated_file.path)
-    print(generated_file.content)
-
-print(result.warnings)
+print(result.generated_files[0].path)
+print(result.bundle.path)
 ```
 
-The public workflows are:
+A **query** requests any supported subset of records and returns `CoreRecords`:
 
-- `recommend(...)` — return analysis, advice, and concrete selections;
-- `generate(...)` — also return generated QE input files and, when
-  `output_dir` is given, publish them with `manifest.json`.
+```python
+from goldilocks_core import CoreJobRequest, CoreRuntime
+from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
 
-Use `CoreJobRequest` with `run_core_job()` when you need a single request model.
-`run_core_job` delegates to a fresh `CoreRuntime`, or reuses a caller-supplied
-runtime for model lifecycle across jobs.
+request = CoreJobRequest(structure="structure.cif")
+with CoreRuntime() as runtime:
+    records = runtime.compute(
+        (StructureAnalysisRecord, KPointSelection),
+        request,
+    )
 
-The default k-point backend loads the configured QRF model lazily. Model errors are reported directly. Explicit `k_grid` and `k_spacing` hints bypass model loading; use `--model` (or `CoreJobRequest.kmesh_model`) to select a local k-index model instead.
+print(records[StructureAnalysisRecord].reduced_formula)
+print(records[KPointSelection].grid)
+```
 
-See the [tutorial](docs/tutorial.md) and [pipeline reference](docs/pipeline.md) for complete examples.
+`run_core_job(request, runtime=...)` provides one dispatch surface: `CoreJobRequest.mode` selects a preset, while `CoreJobRequest.outputs` selects a query. Reuse one `CoreRuntime` across jobs to reuse loaded models.
 
 ## CLI
 
+The CLI exposes the same two presets and query operation:
+
 ```bash
-uv run goldilocks-core recommend structure.cif --json
+uv run goldilocks-core recommend structure.cif --k-grid 4 4 4 --json
 uv run goldilocks-core generate structure.cif \
     --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
+uv run goldilocks-core compute structure.cif \
+    --outputs StructureAnalysisRecord,KPointSelection --k-grid 4 4 4
 ```
 
-Bundle output requires a new destination directory. See the [CLI reference](docs/cli.md) for all controls.
-
-Example structures are installed with the package, so there is something to run straight away:
+Example structures are installed with the package:
 
 ```bash
 uv run goldilocks-core recommend "$(uv run goldilocks-core examples path)/Si.cif" --json
 ```
 
-The standalone model-oriented entry point remains available:
+The standalone model-oriented entrypoint remains available:
 
 ```bash
 uv run goldilocks-kmesh structure.cif --model path/to/model.joblib
 ```
 
+## Transports
+
+All transports share `CoreJobRequest` deserialization and the same runtime behavior:
+
+- CLI: `recommend`, `generate`, and `compute` subcommands.
+- HTTP: `POST /recommend`, `POST /generate`, and `POST /compute`.
+- MCP: `recommend`, `generate`, and `compute` tools.
+
+Each server process reuses one `CoreRuntime` so model state survives across requests. See the [transport reference](docs/transport.md).
+
 ## Documentation
 
 - [Tutorial](docs/tutorial.md)
-- [Pipeline and stage behavior](docs/pipeline.md)
+- [DAG and stage behavior](docs/pipeline.md)
 - [Scientific conventions](docs/conventions.md)
 - [CLI reference](docs/cli.md)
+- [HTTP and MCP transports](docs/transport.md)
 - [Architecture and extension points](docs/architecture.md)
 
 ## Development
@@ -104,8 +159,6 @@ Tests use synthetic structures, temporary files, small UPF snippets, and fake mo
 
 Code is licensed under the [BSD 3-Clause License](LICENSE).
 
-Documentation under `docs/` and the example structures under `examples/` are
-licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Documentation under `docs/` and the example structures under `examples/` are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
-Bundled and user-supplied pseudopotentials carry their own upstream licences —
-see [docs/pseudopotentials.md](docs/pseudopotentials.md).
+Bundled and user-supplied pseudopotentials carry their own upstream licences.

@@ -11,6 +11,7 @@ All notable changes to goldilocks-core are documented here.
 - `DimensionalityClassificationError` and `SymmetryAnalysisError` (in `goldilocks_core.analysis`); `SymmetryUnavailable` typed value (in `goldilocks_core.contracts`), recorded in symmetry fields when spglib cannot analyze.
 - A typed DAG executor with frozen stage/task/preset specifications, registered SCF presets, and `CoreRecords` query results.
 - `CoreRuntime` as the explicit lifecycle owner for reusable kmesh and metallicity models.
+- `query_records(request)` for explicit record queries; `run_core_job` runs presets only and rejects `request.outputs`.
 
 ### Changed
 
@@ -30,6 +31,7 @@ All notable changes to goldilocks-core are documented here.
 - CLI invalid-argument handling: `parser.error(...)` replaced with `parser.print_usage(...)` + `raise SystemExit(2)` (same exit code and message; the handler now re-raises).
 - Analyze uses the runtime-owned CGCNN metallicity model when configured and records provenance and confidence; the structure heuristic remains the fallback.
 - K-point selection is a sibling record: `SelectionRecord` contains pseudopotentials and warnings, while `CoreResult`, input generation, and the QE writer receive `k_points` separately.
+- Orchestration moved to `goldilocks_core.runtime` (stage-agnostic `runtime/graph.py`, SCF task in `runtime/scf.py`, `CoreRuntime` model lifecycle + task dispatch in `runtime/core.py`, entrypoints in `runtime/jobs.py`); tasks register a `TaskHandler` (graph + context builder + result assembler) and dispatch by `intent.task`.
 
 
 ### Fixed
@@ -50,6 +52,7 @@ All notable changes to goldilocks-core are documented here.
 - `register_writer` and the mutable writer dispatch table; the table is now a static tuple.
 - Dead `parse_upf` dataframe layer (`metadata_to_row`/`metadata_list_to_rows`/`metadata_list_to_dataframe`) and the helpers only it used.
 - `advisors/__init__.py` `__getattr__` lazy facade; direct re-exports replace it (the facade was already defeated by `jobs.py`'s module-level advisor imports).
+- The `_lint` no-swallow framework (`allow_swallow`, `check_no_swallow.py`, the pre-commit hook).
 - The standalone `bundle` job mode and `write_bundle` convenience function; `generate(..., output_dir=...)` now handles publication.
 
 ## [0.1.0] - 2026-06-10

@@ -19,9 +19,10 @@ outputs. Stages remain pure functions with no stage base classes.
 | Module | Responsibility |
 | --- | --- |
 | `contracts/` | Data records and serialization shared between stages. |
-| `graph.py` | Frozen task specifications and type-keyed DAG execution. |
-| `runtime.py` | SCF task registration and model lifecycle. |
-| `jobs.py` | `run_core_job` and public convenience functions. |
+| `runtime/graph.py` | Stage-agnostic, type-keyed DAG executor (`TaskSpec`/`StageSpec`/`Preset`/`execute`). |
+| `runtime/scf.py` | The SCF task: run context, stage graph, and result assembly. |
+| `runtime/core.py` | `CoreRuntime`: model lifecycle ownership and task dispatch by `intent.task`. |
+| `runtime/jobs.py` | `run_core_job`, `query_records`, and public convenience functions. |
 | `io/structures.py` | Structure loading. |
 | `analysis.py` | Structure facts. |
 | `advice/` | Scientific and numerical recommendations. |

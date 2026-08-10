@@ -62,9 +62,7 @@ def _run_preset(
     """Run the preset selected by ``request.mode`` without owning ``runtime``."""
     if request.mode == "recommend":
         return runtime.recommend(request)
-    if request.mode == "generate":
-        return runtime.generate(request, output_dir=request.output_dir)
-    raise ValueError(f"Unsupported Core job mode: {request.mode}")
+    return runtime.generate(request, output_dir=request.output_dir)
 
 
 def recommend(

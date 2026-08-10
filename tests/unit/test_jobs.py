@@ -169,8 +169,6 @@ def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> 
     atom_table = tmp_path / "atom-init.json"
     checkpoint.write_bytes(b"checkpoint")
     atom_table.write_bytes(b"atom table")
-    monkeypatch.setenv("GOLDILOCKS_METALLICITY_CHECKPOINT", str(checkpoint))
-    monkeypatch.setenv("GOLDILOCKS_METALLICITY_ATOM_INIT", str(atom_table))
     monkeypatch.setattr("goldilocks_core.ml.models.load_model", lambda spec: FakeQRF())
     monkeypatch.setattr(
         "goldilocks_core.ml.qrf.metallicity.load_metallicity_model",

@@ -4,6 +4,7 @@ import gc
 import json
 import weakref
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 import pytest
 from pymatgen.core import Lattice, Structure
@@ -19,7 +20,12 @@ from goldilocks_core.contracts import (
     StructureAnalysisRecord,
 )
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
-from goldilocks_core.runtime import Preset, ScfContext, StageSpec, TaskSpec
+from goldilocks_core.runtime import (
+    Preset,
+    StageSpec,
+    TaskHandler,
+    TaskSpec,
+)
 
 
 def make_structure() -> Structure:
@@ -95,8 +101,6 @@ def test_analyze_uses_heuristic_without_configured_metallicity_model(
     monkeypatch,
 ) -> None:
     """Use the runtime heuristic service when no model artifacts are configured."""
-    monkeypatch.delenv("GOLDILOCKS_METALLICITY_CHECKPOINT", raising=False)
-    monkeypatch.delenv("GOLDILOCKS_METALLICITY_ATOM_INIT", raising=False)
 
     with CoreRuntime() as runtime:
         records = runtime.compute((StructureAnalysisRecord,), make_request())
@@ -178,9 +182,8 @@ def test_compute_returns_each_requested_record_type(record_type: type) -> None:
 
 def test_select_only_compute_does_not_invoke_kmesh(monkeypatch) -> None:
     backend = TrackingBackend(raise_on_call=True)
-    monkeypatch.setattr(CoreRuntime, "_build_backend", lambda self: backend)
 
-    with CoreRuntime() as runtime:
+    with CoreRuntime(kmesh_backend=backend) as runtime:
         records = runtime.compute((SelectionRecord,), make_request())
 
     assert isinstance(records[SelectionRecord], SelectionRecord)
@@ -189,9 +192,8 @@ def test_select_only_compute_does_not_invoke_kmesh(monkeypatch) -> None:
 
 def test_reset_close_and_context_manager_delegate_to_backend(monkeypatch) -> None:
     backend = TrackingBackend()
-    monkeypatch.setattr(CoreRuntime, "_build_backend", lambda self: backend)
 
-    with CoreRuntime() as runtime:
+    with CoreRuntime(kmesh_backend=backend) as runtime:
         runtime.reset()
         assert runtime.is_closed is False
 
@@ -208,18 +210,12 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     from goldilocks_core.ml.qrf import metallicity
 
     backend = TrackingBackend()
-    backend_builds = 0
     model_loads = 0
     model_refs = []
     classifications = 0
 
     class StubMetallicityModel:
         pass
-
-    def build(runtime):
-        nonlocal backend_builds
-        backend_builds += 1
-        return backend
 
     def load(path):
         nonlocal model_loads
@@ -233,7 +229,6 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
         classifications += 1
         return "metal", 0.9
 
-    monkeypatch.setattr(CoreRuntime, "_build_backend", build)
     monkeypatch.setattr(metallicity, "load_metallicity_model", load)
     monkeypatch.setattr(metallicity, "classify_metallicity", classify)
     request = CoreJobRequest(
@@ -242,6 +237,7 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
         pseudo_metadata=(make_metadata(),),
     )
     runtime = CoreRuntime(
+        kmesh_backend=backend,
         metallicity_checkpoint="metal.ckpt",
         metallicity_atom_init="atom-init.json",
     )
@@ -252,7 +248,6 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     assert first.k_points == second.k_points
     assert first.analysis.electronic_character == "metal"
     assert second.analysis.electronic_character == "metal"
-    assert backend_builds == 1
     assert backend.calls == 2
     assert model_loads == 1
     assert classifications == 2
@@ -278,25 +273,29 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
         runtime.recommend(request)
 
 
-def test_runtime_dispatches_a_registered_task(monkeypatch) -> None:
-    """A second task dispatches by intent.task without editing the runtime."""
+def test_runtime_dispatches_a_registered_task_via_compute(monkeypatch) -> None:
+    """A registered task dispatches by intent.task through compute."""
     monkeypatch.setattr(CoreRuntime, "_build_backend", lambda self: TrackingBackend())
 
     @dataclass
     class StubRecord:
         value: str = "stub"
 
-    def make_stub(*, ctx: ScfContext) -> StubRecord:
+    def make_stub(*, ctx) -> StubRecord:
         return StubRecord("ran")
 
-    other_task = TaskSpec(
-        task="stub_task",
-        stages=(StageSpec(StubRecord, (), make_stub),),
-        presets=(Preset("only", (StubRecord,)),),
+    handler = TaskHandler(
+        spec=TaskSpec(
+            task="stub_task",
+            stages=(StageSpec(StubRecord, (), make_stub),),
+            presets=(Preset("only", (StubRecord,)),),
+        ),
+        build_context=lambda request, runtime: SimpleNamespace(),
+        assemble_result=lambda request, records: records,
     )
 
     with CoreRuntime() as runtime:
-        runtime.register(other_task)
+        runtime.register(handler)
         records = runtime.compute(
             (StubRecord,),
             CoreJobRequest(
@@ -307,3 +306,37 @@ def test_runtime_dispatches_a_registered_task(monkeypatch) -> None:
 
     assert isinstance(records[StubRecord], StubRecord)
     assert records[StubRecord].value == "ran"
+
+
+def test_runtime_recommend_dispatches_a_registered_task_preset(monkeypatch) -> None:
+    """recommend runs the task's recommend preset and the task's own assembler."""
+    monkeypatch.setattr(CoreRuntime, "_build_backend", lambda self: TrackingBackend())
+
+    @dataclass
+    class StubRecord:
+        value: str = "stub"
+
+    def make_stub(*, ctx) -> StubRecord:
+        return StubRecord("ran")
+
+    assembled = object()
+    handler = TaskHandler(
+        spec=TaskSpec(
+            task="stub_task",
+            stages=(StageSpec(StubRecord, (), make_stub),),
+            presets=(Preset("recommend", (StubRecord,)),),
+        ),
+        build_context=lambda request, runtime: SimpleNamespace(),
+        assemble_result=lambda request, records: assembled,
+    )
+
+    with CoreRuntime() as runtime:
+        runtime.register(handler)
+        result = runtime.recommend(
+            CoreJobRequest(
+                structure=make_structure(),
+                intent=CalculationIntent(task="stub_task"),
+            )
+        )
+
+    assert result is assembled

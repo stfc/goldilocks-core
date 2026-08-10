@@ -768,18 +768,19 @@ class CoreJobRequest:
     """Request for running the standard Core workflow.
 
     One request model shared by Python API, CLI, and future HTTP
-    wrappers. ``outputs`` selects a query when set; otherwise ``mode``
-    selects a preset.
+    wrappers. ``mode`` selects a preset run by :func:`run_core_job`; ``outputs``
+    selects a query run by :func:`query_records`. Each entrypoint rejects the
+    other's field.
 
     Attributes:
         structure: structure input — a pymatgen Structure or a
             path to a structure file.
         intent: what to calculate.
         hints: optional operator overrides.
-        mode: preset mode: ``recommend`` or ``generate``. Ignored when
-            ``outputs`` is set.
-        outputs: requested DAG record types for a query. ``None`` falls back
-            to the preset selected by ``mode``.
+        mode: preset mode: ``recommend`` or ``generate``. ``run_core_job`` runs
+            this preset and rejects ``outputs``.
+        outputs: requested DAG record types for a query. ``query_records`` runs
+            this set and requires it (rejecting ``mode``-based presets).
         pseudo_metadata: pseudopotential metadata for selection.
         output_dir: optional output directory, meaningful only with
             ``generate``. The generate entrypoint handles publishing there.

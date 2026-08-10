@@ -12,10 +12,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 from pymatgen.core import Structure
 
 from goldilocks_core.advice.parameters import advise_parameters
+from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.contracts import (
     CalculationHints,
@@ -37,6 +39,7 @@ from goldilocks_core.io.structures import load_structure
 from goldilocks_core.kmesh.resolve import resolve_kpoints
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.runtime.graph import Preset, StageSpec, TaskSpec
+from goldilocks_core.runtime.task import TaskHandler
 from goldilocks_core.selection import select_parameters
 
 
@@ -44,9 +47,9 @@ from goldilocks_core.selection import select_parameters
 class ScfContext:
     """Request data and runtime services for the SCF task graph.
 
-    Services (``kmesh_backend``, ``metallicity_classifier``) are required: the
-    runtime always supplies them, so there is no silent default that hides a
-    missing service. Request data carries the operator inputs.
+    The services (``kmesh_backend``, ``metallicity_classifier``) are required;
+    the runtime always supplies them. The operator request data (``intent``,
+    ``hints``, ``pseudo_metadata``) carries task defaults.
     """
 
     structure_input: StructureInput
@@ -127,6 +130,24 @@ SCF_TASK = TaskSpec(
 )
 
 
+def build_scf_context(
+    request: CoreJobRequest,
+    runtime: Any,
+) -> ScfContext:
+    """Build a fresh SCF run context from a request and the runtime's services."""
+    backend: KMeshAdvisor = runtime.kmesh_backend
+    if request.kmesh_model is not None:
+        backend = ml_kmesh_advisor(request.kmesh_model)
+    return ScfContext(
+        structure_input=request.structure,
+        kmesh_backend=backend,
+        metallicity_classifier=runtime.metallicity,
+        intent=request.intent,
+        hints=request.hints,
+        pseudo_metadata=request.pseudo_metadata,
+    )
+
+
 def assemble_core_result(
     request: CoreJobRequest,
     records: CoreRecords,
@@ -169,3 +190,10 @@ def _advice_warnings(advice: ParameterAdvice) -> tuple[str, ...]:
 def _unique_warnings(*groups: tuple[str, ...]) -> tuple[str, ...]:
     """Return warnings in first-seen order without duplicates."""
     return tuple(dict.fromkeys(warning for group in groups for warning in group))
+
+
+SCF_HANDLER = TaskHandler(
+    spec=SCF_TASK,
+    build_context=build_scf_context,
+    assemble_result=assemble_core_result,
+)

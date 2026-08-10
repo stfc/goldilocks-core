@@ -94,15 +94,6 @@ def execute(
 
     memo: dict[type, Any] = {}
     for stage in ordered:
-        missing = tuple(
-            input_type for input_type in stage.inputs if input_type not in memo
-        )
-        if missing:
-            names = ", ".join(input_type.__name__ for input_type in missing)
-            raise ValueError(
-                f"Stage producing {stage.output.__name__} has unresolved inputs: "
-                f"{names}"
-            )
         arguments = tuple(memo[input_type] for input_type in stage.inputs)
         memo[stage.output] = stage.call(*arguments, ctx=context)
 

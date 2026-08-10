@@ -9,6 +9,7 @@ from goldilocks_core.runtime.jobs import (
     run_core_job,
 )
 from goldilocks_core.runtime.scf import SCF_TASK, ScfContext, assemble_core_result
+from goldilocks_core.runtime.task import TaskHandler
 
 __all__ = [
     "CoreRuntime",
@@ -16,6 +17,7 @@ __all__ = [
     "SCF_TASK",
     "ScfContext",
     "StageSpec",
+    "TaskHandler",
     "TaskSpec",
     "assemble_core_result",
     "execute",

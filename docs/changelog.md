@@ -18,6 +18,14 @@ All notable changes to goldilocks-core are documented here.
 - Optional HTTP transport with `POST /recommend`, `POST /generate`, `POST /compute`, and `GET /health`.
 - Optional MCP stdio transport with `recommend`, `generate`, and `compute` tools.
 - Shared `from_dict` request deserialization for HTTP and MCP.
+- The Goldilocks Workbench, an independently built React application in `web/`, with Guided (load → recommend → override → ZIP) and backend-driven Graph views sharing one tab-lifetime workspace.
+- Browser-safe HTTP endpoints `GET /tasks` (backend-owned Task Graph Descriptions) and `POST /structure/load` (canonical Structure Document); `POST /generate` returns in-memory generated input contents.
+- HTTP transport rejects server-path fields (`output_dir`, `pseudo_root`, path-shaped `structure`, `pseudo_metadata.filepath`) as `invalid_request`; pseudopotentials are identified by filename/library.
+- Bounded per-process computation concurrency (`GOLDILOCKS_COMPUTE_LIMIT`/`GOLDILOCKS_COMPUTE_WAIT_SECONDS`); a saturated gate surfaces a retryable `server_busy` 503 with `Retry-After`.
+- Structured failure envelope (`{kind, message, status, details}`) with stable kinds including `unexpected` (500); full server tracebacks are logged for unexpected failures.
+- Typed transport schemas producing OpenAPI, with committed generated TypeScript contracts (`openapi-typescript`/`openapi-fetch`) and a drift check (`npm run verify:api`).
+- Static same-origin serving of the built Workbench from FastAPI after all API routes, and a multi-stage Dockerfile composing matching Core and Workbench builds into one non-root container.
+- Server-owned deployment config seam (`server/config.py`) for computation capacity and injected pseudo metadata (`GOLDILOCKS_PSEUDO_METADATA` or `GOLDILOCKS_PSEUDO_ROOT`).
 
 ### Changed
 

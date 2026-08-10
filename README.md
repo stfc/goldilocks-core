@@ -8,7 +8,8 @@ It provides:
 - model- or hint-driven k-point selection;
 - deterministic pseudopotential selection and QE input generation;
 - a typed DAG runtime that computes only the records a caller requests;
-- preset and query APIs exposed through Python, CLI, HTTP, and MCP.
+- preset and query APIs exposed through Python, CLI, HTTP, and MCP;
+- the Goldilocks Workbench browser application in `web/`.
 
 ## Install
 
@@ -128,10 +129,58 @@ uv run goldilocks-kmesh structure.cif --model path/to/model.joblib
 All transports share `CoreJobRequest` deserialization and the same runtime behavior:
 
 - CLI: `recommend`, `generate`, and `compute` subcommands.
-- HTTP: `POST /recommend`, `POST /generate`, and `POST /compute`.
-- MCP: `recommend`, `generate`, and `compute` tools.
+- HTTP: `GET /health`, `GET /tasks`, `POST /structure/load`, `POST /recommend`, `POST /generate`, and `POST /compute`. The HTTP surface is browser-safe: it accepts only inline structure content and never server paths, `pseudo_root`, or `output_dir`.
+- MCP: `recommend`, `generate`, and `compute` tools, which keep the Python/CLI path capabilities (`pseudo_root`, `output_dir`).
 
 Each server process reuses one `CoreRuntime` so model state survives across requests. See the [transport reference](docs/transport.md).
+
+## Workbench
+
+This repository is a monorepo. `src/goldilocks_core/` is the independently installable Core package (this package); `web/` is the independently built **Goldilocks Workbench**, a browser application for loading structures, reviewing recommendations and provenance, overriding supported hints, and downloading a reproducible input archive. Core must never depend on the Workbench.
+
+The Workbench has two views backed by one tab-lifetime workspace:
+
+- **Guided view:** load structure → recommend → review/override → generate ZIP.
+- **Graph view:** inspect the backend-owned Task Graph, select output records, and run the selection.
+
+The browser sends inline structure content only; all scientific truth — structures, task graphs, records, validation, provenance — is owned by Core.
+
+### Develop the Workbench
+
+From `web/`, after `npm ci`:
+
+```bash
+npm run dev          # Vite dev server proxying Core on http://localhost:8000
+npm run test:run     # Vitest (Workspace, presenters, archive, client)
+npx playwright test  # browser workflows against a real backend
+npm run lint         # ESLint
+npm run typecheck    # strict TypeScript
+npm run verify:api   # fail on generated-contract drift
+npm run build        # production bundle
+```
+
+Run the Core HTTP transport for development in another terminal:
+
+```bash
+uv sync --extra http
+uv run goldilocks-core serve http --host 127.0.0.1 --port 8000
+```
+
+The Vite dev server proxies `/health`, `/structure`, `/tasks`, `/recommend`, `/generate`, and `/compute` to the local FastAPI app. Production serves the Vite build from FastAPI under the same origin, so no CORS is configured.
+
+### Run the container
+
+Build one stateless container that serves both Core and the built Workbench under one origin:
+
+```bash
+docker build -t goldilocks-core:workbench .
+docker run -p 8000:8000 \
+    -v /host/pseudos:/data/pseudos:ro \
+    -e GOLDILOCKS_PSEUDO_ROOT=/data/pseudos \
+    goldilocks-core:workbench
+```
+
+Mount administrator-owned pseudopotential metadata under `/data`; the browser never supplies server paths. See the `Dockerfile` and the [transport reference](docs/transport.md) for configuration and deployment scope.
 
 ## Documentation
 

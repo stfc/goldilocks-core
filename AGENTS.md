@@ -12,6 +12,25 @@ uv run ruff format src tests
 uv run pre-commit run --all-files
 ```
 
+Workbench (`web/`, after `npm ci`):
+
+```bash
+npm run dev
+npm run lint
+npm run typecheck
+npm run verify:api
+npm run test:run
+npx playwright test
+npm run build
+```
+
+Container:
+
+```bash
+docker build -t goldilocks-core:workbench .
+docker run -p 8000:8000 -v /host/pseudos:/data/pseudos:ro -e GOLDILOCKS_PSEUDO_ROOT=/data/pseudos goldilocks-core:workbench
+```
+
 Run `pre-commit` before committing. CI (on `main` and PRs) runs Ruff, pytest with branch coverage, focused mutation testing, and distribution validation — all via `uv`.
 
 ## Code style

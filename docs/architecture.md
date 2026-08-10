@@ -140,3 +140,37 @@ Intermediate records remain ordinary Python data. Stage authors are responsible 
 Scientific choices belong in Analyze, Advise, Kmesh, and Select. Generate maps completed choices to calculation syntax. Publication writes generated files but does not run calculations or copy pseudopotential libraries.
 
 Runner/AiiDA workflows, schedulers, auth, frontend state, and completed-output analysis are outside this package.
+
+The **Goldilocks Workbench** (`web/`) is a separate React module that consumes Core only through the browser-safe HTTP transport. Core never imports or depends on it. See the Workbench section below.
+
+## Workbench
+
+`web/` is an independently built React application. It is not a Core module: Core cannot import or depend on it. The Workbench crosses into Core only through one transport adapter (`CoreClient`), and Core is the sole authority for structures, task graphs, records, validation, and provenance.
+
+### Deep modules
+
+The frontend keeps scientific interaction logic in modules with narrow interfaces, each behind its own seam:
+
+| Module | Responsibility | Seam |
+| --- | --- | --- |
+| `client/CoreClient` | The single entry point to Core: health, tasks, structure load, recommend, compute, generate. | Hides HTTP paths, generated schemas, status codes, and serialisation; failures cross as `CoreFailure`. |
+| `client/HttpCoreClient` | The only module that knows `openapi-fetch`, the generated contract, routes, and status codes. | Maps every response to domain types and `CoreFailure`. |
+| `store/workspace` | Vanilla Zustand store with narrow domain actions and selectors. | Owns transition rules, stale-state semantics, and operation-local failures; modules cannot call unrestricted `setState`. |
+| `records/presenters` | Registry of record-specific presenters returning semantic sections, values, units, provenance, warnings, and raw data. | Guided and Graph views reuse the same presentations. |
+| `structure/StructureViewer` | Consumes `StructureDocument` behind a library-neutral interface. | No 3D-library object or event type crosses the seam; a lazy 3Dmol.js adapter backs it, with a textual `StructureSummary` fallback. |
+| `archive/InputArchive` | Turns generated inputs, the original structure, and a reproducibility manifest into one named ZIP blob with `fflate`. | Never touches server paths. |
+| `errors/ErrorReport` | Presents typed failures and diagnostics. | Does not own operation state. |
+
+Mantine is used directly for generic controls; local modules exist only where Goldilocks contributes substantial behaviour or semantics. The two views — Guided (load → recommend → override → ZIP) and Graph (inspect the backend-owned Task Graph, select records, run the selection) — share one tab-lifetime workspace.
+
+### Typed transport seam
+
+Backend-owned Pydantic schemas (`server/schemas.py`) define typed request/response bodies and produce useful OpenAPI. `web/scripts/export_openapi.py` and `web/scripts/api.mjs` generate committed TypeScript (`web/src/client/generated/dto.ts`) with `openapi-typescript`, consumed through `openapi-fetch` inside the HTTP adapter. The generated code is committed and never hand-edited; `npm run verify:api` fails if regeneration produces a diff.
+
+### Backend-owned truth
+
+Core owns canonical Structure Documents, stable Task/Stage/Record identifiers, graph dependencies and presets, selectable output records, semantic names and descriptions, transport validation, scientific results, and provenance. The Workbench owns layout, interaction, and presentation; task descriptions carry no Python callables/class names or React concepts.
+
+### Deployment
+
+Production serves the Vite build (`web/dist`) from FastAPI under the same origin (`server/static.py`), registered after every API route so the SPA fallback never shadows `/health` or `/tasks`. No CORS is configured. Development uses a Vite proxy to a local FastAPI app. `server/config.py` is the single deployment seam: `GOLDILOCKS_COMPUTE_LIMIT`/`_WAIT_SECONDS` bound expensive computation, and administrator-owned pseudopotential metadata (`GOLDILOCKS_PSEUDO_METADATA` or `GOLDILOCKS_PSEUDO_ROOT`) is injected into Workbench requests that supply none. A multi-stage `Dockerfile` composes matching Core and Workbench builds into one non-root container.

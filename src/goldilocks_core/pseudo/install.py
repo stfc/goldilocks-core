@@ -13,6 +13,9 @@ from pathlib import Path
 from goldilocks_core.artifacts import materialscloud, pseudodojo
 from goldilocks_core.artifacts.cache import artifact_path
 from goldilocks_core.artifacts.remote import HttpClient
+from goldilocks_core.contracts import PathLike
+from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
+from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 from goldilocks_core.pseudo.table_registry import (
     PseudoTable,
     default_table,
@@ -141,3 +144,34 @@ def _layout(table: PseudoTable) -> tuple[str, str]:
         return materialscloud.LIBRARY, table.upstream_table
 
     return table.provider, table.upstream_table
+
+
+def resolve_pseudos(
+    root: PathLike | None = None,
+    *,
+    required: bool = True,
+) -> tuple[PseudoMetadata, ...]:
+    """Return the pseudopotentials a run should choose from.
+
+    An explicit ``root`` always wins: a user who names a directory means that
+    directory, whether or not Core installed anything. Otherwise the installed
+    tables are used.
+
+    Args:
+        root: an explicit pseudopotential root, usually ``--pseudo-root``.
+        required: whether the caller cannot proceed without pseudopotentials.
+            Recommending k-points does not need them; writing an input does.
+
+    Raises:
+        NoPseudopotentials: ``required`` and nothing is installed. The message
+            names the command that fixes it.
+    """
+    if root is not None:
+        return tuple(load_pseudo_metadata(root))
+
+    if required:
+        require_installed()
+    elif not installed_tables():
+        return ()
+
+    return tuple(load_pseudo_metadata(pseudo_root()))

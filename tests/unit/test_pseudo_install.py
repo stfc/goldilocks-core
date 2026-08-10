@@ -21,11 +21,21 @@ def _isolated_cache(monkeypatch, tmp_path):
     monkeypatch.setenv(cache.CACHE_ENV, str(tmp_path / "cache"))
 
 
+def _upf(element: str) -> str:
+    """The smallest UPF the parser accepts."""
+    return (
+        "<UPF>"
+        f'<PP_HEADER element="{element}" pseudo_type="NC" functional="PBEsol" '
+        'relativistic="scalar" z_valence="4.0" />'
+        "</UPF>"
+    )
+
+
 def _pretend_installed(table, contents=("Si.upf",)):
     directory = installer.install_path(table)
     directory.mkdir(parents=True, exist_ok=True)
     for name in contents:
-        (directory / name).write_bytes(b"pseudo")
+        (directory / name).write_text(_upf(name.split(".")[0]))
     return directory
 
 
@@ -119,3 +129,30 @@ def test_every_registered_provider_has_an_installer(registry):
     """A table listed but not installable is a promise the CLI cannot keep."""
     for table in registry.values():
         assert table.provider in {"pseudodojo", "materialscloud"}
+
+
+def test_resolve_pseudos_prefers_an_explicit_root(registry, tmp_path):
+    """A user who names a directory means that directory."""
+    _pretend_installed(registry["pseudodojo-pbesol-efficiency"])
+    elsewhere = tmp_path / "mine"
+    elsewhere.mkdir()
+
+    assert installer.resolve_pseudos(elsewhere) == ()
+
+
+def test_resolve_pseudos_reads_the_installed_tables(registry):
+    _pretend_installed(registry["pseudodojo-pbesol-efficiency"], ("Si.upf",))
+
+    resolved = installer.resolve_pseudos()
+
+    assert [m.filename for m in resolved] == ["Si.upf"]
+
+
+def test_resolve_pseudos_refuses_to_proceed_when_a_run_needs_them(registry):
+    with pytest.raises(installer.NoPseudopotentials):
+        installer.resolve_pseudos(required=True)
+
+
+def test_resolve_pseudos_is_empty_when_a_run_does_not_need_them(registry):
+    """Recommending k-points needs no pseudopotentials, so it must not demand any."""
+    assert installer.resolve_pseudos(required=False) == ()

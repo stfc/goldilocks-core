@@ -18,7 +18,7 @@ from goldilocks_core.contracts import (
 from goldilocks_core.examples import structures_path
 from goldilocks_core.jobs import Pipeline, run_core_job
 from goldilocks_core.kmesh import resolve_kpoints_from_advice
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
+from goldilocks_core.pseudo import install as installer
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -70,6 +70,8 @@ def main() -> None:
         _validate_backend_options(args)
         request = _request_from_args(args)
         pipeline = _pipeline_from_args(args)
+    except installer.NoPseudopotentials as error:
+        raise SystemExit(f"error: {error}") from None
     except ValueError as error:
         parser.error(str(error))
 
@@ -189,8 +191,9 @@ def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
         use_vdw=_parse_optional_bool(args.use_vdw),
         vdw_method=args.vdw_method,
     )
-    pseudo_metadata = (
-        tuple(load_pseudo_metadata(Path(args.pseudo_root))) if args.pseudo_root else ()
+    pseudo_metadata = installer.resolve_pseudos(
+        Path(args.pseudo_root) if args.pseudo_root else None,
+        required=args.command in ("generate", "bundle"),
     )
 
     return CoreJobRequest(

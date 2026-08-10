@@ -23,6 +23,12 @@ from goldilocks_core.kmesh import resolve_kpoints_from_advice
 _VDW_METHODS = ("d3", "d3bj", "ts", "mbd")
 
 
+@pytest.fixture(autouse=True)
+def _no_installed_tables(monkeypatch, tmp_path):
+    """CLI behaviour must not depend on what the developer happens to have installed."""
+    monkeypatch.setenv("GOLDILOCKS_CACHE", str(tmp_path / "empty-cache"))
+
+
 def make_result(request: CoreJobRequest) -> CoreResult:
     """Build a minimal Core result for CLI tests."""
     analysis = StructureAnalysisRecord(
@@ -447,7 +453,9 @@ def test_main_builds_pipeline_for_model_backend(monkeypatch, capsys) -> None:
     assert json.loads(capsys.readouterr().out)["request"]["structure"] == "Si.cif"
 
 
-def test_main_builds_bundle_request_with_output_dir(monkeypatch, capsys) -> None:
+def test_main_builds_bundle_request_with_output_dir(
+    monkeypatch, capsys, tmp_path
+) -> None:
     """Pass bundle output path through the shared Core job request."""
     captured: dict[str, CoreJobRequest] = {}
 
@@ -470,7 +478,7 @@ def test_main_builds_bundle_request_with_output_dir(monkeypatch, capsys) -> None
     monkeypatch.setattr(
         sys,
         "argv",
-        ["gl", "bundle", "Si.cif", "--out", "run"],
+        ["gl", "bundle", "Si.cif", "--out", "run", "--pseudo-root", str(tmp_path)],
     )
 
     cli_core.main()

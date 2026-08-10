@@ -66,8 +66,9 @@ Dimensionality = Literal["3d", "2d", "1d", "molecule", "unknown"]
 """Bonded-structure dimensionality, or ``unknown`` when detection fails."""
 
 ElectronicCharacter = Literal["metal", "insulator", "likely_metal", "unknown"]
-"""Conservative electronic-character classification from structure facts.
+"""Electronic-character classification from a model or structure facts.
 
+- ``metal`` / ``insulator``: model-backed classifications.
 - ``likely_metal``: all elements are metallic; treat as likely, not confirmed.
 - ``unknown``: cannot determine from structure alone; verify manually.
 """

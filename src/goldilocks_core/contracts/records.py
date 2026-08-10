@@ -340,10 +340,10 @@ class StructureAnalysisRecord:
         has_vacuum: connectivity-derived low-dimensional/vacuum heuristic:
             True when bonded dimensionality is below 3D. This is not a
             measured cell-vacuum quantity.
-        electronic_character: conservative electronic-character
-            classification.
-        electronic_character_source: origin of the classification, currently
-            ``heuristic``.
+        electronic_character: electronic-character classification from the
+            runtime model or structure-only fallback.
+        electronic_character_source: origin of the classification, such as
+            ``model`` or ``heuristic``.
         electronic_character_confidence: optional confidence score in [0, 1].
         analysis_warnings: warnings about heuristic limitations
             (e.g. metallicity uncertainty).

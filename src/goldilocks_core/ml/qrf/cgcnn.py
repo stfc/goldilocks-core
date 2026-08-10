@@ -51,11 +51,7 @@ class CGCNNConv(MessagePassing):
 
 
 class CGCNN_PyG(nn.Module):
-    """CGCNN model. Only the pieces needed to load the checkpoint and extract
-    the pooled crystal representation are exercised here; other task heads are
-    reconstructed from the checkpoint hyper-parameters so ``load_state_dict``
-    matches.
-    """
+    """CGCNN model for crystal representations and property prediction."""
 
     def __init__(
         self,
@@ -139,3 +135,28 @@ class CGCNN_PyG(nn.Module):
         if self.global_pooling == "mean_pool":
             x = global_mean_pool(x, batch)
         return x
+
+    def forward(
+        self,
+        data,
+        additional_features: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Return class probabilities for the input crystal graph."""
+        crystal_features = self.extract_crystal_repr(data)
+        if self.additional_compound_features:
+            if additional_features is None:
+                raise ValueError(
+                    "additional_features is required when "
+                    "additional_compound_features is enabled"
+                )
+            projected = self.proj_add_feat(self.add_feat_norm(additional_features))
+            crystal_features = torch.cat(
+                [crystal_features, self.softplus(projected)], dim=1
+            )
+
+        crystal_features = self.conv_to_fc_softplus(self.conv_to_fc(crystal_features))
+        if hasattr(self, "fcs"):
+            for fc, softplus in zip(self.fcs, self.softpluses):
+                crystal_features = softplus(fc(crystal_features))
+        logits = self.fc_out(crystal_features)
+        return F.softmax(logits, dim=1)

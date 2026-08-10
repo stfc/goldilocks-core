@@ -110,6 +110,10 @@ def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> 
         lambda path: object(),
     )
     monkeypatch.setattr(
+        "goldilocks_core.ml.qrf.metallicity.classify_metallicity",
+        lambda structure, model, atom_init, **settings: ("insulator", 0.9),
+    )
+    monkeypatch.setattr(
         "goldilocks_core.ml.qrf.features.extract_qrf_features",
         lambda structure, model, atom_init, settings: StructureFeatureVector(
             values=np.zeros(483),

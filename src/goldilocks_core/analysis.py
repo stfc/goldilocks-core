@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from pymatgen.analysis.dimensionality import get_dimensionality_larsen
 from pymatgen.analysis.local_env import CrystalNN
 from pymatgen.core import Structure
@@ -73,11 +75,21 @@ def heuristic_metallicity(structure: Structure) -> ElectronicCharacter:
 
 
 @allow_swallow
-def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
+def analyze_structure(
+    structure: Structure,
+    *,
+    metallicity_classifier: Callable[
+        [Structure], tuple[ElectronicCharacter, str, float | None]
+    ]
+    | None = None,
+) -> StructureAnalysisRecord:
     """Return deterministic structure facts used by later pipeline stages.
 
     Args:
         structure: Ordered or disordered pymatgen structure to inspect.
+        metallicity_classifier: Optional runtime service returning electronic
+            character, source, and confidence. Uses the structure-only heuristic
+            when omitted.
 
     Returns:
         A ``StructureAnalysisRecord`` with composition, element classes,
@@ -119,8 +131,19 @@ def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
             "space_group_number": unavailable,
             "crystal_system": unavailable,
         }
-    electronic_character = heuristic_metallicity(structure)
-    electronic_warnings = _electronic_character_warnings(electronic_character)
+    if metallicity_classifier is None:
+        electronic_character = heuristic_metallicity(structure)
+        electronic_character_source = "heuristic"
+        electronic_character_confidence = None
+    else:
+        (
+            electronic_character,
+            electronic_character_source,
+            electronic_character_confidence,
+        ) = metallicity_classifier(structure)
+    electronic_warnings = _electronic_character_warnings(
+        electronic_character, source=electronic_character_source
+    )
 
     return StructureAnalysisRecord(
         formula=structure.composition.formula,
@@ -141,8 +164,8 @@ def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
         dimensionality=dimensionality,
         has_vacuum=has_vacuum,
         electronic_character=electronic_character,
-        electronic_character_source="heuristic",
-        electronic_character_confidence=None,
+        electronic_character_source=electronic_character_source,
+        electronic_character_confidence=electronic_character_confidence,
         analysis_warnings=(*electronic_warnings, *dimensionality_warnings),
     )
 
@@ -223,12 +246,12 @@ def _analyze_symmetry(structure: Structure) -> dict[str, str | int]:
 
 def _electronic_character_warnings(
     character: ElectronicCharacter,
+    *,
+    source: str,
 ) -> tuple[str, ...]:
-    """Return heuristic-uncertainty warnings for a given electronic character.
-
-    Only the structure-only heuristics (``likely_metal``, ``unknown``) carry
-    uncertainty warnings; a decided ``metal`` or ``insulator`` carries none.
-    """
+    """Return uncertainty warnings for heuristic electronic character only."""
+    if source != "heuristic":
+        return ()
     if character == "likely_metal":
         return (
             "All elements are metallic; treat metallicity as likely, not "

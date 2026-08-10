@@ -10,13 +10,14 @@ from pymatgen.core import Structure
 from goldilocks_core.advice.parameters import advise_parameters
 from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.advisors.kdistance_advisor import QrfKDistanceBackend
-from goldilocks_core.analysis import analyze_structure
+from goldilocks_core.analysis import analyze_structure, heuristic_metallicity
 from goldilocks_core.bundle import write_bundle_directory
 from goldilocks_core.contracts import (
     BundleRecord,
     CoreJobRequest,
     CoreRecords,
     CoreResult,
+    ElectronicCharacter,
     GeneratedFiles,
     KMeshAdvisor,
     KPointSelection,
@@ -42,7 +43,9 @@ SCF_TASK = TaskSpec(
         StageSpec(
             output=StructureAnalysisRecord,
             inputs=(Structure,),
-            call=lambda structure, *, ctx: analyze_structure(structure),
+            call=lambda structure, *, ctx: analyze_structure(
+                structure, metallicity_classifier=ctx.metallicity_classifier
+            ),
         ),
         StageSpec(
             output=KPointSelection,
@@ -116,6 +119,8 @@ class CoreRuntime:
         self._metallicity_atom_init = metallicity_atom_init or os.environ.get(
             "GOLDILOCKS_METALLICITY_ATOM_INIT"
         )
+        self._metallicity_model: object | None = None
+        self._metallicity_graph_settings: tuple[float, int] | None = None
         self._backend = self._build_backend()
         self._task = SCF_TASK
         self._closed = False
@@ -167,12 +172,15 @@ class CoreRuntime:
     def reset(self) -> None:
         """Discard cached model state so the next model call reloads it."""
         self._backend.reset()
+        self._metallicity_model = None
 
     def close(self) -> None:
         """Release model resources; repeated calls are harmless."""
         if self._closed:
             return
         self._backend.close()
+        self._metallicity_model = None
+        self._metallicity_graph_settings = None
         self._closed = True
 
     def __enter__(self) -> CoreRuntime:
@@ -192,7 +200,43 @@ class CoreRuntime:
             hints=request.hints,
             pseudo_metadata=request.pseudo_metadata,
             kmesh_backend=backend,
+            metallicity_classifier=self._classify_metallicity,
         )
+
+    def _classify_metallicity(
+        self,
+        structure: Structure,
+    ) -> tuple[ElectronicCharacter, str, float | None]:
+        """Classify metallicity with the configured model or the heuristic."""
+        if self._metallicity_checkpoint is None or self._metallicity_atom_init is None:
+            return heuristic_metallicity(structure), "heuristic", None
+
+        from goldilocks_core.ml.qrf.metallicity import (
+            classify_metallicity,
+            load_metallicity_model,
+        )
+
+        if self._metallicity_model is None:
+            self._metallicity_model = load_metallicity_model(
+                os.fspath(self._metallicity_checkpoint)
+            )
+        if self._metallicity_graph_settings is None:
+            from goldilocks_core.ml.model_registry import load_default_qrf_config
+
+            settings = load_default_qrf_config(self._registry_path).feature_settings
+            self._metallicity_graph_settings = (
+                settings.metallicity_graph_radius,
+                settings.metallicity_max_neighbors,
+            )
+        graph_radius, max_neighbors = self._metallicity_graph_settings
+        character, confidence = classify_metallicity(
+            structure,
+            self._metallicity_model,
+            os.fspath(self._metallicity_atom_init),
+            graph_radius=graph_radius,
+            max_neighbors=max_neighbors,
+        )
+        return character, "model", confidence
 
     def _assemble_result(
         self,

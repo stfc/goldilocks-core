@@ -85,6 +85,80 @@ def test_recommend_returns_complete_result_without_generated_files() -> None:
     assert result.generated_files == ()
 
 
+def test_analyze_uses_heuristic_without_configured_metallicity_model(
+    monkeypatch,
+) -> None:
+    """Use the runtime heuristic service when no model artifacts are configured."""
+    monkeypatch.delenv("GOLDILOCKS_METALLICITY_CHECKPOINT", raising=False)
+    monkeypatch.delenv("GOLDILOCKS_METALLICITY_ATOM_INIT", raising=False)
+
+    with CoreRuntime() as runtime:
+        records = runtime.compute((StructureAnalysisRecord,), make_request())
+
+    analysis = records[StructureAnalysisRecord]
+    assert analysis.electronic_character == "unknown"
+    assert analysis.electronic_character_source == "heuristic"
+    assert analysis.electronic_character_confidence is None
+
+
+def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
+    """Lazy-load and invoke the model-backed classifier through the run context."""
+    from goldilocks_core.ml.qrf import metallicity
+
+    model = object()
+    calls = []
+    monkeypatch.setattr(metallicity, "load_metallicity_model", lambda path: model)
+
+    def classify(structure, actual_model, atom_init, **settings):
+        calls.append((structure, actual_model, atom_init, settings))
+        return "metal", 0.92
+
+    monkeypatch.setattr(metallicity, "classify_metallicity", classify)
+
+    with CoreRuntime(
+        metallicity_checkpoint="metal.ckpt",
+        metallicity_atom_init="atom-init.json",
+    ) as runtime:
+        records = runtime.compute((StructureAnalysisRecord,), make_request())
+
+    analysis = records[StructureAnalysisRecord]
+    assert analysis.electronic_character == "metal"
+    assert analysis.electronic_character_source == "model"
+    assert analysis.electronic_character_confidence == 0.92
+    assert len(calls) == 1
+    assert calls[0][1:3] == (model, "atom-init.json")
+
+
+def test_reset_reloads_metallicity_model_on_next_analyze(monkeypatch) -> None:
+    """Discard the loaded classifier model while retaining its configuration."""
+    from goldilocks_core.ml.qrf import metallicity
+
+    loaded_models = []
+
+    def load(path):
+        model = object()
+        loaded_models.append(model)
+        return model
+
+    monkeypatch.setattr(metallicity, "load_metallicity_model", load)
+    monkeypatch.setattr(
+        metallicity,
+        "classify_metallicity",
+        lambda structure, model, atom_init, **settings: ("insulator", 0.8),
+    )
+
+    with CoreRuntime(
+        metallicity_checkpoint="metal.ckpt",
+        metallicity_atom_init="atom-init.json",
+    ) as runtime:
+        runtime.compute((StructureAnalysisRecord,), make_request())
+        runtime.compute((StructureAnalysisRecord,), make_request())
+        runtime.reset()
+        runtime.compute((StructureAnalysisRecord,), make_request())
+
+    assert len(loaded_models) == 2
+
+
 def test_generate_returns_generated_files() -> None:
     with CoreRuntime() as runtime:
         result = runtime.generate(make_request(mode="generate"))

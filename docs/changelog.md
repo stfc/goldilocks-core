@@ -11,7 +11,7 @@ All notable changes to goldilocks-core are documented here.
 - `DimensionalityClassificationError` and `SymmetryAnalysisError` (in `goldilocks_core.analysis`); `SymmetryUnavailable` typed value (in `goldilocks_core.contracts`), recorded in symmetry fields when spglib cannot analyze.
 - A typed DAG executor with frozen stage/task/preset specifications, registered SCF presets, and `CoreRecords` query results.
 - `CoreRuntime` as the explicit lifecycle owner for reusable kmesh and metallicity models.
-- `query_records(request)` for explicit record queries; `run_core_job` runs presets only and rejects `request.outputs`.
+- `query_records(request)` for explicit record queries; `run_core_job` runs presets only.
 
 ### Changed
 
@@ -22,7 +22,7 @@ All notable changes to goldilocks-core are documented here.
 - Default exchange-correlation functional changed from PBE to PBEsol. This changes generated inputs and the pseudopotentials selected on a default run; pass `--functional PBE` to restore the previous behaviour.
 - `run_core_job` now delegates to `CoreRuntime`; the runtime executes the minimal SCF subgraph needed by the selected preset or record query.
 - K-points are resolved by `resolve_kpoints(structure, hints, backend)`; the `KMeshAdvisor` signature is `(Structure) -> KPointSelection`.
-- CLI `--model` now sets `CoreJobRequest.kmesh_model` (a `ModelSpec` on the request) instead of swapping a `Pipeline` backend.
+- CLI `--model` now sets the request's `kmesh_model` (a `ModelSpec` on `PresetRequest`/`QueryRequest`) instead of swapping a `Pipeline` backend.
 - Every `src/**/__init__.py` is now an export-only facade; logic moved to named sibling modules (`ml/qrf/inference`, `ml/kindex/inference`, `kmesh/resolve`, `advice/parameters`, `examples/structures`). Public import paths are preserved by re-exports.
 - Dimensionality: CrystalNN/Larsen failures now raise `DimensionalityClassificationError` instead of silently degrading to `"unknown"`; disordered structures keep a conservative warned `"unknown"` default (a precondition, not an error swallow).
 - Symmetry: spglib failures raise `SymmetryAnalysisError`, caught in `analyze_structure` and recorded as typed `SymmetryUnavailable(reason=...)`; the recommendation stays complete (symmetry is reporting-only).
@@ -31,7 +31,8 @@ All notable changes to goldilocks-core are documented here.
 - CLI invalid-argument handling: `parser.error(...)` replaced with `parser.print_usage(...)` + `raise SystemExit(2)` (same exit code and message; the handler now re-raises).
 - Analyze uses the runtime-owned CGCNN metallicity model when configured and records provenance and confidence; the structure heuristic remains the fallback.
 - K-point selection is a sibling record: `SelectionRecord` contains pseudopotentials and warnings, while `CoreResult`, input generation, and the QE writer receive `k_points` separately.
-- Orchestration moved to `goldilocks_core.runtime` (stage-agnostic `runtime/graph.py`, SCF task in `runtime/scf.py`, `CoreRuntime` model lifecycle + task dispatch in `runtime/core.py`, entrypoints in `runtime/jobs.py`); tasks register a `TaskHandler` (graph + context builder + result assembler) and dispatch by `intent.task`.
+- Orchestration moved to `goldilocks_core.runtime`: stage-agnostic `runtime/graph.py`, the SCF task in `runtime/scf.py`, `CoreRuntime` (model lifecycle only) and `TaskDispatcher` (task registry + dispatch) in `runtime/core.py` + `runtime/dispatch.py`, entrypoints in `runtime/jobs.py`. Tasks register a `TaskHandler` (graph + context builder + result assembler) and dispatch by `intent.task`.
+- `CoreJobRequest` split into `PresetRequest` (preset run: `mode`/`output_dir`) and `QueryRequest` (explicit query: `outputs` required at construction). `run_core_job` takes `PresetRequest`; `query_records` takes `QueryRequest`. The old cross-field runtime validation is gone — each request type carries only its own selector, so the invariant is structural.
 
 
 ### Fixed
@@ -54,6 +55,8 @@ All notable changes to goldilocks-core are documented here.
 - `advisors/__init__.py` `__getattr__` lazy facade; direct re-exports replace it (the facade was already defeated by `jobs.py`'s module-level advisor imports).
 - The `_lint` no-swallow framework (`allow_swallow`, `check_no_swallow.py`, the pre-commit hook).
 - The standalone `bundle` job mode and `write_bundle` convenience function; `generate(..., output_dir=...)` now handles publication.
+- `CoreJobRequest` (split into `PresetRequest`/`QueryRequest`).
+- The `recommend` and `generate` free-function wrappers (use `run_core_job(PresetRequest(mode=...))`).
 
 ## [0.1.0] - 2026-06-10
 

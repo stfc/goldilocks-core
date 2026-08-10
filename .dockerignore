@@ -1,0 +1,32 @@
+# Keep the build context minimal and reproducible.
+
+# Version control
+.git
+.gitignore
+
+# Python build/runtime artifacts
+.venv
+__pycache__
+*.py[oc]
+build
+dist
+wheels
+*.egg-info
+.coverage
+coverage.xml
+htmlcov
+mutants
+.pytest_cache
+.ruff_cache
+
+# Node / web artifacts (rebuilt inside the image)
+web/node_modules
+web/dist
+web/playwright-report
+web/test-results
+
+# Local scratch and generated data
+local_data
+notebooks
+goldilocks_output
+design.md

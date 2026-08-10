@@ -96,6 +96,10 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["goldilocks_core*"]
+
 [tool.setuptools.package-data]
 goldilocks_core = [
     "model_registry.toml",

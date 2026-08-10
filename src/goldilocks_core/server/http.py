@@ -83,6 +83,7 @@ def create_app(
         load_structure_from_text,
         structure_to_document,
     )
+    from goldilocks_core.server.static import mount_workbench
 
     config = config if config is not None else DeploymentConfig.from_environ()
     state = _AppState(runtime, config)
@@ -154,6 +155,10 @@ def create_app(
     def compute(body: RecordQuery) -> dict[str, Any]:
         """Compute only the requested record types."""
         return _execute("compute", body, state)
+
+    # Serve the built Workbench only when a build directory exists, and only
+    # after every API route so the SPA fallback never shadows them.
+    mount_workbench(app)
 
     return app
 

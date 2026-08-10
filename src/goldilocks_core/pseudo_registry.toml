@@ -1,9 +1,9 @@
 # Pseudopotential tables Core knows about.
 #
 # This declares what exists; it holds no pseudopotentials. Nothing is installed
-# without the user asking -- `gl download pp` installs the default, `gl list pp`
-# shows every option. Coverage is recorded here so Core can say which table
-# would resolve a gap before anything is downloaded.
+# without the user asking -- `gl pp install` installs the default, `gl pp
+# available` shows every option. Coverage is recorded here so Core can say
+# which table would resolve a gap before anything is downloaded.
 #
 # Every field was measured from the published tables, not read from
 # documentation: the naming does not predict the content. Regenerate with

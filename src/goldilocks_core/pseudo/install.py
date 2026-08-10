@@ -1,7 +1,7 @@
 """Install registered pseudopotential tables, and report what is installed.
 
 Nothing here runs on its own. A table arrives because the user asked for it --
-``gl download pp`` -- so there is no prompt to design and no unattended
+``gl pp install`` -- so there is no prompt to design and no unattended
 download to guard against. What Core owes the user instead is a clear account
 of what is missing and the command that fixes it.
 """

@@ -115,6 +115,7 @@ describe('buildInputArchive', () => {
   });
 
   it('downloads the archive under the formula name', () => {
+    vi.useFakeTimers();
     const createObjectURL = vi
       .spyOn(URL, 'createObjectURL')
       .mockReturnValue('blob:goldilocks');
@@ -142,6 +143,101 @@ describe('buildInputArchive', () => {
     expect(click).toHaveBeenCalledTimes(1);
     expect(downloadedName).toBe('Si-inputs.zip');
     expect(createObjectURL).toHaveBeenCalledTimes(1);
+    // Object URL cleanup is deferred so Firefox's async download start cannot
+    // race the revoke; the timer releases it.
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    vi.runAllTimers();
     expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('rejects a generated entry that collides with a reserved name', async () => {
+    expect(() =>
+      buildInputArchive({
+        files: [{ path: 'goldilocks.json', content: '{}', role: 'input' }],
+        structure: siStructureDocument,
+        request: { structure: { content: siCif, format: 'cif' } },
+        recommendation: siRecommendation,
+        meta: {
+          generatedBy: 'goldilocks-workbench',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      }),
+    ).toThrow(/reserved entry/);
+
+    expect(() =>
+      buildInputArchive({
+        files: [{ path: 'structure.cif', content: '', role: 'input' }],
+        structure: siStructureDocument,
+        request: { structure: { content: siCif, format: 'cif' } },
+        recommendation: siRecommendation,
+        meta: {
+          generatedBy: 'goldilocks-workbench',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      }),
+    ).toThrow(/reserved entry/);
+  });
+
+  it('rejects duplicate generated entry names instead of overwriting', () => {
+    expect(() =>
+      buildInputArchive({
+        files: [
+          { path: 'inputs/qe.in', content: 'first', role: 'input' },
+          { path: 'inputs/qe.in', content: 'second', role: 'input' },
+        ],
+        structure: siStructureDocument,
+        request: { structure: { content: siCif, format: 'cif' } },
+        recommendation: siRecommendation,
+        meta: {
+          generatedBy: 'goldilocks-workbench',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      }),
+    ).toThrow(/Duplicate archive entry/);
+  });
+
+  it('records the model identity from provenance, never inventing one', async () => {
+    const modelRecommendation = {
+      ...siRecommendation,
+      k_points: {
+        ...siRecommendation.k_points,
+        provenance: {
+          ...siRecommendation.k_points.provenance,
+          data_source: 'goldilocks-qrf-v1',
+        },
+      },
+    };
+    const blob = buildInputArchive({
+      files: [],
+      structure: siStructureDocument,
+      request: { structure: { content: siCif, format: 'cif' } },
+      recommendation: modelRecommendation,
+      meta: {
+        coreVersion: '0.1.0',
+        generatedBy: 'goldilocks-workbench',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    });
+    const entries = await unzip(blob);
+    const manifest = JSON.parse(strFromU8(entries['goldilocks.json']));
+    expect(manifest.model).toBe('goldilocks-qrf-v1');
+  });
+
+  it('records core_version in the manifest from the transport value', async () => {
+    const blob = buildInputArchive({
+      files: [],
+      structure: siStructureDocument,
+      request: { structure: { content: siCif, format: 'cif' } },
+      recommendation: siRecommendation,
+      meta: {
+        coreVersion: '0.3.0',
+        generatedBy: 'goldilocks-workbench',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    });
+    const entries = await unzip(blob);
+    const manifest = JSON.parse(strFromU8(entries['goldilocks.json']));
+    expect(manifest.core_version).toBe('0.3.0');
   });
 });

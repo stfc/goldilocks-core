@@ -194,6 +194,8 @@ export function createWorkspaceStore(client: CoreClient): WorkspaceStore {
     },
 
     recommend: async () => {
+      // Store invariant: never launch a second recommendation while one runs.
+      if (get().recordsStatus === 'running') return;
       const state = get();
       const source = state.source;
       if (!state.structure || !source) return;
@@ -220,6 +222,8 @@ export function createWorkspaceStore(client: CoreClient): WorkspaceStore {
     },
 
     generate: async () => {
+      // Store invariant: never launch a second generation while one runs.
+      if (get().generationStatus === 'running') return;
       const state = get();
       const source = state.source;
       if (!state.structure || !source) return;
@@ -251,6 +255,9 @@ export function createWorkspaceStore(client: CoreClient): WorkspaceStore {
     },
 
     setSelectedRecords: (ids) => {
+      // A selection change alters the query inputs, so an in-flight compute
+      // must never mark results fresh for a now-different selection.
+      requestRevision += 1;
       set((state) => ({
         selectedRecordIds: [...ids],
         // A different selection means prior results describe a different query.
@@ -259,6 +266,8 @@ export function createWorkspaceStore(client: CoreClient): WorkspaceStore {
     },
 
     runSelectedRecords: async () => {
+      // Store invariant: never launch a second selection compute while one runs.
+      if (get().graphStatus === 'running') return;
       const state = get();
       const source = state.source;
       if (!state.structure || !source) return;

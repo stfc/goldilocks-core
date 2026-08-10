@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createWorkspaceStore } from '../../store/workspace';
-import type { ComputationRequest, Recommendation } from '../../client/types';
+import type {
+  ComputationRequest,
+  Recommendation,
+  RecordQuery,
+  RecordSet,
+} from '../../client/types';
 import { FakeCoreClient } from '../mocks/FakeCoreClient';
 import { siCif, siStructureDocument } from '../mocks/fixtures';
 
@@ -125,6 +130,82 @@ describe('Workspace store', () => {
     expect(store.getState().recordsStatus).toBe('complete');
     // The in-flight result reflects pre-override inputs; it must stay stale.
     expect(store.getState().recordsStale).toBe(true);
+  });
+
+  it('does not launch a second recommend while one is running', async () => {
+    const client = new FakeCoreClient();
+    const store = createWorkspaceStore(client);
+    await store.getState().loadStructure(cif);
+    await store.getState().recommend();
+
+    const gate = defer();
+    let wrappedCalls = 0;
+    const originalRecommend = client.recommend.bind(client);
+    client.recommend = async (request: ComputationRequest): Promise<Recommendation> => {
+      wrappedCalls += 1;
+      await gate.promise;
+      return originalRecommend(request);
+    };
+
+    const first = store.getState().recommend();
+    // A concurrent duplicate call is a store-invariant no-op.
+    await store.getState().recommend();
+    expect(wrappedCalls).toBe(1);
+    expect(store.getState().recordsStatus).toBe('running');
+
+    gate.release();
+    await first;
+  });
+
+  it('does not launch a second generate while one is running', async () => {
+    const client = new FakeCoreClient();
+    const store = createWorkspaceStore(client);
+    await store.getState().loadStructure(cif);
+    await store.getState().recommend();
+    await store.getState().generate();
+
+    const gate = defer();
+    let wrappedCalls = 0;
+    const originalGenerate = client.generate.bind(client);
+    client.generate = async (request: ComputationRequest): Promise<Recommendation> => {
+      wrappedCalls += 1;
+      await gate.promise;
+      return originalGenerate(request);
+    };
+
+    const first = store.getState().generate();
+    // A concurrent duplicate call is a store-invariant no-op.
+    await store.getState().generate();
+    expect(wrappedCalls).toBe(1);
+    expect(store.getState().generationStatus).toBe('running');
+
+    gate.release();
+    await first;
+  });
+
+  it('does not launch a second selection compute while one is running', async () => {
+    const client = new FakeCoreClient();
+    const store = createWorkspaceStore(client);
+    await store.getState().loadStructure(cif);
+    store.getState().setSelectedRecords(['analysis']);
+    await store.getState().runSelectedRecords();
+
+    const gate = defer();
+    let wrappedCalls = 0;
+    const originalCompute = client.compute.bind(client);
+    client.compute = async (query: RecordQuery): Promise<RecordSet> => {
+      wrappedCalls += 1;
+      await gate.promise;
+      return originalCompute(query);
+    };
+
+    const first = store.getState().runSelectedRecords();
+    await store.getState().runSelectedRecords();
+    expect(wrappedCalls).toBe(1);
+    expect(store.getState().graphStatus).toBe('running');
+
+    gate.release();
+    await first;
   });
 
   it('retains the previously generated archive when an unrelated recommend re-runs', async () => {

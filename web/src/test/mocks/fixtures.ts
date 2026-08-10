@@ -198,6 +198,7 @@ export const siTaskCatalogue: TaskCatalogue = {
 };
 
 export const siRecommendation: Recommendation = {
+  core_version: '0.1.0',
   intent: {
     code: 'quantum_espresso',
     task: 'scf_single_point',

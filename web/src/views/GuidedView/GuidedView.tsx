@@ -569,6 +569,8 @@ function GenerationPanel() {
       meta: {
         generatedBy: 'goldilocks-workbench',
         createdAt: new Date().toISOString(),
+        // Carried from the real generate response, never invented.
+        coreVersion: s.generated.core_version,
       },
     });
   };
@@ -608,6 +610,7 @@ function GenerationPanel() {
             leftSection={<IconFileZip size={16} />}
             loading={busy}
             loaderProps={{ type: 'dots' }}
+            disabled={busy}
           >
             Generate input archive
           </Button>
@@ -672,9 +675,11 @@ function GuidedWelcome() {
 export function GuidedView() {
   const structure = useWorkspace((s) => s.structure);
   const structureStatus = useWorkspace((s) => s.structureStatus);
+  const recordsStatus = useWorkspace((s) => s.recordsStatus);
   const recommend = useWorkspace((s) => s.recommend);
   const records = useWorkspace((s) => s.records);
   const canRecommend = structureStatus === 'complete' && structure !== null;
+  const recommending = recordsStatus === 'running';
 
   return (
     <Stack gap="lg" maw={960} mx="auto" w="100%">
@@ -695,7 +700,7 @@ export function GuidedView() {
               onClick={() => void recommend()}
               size="md"
               rightSection={<IconArrowRight size={16} />}
-              disabled={!canRecommend}
+              disabled={!canRecommend || recommending}
             >
               {records === null ? 'Recommend parameters' : 'Re-run recommendation'}
             </Button>

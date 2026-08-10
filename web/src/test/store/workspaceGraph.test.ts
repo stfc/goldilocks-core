@@ -126,6 +126,30 @@ describe('Workspace store — record selection and execution', () => {
     expect(store.getState().graphStale).toBe(true);
   });
 
+  it('keeps in-flight results stale when the selection changes mid-flight', async () => {
+    const client = new FakeCoreClient();
+    const store = createWorkspaceStore(client);
+    await store.getState().loadStructure(cif);
+    store.getState().setSelectedRecords(['analysis']);
+
+    const gate = defer();
+    const originalCompute = client.compute.bind(client);
+    client.compute = async (query: RecordQuery): Promise<RecordSet> => {
+      await gate.promise;
+      return originalCompute(query);
+    };
+
+    const pending = store.getState().runSelectedRecords();
+    // Changing the selection mid-flight is a query-input change like any other.
+    store.getState().setSelectedRecords(['analysis', 'advice']);
+
+    gate.release();
+    await pending;
+    expect(store.getState().graphStatus).toBe('complete');
+    // The in-flight result reflects the pre-change selection; it must stay stale.
+    expect(store.getState().graphStale).toBe(true);
+  });
+
   it('marks graph results stale when the selection changes', async () => {
     const store = createWorkspaceStore(new FakeCoreClient());
     await store.getState().loadStructure(cif);

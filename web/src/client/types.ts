@@ -224,6 +224,8 @@ export type Bundle = {
 
 /** A completed recommend or generate preset result. */
 export type Recommendation = {
+  /** Core package version reported by the transport. */
+  core_version: string;
   intent: Intent;
   analysis: Analysis;
   advice: Advice;

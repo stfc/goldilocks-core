@@ -90,6 +90,7 @@ select = ["E", "F", "I"]
 [tool.setuptools.package-data]
 goldilocks_core = [
     "model_registry.toml",
+    "pseudo_registry.toml",
     "examples/structures/*.cif",
     "examples/structures/README.md",
 ]

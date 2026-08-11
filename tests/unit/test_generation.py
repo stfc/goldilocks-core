@@ -12,6 +12,7 @@ from goldilocks_core.contracts import (
     KPointSelection,
     ParameterAdvice,
     Provenance,
+    PseudoMetadata,
     PseudopotentialSelection,
     SelectionRecord,
     SmearingType,
@@ -20,7 +21,6 @@ from goldilocks_core.contracts import (
 from goldilocks_core.generation import generate_inputs
 from goldilocks_core.generation.qe.scf import _QE_SMEARING, _QE_VDW_CORR
 from goldilocks_core.kmesh import resolve_kpoints
-from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.selection import select_parameters
 
 

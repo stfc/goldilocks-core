@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pymatgen.core import Structure
 
 from goldilocks_core import CalculationHints, PresetRequest, run_core_job
-from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
+from goldilocks_core.contracts import PseudoMetadata
 
 
 def test_generate_crosses_every_in_memory_stage_with_real_backends(

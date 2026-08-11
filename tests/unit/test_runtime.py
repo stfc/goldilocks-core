@@ -22,10 +22,10 @@ from goldilocks_core.contracts import (
     KPointSelection,
     ParameterAdvice,
     Provenance,
+    PseudoMetadata,
     SelectionRecord,
     StructureAnalysisRecord,
 )
-from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.runtime import (
     Preset,
     StageSpec,

@@ -9,9 +9,9 @@ from goldilocks_core.contracts import (
     CalculationIntent,
     KmeshHints,
     ParameterAdvice,
+    PseudoMetadata,
 )
 from goldilocks_core.kmesh import resolve_kpoints
-from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.selection import (
     _metadata_matches_mode,
     _rank_pseudo_candidate,

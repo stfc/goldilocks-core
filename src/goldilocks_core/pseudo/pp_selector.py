@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
+from goldilocks_core.contracts import PseudoMetadata
 from goldilocks_core.pseudo.pp_registry import (
     filter_by_element,
     filter_by_functional,

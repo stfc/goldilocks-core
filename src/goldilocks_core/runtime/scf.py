@@ -29,6 +29,7 @@ from goldilocks_core.contracts import (
     KPointSelection,
     ParameterAdvice,
     PresetRequest,
+    PseudoMetadata,
     QueryRequest,
     SelectionRecord,
     StructureAnalysisRecord,
@@ -37,7 +38,6 @@ from goldilocks_core.contracts import (
 from goldilocks_core.generation.registry import generate_inputs
 from goldilocks_core.io.structures import load_structure
 from goldilocks_core.kmesh.resolve import resolve_kpoints
-from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.runtime.core import CoreRuntime
 from goldilocks_core.runtime.graph import Preset, StageSpec, TaskSpec
 from goldilocks_core.runtime.task import TaskHandler

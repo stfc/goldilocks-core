@@ -82,7 +82,8 @@ def test_the_verbose_listing_carries_source_and_version(capsys):
 
     assert "SOURCE" in output
     assert "VERSION" in output
-    assert "sssp" in output
+    assert "https://www.pseudo-dojo.org/" in output
+    assert "https://archive.materialscloud.org/" in output
     assert "1.3.0" in output
 
 
@@ -179,6 +180,31 @@ class _Stream(io.StringIO):
 
     def isatty(self) -> bool:
         return self._tty
+
+
+def test_a_short_url_is_shown_whole():
+    assert pseudos._elide("https://www.pseudo-dojo.org/", 38) == (
+        "https://www.pseudo-dojo.org/"
+    )
+
+
+def test_a_long_url_keeps_the_part_that_says_where_it_points():
+    """The host identifies the source; the record id is what can be elided."""
+    elided = pseudos._elide(
+        "https://archive.materialscloud.org/records/rcyfm-68h65", 38
+    )
+
+    assert elided == "https://archive.materialscloud.org/..."
+    assert len(elided) == 38
+
+
+def test_the_link_target_is_the_whole_url_not_the_elided_one(capsys):
+    """Eliding is a display choice; clicking has to reach the actual record."""
+    full = load_tables()["sssp-pbe-efficiency-sr"].upstream_url
+    cell = pseudos._linked_cell(pseudos._elide(full, 38), full, 40, linked=True)
+
+    assert f"\033]8;;{full}\033\\" in cell
+    assert "rcyfm-68h65" not in cell.split("\033\\")[1]
 
 
 def test_a_plain_cell_is_exactly_the_padded_text():

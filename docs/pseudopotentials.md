@@ -140,26 +140,28 @@ $ gl pp available
 
 `-v` adds what a name cannot carry -- where the table is fetched from, which
 upstream version, and what it covers (`Ln`/`An` are the standard generic
-symbols for lanthanides and actinides):
+symbols for lanthanides and actinides). In a terminal the `SOURCE` cell is a
+clickable link; long URLs are elided to their host, and clicking still opens
+the full address:
 
 ```
 $ gl pp available -v
-  #  NAME                             SOURCE      VERSION  XC      REL  ACCURACY     ELEMENTS  Ln  An     SIZE  STATE
-  1  pseudodojo-pbesol-efficiency-sr  pseudodojo  0.4      PBEsol  SR   efficiency         72   2   0   5.2 MB  installed (default)
-  2  pseudodojo-pbesol-precision-sr   pseudodojo  0.4      PBEsol  SR   precision          72   2   0   5.4 MB  uninstalled
-  3  pseudodojo-pbe-efficiency-sr     pseudodojo  0.4      PBE     SR   efficiency         72   2   0   5.2 MB  uninstalled
-  4  pseudodojo-pbe-precision-sr      pseudodojo  0.4      PBE     SR   precision          72   2   0   5.4 MB  uninstalled
-  5  pseudodojo-lda-efficiency-sr     pseudodojo  0.4      LDA     SR   efficiency         70   0   0   4.9 MB  uninstalled
-  6  pseudodojo-lda-precision-sr      pseudodojo  0.4      LDA     SR   precision          70   0   0   5.2 MB  uninstalled
-  7  pseudodojo-pbe-lanthanides-sr    pseudodojo  0.4      PBE     SR   efficiency         14  14   0   1.4 MB  uninstalled
-  8  pseudodojo-pbesol-efficiency-fr  pseudodojo  0.4      PBEsol  FR   efficiency         71   1   0   6.7 MB  uninstalled
-  9  pseudodojo-pbesol-precision-fr   pseudodojo  0.4      PBEsol  FR   precision          71   1   0   7.1 MB  uninstalled
- 10  pseudodojo-pbe-efficiency-fr     pseudodojo  0.4      PBE     FR   efficiency         70   0   0   6.6 MB  uninstalled
- 11  pseudodojo-pbe-precision-fr      pseudodojo  0.4      PBE     FR   precision          72   2   0   7.3 MB  uninstalled
- 12  sssp-pbe-efficiency-sr           sssp        1.3.0    PBE     SR   efficiency        103  15  15  59.5 MB  uninstalled
- 13  sssp-pbe-precision-sr            sssp        1.3.0    PBE     SR   precision         103  15  15  63.0 MB  uninstalled
- 14  sssp-pbesol-efficiency-sr        sssp        1.3.0    PBEsol  SR   efficiency        103  15  15  60.5 MB  uninstalled
- 15  sssp-pbesol-precision-sr         sssp        1.3.0    PBEsol  SR   precision         103  15  15  63.9 MB  uninstalled
+  #  NAME                             SOURCE                                  VERSION  XC      REL  ACCURACY     ELEMENTS  Ln  An     SIZE  STATE
+  1  pseudodojo-pbesol-efficiency-sr  https://www.pseudo-dojo.org/            0.4      PBEsol  SR   efficiency         72   2   0   5.2 MB  installed (default)
+  2  pseudodojo-pbesol-precision-sr   https://www.pseudo-dojo.org/            0.4      PBEsol  SR   precision          72   2   0   5.4 MB  uninstalled
+  3  pseudodojo-pbe-efficiency-sr     https://www.pseudo-dojo.org/            0.4      PBE     SR   efficiency         72   2   0   5.2 MB  uninstalled
+  4  pseudodojo-pbe-precision-sr      https://www.pseudo-dojo.org/            0.4      PBE     SR   precision          72   2   0   5.4 MB  uninstalled
+  5  pseudodojo-lda-efficiency-sr     https://www.pseudo-dojo.org/            0.4      LDA     SR   efficiency         70   0   0   4.9 MB  uninstalled
+  6  pseudodojo-lda-precision-sr      https://www.pseudo-dojo.org/            0.4      LDA     SR   precision          70   0   0   5.2 MB  uninstalled
+  7  pseudodojo-pbe-lanthanides-sr    https://www.pseudo-dojo.org/            0.4      PBE     SR   efficiency         14  14   0   1.4 MB  uninstalled
+  8  pseudodojo-pbesol-efficiency-fr  https://www.pseudo-dojo.org/            0.4      PBEsol  FR   efficiency         71   1   0   6.7 MB  uninstalled
+  9  pseudodojo-pbesol-precision-fr   https://www.pseudo-dojo.org/            0.4      PBEsol  FR   precision          71   1   0   7.1 MB  uninstalled
+ 10  pseudodojo-pbe-efficiency-fr     https://www.pseudo-dojo.org/            0.4      PBE     FR   efficiency         70   0   0   6.6 MB  uninstalled
+ 11  pseudodojo-pbe-precision-fr      https://www.pseudo-dojo.org/            0.4      PBE     FR   precision          72   2   0   7.3 MB  uninstalled
+ 12  sssp-pbe-efficiency-sr           https://archive.materialscloud.org/...  1.3.0    PBE     SR   efficiency        103  15  15  59.5 MB  uninstalled
+ 13  sssp-pbe-precision-sr            https://archive.materialscloud.org/...  1.3.0    PBE     SR   precision         103  15  15  63.0 MB  uninstalled
+ 14  sssp-pbesol-efficiency-sr        https://archive.materialscloud.org/...  1.3.0    PBEsol  SR   efficiency        103  15  15  60.5 MB  uninstalled
+ 15  sssp-pbesol-precision-sr         https://archive.materialscloud.org/...  1.3.0    PBEsol  SR   precision         103  15  15  63.9 MB  uninstalled
 
   the default is pseudodojo-pbesol-efficiency-sr; `gl pp install` with no argument installs it
   install others by name or number: `gl pp install NAME|N`

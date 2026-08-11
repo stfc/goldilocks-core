@@ -22,10 +22,13 @@ _NUMBER = f"{'#':>3}  "
 
 _BRIEF_HEADER = f"{_NUMBER}{'NAME':<{_NAME_WIDTH}}STATE"
 
+_SOURCE_WIDTH = 38
+"""Enough for a scheme and host; longer URLs are elided to their host."""
+
 _DETAILED_HEADER = (
-    f"{_NUMBER}{'NAME':<{_NAME_WIDTH}}{'SOURCE':<12}{'VERSION':<9}{'XC':<8}"
-    f"{'REL':<5}{'ACCURACY':<12}{'ELEMENTS':>9}{'Ln':>4}{'An':>4}"
-    f"{'SIZE':>9}  STATE"
+    f"{_NUMBER}{'NAME':<{_NAME_WIDTH}}{'SOURCE':<{_SOURCE_WIDTH + 2}}"
+    f"{'VERSION':<9}{'XC':<8}{'REL':<5}{'ACCURACY':<12}{'ELEMENTS':>9}"
+    f"{'Ln':>4}{'An':>4}{'SIZE':>9}  STATE"
 )
 
 
@@ -92,7 +95,12 @@ def _available(*, verbose: bool = False) -> int:
             state = f"{state} (default)"
 
         if verbose:
-            source = _linked_cell(table.provider, table.upstream_url, 12, linked=linked)
+            source = _linked_cell(
+                _elide(table.upstream_url, _SOURCE_WIDTH),
+                table.upstream_url,
+                _SOURCE_WIDTH + 2,
+                linked=linked,
+            )
             row = (
                 f"{number:>3}  {table.name:<{_NAME_WIDTH}}{source}"
                 f"{table.version:<9}{table.functional:<8}{table.relativistic:<5}"
@@ -254,6 +262,19 @@ def _hyperlinks_render() -> bool:
     than ignoring it, which is what a terminal without OSC 8 should do.
     """
     return sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+
+
+def _elide(url: str, width: int) -> str:
+    """Shorten ``url`` to ``width``, keeping the part that says where it points.
+
+    Truncation from the right leaves the scheme and host intact, which is the
+    part identifying the source; the trailing record or path is what gets
+    replaced by the ellipsis. The full URL is still what the link opens.
+    """
+    if len(url) <= width:
+        return url
+
+    return url[: width - 3] + "..."
 
 
 def _linked_cell(text: str, url: str, width: int, *, linked: bool) -> str:

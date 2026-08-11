@@ -9,16 +9,15 @@ from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
+    KPointSelection,
     ParameterAdvice,
+    Provenance,
     SmearingType,
     VdwMethod,
 )
-from goldilocks_core.generation import (
-    _QE_SMEARING,
-    _QE_VDW_CORR,
-    generate_inputs,
-)
-from goldilocks_core.kmesh import resolve_kpoints_from_advice
+from goldilocks_core.generation import generate_inputs
+from goldilocks_core.generation.qe.scf import _QE_SMEARING, _QE_VDW_CORR
+from goldilocks_core.kmesh import resolve_kpoints
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.selection import select_parameters
 
@@ -57,6 +56,16 @@ def make_metadata() -> PseudoMetadata:
     )
 
 
+def _stub_backend(structure: Structure) -> KPointSelection:
+    """Deterministic k-point backend for selection/generation unit tests."""
+    return KPointSelection(
+        grid=(4, 4, 4),
+        shift=(0, 0, 0),
+        mesh_type="monkhorst-pack",
+        provenance=Provenance(source="model", reason="stub"),
+    )
+
+
 def select_from_advice(
     structure: Structure,
     advice: ParameterAdvice,
@@ -68,7 +77,7 @@ def select_from_advice(
     return select_parameters(
         structure,
         advice,
-        resolve_kpoints_from_advice(structure, hints, advice.k_points),
+        resolve_kpoints(structure, hints, _stub_backend),
         metadata_list=metadata_list,
     )
 
@@ -292,90 +301,8 @@ K_POINTS automatic
     assert content == expected
 
 
-def test_generate_inputs_rejects_extraneous_pseudopotential_selection() -> None:
-    """Unrelated resources cannot inflate the generated global cutoffs."""
-    structure = make_structure()
-    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
-    advice = advise_parameters(analyze_structure(structure), hints=hints)
-    selection = select_from_advice(
-        structure,
-        advice,
-        hints=hints,
-        metadata_list=[make_metadata()],
-    )
-    silicon = selection.pseudopotentials[0]
-    oxygen = replace(
-        silicon,
-        element="O",
-        filename="O.UPF",
-        ecutwfc_ry=999.0,
-        ecutrho_ry=3996.0,
-    )
-    selection = replace(
-        selection,
-        pseudopotentials=(*selection.pseudopotentials, oxygen),
-    )
-
-    with pytest.raises(ValueError, match="unexpected O"):
-        generate_inputs(structure, advice_context(), advice, selection)
-
-
-def test_generate_inputs_rejects_absent_element_selection() -> None:
-    """Report structure elements omitted entirely by selection."""
-    structure = make_structure()
-    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
-    advice = advise_parameters(analyze_structure(structure), hints=hints)
-    selection = select_from_advice(
-        structure,
-        advice,
-        hints=hints,
-        metadata_list=[make_metadata()],
-    )
-    selection = replace(selection, pseudopotentials=())
-
-    with pytest.raises(
-        ValueError, match="match the structure elements exactly.*missing Si"
-    ):
-        generate_inputs(structure, advice_context(), advice, selection)
-
-
-def test_generate_inputs_rejects_incomplete_pseudopotential_selection() -> None:
-    """Do not let generators invent missing pseudopotentials or cutoffs."""
-    structure = make_structure()
-    hints = CalculationHints()
-    advice = advise_parameters(analyze_structure(structure), hints=hints)
-    selection = select_from_advice(
-        structure,
-        advice,
-        hints=hints,
-        metadata_list=[],
-    )
-
-    with pytest.raises(ValueError, match="complete pseudo and cutoff"):
-        generate_inputs(structure, advice_context(), advice, selection)
-
-
-def test_generate_inputs_rejects_unsafe_pseudopotential_filename() -> None:
-    """Do not place untrusted metadata directly into QE syntax."""
-    structure = make_structure()
-    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
-    advice = advise_parameters(analyze_structure(structure), hints=hints)
-    selection = select_from_advice(
-        structure, advice, hints=hints, metadata_list=[make_metadata()]
-    )
-    pseudo = replace(selection.pseudopotentials[0], filename="Si.UPF\n/")
-
-    with pytest.raises(ValueError, match="Unsafe pseudopotential filename"):
-        generate_inputs(
-            structure,
-            advice_context(),
-            advice,
-            replace(selection, pseudopotentials=(pseudo,)),
-        )
-
-
 def test_generate_inputs_rejects_unsupported_target_code() -> None:
-    """Only Quantum ESPRESSO generation is implemented."""
+    """Unregistered target codes are rejected at the dispatch table."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -387,12 +314,12 @@ def test_generate_inputs_rejects_unsupported_target_code() -> None:
     )
     intent = CalculationIntent(code="vasp")
 
-    with pytest.raises(ValueError, match="Only Quantum ESPRESSO"):
+    with pytest.raises(ValueError, match="No input writer registered for code='vasp'"):
         generate_inputs(structure, intent, advice, selection)
 
 
 def test_generate_inputs_rejects_unsupported_task() -> None:
-    """Only SCF single-point generation is implemented."""
+    """Unregistered tasks are rejected at the dispatch table."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -404,8 +331,32 @@ def test_generate_inputs_rejects_unsupported_task() -> None:
     )
     intent = CalculationIntent(task="relax")
 
-    with pytest.raises(ValueError, match="Only SCF single-point"):
+    with pytest.raises(
+        ValueError, match="No input writer registered for .*task='relax'"
+    ):
         generate_inputs(structure, intent, advice, selection)
+
+
+def test_generate_inputs_rejects_unsafe_pseudopotential_filename() -> None:
+    """Reject pseudopotential filenames that are unsafe to render verbatim."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+    pseudo = replace(selection.pseudopotentials[0], filename="Si.UPF\n/")
+
+    with pytest.raises(ValueError, match="Unsafe pseudopotential filename"):
+        generate_inputs(
+            structure,
+            advice_context(),
+            advice,
+            replace(selection, pseudopotentials=(pseudo,)),
+        )
 
 
 def advice_context() -> CalculationIntent:

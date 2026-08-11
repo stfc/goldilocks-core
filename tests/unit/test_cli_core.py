@@ -17,8 +17,6 @@ from goldilocks_core.contracts import (
     SelectionRecord,
     StructureAnalysisRecord,
 )
-from goldilocks_core.jobs import Pipeline
-from goldilocks_core.kmesh import resolve_kpoints_from_advice
 
 _VDW_METHODS = ("d3", "d3bj", "ts", "mbd")
 
@@ -292,39 +290,11 @@ def test_main_rejects_disabled_vdw_method_before_job_execution(
     assert "vdw_method must be None" in capsys.readouterr().err
 
 
-def test_cli_uses_shared_default_pipeline_without_an_override() -> None:
-    """A bare CLI request delegates default policy to run_core_job."""
+def test_cli_uses_default_kmesh_backend_without_an_override() -> None:
+    """A bare CLI request leaves the k-index model spec unset."""
     args = cli_core.build_parser().parse_args(["recommend", "Si.cif"])
 
-    assert cli_core._pipeline_from_args(args) is None
-
-
-def test_cli_can_select_explicit_heuristic_backend() -> None:
-    """Expose a no-model backend choice without changing request data."""
-    args = cli_core.build_parser().parse_args(
-        ["recommend", "Si.cif", "--heuristic-kpoints"]
-    )
-
-    pipeline = cli_core._pipeline_from_args(args)
-
-    assert isinstance(pipeline, Pipeline)
-    assert pipeline.kmesh is resolve_kpoints_from_advice
-
-
-def test_cli_rejects_model_and_heuristic_backend_together() -> None:
-    """Reject contradictory backend configuration during argument parsing."""
-    parser = cli_core.build_parser()
-
-    with pytest.raises(SystemExit):
-        parser.parse_args(
-            [
-                "recommend",
-                "Si.cif",
-                "--model",
-                "model.joblib",
-                "--heuristic-kpoints",
-            ]
-        )
+    assert cli_core._model_spec_from_args(args) is None
 
 
 @pytest.mark.parametrize("option", ["--model-name", "--model-version"])
@@ -364,15 +334,10 @@ def test_cli_rejects_removed_accuracy_control(capsys) -> None:
 
 def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
     """Keep CLI main as parse -> request -> run_core_job -> print."""
-    captured: dict[str, CoreJobRequest | Pipeline | None] = {}
+    captured: dict[str, CoreJobRequest] = {}
 
-    def fake_run_core_job(
-        request: CoreJobRequest,
-        *,
-        pipeline: Pipeline | None = None,
-    ) -> CoreResult:
+    def fake_run_core_job(request: CoreJobRequest) -> CoreResult:
         captured["request"] = request
-        captured["pipeline"] = pipeline
         return make_result(request)
 
     monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)
@@ -401,23 +366,17 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
     assert request.mode == "recommend"
     assert request.hints.k_grid == (2, 2, 1)
     assert request.hints.pseudo_type == "NC"
-    assert captured["pipeline"] is None
     output = json.loads(capsys.readouterr().out)
     assert output["selection"]["k_points"]["grid"] == [2, 2, 1]
     assert output["request"]["structure"] == "Si.cif"
 
 
-def test_main_builds_pipeline_for_model_backend(monkeypatch, capsys) -> None:
-    """Resolve CLI --model into a custom Core pipeline, not request data."""
-    captured: dict[str, CoreJobRequest | Pipeline | None] = {}
+def test_main_builds_request_with_model_backend(monkeypatch, capsys) -> None:
+    """Resolve CLI --model into a k-index model spec on the request."""
+    captured: dict[str, CoreJobRequest] = {}
 
-    def fake_run_core_job(
-        request: CoreJobRequest,
-        *,
-        pipeline: Pipeline | None = None,
-    ) -> CoreResult:
+    def fake_run_core_job(request: CoreJobRequest) -> CoreResult:
         captured["request"] = request
-        captured["pipeline"] = pipeline
         return make_result(request)
 
     monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)
@@ -439,11 +398,10 @@ def test_main_builds_pipeline_for_model_backend(monkeypatch, capsys) -> None:
     cli_core.main()
 
     request = captured["request"]
-    pipeline = captured["pipeline"]
     assert isinstance(request, CoreJobRequest)
-    assert isinstance(pipeline, Pipeline)
-    assert request.to_dict().get("model") is None
-    assert pipeline.kmesh is not Pipeline().kmesh
+    assert request.kmesh_model is not None
+    assert request.kmesh_model.location == "model.joblib"
+    assert request.kmesh_model.name == "fixture-model"
     assert json.loads(capsys.readouterr().out)["request"]["structure"] == "Si.cif"
 
 
@@ -451,11 +409,7 @@ def test_main_builds_bundle_request_with_output_dir(monkeypatch, capsys) -> None
     """Pass bundle output path through the shared Core job request."""
     captured: dict[str, CoreJobRequest] = {}
 
-    def fake_run_core_job(
-        request: CoreJobRequest,
-        *,
-        pipeline: Pipeline | None = None,
-    ) -> CoreResult:
+    def fake_run_core_job(request: CoreJobRequest) -> CoreResult:
         captured["request"] = request
         result = make_result(request)
         return CoreResult(

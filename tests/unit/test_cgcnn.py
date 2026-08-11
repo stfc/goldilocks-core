@@ -4,9 +4,9 @@ import pytest
 import torch
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.ml.atom_features import atom_features_from_structure
-from goldilocks_core.ml.cgcnn import CGCNN_PyG
-from goldilocks_core.ml.cgcnn_graph import build_radius_cgcnn_graph_from_structure
+from goldilocks_core.ml.qrf.atom_features import atom_features_from_structure
+from goldilocks_core.ml.qrf.cgcnn import CGCNN_PyG
+from goldilocks_core.ml.qrf.cgcnn_graph import build_radius_cgcnn_graph_from_structure
 
 
 def make_pair() -> Structure:

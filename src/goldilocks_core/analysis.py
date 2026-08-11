@@ -9,7 +9,11 @@ from pymatgen.core.graphs import StructureGraph
 from pymatgen.core.periodic_table import Element
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
-from goldilocks_core.contracts import Dimensionality, StructureAnalysisRecord
+from goldilocks_core.contracts import (
+    Dimensionality,
+    ElectronicCharacter,
+    StructureAnalysisRecord,
+)
 
 _DIMENSIONALITY_BY_VALUE: dict[int, Dimensionality] = {
     3: "3d",
@@ -17,6 +21,21 @@ _DIMENSIONALITY_BY_VALUE: dict[int, Dimensionality] = {
     1: "1d",
     0: "molecule",
 }
+
+
+def heuristic_metallicity(structure: Structure) -> ElectronicCharacter:
+    """Return a conservative structure-only electronic character heuristic.
+
+    Classifies a composition as ``likely_metal`` when every element is metallic
+    and ``unknown`` otherwise. Carries no electronic-structure evidence.
+    """
+    periodic_elements = tuple(
+        Element(symbol)
+        for symbol in sorted(e.symbol for e in structure.composition.elements)
+    )
+    if periodic_elements and all(element.is_metal for element in periodic_elements):
+        return "likely_metal"
+    return "unknown"
 
 
 def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
@@ -57,9 +76,8 @@ def analyze_structure(structure: Structure) -> StructureAnalysisRecord:
         structure
     )
     symmetry = _analyze_symmetry(structure)
-    electronic_character, electronic_warnings = _classify_electronic_character(
-        periodic_elements
-    )
+    electronic_character = heuristic_metallicity(structure)
+    electronic_warnings = _electronic_character_warnings(electronic_character)
 
     return StructureAnalysisRecord(
         formula=structure.composition.formula,
@@ -161,23 +179,22 @@ def _analyze_symmetry(structure: Structure) -> dict[str, str | int | None]:
         }
 
 
-def _classify_electronic_character(
-    elements: tuple[Element, ...],
-) -> tuple[str, tuple[str, ...]]:
-    """Return a conservative structure-only electronic character heuristic."""
-    if elements and all(element.is_metal for element in elements):
-        return (
-            "likely_metal",
-            (
-                "All elements are metallic; treat metallicity as likely, not "
-                "confirmed without electronic-structure data.",
-            ),
-        )
+def _electronic_character_warnings(
+    character: ElectronicCharacter,
+) -> tuple[str, ...]:
+    """Return heuristic-uncertainty warnings for a given electronic character.
 
-    return (
-        "unknown",
-        (
+    Only the structure-only heuristics (``likely_metal``, ``unknown``) carry
+    uncertainty warnings; a decided ``metal`` or ``insulator`` carries none.
+    """
+    if character == "likely_metal":
+        return (
+            "All elements are metallic; treat metallicity as likely, not "
+            "confirmed without electronic-structure data.",
+        )
+    if character == "unknown":
+        return (
             "Electronic character is unknown from structure facts alone; verify "
             "smearing manually for metallic systems.",
-        ),
-    )
+        )
+    return ()

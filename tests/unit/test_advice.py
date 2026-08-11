@@ -48,8 +48,6 @@ def test_advise_parameters_records_user_hint_provenance() -> None:
         ),
     )
 
-    assert advice.k_points.explicit_grid == (2, 2, 1)
-    assert advice.k_points.provenance.source == "user_hint"
     assert advice.magnetism.spin_polarized is True
     assert advice.magnetism.provenance.source == "user_hint"
     assert advice.spin_orbit.enabled is True

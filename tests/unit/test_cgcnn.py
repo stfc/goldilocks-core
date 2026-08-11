@@ -47,18 +47,64 @@ def test_build_radius_graph_has_expected_shapes() -> None:
     assert data.edge_attr.shape[1] == 1
 
 
+def make_graph():
+    """Build the synthetic graph used by CGCNN model tests."""
+    return build_radius_cgcnn_graph_from_structure(
+        make_pair(), [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]], radius=5.0
+    )
+
+
 def test_cgcnn_extract_crystal_repr_pools_to_atom_fea_len() -> None:
     """The pooled crystal representation has width atom_fea_len for one graph."""
     model = CGCNN_PyG(
         orig_atom_fea_len=4, atom_fea_len=8, edge_feat_dim=16, n_conv=1, n_h=1
     )
     model.eval()
-    data = build_radius_cgcnn_graph_from_structure(
-        make_pair(), [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]], radius=5.0
-    )
 
     with torch.no_grad():
-        representation = model.extract_crystal_repr(data)
+        representation = model.extract_crystal_repr(make_graph())
 
     assert representation.shape == (1, 8)
     assert torch.isfinite(representation).all()
+
+
+def test_cgcnn_forward_returns_class_probabilities() -> None:
+    """Run the pooled representation through the complete classification head."""
+    model = CGCNN_PyG(
+        orig_atom_fea_len=4,
+        atom_fea_len=8,
+        edge_feat_dim=16,
+        h_fea_len=10,
+        n_conv=1,
+        n_h=2,
+        classification=True,
+    )
+    model.eval()
+
+    with torch.no_grad():
+        probabilities = model(make_graph())
+
+    assert probabilities.shape == (1, 2)
+    assert torch.allclose(probabilities.sum(dim=1), torch.ones(1))
+
+
+def test_cgcnn_forward_projects_additional_compound_features() -> None:
+    """Concatenate projected compound features before the classification head."""
+    model = CGCNN_PyG(
+        orig_atom_fea_len=4,
+        atom_fea_len=8,
+        edge_feat_dim=16,
+        h_fea_len=10,
+        n_conv=1,
+        n_h=1,
+        classification=True,
+        additional_compound_features=True,
+        add_feat_len=3,
+    )
+    model.eval()
+
+    with torch.no_grad():
+        probabilities = model(make_graph(), torch.tensor([[1.0, 2.0, 3.0]]))
+
+    assert probabilities.shape == (1, 2)
+    assert torch.allclose(probabilities.sum(dim=1), torch.ones(1))

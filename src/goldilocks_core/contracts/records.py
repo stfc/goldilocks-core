@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -283,6 +285,23 @@ class CalculationHints:
 
 
 @dataclass(frozen=True, slots=True)
+class SymmetryUnavailable:
+    """Typed marker that symmetry facts could not be determined.
+
+    Stored in ``StructureAnalysisRecord`` symmetry fields when spglib cannot
+    analyze a structure (e.g. disordered sites). Carries a ``reason`` so the
+    manifest records why the field is unavailable instead of a bare null.
+    Symmetry is reporting-only; a recommendation stays complete with one of
+    these in place of a crystal-system/space-group value.
+
+    Attributes:
+        reason: why symmetry analysis was unavailable.
+    """
+
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
 class StructureAnalysisRecord:
     """Facts reported by the Analyze stage without parameter decisions.
 
@@ -309,20 +328,23 @@ class StructureAnalysisRecord:
             occupancies.
         disordered_site_count: number of sites with partial
             occupancies.
-        space_group_symbol: Hermann-Mauguin symbol, or None for
-            disordered structures.
+        space_group_symbol: Hermann-Mauguin symbol, or
+            ``SymmetryUnavailable`` when spglib cannot analyze, or None.
         space_group_number: International space group number
-            (1–230), or None.
+            (1–230), or ``SymmetryUnavailable``, or None.
         crystal_system: crystal system name (e.g. ``cubic``), or
-            None.
+            ``SymmetryUnavailable``, or None.
         dimensionality: structure dimensionality from a bonded-cluster
             analysis (``3d``, ``2d``, ``1d``, ``molecule``), or
             ``unknown`` when detection fails.
         has_vacuum: connectivity-derived low-dimensional/vacuum heuristic:
             True when bonded dimensionality is below 3D. This is not a
             measured cell-vacuum quantity.
-        electronic_character: conservative electronic-character
-            heuristic.
+        electronic_character: electronic-character classification from the
+            runtime model or structure-only fallback.
+        electronic_character_source: origin of the classification, such as
+            ``model`` or ``heuristic``.
+        electronic_character_confidence: optional confidence score in [0, 1].
         analysis_warnings: warnings about heuristic limitations
             (e.g. metallicity uncertainty).
     """
@@ -339,12 +361,14 @@ class StructureAnalysisRecord:
     heavy_elements: tuple[str, ...]
     disorder_warnings: tuple[str, ...] = ()
     disordered_site_count: int = 0
-    space_group_symbol: str | None = None
-    space_group_number: int | None = None
-    crystal_system: str | None = None
+    space_group_symbol: str | int | SymmetryUnavailable | None = None
+    space_group_number: str | int | SymmetryUnavailable | None = None
+    crystal_system: str | int | SymmetryUnavailable | None = None
     dimensionality: Dimensionality = "unknown"
     has_vacuum: bool = False
     electronic_character: ElectronicCharacter = "unknown"
+    electronic_character_source: str = "heuristic"
+    electronic_character_confidence: float | None = None
     analysis_warnings: tuple[str, ...] = ()
 
     def to_dict(self) -> JsonDict:
@@ -609,19 +633,14 @@ class PseudopotentialSelection:
 
 @dataclass(frozen=True, slots=True)
 class SelectionRecord:
-    """Complete Select-stage output.
-
-    Contains the Kmesh-stage grid, pseudopotential selections, and any
-    accumulated warnings from the selection process.
+    """Complete Select-stage pseudopotential output.
 
     Attributes:
-        k_points: resolved k-point grid and shift.
         pseudopotentials: one selection per element.
         warnings: warnings from pseudo selection (e.g. missing
             pseudos, incomplete cutoffs).
     """
 
-    k_points: KPointSelection
     pseudopotentials: tuple[PseudopotentialSelection, ...]
     warnings: tuple[str, ...] = ()
 
@@ -654,12 +673,15 @@ class GeneratedFile:
         return to_jsonable(self)
 
 
+type GeneratedFiles = tuple[GeneratedFile, ...]
+"""Immutable collection produced by the Generate stage."""
+
+
 @dataclass(frozen=True, slots=True)
 class BundleRecord:
-    """Terminal Bundle-stage output: where files were written and the manifest.
+    """Bundle publication output: where files were written and the manifest.
 
-    This is a stage record like every other: one stage produces one record.
-    It is only populated in bundle mode.
+    It is populated when generate publishes files to an output directory.
 
     Attributes:
         path: bundle root directory path.
@@ -674,34 +696,65 @@ class BundleRecord:
         return to_jsonable(self)
 
 
+class CoreRecords(Mapping[type, Any]):
+    """Requested DAG records keyed by their record types.
+
+    Only explicitly requested record types are present.
+    """
+
+    __slots__ = ("_records",)
+
+    def __init__(self, records: Mapping[type, Any] | None = None) -> None:
+        self._records = dict(records or {})
+
+    def __getitem__(self, record_type: type) -> Any:
+        return self._records[record_type]
+
+    def __iter__(self) -> Iterator[type]:
+        return iter(self._records)
+
+    def __len__(self) -> int:
+        return len(self._records)
+
+    def to_dict(self) -> JsonDict:
+        """Return records as a JSON-serializable dictionary."""
+        return to_jsonable(
+            {
+                record_type.__name__: record
+                for record_type, record in self._records.items()
+            }
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class CoreResult:
     """Records produced by a recommendation or generation workflow.
 
-    Scientific records are populated as their stages run. ``generated_files``
-    is populated in generate/bundle modes. ``bundle`` is set only in bundle
-    mode. The request is not echoed here — the caller already has it;
-    CLI/HTTP layers echo it themselves in their serialized output.
+    Scientific records are populated as their stages run. ``k_points`` is the
+    Kmesh-stage output alongside the Select-stage pseudopotentials.
+    ``generated_files`` is populated in generate mode. ``bundle`` is set only
+    when generate is given an output directory. The request is not echoed here
+    — the caller already has it; CLI/HTTP layers echo it themselves.
 
     Attributes:
         intent: what the operator asked for.
         analysis: structure facts from the Analyze stage.
         advice: provenance-backed recommendations from the Advise
             stage.
-        selection: concrete values from the Select stage.
-        generated_files: generated input files, populated by
-            Generate or Bundle modes.
+        k_points: concrete grid and shift from the Kmesh stage.
+        selection: concrete pseudopotentials from the Select stage.
+        generated_files: generated input files, populated by Generate mode.
         warnings: aggregated warnings from analysis, Kmesh, and
             selection.
-        bundle: terminal Bundle-stage record, set only in bundle
-            mode.
+        bundle: output bundle record, set only when generate writes files.
     """
 
     intent: CalculationIntent
     analysis: StructureAnalysisRecord
     advice: ParameterAdvice
+    k_points: KPointSelection
     selection: SelectionRecord
-    generated_files: tuple[GeneratedFile, ...] = ()
+    generated_files: GeneratedFiles = ()
     warnings: tuple[str, ...] = ()
     bundle: BundleRecord | None = None
 
@@ -711,25 +764,24 @@ class CoreResult:
 
 
 @dataclass(frozen=True, slots=True)
-class CoreJobRequest:
-    """Request for running the standard Core workflow.
+class PresetRequest:
+    """Operator request for a named-preset Core run (recommend/generate).
 
-    One request model shared by Python API, CLI, and future HTTP
-    wrappers. ``mode`` controls how far the pipeline runs.
+    Passed to :func:`run_core_job` (or a dispatcher's ``recommend``/``generate``).
+    ``mode`` selects the preset; ``output_dir`` is meaningful only with
+    ``generate``.
 
     Attributes:
-        structure: structure input — a pymatgen Structure or a
-            path to a structure file.
+        structure: structure input — a pymatgen Structure or a path to a
+            structure file.
         intent: what to calculate.
         hints: optional operator overrides.
-        mode: pipeline mode: ``recommend``, ``generate``, or
-            ``bundle``.
+        mode: preset mode: ``recommend`` or ``generate``.
         pseudo_metadata: pseudopotential metadata for selection.
-        output_dir: output directory path, required when mode is
-            ``bundle``.
-        kmesh_model: optional local k-index model spec; when set, the
-            SCF path uses it for k-point selection instead of the default
-            QRF k-distance model.
+        output_dir: optional output directory, meaningful only with
+            ``generate``. The generate entrypoint handles publishing there.
+        kmesh_model: optional local k-index model spec; when set, the SCF path
+            uses it for k-point selection instead of the default QRF model.
     """
 
     structure: StructureInput
@@ -741,13 +793,54 @@ class CoreJobRequest:
     kmesh_model: ModelSpec | None = None
 
     def __post_init__(self) -> None:
-        """Validate request invariants at construction."""
-        if self.mode not in {"recommend", "generate", "bundle"}:
+        """Validate the preset mode at construction."""
+        if self.mode not in {"recommend", "generate"}:
             raise ValueError(f"Unsupported Core job mode: {self.mode}")
-
-        if self.mode == "bundle" and self.output_dir is None:
-            raise ValueError("output_dir is required for bundle mode")
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
-        return to_jsonable(self)
+        return {
+            "structure": to_jsonable(self.structure),
+            "intent": to_jsonable(self.intent),
+            "hints": to_jsonable(self.hints),
+            "mode": self.mode,
+            "pseudo_metadata": to_jsonable(self.pseudo_metadata),
+            "output_dir": self.output_dir,
+            "kmesh_model": to_jsonable(self.kmesh_model),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class QueryRequest:
+    """Operator request for an explicit record query.
+
+    Passed to :func:`query_records` (or a dispatcher's ``compute``). ``outputs``
+    is required: it names the DAG record types to compute.
+
+    Attributes:
+        structure: structure input — a pymatgen Structure or a path to a
+            structure file.
+        outputs: requested DAG record types (required, non-None).
+        intent: what to calculate.
+        hints: optional operator overrides.
+        pseudo_metadata: pseudopotential metadata for selection.
+        kmesh_model: optional local k-index model spec.
+    """
+
+    structure: StructureInput
+    outputs: tuple[type, ...]
+    intent: CalculationIntent = field(default_factory=CalculationIntent)
+    hints: CalculationHints = field(default_factory=CalculationHints)
+    pseudo_metadata: tuple[PseudoMetadata, ...] = ()
+    kmesh_model: ModelSpec | None = None
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary with output type names."""
+        return {
+            "structure": to_jsonable(self.structure),
+            "outputs": [output_type.__name__ for output_type in self.outputs],
+            "intent": to_jsonable(self.intent),
+            "hints": to_jsonable(self.hints),
+            "pseudo_metadata": to_jsonable(self.pseudo_metadata),
+            "kmesh_model": to_jsonable(self.kmesh_model),
+        }

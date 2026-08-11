@@ -2,8 +2,11 @@ import pytest
 from pymatgen.core import Lattice, Structure
 
 import goldilocks_core.analysis as analysis_module
-from goldilocks_core.advice import advise_parameters
-from goldilocks_core.analysis import analyze_structure
+from goldilocks_core.analysis import (
+    DimensionalityClassificationError,
+    analyze_structure,
+)
+from goldilocks_core.contracts import SymmetryUnavailable
 
 
 def test_analyze_structure_reports_composition_and_element_facts() -> None:
@@ -60,10 +63,8 @@ def test_analyze_structure_marks_all_metal_compositions_as_likely_metal() -> Non
     assert "likely" in analysis.analysis_warnings[0]
 
 
-def test_analyze_structure_falls_back_for_crystal_nn_value_error(
-    monkeypatch,
-) -> None:
-    """Handle CrystalNN's documented operational ValueError conservatively."""
+def test_analyze_structure_raises_when_crystal_nn_fails(monkeypatch) -> None:
+    """Raise DimensionalityClassificationError when CrystalNN cannot bond."""
 
     def fail_crystal_nn():
         raise ValueError("No Voronoi neighbors found for site")
@@ -75,20 +76,12 @@ def test_analyze_structure_falls_back_for_crystal_nn_value_error(
         coords=[[0.0, 0.0, 0.0]],
     )
 
-    analysis = analyze_structure(structure)
-    advice = advise_parameters(analysis)
-
-    assert analysis.dimensionality == "unknown"
-    assert analysis.has_vacuum is False
-    assert any(
-        "CalculationHints(use_vdw=True)" in warning
-        for warning in analysis.analysis_warnings
-    )
-    assert advice.vdw.use_vdw is False
+    with pytest.raises(DimensionalityClassificationError):
+        analyze_structure(structure)
 
 
-def test_analyze_structure_falls_back_for_larsen_runtime_error(monkeypatch) -> None:
-    """Handle runtime failures from the CrystalNN/Larsen operations."""
+def test_analyze_structure_raises_when_larsen_fails(monkeypatch) -> None:
+    """Raise DimensionalityClassificationError on Larsen runtime failures."""
 
     def fail_larsen(*_args):
         raise RuntimeError("pathological graph")
@@ -100,10 +93,36 @@ def test_analyze_structure_falls_back_for_larsen_runtime_error(monkeypatch) -> N
         coords=[[0.0, 0.0, 0.0]],
     )
 
+    with pytest.raises(DimensionalityClassificationError):
+        analyze_structure(structure)
+
+
+def test_analyze_structure_records_symmetry_unavailable_when_spglib_fails(
+    monkeypatch,
+) -> None:
+    """Record typed SymmetryUnavailable when spglib cannot analyze symmetry."""
+
+    def fail_spglib(_structure: Structure) -> None:
+        raise TypeError("spglib cannot handle this structure")
+
+    monkeypatch.setattr(analysis_module, "SpacegroupAnalyzer", fail_spglib)
+    structure = Structure(
+        lattice=Lattice.cubic(3.61),
+        species=["Cu", "Cu", "Cu", "Cu"],
+        coords=[[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5]],
+    )
+
     analysis = analyze_structure(structure)
 
-    assert analysis.dimensionality == "unknown"
-    assert analysis.has_vacuum is False
+    assert analysis.dimensionality == "3d"
+    assert isinstance(analysis.crystal_system, SymmetryUnavailable)
+    assert isinstance(analysis.space_group_symbol, SymmetryUnavailable)
+    assert isinstance(analysis.space_group_number, SymmetryUnavailable)
+    assert analysis.crystal_system.reason
+
+    # SymmetryUnavailable must round-trip through the manifest serializer.
+    serialized = analysis.to_dict()
+    assert serialized["crystal_system"] == {"reason": analysis.crystal_system.reason}
 
 
 def test_analyze_structure_propagates_unexpected_dimensionality_assertion(

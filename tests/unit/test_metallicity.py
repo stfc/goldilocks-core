@@ -48,10 +48,21 @@ def test_load_metallicity_model_reconstructs_checkpoint_and_enters_eval_mode(
     assert model.eval_called is True
 
 
+def test_probability_mapping_uses_published_class_order() -> None:
+    """Map class 0 to insulator and class 1 to metal with winning confidence."""
+    assert metallicity._electronic_character_from_probabilities([0.8, 0.2]) == (
+        "insulator",
+        0.8,
+    )
+    assert metallicity._electronic_character_from_probabilities([0.1, 0.9]) == (
+        "metal",
+        0.9,
+    )
+
+
 def test_metal_features_builds_configured_graph_without_gradients(monkeypatch) -> None:
     """Verify feature extraction passes graph controls and returns a flat array."""
     structure = Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
-    atom_features = np.array([[1.0, 2.0]])
     graph = object()
     calls = {}
 
@@ -60,28 +71,17 @@ def test_metal_features_builds_configured_graph_without_gradients(monkeypatch) -
         "torch",
         SimpleNamespace(no_grad=nullcontext),
     )
-    monkeypatch.setattr(
-        metallicity,
-        "atom_features_from_structure",
-        lambda actual_structure, path: (
-            calls.update(structure=actual_structure, path=path) or atom_features
-        ),
-    )
 
-    def build_graph(actual_structure, actual_features, *, radius, max_neighbors):
+    def build_graph(actual_structure, path, *, graph_radius, max_neighbors):
         calls.update(
-            graph_structure=actual_structure,
-            features=actual_features,
-            radius=radius,
+            structure=actual_structure,
+            path=path,
+            graph_radius=graph_radius,
             max_neighbors=max_neighbors,
         )
         return graph
 
-    monkeypatch.setattr(
-        metallicity,
-        "build_radius_cgcnn_graph_from_structure",
-        build_graph,
-    )
+    monkeypatch.setattr(metallicity, "_build_graph", build_graph)
 
     class FakeRepresentation:
         def numpy(self) -> np.ndarray:
@@ -104,9 +104,36 @@ def test_metal_features_builds_configured_graph_without_gradients(monkeypatch) -
     assert calls == {
         "structure": structure,
         "path": "atom_init.json",
-        "graph_structure": structure,
-        "features": atom_features,
-        "radius": 8.0,
+        "graph_radius": 8.0,
         "max_neighbors": 12,
         "model_graph": graph,
     }
+
+
+def test_classify_metallicity_runs_full_model_forward(monkeypatch) -> None:
+    """Build the graph and map the full model's probabilities."""
+    structure = Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
+    graph = object()
+    calls = {}
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(no_grad=nullcontext))
+    monkeypatch.setattr(metallicity, "_build_graph", lambda *args, **kwargs: graph)
+
+    class FakeProbabilities:
+        def numpy(self) -> np.ndarray:
+            return np.array([[0.25, 0.75]])
+
+    class FakeModel:
+        def __call__(self, actual_graph):
+            calls["graph"] = actual_graph
+            return FakeProbabilities()
+
+    result = metallicity.classify_metallicity(
+        structure,
+        FakeModel(),
+        "atom_init.json",
+        graph_radius=10.0,
+        max_neighbors=12,
+    )
+
+    assert result == ("metal", 0.75)
+    assert calls == {"graph": graph}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import textwrap
 
@@ -82,6 +83,7 @@ def _available(*, verbose: bool = False) -> int:
     """
     registry = load_tables()
     default = default_table(registry)
+    linked = verbose and _hyperlinks_render()
 
     print(_DETAILED_HEADER if verbose else _BRIEF_HEADER)
     for number, table in enumerate(registry.values(), start=1):
@@ -90,8 +92,9 @@ def _available(*, verbose: bool = False) -> int:
             state = f"{state} (default)"
 
         if verbose:
+            source = _linked_cell(table.provider, table.upstream_url, 12, linked=linked)
             row = (
-                f"{number:>3}  {table.name:<{_NAME_WIDTH}}{table.provider:<12}"
+                f"{number:>3}  {table.name:<{_NAME_WIDTH}}{source}"
                 f"{table.version:<9}{table.functional:<8}{table.relativistic:<5}"
                 f"{table.accuracy:<12}{len(table.elements):>9}"
                 f"{len(table.lanthanides):>4}{len(table.actinides):>4}"
@@ -240,3 +243,29 @@ def _megabytes(table: PseudoTable) -> str:
     if not table.transfer_bytes:
         return "-"
     return f"{table.transfer_bytes / 1e6:.1f} MB"
+
+
+def _hyperlinks_render() -> bool:
+    """Whether to emit OSC 8 links for this run.
+
+    Only to a terminal: piping or redirecting has to yield plain text, or
+    `gl pp available -v > file` would collect escape sequences. ``NO_COLOR`` is
+    honoured as an escape hatch for terminals that print the sequence rather
+    than ignoring it, which is what a terminal without OSC 8 should do.
+    """
+    return sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+
+
+def _linked_cell(text: str, url: str, width: int, *, linked: bool) -> str:
+    """Return a fixed-width cell whose text opens ``url`` when clicked.
+
+    The padding sits outside the link, so the clickable region is the word
+    itself and the column width is computed from what is visible rather than
+    from the escape sequence's length.
+    """
+    padding = " " * max(0, width - len(text))
+
+    if not linked:
+        return f"{text}{padding}"
+
+    return f"\033]8;;{url}\033\\{text}\033]8;;\033\\{padding}"

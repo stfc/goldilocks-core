@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import io
+import sys
+
 import pytest
 
 from goldilocks_core.cli import core as cli_core
@@ -165,6 +168,67 @@ def test_install_rejects_a_number_outside_the_listing(capsys, never_fetches, tok
     assert status == 2
     assert "no such table" in err
     assert never_fetches == []
+
+
+class _Stream(io.StringIO):
+    """A stdout that answers isatty() however the test needs it to."""
+
+    def __init__(self, tty: bool):
+        super().__init__()
+        self._tty = tty
+
+    def isatty(self) -> bool:
+        return self._tty
+
+
+def test_a_plain_cell_is_exactly_the_padded_text():
+    """`gl pp available -v > file` must not collect escape sequences."""
+    assert pseudos._linked_cell("sssp", "https://x.invalid/", 12, linked=False) == (
+        "sssp        "
+    )
+
+
+def test_a_linked_cell_wraps_only_the_word():
+    cell = pseudos._linked_cell("sssp", "https://x.invalid/", 12, linked=True)
+
+    assert cell.startswith("\033]8;;https://x.invalid/\033\\sssp\033]8;;\033\\")
+    assert cell.endswith(" " * 8)
+
+
+def test_both_cells_occupy_the_same_visible_width():
+    """Padding sits outside the link, so columns line up either way."""
+    plain = pseudos._linked_cell("sssp", "https://x.invalid/", 12, linked=False)
+    linked = pseudos._linked_cell("sssp", "https://x.invalid/", 12, linked=True)
+    visible = linked.replace("\033]8;;https://x.invalid/\033\\", "")
+    visible = visible.replace("\033]8;;\033\\", "")
+
+    assert visible == plain
+    assert len(visible) == 12
+
+
+@pytest.mark.parametrize(
+    ("tty", "no_color", "expected"),
+    [
+        (True, None, True),
+        (False, None, False),
+        (True, "1", False),
+        (False, "1", False),
+    ],
+)
+def test_links_are_emitted_only_to_a_terminal(monkeypatch, tty, no_color, expected):
+    """Redirected output has to stay plain; NO_COLOR is the terminal opt-out."""
+    monkeypatch.setattr(sys, "stdout", _Stream(tty))
+    if no_color is None:
+        monkeypatch.delenv("NO_COLOR", raising=False)
+    else:
+        monkeypatch.setenv("NO_COLOR", no_color)
+
+    assert pseudos._hyperlinks_render() is expected
+
+
+def test_the_listing_carries_no_escapes_under_capture(capsys):
+    """The integration path, not just the helper: capture is not a terminal."""
+    assert "\033" not in run_available(capsys, "-v")
 
 
 def test_install_defaults_to_the_one_table(capsys, never_fetches):

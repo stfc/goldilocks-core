@@ -153,6 +153,49 @@ existing yet rather than an arbitrary gap. Registering the table would let a
 user download it cleanly and then hit a cutoff-less failure at generation
 time for 11 specific elements; Core would rather not offer it at all.
 
+### Why SSSP 1.3.0 and not 2.0
+
+SSSP 2.0 is the current release --
+[sssp.materialscloud.org/download](https://sssp.materialscloud.org/download)
+titles itself "SSSP v2.0" and files 1.3.0 and below under "Legacy versions".
+Core deliberately stays on 1.3.0 for now. Three reasons, all measured against
+the live v2.0 files rather than read off the page:
+
+1. **v2.0 publishes no checksums.** Its cutoff JSON carries
+   `Z, cutoff_rho, cutoff_wfc, filename, library`; 1.3.0's carries `md5`.
+   Every install path in Core verifies each file against a digest *the
+   publisher* provides before writing it (`store_verified`). Adopting v2.0
+   would mean either dropping that guarantee for one table, or pinning
+   digests we computed ourselves -- which would make Core, not SSSP, the
+   thing asserting the files are intact. Neither is worth a version bump.
+2. **v2.0 is not on the Materials Cloud Archive.** Its pseudopotentials are
+   served from `raw.githubusercontent.com/unkcpz/sssp-verify-scripts` and its
+   cutoffs from the SSSP app's own static data directory. Neither is an
+   InvenioRDM instance, so `artifacts/sssp.py` -- which reuses
+   `artifacts/psdi.py`'s record resolution precisely because the Archive *is*
+   InvenioRDM -- cannot fetch it without a new code path. Note this also
+   means the Archive record's API reports 1.3.0 as its latest version, and
+   the SSSP DOI still resolves there: **the archive is not a reliable way to
+   discover that 2.0 exists.**
+3. **v2.0 covers fewer elements: 95 against 1.3.0's 103.** The eight it drops
+   are all actinides -- Bk, Cf, Cm, Es, Fm, Lr, Md, No. Because lanthanides
+   and actinides are routed to SSSP unconditionally (see above), upgrading
+   would leave those eight covered by no registered table at all.
+
+Revisit when v2.0 is deposited on the Archive with per-file digests, or if
+the actinide coverage is restored.
+
+**Regardless of version, SSSP does not guarantee its own PBEsol library.**
+The download page states that SSSP's PBEsol pseudopotentials reuse the
+corresponding PBE pseudopotentials' input parameters *and* their suggested
+cutoffs, were "not explicitly tested with the SSSP protocol", and that its
+authors "do not guarantee correctness of simulations carried out with the
+SSSP PBEsol library". This is load-bearing here: Core's default functional is
+PBEsol, the only registered SSSP table is PBEsol, and lanthanides/actinides
+are forced onto SSSP -- so the default path for an f-element structure lands
+on a library its own publisher does not vouch for. In v2.0 this is explicit
+in the data as well: the PBEsol rows link to the *same* PBE cutoff file.
+
 ## Installing: `gl pp`
 
 ```

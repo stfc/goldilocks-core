@@ -292,7 +292,10 @@ note = """
 The only table here covering actinides. Fetched from the Materials Cloud Archive, never
 redistributed by us -- the files carry a mix of licences including GPL-3.0, so a user is
 entitled to know what is landing on their disk. No fully relativistic SSSP set exists, so it
-can never satisfy spin-orbit coupling."""
+can never satisfy spin-orbit coupling. SSSP does not guarantee its own PBEsol library: those
+pseudopotentials reuse the PBE ones' input parameters and cutoffs and were not tested with
+the SSSP protocol. 1.3.0, not the current 2.0, which publishes no per-file checksums, is not
+on the Archive, and drops eight actinides -- see docs/pseudopotentials.md."""
 elements = [
   "Ac", "Ag", "Al", "Am", "Ar", "As", "At", "Au", "B", "Ba", "Be", "Bi",
   "Bk", "Br", "C", "Ca", "Cd", "Ce", "Cf", "Cl", "Cm", "Co", "Cr", "Cs",

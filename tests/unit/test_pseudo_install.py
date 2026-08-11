@@ -95,7 +95,7 @@ def test_require_installed_explains_how_to_get_a_table(registry):
     message = str(raised.value)
     assert installer.INSTALL_COMMAND in message
     assert installer.AVAILABLE_COMMAND in message
-    assert "--pseudo-root" in message
+    assert installer.ADD_COMMAND in message
 
 
 def test_the_missing_table_message_carries_terms_and_a_citation(registry):

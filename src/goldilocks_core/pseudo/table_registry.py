@@ -17,12 +17,27 @@ from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
+from goldilocks_core.artifacts.cache import artifact_path
 from goldilocks_core.contracts import PathLike
 
 PSEUDO_REGISTRY_ENV = "GOLDILOCKS_PSEUDO_REGISTRY"
 """Environment variable pointing at a replacement registry file."""
 
 _REGISTRY_RESOURCE = "pseudo_registry.toml"
+
+_LOCAL_REGISTRY = "local_registry.toml"
+"""Tables the user added themselves, in the same schema, beside their files."""
+
+LOCAL_PROVIDER = "local"
+"""Provider of a table that was added from disk rather than fetched."""
+
+FILE_RELATIVISTIC = {"SR": "scalar", "FR": "full", "NR": "non-relativistic"}
+"""Registry vocabulary (whole-table) to UPF vocabulary (per-file).
+
+A table's relativistic mode is stamped into its sidecar in the spelling the UPF
+files use, so that selection reads one vocabulary whether the fact came from the
+registry or from a header.
+"""
 
 LANTHANIDES = frozenset("La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu".split())
 ACTINIDES = frozenset("Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr".split())
@@ -39,7 +54,9 @@ class PseudoTable:
             ``pseudodojo`` or ``sssp``. Names the library rather than its
             host: SSSP is served by the Materials Cloud Archive, but what a
             user chose is SSSP. The host is in ``upstream_url``. Core never
-            redistributes a table; it fetches on the user's behalf.
+            redistributes a table; it fetches on the user's behalf. ``local``
+            marks a table the user added with ``gl pp add``, which came off
+            their own disk and cannot be fetched at all.
         upstream_table: what the provider calls it. The download URL is built
             from this, not from ``name``.
         record: provider record identifier, where the provider addresses tables
@@ -104,13 +121,57 @@ class PseudoTable:
         return tuple(e for e in elements if e not in self.elements)
 
 
-def load_tables(path: PathLike | None = None) -> dict[str, PseudoTable]:
+def local_registry_path() -> Path:
+    """Return the file recording tables the user added with ``gl pp add``.
+
+    It sits beside the pseudopotentials it describes rather than beside the
+    packaged registry, which lives in the installation and is never written to:
+    an added table is part of the user's data, so removing the cache removes
+    the record of it too.
+    """
+    return artifact_path("pseudopotentials") / _LOCAL_REGISTRY
+
+
+def load_tables(
+    path: PathLike | None = None,
+    *,
+    include_local: bool = True,
+) -> dict[str, PseudoTable]:
     """Load the pseudopotential table registry.
 
     Resolution order: ``path``, then ``GOLDILOCKS_PSEUDO_REGISTRY``, then the
     file packaged with Core.
+
+    Locally added tables are merged in afterwards, so a user who added their own
+    pseudopotentials and installed nothing still counts as having a table. The
+    two files answer different questions -- what Core can fetch, and what this
+    user put on disk -- so replacing the first does not discard the second.
+
+    Args:
+        path: an explicit registry file, replacing the packaged catalogue.
+        include_local: whether to merge in tables added with ``gl pp add``.
+            ``gl pp add`` itself passes ``False`` while rewriting that file.
     """
-    document = tomllib.loads(_registry_text(path))
+    tables = parse_tables(_registry_text(path))
+
+    if include_local:
+        tables.update(load_local_tables())
+
+    return tables
+
+
+def load_local_tables() -> dict[str, PseudoTable]:
+    """Return the tables the user added, or nothing if they have added none."""
+    path = local_registry_path()
+    if not path.exists():
+        return {}
+
+    return parse_tables(path.read_text(encoding="utf-8"))
+
+
+def parse_tables(text: str) -> dict[str, PseudoTable]:
+    """Parse a registry document into tables, keyed by name."""
+    document = tomllib.loads(text)
 
     return {
         name: PseudoTable(

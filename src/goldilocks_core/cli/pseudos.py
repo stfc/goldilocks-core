@@ -8,6 +8,7 @@ import textwrap
 from pathlib import Path
 
 from goldilocks_core.pseudo import install as installer
+from goldilocks_core.pseudo import local as local_tables
 from goldilocks_core.pseudo.table_registry import (
     PseudoTable,
     default_table,
@@ -77,6 +78,68 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Table names, or their numbers from `gl pp available`.",
     )
 
+    _add_parser(commands)
+
+
+def _add_parser(commands: argparse._SubParsersAction) -> None:
+    """Register ``gl pp add``, for pseudopotentials Core cannot fetch.
+
+    Every option here is a fact about the table as a whole. Nothing element-level
+    is accepted, on purpose: which element a file holds, what type it is and what
+    cutoff it wants are read out of the files by ``parse_upf``, and a directory
+    those cannot be read from is refused rather than half-added. Retyping
+    per-element data that is already in the files invites a transcription error
+    no later check would catch.
+    """
+    add = commands.add_parser(
+        "add",
+        help="Add pseudopotentials of your own, which Core cannot fetch.",
+        description=(
+            "Copy a directory of UPF files in as a table, so it lists, is "
+            "selected from, and deletes like an installed one. For a public "
+            "library everyone would want, open an issue at "
+            "https://github.com/stfc/goldilocks-core/issues instead: those "
+            "belong in the registry Core ships."
+        ),
+    )
+    add.add_argument("path", metavar="PATH", help="Directory holding the .upf files.")
+    add.add_argument(
+        "--name",
+        help="What to call it. Defaults to the directory's name. The "
+        "relativistic suffix is appended if absent, as every table name "
+        "carries one.",
+    )
+    add.add_argument(
+        "--functional",
+        required=True,
+        help="Exchange-correlation functional the table was generated for, "
+        "e.g. PBEsol. Checked against the structure's, never inferred.",
+    )
+    add.add_argument(
+        "--relativistic",
+        required=True,
+        choices=("SR", "FR", "NR"),
+        help="Relativistic treatment of the table as a whole. Only FR can "
+        "satisfy spin-orbit coupling.",
+    )
+    add.add_argument(
+        "--accuracy",
+        required=True,
+        choices=("efficiency", "precision"),
+        help="Which tier this table is, in the vocabulary the registry uses.",
+    )
+    add.add_argument("--version", default="local", help="Your version label.")
+    add.add_argument(
+        "--licence",
+        default=local_tables.UNSTATED,
+        help="Recorded and shown before use, never interpreted.",
+    )
+    add.add_argument(
+        "--citation",
+        default=local_tables.UNSTATED,
+        help="What someone using this table should cite.",
+    )
+
 
 def run(args: argparse.Namespace) -> int:
     """Dispatch a ``gl pp`` subcommand."""
@@ -84,6 +147,8 @@ def run(args: argparse.Namespace) -> int:
         return _available(verbose=args.verbose)
     if args.pp_command == "list":
         return _installed()
+    if args.pp_command == "add":
+        return _add(args)
     if args.pp_command == "delete":
         return _delete(args.tables)
     return _install(args.tables, everything=args.all)
@@ -122,8 +187,35 @@ def _available(*, verbose: bool = False) -> int:
         f"`{installer.INSTALL_COMMAND}` with no argument installs it"
     )
     print(f"  install others by name or number: `{installer.INSTALL_COMMAND} NAME|N`")
+    print(
+        f"  add pseudopotentials you already have: `{installer.ADD_COMMAND} PATH ...`"
+    )
     if not verbose:
         print(f"  version and element coverage with `{installer.AVAILABLE_COMMAND} -v`")
+    return 0
+
+
+def _add(args: argparse.Namespace) -> int:
+    """Add a user-owned table by copying it under Core's pseudopotential root."""
+    try:
+        table = local_tables.add(
+            Path(args.path),
+            name=args.name or Path(args.path).name,
+            functional=args.functional,
+            relativistic=args.relativistic,
+            accuracy=args.accuracy,
+            version=args.version,
+            licence=args.licence,
+            citation=args.citation,
+        )
+    except local_tables.NotAddable as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+
+    destination = installer.install_path(table)
+    print(f"added {table.name}")
+    print(f"  {len(table.elements)} pseudopotentials copied to {destination}")
+    print(f"  registered in {local_tables.local_registry_path()}")
     return 0
 
 
@@ -146,7 +238,7 @@ def _installed() -> int:
         print(f"  {path}")
 
     print(f"\n  pseudopotentials live under {installer.pseudo_root()}")
-    print("  pass that to --pseudo-root to use a table Core did not install")
+    print(f"  add another directory with `{installer.ADD_COMMAND} PATH ...`")
     return 0
 
 

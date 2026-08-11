@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 
 import pytest
 
 from goldilocks_core.cli import core as cli_core
 from goldilocks_core.cli import pseudos
+from goldilocks_core.pseudo import install as installer
 from goldilocks_core.pseudo.table_registry import default_table, load_tables
 
 
@@ -59,6 +61,27 @@ def run_delete(capsys, *argv: str) -> tuple[int, str, str]:
     status = pseudos.run(args)
     captured = capsys.readouterr()
     return status, captured.out, captured.err
+
+
+def run_add(capsys, *argv: str) -> tuple[int, str, str]:
+    """Run ``gl pp add`` with ``argv`` and return status, stdout, stderr."""
+    args = cli_core.build_parser().parse_args(["pp", "add", *argv])
+    status = pseudos.run(args)
+    captured = capsys.readouterr()
+    return status, captured.out, captured.err
+
+
+def write_local_upf(directory, element: str = "Si") -> None:
+    """Write a minimal UPF with the header cutoff pair `gl pp add` requires."""
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"{element}.upf").write_text(
+        "<UPF>"
+        f'<PP_HEADER element="{element}" pseudo_type="NC" '
+        'functional="PBEsol" relativistic="scalar" z_valence="4.0" '
+        'wfc_cutoff="48.0" rho_cutoff="192.0" />'
+        "</UPF>",
+        encoding="utf-8",
+    )
 
 
 def pretend_installed(name: str) -> tuple:
@@ -135,6 +158,12 @@ def test_no_listing_prints_a_url(capsys):
     """URLs made the row three times as wide as the fact it carried."""
     for argv in ((), ("-v",)):
         assert "http" not in run_available(capsys, *argv)
+
+
+def test_the_listing_points_at_the_local_add_route(capsys):
+    output = run_available(capsys)
+
+    assert installer.ADD_COMMAND in output
 
 
 def table_rows(output: str) -> list[str]:
@@ -282,6 +311,89 @@ def test_delete_removes_everything_the_install_left(capsys):
     assert not sidecar.exists()
     assert not reports.exists()
     assert "removed" in out
+
+
+def test_add_copies_local_pseudos_under_the_default_root(capsys, tmp_path):
+    source = tmp_path / "mine"
+    write_local_upf(source)
+
+    status, out, err = run_add(
+        capsys,
+        str(source),
+        "--functional",
+        "PBEsol",
+        "--relativistic",
+        "SR",
+        "--accuracy",
+        "efficiency",
+    )
+
+    table = load_tables()["mine-sr"]
+    destination = installer.install_path(table)
+    sidecar = destination.parent / f"{destination.name}.json"
+
+    assert status == 0
+    assert err == ""
+    assert "added mine-sr" in out
+    assert destination == installer.pseudo_root() / "local" / "mine-sr"
+    assert (destination / "Si.upf").read_text(encoding="utf-8")
+    assert json.loads(sidecar.read_text(encoding="utf-8")) == {
+        "_relativistic": "scalar",
+        "_accuracy": "efficiency",
+        "Si": {"cutoff_wfc": 48.0, "cutoff_rho": 192.0},
+    }
+    assert table.provider == "local"
+    assert table.elements == ("Si",)
+
+
+def test_add_refuses_pseudos_without_a_cutoff_pair(capsys, tmp_path):
+    source = tmp_path / "mine"
+    source.mkdir()
+    (source / "Si.upf").write_text(
+        "<UPF>"
+        '<PP_HEADER element="Si" pseudo_type="NC" functional="PBEsol" '
+        'relativistic="scalar" z_valence="4.0" rho_cutoff="192.0" />'
+        "</UPF>",
+        encoding="utf-8",
+    )
+
+    status, _out, err = run_add(
+        capsys,
+        str(source),
+        "--functional",
+        "PBEsol",
+        "--relativistic",
+        "SR",
+        "--accuracy",
+        "efficiency",
+    )
+
+    assert status == 2
+    assert "both wfc_cutoff and rho_cutoff" in err
+    assert not (installer.pseudo_root() / "local" / "mine-sr").exists()
+
+
+def test_delete_forgets_a_local_table(capsys, tmp_path):
+    source = tmp_path / "mine"
+    write_local_upf(source)
+    assert (
+        run_add(
+            capsys,
+            str(source),
+            "--functional",
+            "PBEsol",
+            "--relativistic",
+            "SR",
+            "--accuracy",
+            "efficiency",
+        )[0]
+        == 0
+    )
+
+    status, _out, _err = run_delete(capsys, "mine-sr")
+
+    assert status == 0
+    assert "mine-sr" not in load_tables()
 
 
 def test_delete_accepts_a_number(capsys):

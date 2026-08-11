@@ -19,6 +19,8 @@ from goldilocks_core.contracts import PathLike
 from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 from goldilocks_core.pseudo.table_registry import (
+    FILE_RELATIVISTIC,
+    LOCAL_PROVIDER,
     PseudoTable,
     default_table,
     load_tables,
@@ -35,6 +37,9 @@ LIST_COMMAND = "gl pp list"
 
 DELETE_COMMAND = "gl pp delete"
 """What a user runs to remove an installed table."""
+
+ADD_COMMAND = "gl pp add"
+"""What a user runs to add pseudopotentials Core cannot fetch."""
 
 
 class NoPseudopotentials(RuntimeError):
@@ -65,10 +70,6 @@ def is_installed(table: PseudoTable, root: Path | None = None) -> bool:
     return any(install_path(table, root).glob("*.upf", case_sensitive=False))
 
 
-_TABLE_TO_FILE_RELATIVISTIC = {"SR": "scalar", "FR": "full", "NR": "non-relativistic"}
-"""Registry vocabulary (whole-table) to UPF vocabulary (per-file), for the stamp."""
-
-
 def install(
     table: PseudoTable,
     *,
@@ -91,6 +92,12 @@ def install(
             )
         destination = sssp.install(
             table.record, table.upstream_table, root=root or pseudo_root(), http=http
+        )
+    elif table.provider == LOCAL_PROVIDER:
+        raise ProviderNotSupported(
+            f"{table.name} was added from {table.upstream_url}, not fetched, so "
+            f"there is nothing to install from. Add it again: "
+            f"`{ADD_COMMAND} {table.upstream_url}`"
         )
     else:
         raise ProviderNotSupported(
@@ -124,7 +131,7 @@ def _stamp_table_facts(destination: Path, table: PseudoTable) -> None:
     """
     sidecar = destination.parent / f"{destination.name}.json"
     data = json.loads(sidecar.read_text()) if sidecar.exists() else {}
-    data["_relativistic"] = _TABLE_TO_FILE_RELATIVISTIC[table.relativistic]
+    data["_relativistic"] = FILE_RELATIVISTIC[table.relativistic]
     data["_accuracy"] = table.accuracy
     sidecar.write_text(json.dumps(data, indent=2))
 
@@ -169,6 +176,11 @@ def uninstall(table: PseudoTable, root: Path | None = None) -> tuple[Path, ...]:
         else:
             path.unlink()
 
+    if table.provider == LOCAL_PROVIDER:
+        from goldilocks_core.pseudo.local import forget
+
+        forget(table.name)
+
     return removed
 
 
@@ -211,7 +223,7 @@ def require_installed(
         f"  from {default.upstream_url}).\n"
         f"  Cite: {default.citation}\n\n"
         f"  To see every table:      {AVAILABLE_COMMAND}\n"
-        "  To use one you already have:  --pseudo-root PATH"
+        f"  To add one you already have:  {ADD_COMMAND} PATH ..."
     )
 
 

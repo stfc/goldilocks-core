@@ -13,15 +13,23 @@ def write_attr_upf(
     functional: str,
     relativistic: str,
     z_valence: str,
+    wfc_cutoff: str | None = None,
+    rho_cutoff: str | None = None,
 ) -> Path:
     """Write a minimal attribute-style UPF fixture."""
+    cutoffs = ""
+    if wfc_cutoff is not None:
+        cutoffs += f' wfc_cutoff="{wfc_cutoff}"'
+    if rho_cutoff is not None:
+        cutoffs += f' rho_cutoff="{rho_cutoff}"'
     path.write_text(
         "<UPF>"
         f'<PP_HEADER element="{element}" '
         f'pseudo_type="{pseudo_type}" '
         f'functional="{functional}" '
         f'relativistic="{relativistic}" '
-        f'z_valence="{z_valence}" />'
+        f'z_valence="{z_valence}"'
+        f"{cutoffs} />"
         "</UPF>",
         encoding="utf-8",
     )
@@ -141,6 +149,52 @@ def test_parse_upf_metadata_falls_back_to_the_header_without_a_sidecar(
     metadata = parse_upf_metadata(pseudo_path)
 
     assert metadata.relativistic == "non-relativistic"
+
+
+def test_parse_upf_metadata_reads_a_header_cutoff_pair_without_a_sidecar(
+    tmp_path: Path,
+) -> None:
+    """Local tables have no provider report, so a declared pair is usable."""
+    source_set = tmp_path / "pseudopotentials" / "local" / "mine-sr"
+    source_set.mkdir(parents=True)
+    pseudo_path = write_attr_upf(
+        source_set / "Si.upf",
+        element="Si",
+        pseudo_type="NC",
+        functional="PBEsol",
+        relativistic="scalar",
+        z_valence="4.0",
+        wfc_cutoff="48.0",
+        rho_cutoff="192.0",
+    )
+
+    metadata = parse_upf_metadata(pseudo_path)
+
+    assert metadata.sssp_recommended_cutoff == {
+        "ecutwfc_ry": 48.0,
+        "ecutrho_ry": 192.0,
+    }
+
+
+def test_parse_upf_metadata_does_not_treat_rho_cutoff_alone_as_advice(
+    tmp_path: Path,
+) -> None:
+    """A lone rho_cutoff can be a generation parameter, not a recommendation."""
+    source_set = tmp_path / "pseudopotentials" / "local" / "mine-sr"
+    source_set.mkdir(parents=True)
+    pseudo_path = write_attr_upf(
+        source_set / "Si.upf",
+        element="Si",
+        pseudo_type="NC",
+        functional="PBEsol",
+        relativistic="scalar",
+        z_valence="4.0",
+        rho_cutoff="192.0",
+    )
+
+    metadata = parse_upf_metadata(pseudo_path)
+
+    assert metadata.sssp_recommended_cutoff is None
 
 
 def test_parse_upf_metadata_raises_for_missing_file(tmp_path: Path) -> None:

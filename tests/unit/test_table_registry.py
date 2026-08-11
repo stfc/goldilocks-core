@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import pytest
 
+from goldilocks_core.artifacts import cache
 from goldilocks_core.pseudo.table_registry import (
     ACTINIDES,
     PSEUDO_REGISTRY_ENV,
     default_table,
     load_tables,
+    local_registry_path,
     tables_covering,
 )
 
@@ -39,7 +41,7 @@ _SSSP = {
 
 @pytest.fixture(scope="module")
 def packaged():
-    return load_tables()
+    return load_tables(include_local=False)
 
 
 def test_the_packaged_registry_loads(packaged):
@@ -214,7 +216,7 @@ def test_an_explicit_path_overrides_the_packaged_registry(tmp_path):
     registry_file = tmp_path / "custom.toml"
     registry_file.write_text(_MINIMAL)
 
-    tables = load_tables(registry_file)
+    tables = load_tables(registry_file, include_local=False)
 
     assert set(tables) == {"only-one"}
     assert default_table(tables).elements == ("Si", "Ge")
@@ -225,7 +227,7 @@ def test_the_environment_overrides_the_packaged_registry(tmp_path, monkeypatch):
     registry_file.write_text(_MINIMAL)
     monkeypatch.setenv(PSEUDO_REGISTRY_ENV, str(registry_file))
 
-    assert set(load_tables()) == {"only-one"}
+    assert set(load_tables(include_local=False)) == {"only-one"}
 
 
 def test_a_registry_without_a_single_default_is_rejected(tmp_path):
@@ -233,7 +235,7 @@ def test_a_registry_without_a_single_default_is_rejected(tmp_path):
     registry_file.write_text(_MINIMAL.replace("default = true", ""))
 
     with pytest.raises(LookupError, match="exactly one table as default"):
-        default_table(load_tables(registry_file))
+        default_table(load_tables(registry_file, include_local=False))
 
 
 def test_every_functional_has_a_matching_table(packaged):
@@ -248,3 +250,32 @@ def test_names_encode_what_distinguishes_a_table(packaged):
     for table in packaged.values():
         assert table.functional.lower() in table.name.lower()
         assert table.name.endswith(suffix[table.relativistic])
+
+
+def test_local_registry_is_merged_after_the_packaged_registry(tmp_path, monkeypatch):
+    """`gl pp add` entries should list and select like installed tables."""
+    monkeypatch.setenv(cache.CACHE_ENV, str(tmp_path / "cache"))
+    path = local_registry_path()
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        """
+[tables."mine-sr"]
+provider = "local"
+upstream_table = "mine-sr"
+version = "local"
+functional = "PBEsol"
+relativistic = "SR"
+accuracy = "efficiency"
+licence = "not stated"
+upstream_url = "/tmp/mine"
+citation = "not stated"
+elements = ["Si"]
+installed_bytes = 12
+""".strip(),
+        encoding="utf-8",
+    )
+
+    tables = load_tables()
+
+    assert list(tables)[-1] == "mine-sr"
+    assert tables["mine-sr"].provider == "local"

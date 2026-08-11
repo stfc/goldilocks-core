@@ -6,7 +6,7 @@ pseudopotentials come from, how they are laid out on disk, how selection
 reads that layout, how to add a new table to the registry, and how to add an
 entirely new provider.
 
-## Two ways to get pseudopotentials onto disk
+## Three ways to get pseudopotentials onto disk
 
 **`gl pp install`** fetches a table from a small built-in registry
 (`pseudo_registry.toml`) directly from its publisher -- PseudoDojo or the
@@ -18,15 +18,25 @@ citation, rather than downloading anything on your behalf.
 
 **`--pseudo-root PATH`** points at pseudopotentials you already have --
 hand-downloaded, generated yourself, or installed by some other tool. Any
-library works, not just the ones Core knows how to install.
+library works, not just the ones Core knows how to install. This is a
+per-command route: Core reads that directory for this run, and records nothing
+about it.
 
-Both routes converge on the same directory contract below, and both are read
+**`gl pp add PATH ...`** copies pseudopotentials you already have into Core's
+default pseudopotential root, writes the cutoff/selection sidecar beside them,
+and records the table in a user registry under the cache. Use this for
+in-house or otherwise private tables that should not be added to Core's
+packaged registry. The command is non-interactive: missing table-level flags
+are argparse errors, and missing per-file facts are parse errors.
+
+All routes converge on the same directory contract below, and all are read
 by the same parser (`goldilocks_core.pseudo.pp_registry.load_pseudo_metadata`).
 Once files are on disk, Core cannot tell -- and does not need to tell --
 which route put them there.
 
 ```bash
 gl pp install                              # the default table
+gl pp add /path/to/mine --functional PBEsol --relativistic SR --accuracy efficiency
 gl generate structure.cif                  # uses whatever gl pp installed
 gl generate structure.cif --pseudo-root /path/to/your/pseudopotentials
 ```
@@ -73,6 +83,14 @@ SSSP-shaped, and every registered table now writes one):
 with no sidecar, selection still works -- cutoffs simply come back
 unrecommended (`sssp_recommended_cutoff: null`) and relativistic mode falls
 back to whatever the individual UPF header claims.
+
+`gl pp add` writes the same shape of sidecar, but it never accepts
+element-level flags. The table-level facts come from the command line:
+functional, relativistic treatment, accuracy tier, licence and citation. The
+element-level facts come from `parse_upf.py`: element, filename, pseudo type,
+valence charge and cutoffs. If a UPF file does not declare both `wfc_cutoff`
+and `rho_cutoff`, the command fails before copying anything. A lone
+`rho_cutoff` is not accepted as a recommendation.
 
 ### Where installed tables actually live
 
@@ -247,6 +265,7 @@ gl pp list                   # what is actually on disk, and where
 gl pp install                # install the default
 gl pp install NAME|N ...     # install tables by name or by listing number
 gl pp install --all          # install every table (307 MB down, 908 MB on disk)
+gl pp add PATH --functional PBEsol --relativistic SR --accuracy efficiency
 gl pp delete NAME|N ...      # remove installed tables from disk
 ```
 
@@ -258,6 +277,26 @@ outright if any argument names nothing, rather than half-running. There is no
 confirmation prompt, for the same reason installing has none: the command is
 the decision, and nothing it removes is anything `gl pp install` cannot put
 back.
+
+`gl pp add` is for pseudopotentials Core cannot fetch and should not ship. It
+copies `PATH/*.upf` to:
+
+```
+<cache>/pseudopotentials/local/<name>-sr/
+```
+
+and writes:
+
+```
+<cache>/pseudopotentials/local/<name>-sr.json
+<cache>/pseudopotentials/local_registry.toml
+```
+
+The default name is `PATH`'s directory name with the relativistic suffix
+appended if needed. Public tables other users would also want -- for example a
+new SSSP or PseudoDojo release -- should become an issue for the packaged
+registry instead, because Core measures and pins those tables' sizes and
+digests for everyone.
 
 A table can be named in full or given as its number from `gl pp available`,
 which is the point of the number -- the names run to 31 characters. The

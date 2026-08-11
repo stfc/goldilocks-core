@@ -211,6 +211,7 @@ def _normalize_text_header_keys(header_data: dict[str, Any]) -> dict[str, Any]:
     if "Suggested cutoff for wfc and rho" in normalized:
         cutoff = normalized["Suggested cutoff for wfc and rho"]
         if isinstance(cutoff, dict):
+            normalized["wfc_cutoff"] = cutoff.get("ecutwfc_ry")
             normalized["rho_cutoff"] = cutoff.get("ecutrho_ry")
 
     if "Number of Wavefunctions, Number of Projectors" in normalized:
@@ -407,6 +408,39 @@ def _get_sssp_info(
     )
 
 
+_CUTOFF_KEYS = (("wfc_cutoff", "rho_cutoff"), ("ecutwfc", "ecutrho"))
+"""Header spellings of a recommended cutoff pair, most standard first."""
+
+
+def _header_cutoff(header_data: dict[str, Any]) -> dict[str, float] | None:
+    """Return the cutoff pair a UPF header recommends, if it declares one.
+
+    Read only as a fallback behind the sidecar, which carries what the library
+    that published a table converged rather than what one generator happened to
+    write into a file. It exists for pseudopotentials Core did not install --
+    added with ``gl pp add``, or pointed at with ``--pseudo-root`` -- which have
+    no sidecar and would otherwise yield no cutoff at all.
+
+    Both halves are required. A header declaring ``rho_cutoff`` alone does not
+    qualify, and PseudoDojo's is exactly that: a generation parameter recorded
+    beside ``mesh_size`` and ``l_max``, not a converged-basis recommendation. It
+    does not even order correctly across elements -- Si's exceeds O's while Si
+    needs the smaller basis -- so demanding a pair keeps that number from being
+    mistaken for advice.
+    """
+    for wfc_key, rho_key in _CUTOFF_KEYS:
+        try:
+            wfc = _to_float(header_data.get(wfc_key))
+            rho = _to_float(header_data.get(rho_key))
+        except ValueError:
+            continue
+
+        if wfc and rho and wfc > 0 and rho > 0:
+            return {"ecutwfc_ry": wfc, "ecutrho_ry": rho}
+
+    return None
+
+
 def parse_upf_metadata(path: str | Path) -> PseudoMetadata:
     """Parse one UPF file into a PseudoMetadata object."""
     path = Path(path)
@@ -447,7 +481,7 @@ def parse_upf_metadata(path: str | Path) -> PseudoMetadata:
         pseudo_info=header_data,
         is_sssp=is_sssp,
         source_pseudopotential=source_pseudopotential,
-        sssp_recommended_cutoff=sssp_recommended_cutoff,
+        sssp_recommended_cutoff=sssp_recommended_cutoff or _header_cutoff(header_data),
         accuracy=table_accuracy,
     )
 

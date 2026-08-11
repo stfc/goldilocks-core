@@ -47,6 +47,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Comma-separated record type ids to compute.",
     )
 
+    serve = subparsers.add_parser(
+        "serve",
+        help="Run an optional HTTP or MCP transport.",
+    )
+    transports = serve.add_subparsers(dest="transport", required=True)
+    http = transports.add_parser("http", help="Run the HTTP transport.")
+    http.add_argument("--host", default="127.0.0.1")
+    http.add_argument("--port", type=int, default=8000)
+    transports.add_parser("mcp", help="Run the MCP stdio transport.")
+
     examples = subparsers.add_parser(
         "examples",
         help="Inspect the example structures bundled with the package.",
@@ -67,6 +77,9 @@ def main() -> None:
 
     if args.command == "examples":
         print(structures_path())
+        return
+    if args.command == "serve":
+        _serve(args)
         return
 
     try:
@@ -227,6 +240,19 @@ def _parse_outputs(value: str) -> tuple[type, ...]:
     if any(not name for name in names):
         raise ValueError("--outputs must contain comma-separated record type ids")
     return resolve_output_types(names)
+
+
+def _serve(args: argparse.Namespace) -> None:
+    """Run the selected optional transport."""
+    if args.transport == "http":
+        from goldilocks_core.server.http import serve
+
+        serve(host=args.host, port=args.port)
+        return
+
+    from goldilocks_core.server.mcp import serve
+
+    serve()
 
 
 def _model_spec_from_args(args: argparse.Namespace) -> ModelSpec | None:

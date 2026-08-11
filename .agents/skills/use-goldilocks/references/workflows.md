@@ -1,28 +1,25 @@
-# Goldilocks Workflows
+# Goldilocks workflows
 
 Use these patterns before reading implementation files.
 
-## Inspect available structures
+## Inspect structures
 
-```bash
-find PATH -maxdepth 2 -type f \( -iname '*.cif' -o -iname '*.mcif' \) -print
-```
+Read candidate periodic files with pymatgen and report parse failures before
+running Core:
 
-To summarize CIFs with pymatgen:
-
-```bash
-uv run python - <<'PY'
+```python
 from pathlib import Path
 from pymatgen.core import Structure
 
-for path in sorted(Path('PATH').glob('*.cif')):
+for path in sorted(Path("structures").glob("*.cif")):
     try:
         structure = Structure.from_file(path)
-        elements = sorted(element.symbol for element in structure.composition.elements)
+        elements = sorted(
+            element.symbol for element in structure.composition.elements
+        )
         print(path, structure.composition.reduced_formula, elements, len(structure))
-    except Exception as exc:
-        print(path, 'ERROR', exc)
-PY
+    except (OSError, ValueError) as error:
+        print(path, "ERROR", error)
 ```
 
 ## Load pseudopotential metadata
@@ -30,107 +27,90 @@ PY
 ```python
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
-pseudo_metadata = tuple(load_pseudo_metadata('pseudos'))
-```
-
-Goldilocks parses local `.UPF` files. Check whether parsed metadata includes complete cutoffs before expecting generation to work:
-
-```bash
-uv run python - <<'PY'
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
-
-for metadata in load_pseudo_metadata('pseudos'):
+pseudo_metadata = tuple(load_pseudo_metadata("pseudos"))
+for pseudo in pseudo_metadata:
     print(
-        metadata.element,
-        metadata.filename,
-        metadata.functional,
-        metadata.pseudo_type,
-        metadata.relativistic,
-        metadata.sssp_recommended_cutoff,
+        pseudo.element,
+        pseudo.filename,
+        pseudo.functional,
+        pseudo.pseudo_type,
+        pseudo.relativistic,
+        pseudo.sssp_recommended_cutoff,
     )
-PY
 ```
 
-If cutoffs are missing, do not let the generator invent them. Get them from a trusted pseudo-library table or operator-provided policy and make that provenance explicit in the response.
+Generation needs a filename and complete `ecutwfc_ry`/`ecutrho_ry` values for
+every selected element. Never invent missing cutoffs; obtain them from a trusted
+library table or explicit operator policy and preserve provenance.
 
-## Numbers only: run through Select, not Generate
-
-Use this for manually writing an input file from Goldilocks-selected values.
+## Complete recommendation
 
 ```python
-from goldilocks_core import CalculationHints, CalculationIntent, recommend
+from goldilocks_core import (
+    CalculationHints,
+    CalculationIntent,
+    CoreService,
+    PresetRequest,
+)
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
-pseudo_metadata = tuple(load_pseudo_metadata('pseudos'))
-
-result = recommend(
-    'structure.cif',
+request = PresetRequest(
+    structure="structure.cif",
     intent=CalculationIntent(
-        code='quantum_espresso',
-        task='scf_single_point',
-        functional='PBE',
-        pseudo_mode='efficiency',
+        code="quantum_espresso",
+        task="scf_single_point",
+        functional="PBE",
+        pseudo_mode="efficiency",
     ),
     hints=CalculationHints(
         k_spacing=0.2,
         # k_grid=(4, 4, 4),  # explicit grid wins over spacing
-        # pseudo_type='NC',
-        # smearing_type='cold',
+        # pseudo_type="NC",
+        # smearing_type="cold",
         # smearing_width_ry=0.01,
     ),
-    pseudo_metadata=pseudo_metadata,
+    pseudo_metadata=tuple(load_pseudo_metadata("pseudos")),
 )
 
+with CoreService() as core:
+    result = core.recommend(request)
+
 print(result.analysis.reduced_formula)
-print(result.selection.k_points.grid)
-print(result.selection.k_points.shift)
+print(result.k_points.grid, result.k_points.shift)
 print(result.selection.pseudopotentials)
 print(result.advice.smearing)
 print(result.advice.convergence)
 print(result.warnings)
 ```
 
-Extract:
+Extract cutoffs from each `PseudopotentialSelection` and use the maxima across
+elements when inspecting a generated calculation.
 
-- `result.selection.k_points.grid`
-- `result.selection.k_points.shift`
-- one `result.selection.pseudopotentials` record per element
-- max `ecutwfc_ry` and `ecutrho_ry` across selected pseudopotentials
-- `result.advice.smearing`
-- `result.advice.magnetism` and `result.advice.spin_orbit`
-- `result.advice.convergence`
-
-## Generate input files in memory
+## Generate files in memory
 
 ```python
-from goldilocks_core import CalculationHints, generate
+from goldilocks_core import CalculationHints, CoreService, PresetRequest
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
-result = generate(
-    'structure.cif',
+request = PresetRequest(
+    structure="structure.cif",
     hints=CalculationHints(k_grid=(4, 4, 4)),
-    pseudo_metadata=tuple(load_pseudo_metadata('pseudos')),
+    pseudo_metadata=tuple(load_pseudo_metadata("pseudos")),
 )
+
+with CoreService() as core:
+    result = core.generate(request)
 
 for generated_file in result.generated_files:
     print(generated_file.path)
     print(generated_file.content)
 ```
 
-Use this when you want to inspect generated text but do not need a directory yet.
-
-## Write a bundle directory
+## Publish a bundle directory
 
 ```python
-from goldilocks_core import CalculationHints, write_bundle
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
-
-result = write_bundle(
-    'structure.cif',
-    'run-dir',
-    hints=CalculationHints(k_spacing=0.2),
-    pseudo_metadata=tuple(load_pseudo_metadata('pseudos')),
-)
+with CoreService() as core:
+    result = core.generate(request, output_dir="run-dir")
 
 print(result.bundle.path)
 print(result.bundle.manifest)
@@ -139,7 +119,7 @@ print(result.bundle.manifest)
 CLI equivalent:
 
 ```bash
-uv run goldilocks-core bundle structure.cif \
+uv run goldilocks-core generate structure.cif \
     --pseudo-root pseudos \
     --functional PBE \
     --k-spacing 0.2 \
@@ -147,7 +127,7 @@ uv run goldilocks-core bundle structure.cif \
     --json
 ```
 
-Bundle layout:
+The destination must not exist. The published layout is:
 
 ```text
 run-dir/
@@ -156,63 +136,100 @@ run-dir/
     └── qe.in
 ```
 
-If the generated QE file uses `pseudo_dir = './pseudo'`, copy or stage selected UPFs into that directory before running QE.
+If the QE file uses `pseudo_dir = './pseudo'`, stage the selected UPFs there
+before running QE; Core does not copy pseudopotential libraries.
 
-## Shared job runner
-
-Use the shared runner when you need a single data-only request/result model for Python, CLI, or future HTTP mapping.
+## Query selected records
 
 ```python
-from goldilocks_core import CalculationHints, CoreJobRequest, run_core_job
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
+from goldilocks_core import CalculationHints, CoreService, QueryRequest
+from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
 
-request = CoreJobRequest(
-    structure='structure.cif',
-    hints=CalculationHints(k_spacing=0.2),
-    pseudo_metadata=tuple(load_pseudo_metadata('pseudos')),
-    mode='recommend',  # recommend, generate, or bundle
-    output_dir=None,
+request = QueryRequest(
+    structure="structure.cif",
+    outputs=(StructureAnalysisRecord, KPointSelection),
+    hints=CalculationHints(k_grid=(4, 4, 4)),
 )
 
-result = run_core_job(request)
-print(result.to_dict())
+with CoreService() as core:
+    records = core.compute(request)
+
+print(records[StructureAnalysisRecord])
+print(records[KPointSelection])
 ```
 
-## ML kmesh backend
+CLI equivalent:
 
-The request stays data-only. Swap the Kmesh stage through `Pipeline`:
+```bash
+uv run goldilocks-core compute structure.cif \
+    --outputs analysis,k_points \
+    --k-grid 4 4 4
+```
+
+## One-call runner
+
+Use the convenience entry points only when model reuse and discovery are not
+needed:
 
 ```python
+from goldilocks_core import PresetRequest, QueryRequest, query_records, run_core_job
+from goldilocks_core.contracts import StructureAnalysisRecord
 
-from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
-from goldilocks_core.advisors import ml_kmesh_advisor
+result = run_core_job(
+    PresetRequest(structure="structure.cif", mode="recommend")
+)
+records = query_records(
+    QueryRequest(structure="structure.cif", outputs=(StructureAnalysisRecord,))
+)
+```
+
+## Local kmesh model
+
+Put the model specification on the request; do not replace a pipeline object:
+
+```python
+from goldilocks_core import CoreService, PresetRequest
 from goldilocks_core.contracts import ModelSpec
 
 spec = ModelSpec(
-    name='local-kmesh-model',
-    version='v1',
-    model_type='random_forest',
-    target='k_index',
-    feature_set='cslr',
-    source='local',
-    location='models/kmesh.joblib',
+    name="local-kmesh-model",
+    version="v1",
+    model_type="random_forest",
+    target="k_index",
+    feature_set="cslr",
+    source="local",
+    location="models/kmesh.joblib",
 )
 
-pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
-result = run_core_job(CoreJobRequest(structure='structure.cif'), pipeline=pipeline)
-print(result.selection.k_points.grid)
+with CoreService() as core:
+    result = core.recommend(
+        PresetRequest(structure="structure.cif", kmesh_model=spec)
+    )
+print(result.k_points.grid)
 ```
 
-## Manual QE writing checklist
+## Optional transports
 
-When writing the input yourself after `recommend`, include:
+```bash
+uv sync --all-extras
+uv run goldilocks-core serve http --host 127.0.0.1 --port 8000
+uv run goldilocks-core serve mcp
+```
 
-- `&CONTROL`: `calculation='scf'`, `pseudo_dir`, `outdir`, stress/force flags if desired.
-- `&SYSTEM`: `ibrav=0`, `nat`, `ntyp`, cutoffs, occupations, spin/SOC flags.
-- `&ELECTRONS`: convergence threshold, mixing beta, maximum SCF steps.
-- `ATOMIC_SPECIES`: element, mass, selected pseudo filename.
-- `CELL_PARAMETERS angstrom` from the loaded structure lattice.
-- `ATOMIC_POSITIONS crystal` or `angstrom` from the loaded structure.
+HTTP exposes `/recommend`, `/generate`, `/compute`, `/tasks`, `/codes`,
+`/models`, and `/health`. MCP exposes matching operation and discovery tools
+over stdio. Both reuse one process-owned `CoreService`.
+
+## Manual QE writing check
+
+When writing the input yourself after recommendation, include:
+
+- `&CONTROL`: `calculation='scf'`, `pseudo_dir`, `outdir`, stress/force flags;
+- `&SYSTEM`: `ibrav=0`, `nat`, `ntyp`, cutoffs, occupations, spin/SOC;
+- `&ELECTRONS`: convergence threshold, mixing beta, maximum SCF steps;
+- `ATOMIC_SPECIES`: element, mass, selected pseudo filename;
+- `CELL_PARAMETERS angstrom` from the loaded lattice;
+- `ATOMIC_POSITIONS crystal` or `angstrom` from the structure;
 - `K_POINTS automatic` from selected grid and shift.
 
 See `qe-scf-template.md` for a compact template.

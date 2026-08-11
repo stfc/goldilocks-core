@@ -12,6 +12,13 @@ All notable changes to goldilocks-core are documented here.
 - A typed DAG executor with frozen stage/task/preset specifications, registered SCF presets, and `CoreRecords` query results.
 - `CoreRuntime` as the explicit lifecycle owner for reusable kmesh and metallicity models.
 - `query_records(request)` for explicit record queries; `run_core_job` runs presets only.
+- HTTP and MCP transports behind optional `[http]` and `[mcp]` extras: `POST /recommend`, `/generate`, `/compute` endpoints and matching MCP tools, plus `/tasks`, `/codes`, `/models` discovery. HTTP reports request/domain failures as deliberate 4xx responses while unexpected exceptions remain 500 errors.
+- `CoreService` as the unified backend runtime composing `CoreRuntime` (model lifecycle) and `TaskDispatcher` (dispatch); the CLI, HTTP, and MCP are thin entrypoints over it.
+- Shared `from_dict` deserializer (`server/request.py`) turning a JSON body into a `PresetRequest` or `QueryRequest`, including round-trip support for serialized `pymatgen.Structure` values.
+- Stable backend-owned record ids (`record_type_id`, `RECORD_TYPE_IDS`, `resolve_output_types`, `OUTPUT_RECORD_TYPES`) so the wire format never leaks Python class names.
+- `describe_task` and `TaskGraphDescription` for transport-safe task descriptions; `TaskSpec`/`StageSpec` carry their own transport metadata.
+- CLI `serve http`/`serve mcp` subcommands.
+- `QrfKpointsConfig.metallicity_model` (a `ModelSpec`) so the metallicity classifier is discoverable.
 
 ### Changed
 
@@ -19,8 +26,9 @@ All notable changes to goldilocks-core are documented here.
 - Loaded-model quantiles are checked before QRF confidence is reported.
 - Job-level warnings now include de-duplicated scientific caveats from Advise as well as Analyze, Kmesh, and Select.
 - Bundle output uses a straightforward no-overwrite directory writer.
+- MCP tool schemas reject unknown root arguments, and CI installs all optional extras before running the transport tests.
 - Default exchange-correlation functional changed from PBE to PBEsol. This changes generated inputs and the pseudopotentials selected on a default run; pass `--functional PBE` to restore the previous behaviour.
-- `run_core_job` now delegates to `CoreRuntime`; the runtime executes the minimal SCF subgraph needed by the selected preset or record query.
+- `run_core_job` and `query_records` delegate through a short-lived `CoreService`; reusable applications and both servers keep one service alive for model lifecycle and task dispatch.
 - K-points are resolved by `resolve_kpoints(structure, hints, backend)`; the `KMeshAdvisor` signature is `(Structure) -> KPointSelection`.
 - CLI `--model` now sets the request's `kmesh_model` (a `ModelSpec` on `PresetRequest`/`QueryRequest`) instead of swapping a `Pipeline` backend.
 - Every `src/**/__init__.py` is now an export-only facade; logic moved to named sibling modules (`ml/qrf/inference`, `ml/kindex/inference`, `kmesh/resolve`, `advice/parameters`, `examples/structures`). Public import paths are preserved by re-exports.
@@ -35,6 +43,11 @@ All notable changes to goldilocks-core are documented here.
 - The `runtime` package facade is task-agnostic: `SCF_TASK`, `ScfContext`, and `assemble_core_result` are imported from `goldilocks_core.runtime.scf`, not re-exported by `goldilocks_core.runtime`.
 - The SCF task is registered as the default lazily on first dispatch, so `import goldilocks_core.runtime` no longer eagerly loads the stage implementations (29 vs 50 `goldilocks_core` submodules at import).
 - `CoreJobRequest` split into `PresetRequest` (preset run: `mode`/`output_dir`) and `QueryRequest` (explicit query: `outputs` required at construction). `run_core_job` takes `PresetRequest`; `query_records` takes `QueryRequest`. The old cross-field runtime validation is gone — each request type carries only its own selector, so the invariant is structural.
+- `CoreRecords.to_dict` and `QueryRequest.to_dict` now key outputs by stable record ids (`analysis`, `advice`, `k_points`, `selection`, `generated_files`) instead of Python class names.
+- CLI `compute --outputs` now takes stable record type ids; `run_core_job`/`query_records` route through a short-lived `CoreService`.
+- `TaskSpec` gains `name`/`description`/`revision`/`selectable_outputs`; `StageSpec` gains `id`/`name`/`description`, read by `describe_task`.
+- `TaskDispatcher.describe_tasks()` and `CoreRuntime.describe_models()` expose the discovery surfaces `CoreService` aggregates.
+- `model_registry.toml` `[defaults.kpoints.metallicity]` gains `name`/`version`/`model_type`/`target`/`feature_set` for the metallicity model spec.
 
 
 ### Fixed

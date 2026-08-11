@@ -52,8 +52,8 @@ K_POINTS automatic
 ```text
 site_count          -> len(structure)
 element_count       -> len(structure.composition.elements)
-k-grid              -> result.selection.k_points.grid
-k-shift             -> result.selection.k_points.shift
+k-grid              -> result.k_points.grid
+k-shift             -> result.k_points.shift
 pseudos             -> result.selection.pseudopotentials
 ecutwfc / ecutrho   -> max selected cutoffs across elements
 smearing/degauss    -> result.advice.smearing
@@ -67,9 +67,11 @@ warnings            -> result.warnings
 ```python
 from pymatgen.core import Structure
 from pymatgen.core.periodic_table import Element
+from goldilocks_core import CoreService, PresetRequest
 
-structure = Structure.from_file('structure.cif')
-result = recommend(...)
+structure = Structure.from_file("structure.cif")
+with CoreService() as core:
+    result = core.recommend(PresetRequest(structure=structure))
 
 pseudo_by_element = {
     pseudo.element: pseudo for pseudo in result.selection.pseudopotentials
@@ -77,8 +79,8 @@ pseudo_by_element = {
 elements = tuple(sorted(element.symbol for element in structure.composition.elements))
 ecutwfc = max(pseudo.ecutwfc_ry or 0.0 for pseudo in pseudo_by_element.values())
 ecutrho = max(pseudo.ecutrho_ry or 0.0 for pseudo in pseudo_by_element.values())
-grid = result.selection.k_points.grid
-shift = result.selection.k_points.shift
+grid = result.k_points.grid
+shift = result.k_points.shift
 
 for element in elements:
     pseudo = pseudo_by_element[element]

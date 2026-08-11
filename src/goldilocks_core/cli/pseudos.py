@@ -40,13 +40,13 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:
     commands = pseudos.add_subparsers(dest="pp_command", required=True)
 
     available = commands.add_parser(
-        "available", help="Show every table ore can install."
+        "available", help="Show pseudopotential tables goldilocks-core can install."
     )
     available.add_argument(
         "-v",
         "--verbose",
         action="store_true",
-        help="Also show source, version, functional, coverage and size.",
+        help="Also show upstream version and element coverage.",
     )
 
     commands.add_parser("list", help="Show installed tables and where they are.")
@@ -91,8 +91,8 @@ def _available(*, verbose: bool = False) -> int:
 
     A name already encodes provider, functional, accuracy and relativistic
     treatment, so the default listing is names alone -- enough to pick one and
-    pass it to ``gl pp install``. ``-v`` adds the facts a name cannot carry:
-    where it is fetched from, which upstream version, and what it covers.
+    pass it to ``gl pp install``. ``-v`` adds the two facts a name cannot
+    carry: which upstream version, and what it covers.
     """
     registry = load_tables()
     default = default_table(registry)

@@ -15,6 +15,7 @@ from goldilocks_core.contracts import (
     ParameterAdvice,
     SelectionRecord,
 )
+from goldilocks_core.generation.errors import GenerationError
 from goldilocks_core.generation.qe.scf import write_qe_scf
 
 Writer = Callable[
@@ -36,15 +37,14 @@ _WRITERS: tuple[tuple[CodeName, CalcTask, Writer], ...] = (
 def writer_for(code: CodeName, task: CalcTask) -> Writer:
     """Return the writer for ``(code, task)``.
 
-    Raises:
-        ValueError: If no writer is registered for the requested pair.
+    GenerationError: If no writer is registered for the requested pair.
     """
     for entry_code, entry_task, writer in _WRITERS:
         if entry_code == code and entry_task == task:
             return writer
     pairs = sorted({(code, task) for code, task, _ in _WRITERS})
     available = ", ".join(f"{code}/{task}" for code, task in pairs)
-    raise ValueError(
+    raise GenerationError(
         f"No input writer registered for code={code!r}, task={task!r}. "
         f"Available: {available}"
     )
@@ -79,8 +79,7 @@ def generate_inputs(
     Returns:
         Generated input files for the requested code/task.
 
-    Raises:
-        ValueError: If no writer is registered for the requested code/task,
+        GenerationError: If no writer is registered for the requested code/task,
             or if the target writer rejects its inputs.
     """
     return writer_for(intent.code, intent.task)(

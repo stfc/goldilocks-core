@@ -49,6 +49,12 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:
         nargs="*",
         help="Table names. Defaults to the one Core uses unprompted.",
     )
+    install.add_argument(
+        "--all",
+        action="store_true",
+        help="Install every registered table. A flag rather than a table named "
+        "'all', so it can never collide with a real name.",
+    )
 
 
 def run(args: argparse.Namespace) -> int:
@@ -57,7 +63,7 @@ def run(args: argparse.Namespace) -> int:
         return _available(verbose=args.verbose)
     if args.pp_command == "list":
         return _installed()
-    return _install(args.tables)
+    return _install(args.tables, everything=args.all)
 
 
 def _available(*, verbose: bool = False) -> int:
@@ -116,10 +122,21 @@ def _installed() -> int:
     return 0
 
 
-def _install(names: list[str]) -> int:
-    """Install the named tables, or the default when none are named."""
+def _install(names: list[str], *, everything: bool = False) -> int:
+    """Install the named tables, the default, or everything registered."""
     registry = load_tables()
-    wanted = names or [default_table(registry).name]
+
+    if everything and names:
+        print(
+            "error: --all installs every table; do not also name one",
+            file=sys.stderr,
+        )
+        return 2
+
+    if everything:
+        wanted = list(registry)
+    else:
+        wanted = names or [default_table(registry).name]
 
     unknown = [name for name in wanted if name not in registry]
     if unknown:
@@ -129,6 +146,9 @@ def _install(names: list[str]) -> int:
             file=sys.stderr,
         )
         return 2
+
+    if everything:
+        _announce_total(registry, wanted)
 
     for name in wanted:
         table = registry[name]
@@ -150,6 +170,26 @@ def _install(names: list[str]) -> int:
         print(f"  installed to {destination}\n")
 
     return 0
+
+
+def _announce_total(registry: dict[str, PseudoTable], wanted: list[str]) -> None:
+    """Quote the whole bill before the first byte of a bulk install.
+
+    Naming one table is a decision about a known quantity; ``--all`` is not,
+    and the total is most of an hour on a slow connection. Every other install
+    path says what it costs first, so this one has to as well.
+    """
+    outstanding = [
+        registry[name] for name in wanted if not installer.is_installed(registry[name])
+    ]
+    if not outstanding:
+        return
+
+    total = sum(table.transfer_bytes or 0 for table in outstanding)
+    print(
+        f"Installing {len(outstanding)} tables, {total / 1e6:.0f} MB in total, "
+        "from the providers listed below.\n"
+    )
 
 
 def _announce(table: PseudoTable) -> None:

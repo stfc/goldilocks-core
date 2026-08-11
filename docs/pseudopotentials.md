@@ -119,7 +119,7 @@ sssp-pbesol-efficiency-sr
 so `gl pp available` tells you SR from FR by reading the name, without
 opening the TOML.
 
-### Current catalogue (12 tables)
+### Current catalogue (15 tables)
 
 A name encodes provider, functional, accuracy and relativistic treatment, so
 the default listing is names alone -- enough to pick one and install it:
@@ -155,16 +155,26 @@ pseudodojo-pbesol-efficiency-fr  pseudodojo     0.4      PBEsol  FR   efficiency
 pseudodojo-pbesol-precision-fr   pseudodojo     0.4      PBEsol  FR   precision          71   1   0   7.1 MB  uninstalled
 pseudodojo-pbe-efficiency-fr     pseudodojo     0.4      PBE     FR   efficiency         70   0   0   6.6 MB  uninstalled
 pseudodojo-pbe-precision-fr      pseudodojo     0.4      PBE     FR   precision          72   2   0   7.3 MB  uninstalled
+sssp-pbe-efficiency-sr           materialscloud 1.3.0    PBE     SR   efficiency        103  15  15  59.5 MB  uninstalled
+sssp-pbe-precision-sr            materialscloud 1.3.0    PBE     SR   precision         103  15  15  63.0 MB  uninstalled
 sssp-pbesol-efficiency-sr        materialscloud 1.3.0    PBEsol  SR   efficiency        103  15  15  60.5 MB  uninstalled
+sssp-pbesol-precision-sr         materialscloud 1.3.0    PBEsol  SR   precision         103  15  15  63.9 MB  uninstalled
+
+  `gl pp install` with no name installs pseudodojo-pbesol-efficiency-sr
+  install a specific one with `gl pp install NAME`
 ```
 
 The default is `pseudodojo-pbesol-efficiency-sr` -- cheapest, cleanest licence
 (CC-BY-4.0, PseudoDojo redistributes nothing GPL), PBEsol. Both listings name
 it in their footer rather than marking it with a symbol.
 
-**Why 12, not aiida-pseudo's 13.** aiida-pseudo's PseudoDojo family offers 13
-configurations; SSSP is a separate, uncounted 13th-and-beyond family entirely.
-Of PseudoDojo's 13, Core registers 11 and excludes
+**Why 15: 11 PseudoDojo plus all 4 SSSP.** aiida-pseudo's PseudoDojo family
+offers 13 configurations; SSSP is a separate family it does not count.
+SSSP 1.3.0 publishes four tables (PBE and PBEsol, each efficiency and
+precision), all covering the same 103 elements, and Core registers all four --
+registering only PBEsol left a PBE calculation on an f-element with no
+candidate at all, since lanthanides and actinides are routed to SSSP
+unconditionally. Of PseudoDojo's 13, Core registers 11 and excludes
 `nc-sr-05_pbe_{standard,stringent}`: both ship 72 pseudopotentials but publish
 `.djrepo` cutoff hints for only 61 of them. Fetching both archives directly
 shows the 11 missing elements are exactly Ba, Bi, I, Pb, Po, Rb, Rn, S, Te,
@@ -212,10 +222,11 @@ corresponding PBE pseudopotentials' input parameters *and* their suggested
 cutoffs, were "not explicitly tested with the SSSP protocol", and that its
 authors "do not guarantee correctness of simulations carried out with the
 SSSP PBEsol library". This is load-bearing here: Core's default functional is
-PBEsol, the only registered SSSP table is PBEsol, and lanthanides/actinides
-are forced onto SSSP -- so the default path for an f-element structure lands
-on a library its own publisher does not vouch for. In v2.0 this is explicit
-in the data as well: the PBEsol rows link to the *same* PBE cutoff file.
+PBEsol and lanthanides/actinides are forced onto SSSP, so the default path for
+an f-element structure lands on a library its own publisher does not vouch
+for. In v2.0 this is explicit in the data as well: the PBEsol rows link to the
+*same* PBE cutoff file. The `sssp-pbe-*` tables are the tested ones; passing
+`--functional PBE` is what gets you onto them.
 
 ## Installing: `gl pp`
 
@@ -224,7 +235,14 @@ gl pp available            # the names of every table Core can install
 gl pp available -v         # also source, version, functional, coverage, size
 gl pp list                 # what is actually on disk, and where
 gl pp install [NAME ...]   # install the default, or named tables
+gl pp install --all        # install every registered table (~307 MB)
 ```
+
+`--all` is a flag rather than a table named `all`, so it can never collide
+with a real name, and because a glob (`gl pp install '*'`) would be rewritten
+by the shell before Core ever saw it. It quotes the total transfer before
+fetching anything, and refuses to also take a name -- the two spellings mean
+different things and silently honouring one would be worse than an error.
 
 `gl pp install` always prints the licence, upstream URL, citation, and any
 table-specific note *before* transferring a byte -- a user who just installed

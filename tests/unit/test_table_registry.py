@@ -28,6 +28,15 @@ default = true
 """
 
 
+_SSSP = {
+    "sssp-pbe-efficiency-sr",
+    "sssp-pbe-precision-sr",
+    "sssp-pbesol-efficiency-sr",
+    "sssp-pbesol-precision-sr",
+}
+"""Every SSSP table, which all cover exactly the same elements."""
+
+
 @pytest.fixture(scope="module")
 def packaged():
     return load_tables()
@@ -98,13 +107,35 @@ def test_the_lanthanide_table_changes_the_functional(packaged):
     assert lanthanide.functional != default.functional
 
 
-def test_actinides_come_only_from_the_table_with_encumbered_licensing(packaged):
+def test_actinides_come_only_from_the_library_with_encumbered_licensing(packaged):
     """Reachable, but not without the user knowing what lands on their disk."""
     with_actinides = [t for t in packaged.values() if t.actinides]
 
-    assert [t.name for t in with_actinides] == ["sssp-pbesol-efficiency-sr"]
-    assert set(with_actinides[0].actinides) <= ACTINIDES
-    assert "GPL" in with_actinides[0].licence
+    assert with_actinides
+    assert all(t.name.startswith("sssp-") for t in with_actinides)
+    for table in with_actinides:
+        assert set(table.actinides) <= ACTINIDES
+        assert "GPL" in table.licence
+
+
+def test_all_four_sssp_tables_are_registered(packaged):
+    """SSSP 1.3.0 publishes four; registering one left PBE f-elements uncovered."""
+    assert _SSSP <= set(packaged)
+
+
+def test_every_sssp_table_covers_the_same_elements(packaged):
+    """They differ in functional and accuracy, never in reach."""
+    coverage = {frozenset(packaged[name].elements) for name in _SSSP}
+
+    assert len(coverage) == 1
+
+
+def test_every_functional_reaches_the_f_elements(packaged):
+    """Lanthanides and actinides are routed to SSSP, so each needs an SSSP table."""
+    for functional in ("PBE", "PBEsol"):
+        assert any(
+            t.functional == functional and t.actinides for t in packaged.values()
+        )
 
 
 def test_no_pseudodojo_table_covers_actinides(packaged):
@@ -124,9 +155,9 @@ def test_only_a_fully_relativistic_table_can_serve_spin_orbit_coupling(packaged)
 @pytest.mark.parametrize(
     ("element", "expected"),
     [
-        ("Si", {"available everywhere"}),
-        ("Ce", {"pseudodojo-pbe-lanthanides-sr", "sssp-pbesol-efficiency-sr"}),
-        ("U", {"sssp-pbesol-efficiency-sr"}),
+        ("Si", "every table"),
+        ("Ce", {"pseudodojo-pbe-lanthanides-sr"} | _SSSP),
+        ("U", _SSSP),
         ("Og", set()),
     ],
 )
@@ -135,7 +166,7 @@ def test_coverage_lookup_distinguishes_the_reasons_an_element_fails(
 ):
     found = {t.name for t in tables_covering(element, packaged)}
 
-    if expected == {"available everywhere"}:
+    if expected == "every table":
         assert len(found) > 1
     else:
         assert found == expected

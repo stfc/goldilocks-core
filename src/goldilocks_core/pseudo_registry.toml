@@ -276,6 +276,71 @@ elements = [
   "Sr", "Ta", "Tc", "Te", "Ti", "Tl", "V", "W", "Xe", "Y", "Zn", "Zr",
 ]
 
+# The four SSSP 1.3.0 tables. All four cover the same 103 elements -- the only
+# library here reaching the actinides -- and differ only in functional and
+# accuracy. Sizes are the published file sizes, cross-checked against an HTTP
+# Range request; the Archive does not answer HEAD on these files usefully.
+
+[tables."sssp-pbe-efficiency-sr"]
+provider       = "materialscloud"
+upstream_table = "SSSP_1.3.0_PBE_efficiency"
+record         = "rcyfm-68h65"
+version        = "1.3.0"
+functional     = "PBE"
+relativistic   = "SR"
+accuracy       = "efficiency"
+licence        = "mixed; the record is CC-BY-4.0 but individual files include GPL-2.0-or-later, GPL-3.0 and CC-BY-SA-4.0"
+upstream_url   = "https://archive.materialscloud.org/records/rcyfm-68h65"
+citation       = "Prandini et al., npj Comput. Mater. 4, 72 (2018); DOI 10.24435/materialscloud:f3-ym"
+transfer_bytes = 59513522
+note = """
+PBE is the functional SSSP actually tested: the cutoffs here were measured with the SSSP
+protocol rather than inherited. Fetched from the Materials Cloud Archive, never redistributed
+by us -- the files carry a mix of licences including GPL-3.0, so a user is entitled to know
+what is landing on their disk. No fully relativistic SSSP set exists, so no SSSP table can
+satisfy spin-orbit coupling."""
+elements = [
+  "Ac", "Ag", "Al", "Am", "Ar", "As", "At", "Au", "B", "Ba", "Be", "Bi",
+  "Bk", "Br", "C", "Ca", "Cd", "Ce", "Cf", "Cl", "Cm", "Co", "Cr", "Cs",
+  "Cu", "Dy", "Er", "Es", "Eu", "F", "Fe", "Fm", "Fr", "Ga", "Gd", "Ge",
+  "H", "He", "Hf", "Hg", "Ho", "I", "In", "Ir", "K", "Kr", "La", "Li",
+  "Lr", "Lu", "Md", "Mg", "Mn", "Mo", "N", "Na", "Nb", "Nd", "Ne", "Ni",
+  "No", "Np", "O", "Os", "P", "Pa", "Pb", "Pd", "Pm", "Po", "Pr", "Pt",
+  "Pu", "Ra", "Rb", "Re", "Rh", "Rn", "Ru", "S", "Sb", "Sc", "Se", "Si",
+  "Sm", "Sn", "Sr", "Ta", "Tb", "Tc", "Te", "Th", "Ti", "Tl", "Tm", "U",
+  "V", "W", "Xe", "Y", "Yb", "Zn", "Zr",
+]
+
+[tables."sssp-pbe-precision-sr"]
+provider       = "materialscloud"
+upstream_table = "SSSP_1.3.0_PBE_precision"
+record         = "rcyfm-68h65"
+version        = "1.3.0"
+functional     = "PBE"
+relativistic   = "SR"
+accuracy       = "precision"
+licence        = "mixed; the record is CC-BY-4.0 but individual files include GPL-2.0-or-later, GPL-3.0 and CC-BY-SA-4.0"
+upstream_url   = "https://archive.materialscloud.org/records/rcyfm-68h65"
+citation       = "Prandini et al., npj Comput. Mater. 4, 72 (2018); DOI 10.24435/materialscloud:f3-ym"
+transfer_bytes = 62963841
+note = """
+PBE is the functional SSSP actually tested: the cutoffs here were measured with the SSSP
+protocol rather than inherited. Fetched from the Materials Cloud Archive, never redistributed
+by us -- the files carry a mix of licences including GPL-3.0, so a user is entitled to know
+what is landing on their disk. No fully relativistic SSSP set exists, so no SSSP table can
+satisfy spin-orbit coupling."""
+elements = [
+  "Ac", "Ag", "Al", "Am", "Ar", "As", "At", "Au", "B", "Ba", "Be", "Bi",
+  "Bk", "Br", "C", "Ca", "Cd", "Ce", "Cf", "Cl", "Cm", "Co", "Cr", "Cs",
+  "Cu", "Dy", "Er", "Es", "Eu", "F", "Fe", "Fm", "Fr", "Ga", "Gd", "Ge",
+  "H", "He", "Hf", "Hg", "Ho", "I", "In", "Ir", "K", "Kr", "La", "Li",
+  "Lr", "Lu", "Md", "Mg", "Mn", "Mo", "N", "Na", "Nb", "Nd", "Ne", "Ni",
+  "No", "Np", "O", "Os", "P", "Pa", "Pb", "Pd", "Pm", "Po", "Pr", "Pt",
+  "Pu", "Ra", "Rb", "Re", "Rh", "Rn", "Ru", "S", "Sb", "Sc", "Se", "Si",
+  "Sm", "Sn", "Sr", "Ta", "Tb", "Tc", "Te", "Th", "Ti", "Tl", "Tm", "U",
+  "V", "W", "Xe", "Y", "Yb", "Zn", "Zr",
+]
+
 [tables."sssp-pbesol-efficiency-sr"]
 provider       = "materialscloud"
 upstream_table = "SSSP_1.3.0_PBEsol_efficiency"
@@ -285,17 +350,47 @@ functional     = "PBEsol"
 relativistic   = "SR"
 accuracy       = "efficiency"
 licence        = "mixed; the record is CC-BY-4.0 but individual files include GPL-2.0-or-later, GPL-3.0 and CC-BY-SA-4.0"
-upstream_url   = "https://archive.materialscloud.org/record/2023.65"
+upstream_url   = "https://archive.materialscloud.org/records/rcyfm-68h65"
 citation       = "Prandini et al., npj Comput. Mater. 4, 72 (2018); DOI 10.24435/materialscloud:f3-ym"
-transfer_bytes = 60487174
+transfer_bytes = 60464715
 note = """
-The only table here covering actinides. Fetched from the Materials Cloud Archive, never
-redistributed by us -- the files carry a mix of licences including GPL-3.0, so a user is
-entitled to know what is landing on their disk. No fully relativistic SSSP set exists, so it
-can never satisfy spin-orbit coupling. SSSP does not guarantee its own PBEsol library: those
-pseudopotentials reuse the PBE ones' input parameters and cutoffs and were not tested with
-the SSSP protocol. 1.3.0, not the current 2.0, which publishes no per-file checksums, is not
-on the Archive, and drops eight actinides -- see docs/pseudopotentials.md."""
+SSSP does not guarantee its own PBEsol library: these pseudopotentials reuse the PBE ones'
+input parameters and cutoffs and were not tested with the SSSP protocol. Fetched from the
+Materials Cloud Archive, never redistributed by us -- the files carry a mix of licences
+including GPL-3.0, so a user is entitled to know what is landing on their disk. No fully
+relativistic SSSP set exists, so no SSSP table can satisfy spin-orbit coupling. 1.3.0, not
+the current 2.0, which publishes no per-file checksums, is not on the Archive, and drops
+eight actinides -- see docs/pseudopotentials.md."""
+elements = [
+  "Ac", "Ag", "Al", "Am", "Ar", "As", "At", "Au", "B", "Ba", "Be", "Bi",
+  "Bk", "Br", "C", "Ca", "Cd", "Ce", "Cf", "Cl", "Cm", "Co", "Cr", "Cs",
+  "Cu", "Dy", "Er", "Es", "Eu", "F", "Fe", "Fm", "Fr", "Ga", "Gd", "Ge",
+  "H", "He", "Hf", "Hg", "Ho", "I", "In", "Ir", "K", "Kr", "La", "Li",
+  "Lr", "Lu", "Md", "Mg", "Mn", "Mo", "N", "Na", "Nb", "Nd", "Ne", "Ni",
+  "No", "Np", "O", "Os", "P", "Pa", "Pb", "Pd", "Pm", "Po", "Pr", "Pt",
+  "Pu", "Ra", "Rb", "Re", "Rh", "Rn", "Ru", "S", "Sb", "Sc", "Se", "Si",
+  "Sm", "Sn", "Sr", "Ta", "Tb", "Tc", "Te", "Th", "Ti", "Tl", "Tm", "U",
+  "V", "W", "Xe", "Y", "Yb", "Zn", "Zr",
+]
+
+[tables."sssp-pbesol-precision-sr"]
+provider       = "materialscloud"
+upstream_table = "SSSP_1.3.0_PBEsol_precision"
+record         = "rcyfm-68h65"
+version        = "1.3.0"
+functional     = "PBEsol"
+relativistic   = "SR"
+accuracy       = "precision"
+licence        = "mixed; the record is CC-BY-4.0 but individual files include GPL-2.0-or-later, GPL-3.0 and CC-BY-SA-4.0"
+upstream_url   = "https://archive.materialscloud.org/records/rcyfm-68h65"
+citation       = "Prandini et al., npj Comput. Mater. 4, 72 (2018); DOI 10.24435/materialscloud:f3-ym"
+transfer_bytes = 63907272
+note = """
+SSSP does not guarantee its own PBEsol library: these pseudopotentials reuse the PBE ones'
+input parameters and cutoffs and were not tested with the SSSP protocol. Fetched from the
+Materials Cloud Archive, never redistributed by us -- the files carry a mix of licences
+including GPL-3.0, so a user is entitled to know what is landing on their disk. No fully
+relativistic SSSP set exists, so no SSSP table can satisfy spin-orbit coupling."""
 elements = [
   "Ac", "Ag", "Al", "Am", "Ar", "As", "At", "Au", "B", "Ba", "Be", "Bi",
   "Bk", "Br", "C", "Ca", "Cd", "Ce", "Cf", "Cl", "Cm", "Co", "Cr", "Cs",

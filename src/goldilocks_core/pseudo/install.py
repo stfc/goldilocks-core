@@ -9,6 +9,7 @@ of what is missing and the command that fixes it.
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 from goldilocks_core.artifacts import pseudodojo, sssp
@@ -31,6 +32,9 @@ AVAILABLE_COMMAND = "gl pp available"
 
 LIST_COMMAND = "gl pp list"
 """What a user runs to see the tables already on disk."""
+
+DELETE_COMMAND = "gl pp delete"
+"""What a user runs to remove an installed table."""
 
 
 class NoPseudopotentials(RuntimeError):
@@ -123,6 +127,49 @@ def _stamp_table_facts(destination: Path, table: PseudoTable) -> None:
     data["_relativistic"] = _TABLE_TO_FILE_RELATIVISTIC[table.relativistic]
     data["_accuracy"] = table.accuracy
     sidecar.write_text(json.dumps(data, indent=2))
+
+
+def installed_paths(table: PseudoTable, root: Path | None = None) -> tuple[Path, ...]:
+    """Return every path on disk that ``table`` put there, in existence order.
+
+    A table is not only its ``*.upf`` directory: installing also leaves the
+    cutoff sidecar beside it, and for PseudoDojo the dojo reports the digests
+    were read from. Removing the pseudopotentials alone would leave those
+    behind to be mistaken for a partial install later.
+    """
+    directory = install_path(table, root)
+    candidates = [directory, directory.parent / f"{directory.name}.json"]
+
+    if table.provider == "pseudodojo":
+        candidates.append(directory.parent / f"{table.upstream_table}_djrepo")
+
+    return tuple(path for path in candidates if path.exists())
+
+
+def uninstall(table: PseudoTable, root: Path | None = None) -> tuple[Path, ...]:
+    """Delete everything ``table`` installed, and return what was removed.
+
+    Raises:
+        ValueError: the table resolves outside its own root. Nothing that
+            reaches ``shutil.rmtree`` should be taken on trust: a registry can
+            be replaced wholesale through ``GOLDILOCKS_PSEUDO_REGISTRY``, and
+            an ``upstream_table`` containing ``..`` would otherwise point this
+            at a directory the user never installed.
+    """
+    base = (root or pseudo_root()).resolve()
+    removed = installed_paths(table, root)
+
+    for path in removed:
+        if not path.resolve().is_relative_to(base):
+            raise ValueError(f"{table.name} resolves to {path}, outside {base}")
+
+    for path in removed:
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+
+    return removed
 
 
 def installed_tables(

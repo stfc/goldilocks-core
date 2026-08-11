@@ -135,37 +135,33 @@ $ gl pp available
 ...
   the default is pseudodojo-pbesol-efficiency-sr; `gl pp install` with no argument installs it
   install others by name or number: `gl pp install NAME|N`
-  source, version and coverage with `gl pp available -v`
+  version and element coverage with `gl pp available -v`
 ```
 
-`-v` adds only what a name cannot carry -- the address the files are fetched
-from, the upstream version, and coverage (`Ln`/`An` are the standard generic
-symbols for lanthanides and actinides). Functional, relativistic treatment and
-accuracy are deliberately absent: all three are already in the name. So is
-transfer size, which `gl pp install` quotes before fetching, when it matters.
-
-In a terminal the `SOURCE` cell is underlined and clickable. The whole URL is
-shown rather than a shortened form, so terminals without OSC 8 support can
-still detect and open it themselves:
+`-v` adds only what a name cannot carry -- the upstream version and coverage
+(`Ln`/`An` are the standard generic symbols for lanthanides and actinides).
+Functional, relativistic treatment and accuracy are deliberately absent: all
+three are already in the name. So are source URL and transfer size, which
+`gl pp install` prints before fetching, which is when they decide anything:
 
 ```
 $ gl pp available -v
-  #  NAME                             SOURCE                                                  VERSION   ELEMENTS  Ln  An  STATE
-  1  pseudodojo-pbesol-efficiency-sr  https://www.pseudo-dojo.org/                            0.4             72   2   0  installed (default)
-  2  pseudodojo-pbesol-precision-sr   https://www.pseudo-dojo.org/                            0.4             72   2   0  uninstalled
-  3  pseudodojo-pbe-efficiency-sr     https://www.pseudo-dojo.org/                            0.4             72   2   0  uninstalled
-  4  pseudodojo-pbe-precision-sr      https://www.pseudo-dojo.org/                            0.4             72   2   0  uninstalled
-  5  pseudodojo-lda-efficiency-sr     https://www.pseudo-dojo.org/                            0.4             70   0   0  uninstalled
-  6  pseudodojo-lda-precision-sr      https://www.pseudo-dojo.org/                            0.4             70   0   0  uninstalled
-  7  pseudodojo-pbe-lanthanides-sr    https://www.pseudo-dojo.org/                            0.4             14  14   0  uninstalled
-  8  pseudodojo-pbesol-efficiency-fr  https://www.pseudo-dojo.org/                            0.4             71   1   0  uninstalled
-  9  pseudodojo-pbesol-precision-fr   https://www.pseudo-dojo.org/                            0.4             71   1   0  uninstalled
- 10  pseudodojo-pbe-efficiency-fr     https://www.pseudo-dojo.org/                            0.4             70   0   0  uninstalled
- 11  pseudodojo-pbe-precision-fr      https://www.pseudo-dojo.org/                            0.4             72   2   0  uninstalled
- 12  sssp-pbe-efficiency-sr           https://archive.materialscloud.org/records/rcyfm-68h65  1.3.0          103  15  15  uninstalled
- 13  sssp-pbe-precision-sr            https://archive.materialscloud.org/records/rcyfm-68h65  1.3.0          103  15  15  uninstalled
- 14  sssp-pbesol-efficiency-sr        https://archive.materialscloud.org/records/rcyfm-68h65  1.3.0          103  15  15  uninstalled
- 15  sssp-pbesol-precision-sr         https://archive.materialscloud.org/records/rcyfm-68h65  1.3.0          103  15  15  uninstalled
+  #  NAME                             VERSION   ELEMENTS  Ln  An  STATE
+  1  pseudodojo-pbesol-efficiency-sr  0.4             72   2   0  installed (default)
+  2  pseudodojo-pbesol-precision-sr   0.4             72   2   0  uninstalled
+  3  pseudodojo-pbe-efficiency-sr     0.4             72   2   0  uninstalled
+  4  pseudodojo-pbe-precision-sr      0.4             72   2   0  uninstalled
+  5  pseudodojo-lda-efficiency-sr     0.4             70   0   0  uninstalled
+  6  pseudodojo-lda-precision-sr      0.4             70   0   0  uninstalled
+  7  pseudodojo-pbe-lanthanides-sr    0.4             14  14   0  uninstalled
+  8  pseudodojo-pbesol-efficiency-fr  0.4             71   1   0  uninstalled
+  9  pseudodojo-pbesol-precision-fr   0.4             71   1   0  uninstalled
+ 10  pseudodojo-pbe-efficiency-fr     0.4             70   0   0  uninstalled
+ 11  pseudodojo-pbe-precision-fr      0.4             72   2   0  uninstalled
+ 12  sssp-pbe-efficiency-sr           1.3.0          103  15  15  uninstalled
+ 13  sssp-pbe-precision-sr            1.3.0          103  15  15  uninstalled
+ 14  sssp-pbesol-efficiency-sr        1.3.0          103  15  15  uninstalled
+ 15  sssp-pbesol-precision-sr         1.3.0          103  15  15  uninstalled
 
   the default is pseudodojo-pbesol-efficiency-sr; `gl pp install` with no argument installs it
   install others by name or number: `gl pp install NAME|N`
@@ -239,12 +235,22 @@ for. In v2.0 this is explicit in the data as well: the PBEsol rows link to the
 
 ```
 gl pp available              # the names of every table Core can install
-gl pp available -v           # also source, version, functional, coverage, size
+gl pp available -v           # also version and element coverage
 gl pp list                   # what is actually on disk, and where
 gl pp install                # install the default
 gl pp install NAME|N ...     # install tables by name or by listing number
 gl pp install --all          # install every registered table (~307 MB)
+gl pp delete NAME|N ...      # remove installed tables from disk
 ```
+
+`gl pp delete` takes no `--all`: the constructive direction can afford a bulk
+form, the destructive one should not. It removes everything an install left --
+the pseudopotentials, the cutoff sidecar, and for PseudoDojo the dojo reports
+-- prints every path it removed and how much space that freed, and refuses
+outright if any argument names nothing, rather than half-running. There is no
+confirmation prompt, for the same reason installing has none: the command is
+the decision, and nothing it removes is anything `gl pp install` cannot put
+back.
 
 A table can be named in full or given as its number from `gl pp available`,
 which is the point of the number -- the names run to 31 characters. The

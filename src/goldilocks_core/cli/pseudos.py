@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import textwrap
+from pathlib import Path
 
 from goldilocks_core.pseudo import install as installer
 from goldilocks_core.pseudo.table_registry import (
@@ -22,23 +22,14 @@ _NUMBER = f"{'#':>3}  "
 
 _BRIEF_HEADER = f"{_NUMBER}{'NAME':<{_NAME_WIDTH}}STATE"
 
-_SOURCE_MAX = 60
-"""Cap on the URL column. Nothing registered comes close; a future entry that
-does gets elided rather than pushing every other column off the screen."""
-
-
-def _detailed_header(source_width: int) -> str:
-    """Build the wide header once the URL column's width is known.
-
-    Functional, relativistic treatment and accuracy are not columns: every one
-    of them is already in the name, which is why the names are shaped the way
-    they are. Transfer size is not either -- ``gl pp install`` quotes it before
-    fetching, which is when it matters.
-    """
-    return (
-        f"{_NUMBER}{'NAME':<{_NAME_WIDTH}}{'SOURCE':<{source_width + 2}}"
-        f"{'VERSION':<9}{'ELEMENTS':>9}{'Ln':>4}{'An':>4}  STATE"
-    )
+_DETAILED_HEADER = (
+    f"{_NUMBER}{'NAME':<{_NAME_WIDTH}}{'VERSION':<9}{'ELEMENTS':>9}"
+    f"{'Ln':>4}{'An':>4}  STATE"
+)
+"""Functional, relativistic treatment and accuracy are not columns: all three
+are already in the name, which is why the names are shaped the way they are.
+Neither are transfer size and source URL -- ``gl pp install`` prints both
+before fetching, which is when they decide anything."""
 
 
 def add_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -49,7 +40,7 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:
     commands = pseudos.add_subparsers(dest="pp_command", required=True)
 
     available = commands.add_parser(
-        "available", help="Show every table Core can install."
+        "available", help="Show every table ore can install."
     )
     available.add_argument(
         "-v",
@@ -75,6 +66,14 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:
         "'all', so it can never collide with a real name.",
     )
 
+    delete = commands.add_parser("delete", help="Remove installed tables from disk.")
+    delete.add_argument(
+        "tables",
+        nargs="+",
+        metavar="NAME|N",
+        help="Table names, or their numbers from `gl pp available`.",
+    )
+
 
 def run(args: argparse.Namespace) -> int:
     """Dispatch a ``gl pp`` subcommand."""
@@ -82,6 +81,8 @@ def run(args: argparse.Namespace) -> int:
         return _available(verbose=args.verbose)
     if args.pp_command == "list":
         return _installed()
+    if args.pp_command == "delete":
+        return _delete(args.tables)
     return _install(args.tables, everything=args.all)
 
 
@@ -95,28 +96,18 @@ def _available(*, verbose: bool = False) -> int:
     """
     registry = load_tables()
     default = default_table(registry)
-    linked = verbose and _hyperlinks_render()
-    source_width = min(
-        max(len(table.upstream_url) for table in registry.values()), _SOURCE_MAX
-    )
 
-    print(_detailed_header(source_width) if verbose else _BRIEF_HEADER)
+    print(_DETAILED_HEADER if verbose else _BRIEF_HEADER)
     for number, table in enumerate(registry.values(), start=1):
         state = "installed" if installer.is_installed(table) else "uninstalled"
         if table is default:
             state = f"{state} (default)"
 
         if verbose:
-            source = _linked_cell(
-                _elide(table.upstream_url, source_width),
-                table.upstream_url,
-                source_width + 2,
-                linked=linked,
-            )
             row = (
-                f"{number:>3}  {table.name:<{_NAME_WIDTH}}{source}"
-                f"{table.version:<9}{len(table.elements):>9}"
-                f"{len(table.lanthanides):>4}{len(table.actinides):>4}  {state}"
+                f"{number:>3}  {table.name:<{_NAME_WIDTH}}{table.version:<9}"
+                f"{len(table.elements):>9}{len(table.lanthanides):>4}"
+                f"{len(table.actinides):>4}  {state}"
             )
         else:
             row = f"{number:>3}  {table.name:<{_NAME_WIDTH}}{state}"
@@ -128,7 +119,7 @@ def _available(*, verbose: bool = False) -> int:
     )
     print(f"  install others by name or number: `{installer.INSTALL_COMMAND} NAME|N`")
     if not verbose:
-        print(f"  source, version and coverage with `{installer.AVAILABLE_COMMAND} -v`")
+        print(f"  version and element coverage with `{installer.AVAILABLE_COMMAND} -v`")
     return 0
 
 
@@ -168,6 +159,65 @@ def _resolve(token: str, registry: dict[str, PseudoTable]) -> str | None:
     return None
 
 
+def _resolve_all(
+    tokens: list[str], registry: dict[str, PseudoTable]
+) -> list[str] | None:
+    """Resolve every token, or report the ones that name nothing and return None.
+
+    All-or-nothing: a command that half-ran because one argument was a typo
+    leaves the user reconstructing which half.
+    """
+    resolved = [(token, _resolve(token, registry)) for token in tokens]
+    unresolved = [token for token, name in resolved if name is None]
+
+    if unresolved:
+        print(
+            f"error: no such table: {', '.join(unresolved)}\n"
+            f"       names and numbers 1-{len(registry)} are listed by "
+            f"`{installer.AVAILABLE_COMMAND}`",
+            file=sys.stderr,
+        )
+        return None
+
+    return [name for _token, name in resolved]
+
+
+def _delete(tokens: list[str]) -> int:
+    """Remove installed tables from disk.
+
+    No confirmation prompt, for the same reason installing has none: the
+    command is the decision. Nothing is deleted that ``gl pp install`` cannot
+    put back, and every path removed is printed.
+    """
+    registry = load_tables()
+    wanted = _resolve_all(tokens, registry)
+    if wanted is None:
+        return 2
+
+    for name in wanted:
+        table = registry[name]
+        if not installer.is_installed(table):
+            print(f"{table.name} is not installed")
+            continue
+
+        freed = _bytes_on_disk(installer.installed_paths(table))
+        for path in installer.uninstall(table):
+            print(f"removed {path}")
+        print(f"  {table.name}, {freed / 1e6:.1f} MB freed\n")
+
+    return 0
+
+
+def _bytes_on_disk(paths: tuple[Path, ...]) -> int:
+    """Total size of ``paths``, recursing into directories."""
+    return sum(
+        sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+        if path.is_dir()
+        else path.stat().st_size
+        for path in paths
+    )
+
+
 def _install(tokens: list[str], *, everything: bool = False) -> int:
     """Install the named tables, the default, or everything registered."""
     registry = load_tables()
@@ -182,18 +232,11 @@ def _install(tokens: list[str], *, everything: bool = False) -> int:
     if everything:
         wanted = list(registry)
     else:
-        chosen = [(token, _resolve(token, registry)) for token in tokens]
-        unresolved = [token for token, name in chosen if name is None]
-        if unresolved:
-            print(
-                f"error: no such table: {', '.join(unresolved)}\n"
-                f"       names and numbers 1-{len(registry)} are listed by "
-                f"`{installer.AVAILABLE_COMMAND}`",
-                file=sys.stderr,
-            )
+        resolved = _resolve_all(tokens, registry)
+        if resolved is None:
             return 2
 
-        wanted = [name for _token, name in chosen] or [default_table(registry).name]
+        wanted = resolved or [default_table(registry).name]
 
     if everything:
         _announce_total(registry, wanted)
@@ -261,48 +304,3 @@ def _megabytes(table: PseudoTable) -> str:
     if not table.transfer_bytes:
         return "-"
     return f"{table.transfer_bytes / 1e6:.1f} MB"
-
-
-def _hyperlinks_render() -> bool:
-    """Whether to emit OSC 8 links for this run.
-
-    Only to a terminal: piping or redirecting has to yield plain text, or
-    `gl pp available -v > file` would collect escape sequences. ``NO_COLOR`` is
-    honoured as an escape hatch for terminals that print the sequence rather
-    than ignoring it, which is what a terminal without OSC 8 should do.
-    """
-    return sys.stdout.isatty() and not os.environ.get("NO_COLOR")
-
-
-def _elide(url: str, width: int) -> str:
-    """Shorten ``url`` to ``width``, keeping the part that says where it points.
-
-    Truncation from the right leaves the scheme and host intact, which is the
-    part identifying the source; the trailing record or path is what gets
-    replaced by the ellipsis. The full URL is still what the link opens.
-    """
-    if len(url) <= width:
-        return url
-
-    return url[: width - 3] + "..."
-
-
-def _linked_cell(text: str, url: str, width: int, *, linked: bool) -> str:
-    """Return a fixed-width cell whose text opens ``url`` when clicked.
-
-    Underlined, because a link nobody knows is a link may as well be plain
-    text. The underline is ordinary SGR, which every terminal renders, so the
-    affordance survives even where OSC 8 does not -- and in that case the cell
-    still holds a whole URL, which terminals detect and open by themselves.
-
-    The padding sits outside both, so the underline and the clickable region
-    cover the URL rather than trailing space, and the column width is computed
-    from what is visible rather than from the escape sequences' length.
-    """
-    padding = " " * max(0, width - len(text))
-
-    if not linked:
-        return f"{text}{padding}"
-
-    underlined = f"\033[4m{text}\033[24m"
-    return f"\033]8;;{url}\033\\{underlined}\033]8;;\033\\{padding}"

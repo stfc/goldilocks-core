@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import re
 import sys
 
 import pytest
@@ -85,6 +86,23 @@ def test_the_verbose_listing_carries_source_and_version(capsys):
     assert "https://www.pseudo-dojo.org/" in output
     assert "https://archive.materialscloud.org/" in output
     assert "1.3.0" in output
+
+
+def test_the_verbose_listing_repeats_nothing_the_name_already_says(capsys):
+    """Functional, relativistic mode and accuracy are all in the name."""
+    output = run_available(capsys, "-v")
+
+    for column in ("XC", "REL", "ACCURACY", "SIZE"):
+        assert column not in output
+
+
+def test_the_source_column_shows_whole_urls(capsys):
+    """Truncating broke the terminal's own URL detection, not just the look."""
+    output = run_available(capsys, "-v")
+    urls = {table.upstream_url for table in load_tables().values()}
+
+    assert "..." not in output
+    assert all(url in output for url in urls)
 
 
 def table_rows(output: str) -> list[str]:
@@ -214,22 +232,32 @@ def test_a_plain_cell_is_exactly_the_padded_text():
     )
 
 
-def test_a_linked_cell_wraps_only_the_word():
+def strip_escapes(cell: str) -> str:
+    """Return what a terminal actually shows, dropping OSC 8 and SGR."""
+    return re.sub(r"\033\]8;;[^\033]*\033\\|\033\[[0-9]+m", "", cell)
+
+
+def test_a_linked_cell_underlines_the_url():
+    """A link nobody knows is a link may as well be plain text."""
     cell = pseudos._linked_cell("sssp", "https://x.invalid/", 12, linked=True)
 
-    assert cell.startswith("\033]8;;https://x.invalid/\033\\sssp\033]8;;\033\\")
+    assert "\033[4msssp\033[24m" in cell
+
+
+def test_a_linked_cell_wraps_only_the_url_not_the_padding():
+    cell = pseudos._linked_cell("sssp", "https://x.invalid/", 12, linked=True)
+
+    assert cell.startswith("\033]8;;https://x.invalid/\033\\")
     assert cell.endswith(" " * 8)
 
 
 def test_both_cells_occupy_the_same_visible_width():
-    """Padding sits outside the link, so columns line up either way."""
+    """Padding sits outside the escapes, so columns line up either way."""
     plain = pseudos._linked_cell("sssp", "https://x.invalid/", 12, linked=False)
     linked = pseudos._linked_cell("sssp", "https://x.invalid/", 12, linked=True)
-    visible = linked.replace("\033]8;;https://x.invalid/\033\\", "")
-    visible = visible.replace("\033]8;;\033\\", "")
 
-    assert visible == plain
-    assert len(visible) == 12
+    assert strip_escapes(linked) == plain
+    assert len(strip_escapes(linked)) == 12
 
 
 @pytest.mark.parametrize(

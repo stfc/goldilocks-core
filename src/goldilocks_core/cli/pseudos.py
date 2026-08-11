@@ -22,14 +22,23 @@ _NUMBER = f"{'#':>3}  "
 
 _BRIEF_HEADER = f"{_NUMBER}{'NAME':<{_NAME_WIDTH}}STATE"
 
-_SOURCE_WIDTH = 38
-"""Enough for a scheme and host; longer URLs are elided to their host."""
+_SOURCE_MAX = 60
+"""Cap on the URL column. Nothing registered comes close; a future entry that
+does gets elided rather than pushing every other column off the screen."""
 
-_DETAILED_HEADER = (
-    f"{_NUMBER}{'NAME':<{_NAME_WIDTH}}{'SOURCE':<{_SOURCE_WIDTH + 2}}"
-    f"{'VERSION':<9}{'XC':<8}{'REL':<5}{'ACCURACY':<12}{'ELEMENTS':>9}"
-    f"{'Ln':>4}{'An':>4}{'SIZE':>9}  STATE"
-)
+
+def _detailed_header(source_width: int) -> str:
+    """Build the wide header once the URL column's width is known.
+
+    Functional, relativistic treatment and accuracy are not columns: every one
+    of them is already in the name, which is why the names are shaped the way
+    they are. Transfer size is not either -- ``gl pp install`` quotes it before
+    fetching, which is when it matters.
+    """
+    return (
+        f"{_NUMBER}{'NAME':<{_NAME_WIDTH}}{'SOURCE':<{source_width + 2}}"
+        f"{'VERSION':<9}{'ELEMENTS':>9}{'Ln':>4}{'An':>4}  STATE"
+    )
 
 
 def add_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -87,8 +96,11 @@ def _available(*, verbose: bool = False) -> int:
     registry = load_tables()
     default = default_table(registry)
     linked = verbose and _hyperlinks_render()
+    source_width = min(
+        max(len(table.upstream_url) for table in registry.values()), _SOURCE_MAX
+    )
 
-    print(_DETAILED_HEADER if verbose else _BRIEF_HEADER)
+    print(_detailed_header(source_width) if verbose else _BRIEF_HEADER)
     for number, table in enumerate(registry.values(), start=1):
         state = "installed" if installer.is_installed(table) else "uninstalled"
         if table is default:
@@ -96,17 +108,15 @@ def _available(*, verbose: bool = False) -> int:
 
         if verbose:
             source = _linked_cell(
-                _elide(table.upstream_url, _SOURCE_WIDTH),
+                _elide(table.upstream_url, source_width),
                 table.upstream_url,
-                _SOURCE_WIDTH + 2,
+                source_width + 2,
                 linked=linked,
             )
             row = (
                 f"{number:>3}  {table.name:<{_NAME_WIDTH}}{source}"
-                f"{table.version:<9}{table.functional:<8}{table.relativistic:<5}"
-                f"{table.accuracy:<12}{len(table.elements):>9}"
-                f"{len(table.lanthanides):>4}{len(table.actinides):>4}"
-                f"{_megabytes(table):>9}  {state}"
+                f"{table.version:<9}{len(table.elements):>9}"
+                f"{len(table.lanthanides):>4}{len(table.actinides):>4}  {state}"
             )
         else:
             row = f"{number:>3}  {table.name:<{_NAME_WIDTH}}{state}"
@@ -280,13 +290,19 @@ def _elide(url: str, width: int) -> str:
 def _linked_cell(text: str, url: str, width: int, *, linked: bool) -> str:
     """Return a fixed-width cell whose text opens ``url`` when clicked.
 
-    The padding sits outside the link, so the clickable region is the word
-    itself and the column width is computed from what is visible rather than
-    from the escape sequence's length.
+    Underlined, because a link nobody knows is a link may as well be plain
+    text. The underline is ordinary SGR, which every terminal renders, so the
+    affordance survives even where OSC 8 does not -- and in that case the cell
+    still holds a whole URL, which terminals detect and open by themselves.
+
+    The padding sits outside both, so the underline and the clickable region
+    cover the URL rather than trailing space, and the column width is computed
+    from what is visible rather than from the escape sequences' length.
     """
     padding = " " * max(0, width - len(text))
 
     if not linked:
         return f"{text}{padding}"
 
-    return f"\033]8;;{url}\033\\{text}\033]8;;\033\\{padding}"
+    underlined = f"\033[4m{text}\033[24m"
+    return f"\033]8;;{url}\033\\{underlined}\033]8;;\033\\{padding}"

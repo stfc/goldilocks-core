@@ -76,8 +76,8 @@ def test_query_records_returns_only_requested_records() -> None:
     records = query_records(request)
 
     assert request.to_dict()["outputs"] == [
-        "StructureAnalysisRecord",
-        "ParameterAdvice",
+        "analysis",
+        "advice",
     ]
     assert isinstance(records, CoreRecords)
     assert tuple(records) == (StructureAnalysisRecord, ParameterAdvice)

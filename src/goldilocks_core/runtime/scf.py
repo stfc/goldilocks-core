@@ -19,6 +19,7 @@ from goldilocks_core.advice.parameters import advise_parameters
 from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.contracts import (
+    OUTPUT_RECORD_TYPES,
     CalculationHints,
     CalculationIntent,
     CoreRecords,
@@ -65,11 +66,17 @@ class ScfContext:
 
 SCF_TASK = TaskSpec(
     task="scf_single_point",
+    name="Single-point SCF",
+    description=("Recommend and generate inputs for a single-point SCF calculation."),
+    selectable_outputs=OUTPUT_RECORD_TYPES,
     stages=(
         StageSpec(
             output=Structure,
             inputs=(),
             call=lambda *, ctx: load_structure(ctx.structure_input),
+            id="load_structure",
+            name="Load structure",
+            description="Parse and validate the source into a Structure.",
         ),
         StageSpec(
             output=StructureAnalysisRecord,
@@ -77,6 +84,9 @@ SCF_TASK = TaskSpec(
             call=lambda structure, *, ctx: analyze_structure(
                 structure, metallicity_classifier=ctx.metallicity_classifier
             ),
+            id="analyze",
+            name="Analyze",
+            description="Report structure facts without parameter decisions.",
         ),
         StageSpec(
             output=KPointSelection,
@@ -84,6 +94,9 @@ SCF_TASK = TaskSpec(
             call=lambda structure, *, ctx: resolve_kpoints(
                 structure, ctx.hints.kmesh, ctx.kmesh_backend
             ),
+            id="resolve_k_points",
+            name="Resolve k-points",
+            description="Choose the k-point grid from operator hints or a model.",
         ),
         StageSpec(
             output=ParameterAdvice,
@@ -91,6 +104,9 @@ SCF_TASK = TaskSpec(
             call=lambda analysis, *, ctx: advise_parameters(
                 analysis, ctx.intent, ctx.hints
             ),
+            id="advise",
+            name="Advise",
+            description="Recommend provenance-backed calculation parameters.",
         ),
         StageSpec(
             output=SelectionRecord,
@@ -98,6 +114,9 @@ SCF_TASK = TaskSpec(
             call=lambda structure, advice, *, ctx: select_parameters(
                 structure, advice, ctx.pseudo_metadata
             ),
+            id="select_pseudopotentials",
+            name="Select pseudopotentials",
+            description="Select a concrete pseudopotential for each element.",
         ),
         StageSpec(
             output=GeneratedFiles,
@@ -105,6 +124,9 @@ SCF_TASK = TaskSpec(
             call=lambda structure, advice, selection, k_points, *, ctx: generate_inputs(
                 structure, ctx.intent, advice, selection, k_points
             ),
+            id="generate_inputs",
+            name="Generate inputs",
+            description="Produce target-code input files.",
         ),
     ),
     presets=(

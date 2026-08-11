@@ -56,6 +56,7 @@ class QrfKpointsConfig:
     confidence: float
     correction: float
     metallicity: ArtifactSpec
+    metallicity_model: ModelSpec
     metallicity_checkpoint_file: str
     metallicity_atom_init_file: str
 
@@ -109,6 +110,16 @@ def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
         confidence=kpoints["interval_confidence"],
         correction=calibration["correction"],
         metallicity=ArtifactSpec(
+            source=cast(ModelSource, metallicity["source"]),
+            location=metallicity["location"],
+            revision=metallicity.get("revision"),
+        ),
+        metallicity_model=ModelSpec(
+            name=metallicity["name"],
+            version=metallicity["version"],
+            model_type=cast(ModelType, metallicity["model_type"]),
+            target=metallicity["target"],
+            feature_set=metallicity["feature_set"],
             source=cast(ModelSource, metallicity["source"]),
             location=metallicity["location"],
             revision=metallicity.get("revision"),

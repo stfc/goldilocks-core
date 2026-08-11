@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+from pymatgen.core import Structure
 
 from goldilocks_core.contracts.serial import to_jsonable
 from goldilocks_core.contracts.types import (
@@ -827,6 +828,33 @@ type GeneratedFiles = tuple[GeneratedFile, ...]
 """Immutable collection produced by the Generate stage."""
 
 
+RECORD_TYPE_IDS: dict[type, str] = {
+    Structure: "structure",
+    StructureAnalysisRecord: "analysis",
+    ParameterAdvice: "advice",
+    KPointSelection: "k_points",
+    SelectionRecord: "selection",
+    GeneratedFiles: "generated_files",
+}
+"""Authoritative stable transport id for each graph record type.
+
+These ids are backend-owned and never derived from Python class names, so the
+wire format survives renames and never leaks implementation types. They are
+used consistently for task descriptions, selectable query outputs, query
+resolution, and record-set serialization.
+"""
+
+
+def record_type_id(record_type: type) -> str:
+    """Return the stable transport id for a graph record type."""
+    try:
+        return RECORD_TYPE_IDS[record_type]
+    except KeyError as error:
+        raise ValueError(
+            f"No stable transport record id for record type {record_type.__name__}"
+        ) from error
+
+
 @dataclass(frozen=True, slots=True)
 class BundleRecord:
     """Bundle publication output: where files were written and the manifest.
@@ -867,10 +895,10 @@ class CoreRecords(Mapping[type, Any]):
         return len(self._records)
 
     def to_dict(self) -> JsonDict:
-        """Return records as a JSON-serializable dictionary."""
+        """Return records as a JSON-serializable dictionary keyed by stable ids."""
         return to_jsonable(
             {
-                record_type.__name__: record
+                record_type_id(record_type): record
                 for record_type, record in self._records.items()
             }
         )
@@ -985,10 +1013,10 @@ class QueryRequest:
     kmesh_model: ModelSpec | None = None
 
     def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary with output type names."""
+        """Return a JSON-serializable dictionary with stable record ids."""
         return {
             "structure": to_jsonable(self.structure),
-            "outputs": [output_type.__name__ for output_type in self.outputs],
+            "outputs": [record_type_id(output_type) for output_type in self.outputs],
             "intent": to_jsonable(self.intent),
             "hints": to_jsonable(self.hints),
             "pseudo_metadata": to_jsonable(self.pseudo_metadata),

@@ -118,6 +118,32 @@ def test_actinides_come_only_from_the_library_with_encumbered_licensing(packaged
         assert "GPL" in table.licence
 
 
+def test_registry_order_is_pinned(packaged):
+    """`gl pp install N` numbers tables by this order, so it is an interface.
+
+    Appending is free. Inserting or removing renumbers everything after it,
+    which would silently repoint a scripted `gl pp install 12` at a different
+    table -- so that has to be a deliberate edit here, not a side effect.
+    """
+    assert list(packaged) == [
+        "pseudodojo-pbesol-efficiency-sr",
+        "pseudodojo-pbesol-precision-sr",
+        "pseudodojo-pbe-efficiency-sr",
+        "pseudodojo-pbe-precision-sr",
+        "pseudodojo-lda-efficiency-sr",
+        "pseudodojo-lda-precision-sr",
+        "pseudodojo-pbe-lanthanides-sr",
+        "pseudodojo-pbesol-efficiency-fr",
+        "pseudodojo-pbesol-precision-fr",
+        "pseudodojo-pbe-efficiency-fr",
+        "pseudodojo-pbe-precision-fr",
+        "sssp-pbe-efficiency-sr",
+        "sssp-pbe-precision-sr",
+        "sssp-pbesol-efficiency-sr",
+        "sssp-pbesol-precision-sr",
+    ]
+
+
 def test_all_four_sssp_tables_are_registered(packaged):
     """SSSP 1.3.0 publishes four; registering one left PBE f-elements uncovered."""
     assert _SSSP <= set(packaged)

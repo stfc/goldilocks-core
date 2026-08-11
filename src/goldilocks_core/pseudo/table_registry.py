@@ -35,9 +35,11 @@ class PseudoTable:
     Attributes:
         name: our identifier, e.g. ``pseudodojo-pbesol-efficiency-sr``. Always
             ends in ``-sr``, ``-fr``, or ``-nr``, matching ``relativistic``.
-        provider: which upstream serves it -- ``pseudodojo`` or
-            ``materialscloud``. Core never redistributes a table; it fetches
-            from the provider on the user's behalf.
+        provider: which pseudopotential library it comes from --
+            ``pseudodojo`` or ``sssp``. Names the library rather than its
+            host: SSSP is served by the Materials Cloud Archive, but what a
+            user chose is SSSP. The host is in ``upstream_url``. Core never
+            redistributes a table; it fetches on the user's behalf.
         upstream_table: what the provider calls it. The download URL is built
             from this, not from ``name``.
         record: provider record identifier, where the provider addresses tables

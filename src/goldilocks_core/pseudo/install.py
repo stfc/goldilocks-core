@@ -80,7 +80,7 @@ def install(
         destination = pseudodojo.install(
             table.upstream_table, root=root or pseudo_root(), http=http
         )
-    elif table.provider == "materialscloud":
+    elif table.provider == "sssp":
         if not table.record:
             raise ProviderNotSupported(
                 f"{table.name} names no record to resolve from the Archive"
@@ -174,7 +174,7 @@ def _layout(table: PseudoTable) -> tuple[str, str]:
     if table.provider == "pseudodojo":
         return pseudodojo.LIBRARY, f"{table.upstream_table}_upf"
 
-    if table.provider == "materialscloud":
+    if table.provider == "sssp":
         return sssp.LIBRARY, table.upstream_table
 
     return table.provider, table.upstream_table

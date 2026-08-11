@@ -282,7 +282,7 @@ elements = [
 # Range request; the Archive does not answer HEAD on these files usefully.
 
 [tables."sssp-pbe-efficiency-sr"]
-provider       = "materialscloud"
+provider       = "sssp"
 upstream_table = "SSSP_1.3.0_PBE_efficiency"
 record         = "rcyfm-68h65"
 version        = "1.3.0"
@@ -312,7 +312,7 @@ elements = [
 ]
 
 [tables."sssp-pbe-precision-sr"]
-provider       = "materialscloud"
+provider       = "sssp"
 upstream_table = "SSSP_1.3.0_PBE_precision"
 record         = "rcyfm-68h65"
 version        = "1.3.0"
@@ -342,7 +342,7 @@ elements = [
 ]
 
 [tables."sssp-pbesol-efficiency-sr"]
-provider       = "materialscloud"
+provider       = "sssp"
 upstream_table = "SSSP_1.3.0_PBEsol_efficiency"
 record         = "rcyfm-68h65"
 version        = "1.3.0"
@@ -374,7 +374,7 @@ elements = [
 ]
 
 [tables."sssp-pbesol-precision-sr"]
-provider       = "materialscloud"
+provider       = "sssp"
 upstream_table = "SSSP_1.3.0_PBEsol_precision"
 record         = "rcyfm-68h65"
 version        = "1.3.0"

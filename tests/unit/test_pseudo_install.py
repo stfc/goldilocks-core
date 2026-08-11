@@ -188,7 +188,7 @@ def test_install_stamps_full_for_a_fully_relativistic_table(monkeypatch, registr
 def test_every_registered_provider_has_an_installer(registry):
     """A table listed but not installable is a promise the CLI cannot keep."""
     for table in registry.values():
-        assert table.provider in {"pseudodojo", "materialscloud"}
+        assert table.provider in {"pseudodojo", "sssp"}
 
 
 def test_resolve_pseudos_prefers_an_explicit_root(registry, tmp_path):

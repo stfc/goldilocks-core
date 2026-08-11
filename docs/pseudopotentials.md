@@ -122,18 +122,19 @@ opening the TOML.
 ### Current catalogue (15 tables)
 
 A name encodes provider, functional, accuracy and relativistic treatment, so
-the default listing is names alone -- enough to pick one and install it:
+the default listing is names alone -- enough to pick one and install it,
+either by name or by the number beside it:
 
 ```
 $ gl pp available
-NAME                             STATE
-pseudodojo-pbesol-efficiency-sr  installed
-pseudodojo-pbesol-precision-sr   uninstalled
-pseudodojo-pbe-efficiency-sr     uninstalled
+  #  NAME                             STATE
+  1  pseudodojo-pbesol-efficiency-sr  installed (default)
+  2  pseudodojo-pbesol-precision-sr   uninstalled
+  3  pseudodojo-pbe-efficiency-sr     uninstalled
+  4  pseudodojo-pbe-precision-sr      uninstalled
 ...
-
-  `gl pp install` with no name installs pseudodojo-pbesol-efficiency-sr
-  install a specific one with `gl pp install NAME`
+  the default is pseudodojo-pbesol-efficiency-sr; `gl pp install` with no argument installs it
+  install others by name or number: `gl pp install NAME|N`
   source, version and coverage with `gl pp available -v`
 ```
 
@@ -143,25 +144,25 @@ symbols for lanthanides and actinides):
 
 ```
 $ gl pp available -v
-NAME                             SOURCE         VERSION  XC      REL  ACCURACY     ELEMENTS  Ln  An     SIZE  STATE
-pseudodojo-pbesol-efficiency-sr  pseudodojo     0.4      PBEsol  SR   efficiency         72   2   0   5.2 MB  installed
-pseudodojo-pbesol-precision-sr   pseudodojo     0.4      PBEsol  SR   precision          72   2   0   5.4 MB  uninstalled
-pseudodojo-pbe-efficiency-sr     pseudodojo     0.4      PBE     SR   efficiency         72   2   0   5.2 MB  uninstalled
-pseudodojo-pbe-precision-sr      pseudodojo     0.4      PBE     SR   precision          72   2   0   5.4 MB  uninstalled
-pseudodojo-lda-efficiency-sr     pseudodojo     0.4      LDA     SR   efficiency         70   0   0   4.9 MB  uninstalled
-pseudodojo-lda-precision-sr      pseudodojo     0.4      LDA     SR   precision          70   0   0   5.2 MB  uninstalled
-pseudodojo-pbe-lanthanides-sr    pseudodojo     0.4      PBE     SR   efficiency         14  14   0   1.4 MB  uninstalled
-pseudodojo-pbesol-efficiency-fr  pseudodojo     0.4      PBEsol  FR   efficiency         71   1   0   6.7 MB  uninstalled
-pseudodojo-pbesol-precision-fr   pseudodojo     0.4      PBEsol  FR   precision          71   1   0   7.1 MB  uninstalled
-pseudodojo-pbe-efficiency-fr     pseudodojo     0.4      PBE     FR   efficiency         70   0   0   6.6 MB  uninstalled
-pseudodojo-pbe-precision-fr      pseudodojo     0.4      PBE     FR   precision          72   2   0   7.3 MB  uninstalled
-sssp-pbe-efficiency-sr           materialscloud 1.3.0    PBE     SR   efficiency        103  15  15  59.5 MB  uninstalled
-sssp-pbe-precision-sr            materialscloud 1.3.0    PBE     SR   precision         103  15  15  63.0 MB  uninstalled
-sssp-pbesol-efficiency-sr        materialscloud 1.3.0    PBEsol  SR   efficiency        103  15  15  60.5 MB  uninstalled
-sssp-pbesol-precision-sr         materialscloud 1.3.0    PBEsol  SR   precision         103  15  15  63.9 MB  uninstalled
+  #  NAME                             SOURCE      VERSION  XC      REL  ACCURACY     ELEMENTS  Ln  An     SIZE  STATE
+  1  pseudodojo-pbesol-efficiency-sr  pseudodojo  0.4      PBEsol  SR   efficiency         72   2   0   5.2 MB  installed (default)
+  2  pseudodojo-pbesol-precision-sr   pseudodojo  0.4      PBEsol  SR   precision          72   2   0   5.4 MB  uninstalled
+  3  pseudodojo-pbe-efficiency-sr     pseudodojo  0.4      PBE     SR   efficiency         72   2   0   5.2 MB  uninstalled
+  4  pseudodojo-pbe-precision-sr      pseudodojo  0.4      PBE     SR   precision          72   2   0   5.4 MB  uninstalled
+  5  pseudodojo-lda-efficiency-sr     pseudodojo  0.4      LDA     SR   efficiency         70   0   0   4.9 MB  uninstalled
+  6  pseudodojo-lda-precision-sr      pseudodojo  0.4      LDA     SR   precision          70   0   0   5.2 MB  uninstalled
+  7  pseudodojo-pbe-lanthanides-sr    pseudodojo  0.4      PBE     SR   efficiency         14  14   0   1.4 MB  uninstalled
+  8  pseudodojo-pbesol-efficiency-fr  pseudodojo  0.4      PBEsol  FR   efficiency         71   1   0   6.7 MB  uninstalled
+  9  pseudodojo-pbesol-precision-fr   pseudodojo  0.4      PBEsol  FR   precision          71   1   0   7.1 MB  uninstalled
+ 10  pseudodojo-pbe-efficiency-fr     pseudodojo  0.4      PBE     FR   efficiency         70   0   0   6.6 MB  uninstalled
+ 11  pseudodojo-pbe-precision-fr      pseudodojo  0.4      PBE     FR   precision          72   2   0   7.3 MB  uninstalled
+ 12  sssp-pbe-efficiency-sr           sssp        1.3.0    PBE     SR   efficiency        103  15  15  59.5 MB  uninstalled
+ 13  sssp-pbe-precision-sr            sssp        1.3.0    PBE     SR   precision         103  15  15  63.0 MB  uninstalled
+ 14  sssp-pbesol-efficiency-sr        sssp        1.3.0    PBEsol  SR   efficiency        103  15  15  60.5 MB  uninstalled
+ 15  sssp-pbesol-precision-sr         sssp        1.3.0    PBEsol  SR   precision         103  15  15  63.9 MB  uninstalled
 
-  `gl pp install` with no name installs pseudodojo-pbesol-efficiency-sr
-  install a specific one with `gl pp install NAME`
+  the default is pseudodojo-pbesol-efficiency-sr; `gl pp install` with no argument installs it
+  install others by name or number: `gl pp install NAME|N`
 ```
 
 The default is `pseudodojo-pbesol-efficiency-sr` -- cheapest, cleanest licence
@@ -231,12 +232,20 @@ for. In v2.0 this is explicit in the data as well: the PBEsol rows link to the
 ## Installing: `gl pp`
 
 ```
-gl pp available            # the names of every table Core can install
-gl pp available -v         # also source, version, functional, coverage, size
-gl pp list                 # what is actually on disk, and where
-gl pp install [NAME ...]   # install the default, or named tables
-gl pp install --all        # install every registered table (~307 MB)
+gl pp available              # the names of every table Core can install
+gl pp available -v           # also source, version, functional, coverage, size
+gl pp list                   # what is actually on disk, and where
+gl pp install                # install the default
+gl pp install NAME|N ...     # install tables by name or by listing number
+gl pp install --all          # install every registered table (~307 MB)
 ```
+
+A table can be named in full or given as its number from `gl pp available`,
+which is the point of the number -- the names run to 31 characters. The
+numbering is the registry's own order, so it only ever grows at the end;
+`tests/unit/test_table_registry.py` pins it, so inserting or removing an entry
+fails there rather than silently repointing a scripted `gl pp install 12` at a
+different table.
 
 `--all` is a flag rather than a table named `all`, so it can never collide
 with a real name, and because a glob (`gl pp install '*'`) would be rewritten
@@ -420,20 +429,25 @@ To register another PseudoDojo or SSSP/Materials Cloud table:
    `scripts/survey_pseudo_tables.py` against the candidate, or fetch its
    report archive by hand the way this doc's "Current catalogue" section did.
 2. **Add a `[tables."..."]` entry** to `pseudo_registry.toml` with every
-   field `PseudoTable` requires: `provider`, `upstream_table` (what the
+   field `PseudoTable` requires: `provider` (the pseudopotential library --
+   `pseudodojo` or `sssp` -- not its host), `upstream_table` (what the
    *provider* calls it -- the download URL is built from this, never from
    your key), `version`, `functional`, `relativistic` (`SR`/`FR`/`NR`),
    `accuracy` (`efficiency`/`precision`), `licence`, `upstream_url`,
-   `citation`, `elements`, and measured `transfer_bytes`. Materials Cloud
-   entries also need `record` (the Archive record ID).
+   `citation`, `elements`, and measured `transfer_bytes`. `sssp` entries also
+   need `record` (the Archive record ID).
 3. **Name it `<ours>-<functional>-<accuracy>-{sr,fr,nr}`**, matching the
    convention above.
-4. **Write the `note` field** for anything a user must know before choosing
+4. **Append it** rather than inserting it, so the listing numbers `gl pp
+   install N` uses do not shift under anyone; then update the order pinned in
+   `test_table_registry.py`.
+5. **Write the `note` field** for anything a user must know before choosing
    it -- a functional mismatch, a coverage gap, an encumbered licence. The
    existing entries are the style guide.
-5. Run the test suite: `test_table_registry.py` enforces the naming
-   convention and that every entry declares terms (licence, citation, URL);
-   `test_pseudo_install.py` covers layout and installability.
+6. Run the test suite: `test_table_registry.py` enforces the naming
+   convention, the pinned order, and that every entry declares terms
+   (licence, citation, URL); `test_pseudo_install.py` covers layout and
+   installability.
 
 No code change is needed for a new table under an existing provider --
 `install.py` dispatches on `table.provider`, not on the table name.
@@ -494,7 +508,7 @@ whatever `install()` returns, regardless of provider.
 - **`gl pp install` cannot force a reinstall.** A table installed before a
   sidecar-schema change (like the `_relativistic` stamp above) keeps its old
   sidecar until its directory is deleted and reinstalled by hand.
-- **Only two providers are wired up**: PseudoDojo and Materials Cloud/SSSP.
+- **Only two providers are wired up**: `pseudodojo` and `sssp`.
   Anything else (GBRV, PSlibrary, SG15 fetched standalone, ...) has to be
   supplied via `--pseudo-root`.
 

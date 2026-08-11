@@ -16,11 +16,15 @@ from goldilocks_core.pseudo.table_registry import (
 _NAME_WIDTH = 33
 """Wide enough for the longest registered name, with a separating space left."""
 
-_BRIEF_HEADER = f"{'NAME':<{_NAME_WIDTH}}STATE"
+_NUMBER = f"{'#':>3}  "
+"""A table's position in the listing, which ``install`` also accepts."""
+
+_BRIEF_HEADER = f"{_NUMBER}{'NAME':<{_NAME_WIDTH}}STATE"
 
 _DETAILED_HEADER = (
-    f"{'NAME':<{_NAME_WIDTH}}{'SOURCE':<15}{'VERSION':<9}{'XC':<8}{'REL':<5}"
-    f"{'ACCURACY':<12}{'ELEMENTS':>9}{'Ln':>4}{'An':>4}{'SIZE':>9}  STATE"
+    f"{_NUMBER}{'NAME':<{_NAME_WIDTH}}{'SOURCE':<12}{'VERSION':<9}{'XC':<8}"
+    f"{'REL':<5}{'ACCURACY':<12}{'ELEMENTS':>9}{'Ln':>4}{'An':>4}"
+    f"{'SIZE':>9}  STATE"
 )
 
 
@@ -47,7 +51,9 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:
     install.add_argument(
         "tables",
         nargs="*",
-        help="Table names. Defaults to the one Core uses unprompted.",
+        metavar="NAME|N",
+        help="Table names, or their numbers from `gl pp available`. "
+        "Defaults to the one Core uses unprompted.",
     )
     install.add_argument(
         "--all",
@@ -78,22 +84,28 @@ def _available(*, verbose: bool = False) -> int:
     default = default_table(registry)
 
     print(_DETAILED_HEADER if verbose else _BRIEF_HEADER)
-    for table in registry.values():
+    for number, table in enumerate(registry.values(), start=1):
         state = "installed" if installer.is_installed(table) else "uninstalled"
+        if table is default:
+            state = f"{state} (default)"
 
         if verbose:
             row = (
-                f"{table.name:<{_NAME_WIDTH}}{table.provider:<15}{table.version:<9}"
-                f"{table.functional:<8}{table.relativistic:<5}{table.accuracy:<12}"
-                f"{len(table.elements):>9}{len(table.lanthanides):>4}"
-                f"{len(table.actinides):>4}{_megabytes(table):>9}  {state}"
+                f"{number:>3}  {table.name:<{_NAME_WIDTH}}{table.provider:<12}"
+                f"{table.version:<9}{table.functional:<8}{table.relativistic:<5}"
+                f"{table.accuracy:<12}{len(table.elements):>9}"
+                f"{len(table.lanthanides):>4}{len(table.actinides):>4}"
+                f"{_megabytes(table):>9}  {state}"
             )
         else:
-            row = f"{table.name:<{_NAME_WIDTH}}{state}"
+            row = f"{number:>3}  {table.name:<{_NAME_WIDTH}}{state}"
         print(row)
 
-    print(f"\n  `{installer.INSTALL_COMMAND}` with no name installs {default.name}")
-    print(f"  install a specific one with `{installer.INSTALL_COMMAND} NAME`")
+    print(
+        f"\n  the default is {default.name}; "
+        f"`{installer.INSTALL_COMMAND}` with no argument installs it"
+    )
+    print(f"  install others by name or number: `{installer.INSTALL_COMMAND} NAME|N`")
     if not verbose:
         print(f"  source, version and coverage with `{installer.AVAILABLE_COMMAND} -v`")
     return 0
@@ -122,11 +134,24 @@ def _installed() -> int:
     return 0
 
 
-def _install(names: list[str], *, everything: bool = False) -> int:
+def _resolve(token: str, registry: dict[str, PseudoTable]) -> str | None:
+    """Return the table ``token`` selects, by name or by listing number."""
+    if token in registry:
+        return token
+
+    if token.isdigit():
+        names = list(registry)
+        if 1 <= int(token) <= len(names):
+            return names[int(token) - 1]
+
+    return None
+
+
+def _install(tokens: list[str], *, everything: bool = False) -> int:
     """Install the named tables, the default, or everything registered."""
     registry = load_tables()
 
-    if everything and names:
+    if everything and tokens:
         print(
             "error: --all installs every table; do not also name one",
             file=sys.stderr,
@@ -136,16 +161,18 @@ def _install(names: list[str], *, everything: bool = False) -> int:
     if everything:
         wanted = list(registry)
     else:
-        wanted = names or [default_table(registry).name]
+        chosen = [(token, _resolve(token, registry)) for token in tokens]
+        unresolved = [token for token, name in chosen if name is None]
+        if unresolved:
+            print(
+                f"error: no such table: {', '.join(unresolved)}\n"
+                f"       names and numbers 1-{len(registry)} are listed by "
+                f"`{installer.AVAILABLE_COMMAND}`",
+                file=sys.stderr,
+            )
+            return 2
 
-    unknown = [name for name in wanted if name not in registry]
-    if unknown:
-        print(
-            f"error: no such table: {', '.join(unknown)}\n"
-            f"       run `{installer.AVAILABLE_COMMAND}` to see the names",
-            file=sys.stderr,
-        )
-        return 2
+        wanted = [name for _token, name in chosen] or [default_table(registry).name]
 
     if everything:
         _announce_total(registry, wanted)

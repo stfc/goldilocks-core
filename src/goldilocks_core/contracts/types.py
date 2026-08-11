@@ -55,20 +55,20 @@ KPointGrid = tuple[int, int, int]
 KPointShift = tuple[int, int, int]
 """Immutable Monkhorst-Pack shift as (s1, s2, s3) with values 0 or 1."""
 
-JobMode = Literal["recommend", "generate", "bundle"]
+JobMode = Literal["recommend", "generate"]
 """How far the fixed Core pipeline runs.
 
 - ``recommend``: Load → Analyze → Advise → Kmesh → Select.
-- ``generate``: … → Generate.
-- ``bundle``: … → Bundle.
+- ``generate``: … → Generate, optionally publishing to ``output_dir``.
 """
 
 Dimensionality = Literal["3d", "2d", "1d", "molecule", "unknown"]
 """Bonded-structure dimensionality, or ``unknown`` when detection fails."""
 
 ElectronicCharacter = Literal["metal", "insulator", "likely_metal", "unknown"]
-"""Conservative electronic-character classification from structure facts.
+"""Electronic-character classification from a model or structure facts.
 
+- ``metal`` / ``insulator``: model-backed classifications.
 - ``likely_metal``: all elements are metallic; treat as likely, not confirmed.
 - ``unknown``: cannot determine from structure alone; verify manually.
 """

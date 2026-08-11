@@ -4,19 +4,31 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
+from goldilocks_core import contracts
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
-    CoreJobRequest,
     CoreResult,
     ModelSpec,
+    PresetRequest,
+    QueryRequest,
 )
 from goldilocks_core.examples import structures_path
 from goldilocks_core.generation import available_codes, available_tasks
-from goldilocks_core.jobs import run_core_job
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
+from goldilocks_core.runtime import query_records, run_core_job
+
+_OUTPUT_TYPE_NAMES = (
+    "StructureAnalysisRecord",
+    "ParameterAdvice",
+    "KPointSelection",
+    "SelectionRecord",
+    "GeneratedFiles",
+)
+_OUTPUT_TYPES = {name: getattr(contracts, name) for name in _OUTPUT_TYPE_NAMES}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -27,15 +39,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    for command in ("recommend", "generate", "bundle"):
+    for command in ("recommend", "generate"):
         subparser = subparsers.add_parser(command)
         _add_common_arguments(subparser)
-        if command == "bundle":
+        if command == "generate":
             subparser.add_argument(
                 "--out",
-                required=True,
-                help="Output directory for the portable Core bundle.",
+                help="Output directory for a portable Core bundle.",
             )
+
+    compute = subparsers.add_parser("compute")
+    _add_common_arguments(compute)
+    compute.add_argument(
+        "--outputs",
+        required=True,
+        help="Comma-separated record type names to compute.",
+    )
 
     examples = subparsers.add_parser(
         "examples",
@@ -63,7 +82,14 @@ def main() -> None:
         _validate_backend_options(args)
         request = _request_from_args(args)
     except ValueError as error:
-        parser.error(str(error))
+        parser.print_usage(sys.stderr)
+        print(f"{parser.prog}: error: {error}", file=sys.stderr)
+        raise SystemExit(2) from error
+
+    if args.command == "compute":
+        records = query_records(request)
+        print(json.dumps(records.to_dict(), indent=2, sort_keys=True))
+        return
 
     result = run_core_job(request)
 
@@ -152,8 +178,12 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
-    """Build a Core job request from parsed CLI arguments."""
+def _request_from_args(args: argparse.Namespace) -> PresetRequest | QueryRequest:
+    """Build a Core request from parsed CLI arguments.
+
+    Returns a :class:`QueryRequest` for the ``compute`` command and a
+    :class:`PresetRequest` (``recommend``/``generate``) otherwise.
+    """
     intent = CalculationIntent(
         code=args.code,
         task=args.task,
@@ -178,16 +208,42 @@ def _request_from_args(args: argparse.Namespace) -> CoreJobRequest:
     pseudo_metadata = (
         tuple(load_pseudo_metadata(Path(args.pseudo_root))) if args.pseudo_root else ()
     )
+    kmesh_model = _model_spec_from_args(args)
 
-    return CoreJobRequest(
+    if args.command == "compute":
+        return QueryRequest(
+            structure=args.structure,
+            outputs=_parse_outputs(args.outputs),
+            intent=intent,
+            hints=hints,
+            pseudo_metadata=pseudo_metadata,
+            kmesh_model=kmesh_model,
+        )
+    return PresetRequest(
         structure=args.structure,
         intent=intent,
         hints=hints,
         mode=args.command,
         pseudo_metadata=pseudo_metadata,
         output_dir=getattr(args, "out", None),
-        kmesh_model=_model_spec_from_args(args),
+        kmesh_model=kmesh_model,
     )
+
+
+def _parse_outputs(value: str) -> tuple[type, ...]:
+    """Resolve comma-separated contract record names to output types."""
+    names = [name.strip() for name in value.split(",")]
+    if not names or any(not name for name in names):
+        raise ValueError("--outputs must contain comma-separated record type names")
+
+    unknown = [name for name in names if name not in _OUTPUT_TYPES]
+    if unknown:
+        available = ", ".join(_OUTPUT_TYPE_NAMES)
+        invalid = ", ".join(unknown)
+        raise ValueError(
+            f"Unknown output record type(s): {invalid}. Available: {available}"
+        )
+    return tuple(_OUTPUT_TYPES[name] for name in names)
 
 
 def _model_spec_from_args(args: argparse.Namespace) -> ModelSpec | None:
@@ -235,7 +291,7 @@ def _parse_optional_bool(value: str | None) -> bool | None:
 
 def _print_human_summary(result: CoreResult) -> None:
     """Print a small human-readable summary from the Core result."""
-    grid = result.selection.k_points.grid
+    grid = result.k_points.grid
     print(f"formula: {result.analysis.reduced_formula}")
     print(f"code: {result.intent.code}")
     print(f"task: {result.intent.task}")

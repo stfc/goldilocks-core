@@ -124,14 +124,14 @@ for generated_file in result.generated_files:
 ## Writing a portable bundle
 
 ```python
-from goldilocks_core import CalculationHints, write_bundle
+from goldilocks_core import CalculationHints, generate
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 pseudo_metadata = load_pseudo_metadata("path/to/pseudopotentials")
 
-result = write_bundle(
+result = generate(
     "structure.cif",
-    "run/",
+    output_dir="run/",
     hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
     pseudo_metadata=pseudo_metadata,
 )

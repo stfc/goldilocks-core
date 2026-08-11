@@ -1,6 +1,7 @@
 import json
 import math
 
+import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.contracts import (
@@ -197,3 +198,24 @@ def test_kmesh_entries_serialize_open_ended_intervals_as_null() -> None:
 
     assert data["k_distance_interval"][1] is None
     assert json.dumps(data, allow_nan=False)
+
+
+def test_build_kmesh_entries_propagates_invalid_density_interval(monkeypatch) -> None:
+    """A mesh with no valid scalar k-line-density interval surfaces, not nulls."""
+    structure = Structure(
+        lattice=Lattice.cubic(3.5),
+        species=["Si"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+    candidates = generate_candidate_k_distances(structure, max_index=4)
+
+    def raise_invalid(*_args, **_kwargs) -> tuple[float, float]:
+        raise ValueError("Mesh does not correspond to a valid scalar interval")
+
+    monkeypatch.setattr(
+        "goldilocks_core.kmesh.math.mesh_to_k_line_density_interval",
+        raise_invalid,
+    )
+
+    with pytest.raises(ValueError, match="valid scalar interval"):
+        build_kmesh_entries(structure, candidates)

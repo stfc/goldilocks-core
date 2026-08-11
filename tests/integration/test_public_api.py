@@ -5,7 +5,7 @@ from goldilocks_core import (
     PresetRequest,
     run_core_job,
 )
-from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
+from goldilocks_core.contracts import PseudoMetadata
 
 
 def _make_si_structure() -> Structure:

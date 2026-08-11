@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from goldilocks_core.contracts import (
-    CalculationHints,
     Provenance,
+    SpinHints,
     SpinOrbitAdvice,
     StructureAnalysisRecord,
 )
@@ -12,7 +12,7 @@ from goldilocks_core.contracts import (
 
 def advise_spin_orbit(
     analysis: StructureAnalysisRecord,
-    hints: CalculationHints,
+    hints: SpinHints,
 ) -> SpinOrbitAdvice:
     if hints.spin_orbit_coupling is not None:
         return SpinOrbitAdvice(

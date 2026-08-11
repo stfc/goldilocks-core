@@ -18,10 +18,10 @@ from goldilocks_core.contracts import (
     CoreRecords,
     CoreResult,
     ParameterAdvice,
+    PseudoMetadata,
     StructureAnalysisRecord,
     StructureFeatureVector,
 )
-from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 
 def make_structure() -> Structure:

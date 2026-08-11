@@ -3,9 +3,8 @@ import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.advisors.kdistance_advisor import (
-    default_kmesh_advisor,
+    QrfKDistanceBackend,
     kdistance_to_selection,
-    qrf_kdistance_advisor,
 )
 from goldilocks_core.contracts import StructureFeatureVector
 from goldilocks_core.kmesh.math import k_distance_to_mesh
@@ -91,7 +90,7 @@ def test_kdistance_selection_records_model_provenance() -> None:
     assert selection.provenance.confidence == 0.9
 
 
-def test_qrf_advisor_loads_lazily_and_reuses_resources(monkeypatch) -> None:
+def test_qrf_backend_loads_lazily_and_reuses_resources(monkeypatch) -> None:
     loads = 0
 
     def load_model(spec):
@@ -101,36 +100,36 @@ def test_qrf_advisor_loads_lazily_and_reuses_resources(monkeypatch) -> None:
 
     patch_inference(monkeypatch)
     monkeypatch.setattr("goldilocks_core.ml.models.load_model", load_model)
-    advisor = qrf_kdistance_advisor(
-        load_default_qrf_config(),
-        "checkpoint.ckpt",
-        "atom-init.json",
+    backend = QrfKDistanceBackend(
+        config=load_default_qrf_config(),
+        metallicity_checkpoint="checkpoint.ckpt",
+        metallicity_atom_init="atom-init.json",
     )
 
-    first = advisor(make_structure())
-    second = advisor(make_structure())
+    first = backend(make_structure())
+    second = backend(make_structure())
 
     assert first.grid == second.grid
     assert first.provenance.source == "model"
     assert loads == 1
 
 
-def test_model_loading_errors_propagate(monkeypatch) -> None:
+def test_qrf_backend_model_loading_errors_propagate(monkeypatch) -> None:
     def fail(spec):
         raise FileNotFoundError("missing model")
 
     monkeypatch.setattr("goldilocks_core.ml.models.load_model", fail)
-    advisor = qrf_kdistance_advisor(
-        load_default_qrf_config(),
-        "checkpoint.ckpt",
-        "atom-init.json",
+    backend = QrfKDistanceBackend(
+        config=load_default_qrf_config(),
+        metallicity_checkpoint="checkpoint.ckpt",
+        metallicity_atom_init="atom-init.json",
     )
 
     with pytest.raises(FileNotFoundError, match="missing model"):
-        advisor(make_structure())
+        backend(make_structure())
 
 
-def test_default_advisor_loads_registry_on_first_model_call(monkeypatch) -> None:
+def test_qrf_backend_loads_registry_config_on_first_model_call(monkeypatch) -> None:
     loads = 0
 
     def load_config(path=None):
@@ -143,13 +142,13 @@ def test_default_advisor_loads_registry_on_first_model_call(monkeypatch) -> None
         load_config,
     )
     patch_inference(monkeypatch)
-    advisor = default_kmesh_advisor(
+    backend = QrfKDistanceBackend(
         metallicity_checkpoint="checkpoint.ckpt",
         metallicity_atom_init="atom-init.json",
     )
 
-    first = advisor(make_structure())
-    second = advisor(make_structure())
+    first = backend(make_structure())
+    second = backend(make_structure())
 
     assert first.provenance.source == "model"
     assert first.grid == second.grid

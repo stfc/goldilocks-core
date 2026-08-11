@@ -12,7 +12,7 @@ from goldilocks_core import (
     run_core_job,
 )
 from goldilocks_core.advice.smearing import METALLIC_SMEARING_WIDTH_RY
-from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
+from goldilocks_core.contracts import PseudoMetadata
 
 
 def test_elemental_metal_uses_modest_cold_smearing_in_qe_rydberg_units(

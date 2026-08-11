@@ -8,7 +8,7 @@ from pathlib import Path
 from goldilocks_core.contracts import BundleRecord, CoreResult, JsonDict
 
 MANIFEST_FILENAME = "manifest.json"
-MANIFEST_VERSION = 1
+MANIFEST_VERSION = 2
 
 
 def build_bundle_manifest(result: CoreResult) -> JsonDict:

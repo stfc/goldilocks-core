@@ -46,7 +46,7 @@ def test_analyze_structure_reports_partial_occupancy_warnings() -> None:
     assert analysis.disordered_site_count == 1
     assert "partial occupancies" in analysis.disorder_warnings[0]
     assert analysis.dimensionality == "unknown"
-    assert analysis.has_vacuum is False
+    assert analysis.low_dimensional is False
 
 
 def test_analyze_structure_marks_all_metal_compositions_as_likely_metal() -> None:
@@ -155,7 +155,7 @@ def test_analyze_structure_reports_3d_bulk_without_vacuum() -> None:
     analysis = analyze_structure(structure)
 
     assert analysis.dimensionality == "3d"
-    assert analysis.has_vacuum is False
+    assert analysis.low_dimensional is False
 
 
 def test_analyze_structure_reports_2d_slab_with_vacuum() -> None:
@@ -169,7 +169,7 @@ def test_analyze_structure_reports_2d_slab_with_vacuum() -> None:
     analysis = analyze_structure(structure)
 
     assert analysis.dimensionality == "2d"
-    assert analysis.has_vacuum is True
+    assert analysis.low_dimensional is True
 
 
 def test_analyze_structure_reports_molecule_with_vacuum() -> None:
@@ -183,4 +183,4 @@ def test_analyze_structure_reports_molecule_with_vacuum() -> None:
     analysis = analyze_structure(structure)
 
     assert analysis.dimensionality == "molecule"
-    assert analysis.has_vacuum is True
+    assert analysis.low_dimensional is True

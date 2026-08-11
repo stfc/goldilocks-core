@@ -13,15 +13,6 @@ KMeshAdvisor = Callable[[Structure], KPointSelection]
 
 
 @runtime_checkable
-class ModelRuntime(Protocol):
-    """Lifecycle interface for loaded model resources."""
-
-    def reset(self) -> None: ...
-
-    def close(self) -> None: ...
-
-
-@runtime_checkable
 class KMeshService(Protocol):
     """Runtime-owned kmesh service: callable plus ``reset``/``close``."""
 

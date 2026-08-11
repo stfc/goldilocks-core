@@ -20,12 +20,15 @@ from goldilocks_core.contracts import (
 
 
 class DimensionalityClassificationError(Exception):
-    """Dimensionality could not be classified for a structure.
+    """Dimensionality could not be classified for an ordered structure.
 
-    Raised when CrystalNN bonding or the Larsen dimensionality algorithm fails.
-    The recommendation cannot proceed: ``advise_vdw`` depends on dimensionality,
-    so a silent fallback to ``"unknown"`` would produce a partial recommendation.
-    The real fix is a goldilocks-side classifier (see #133).
+    Raised when CrystalNN bonding or the Larsen dimensionality algorithm fails
+    on a structure it is expected to handle. Disordered structures take a
+    conservative ``"unknown"`` default instead (see ``_analyze_dimensionality``):
+    CrystalNN cannot analyze them, so a hard error would make goldilocks
+    unusable for legitimate disordered inputs. An ordered-structure failure is
+    unexpected, so it surfaces hard rather than silently degrading the
+    recommendation. The real fix is a goldilocks-side classifier (see #133).
     """
 
     def __init__(self, structure: Structure, /) -> None:
@@ -117,7 +120,7 @@ def analyze_structure(
     )
     magnetic_elements = tuple(sorted({*transition_metals, *lanthanides, *actinides}))
     disorder_warnings = _find_disorder_warnings(structure)
-    dimensionality, has_vacuum, dimensionality_warnings = _analyze_dimensionality(
+    dimensionality, low_dimensional, dimensionality_warnings = _analyze_dimensionality(
         structure
     )
     try:
@@ -160,7 +163,7 @@ def analyze_structure(
         space_group_number=symmetry["space_group_number"],
         crystal_system=symmetry["crystal_system"],
         dimensionality=dimensionality,
-        has_vacuum=has_vacuum,
+        low_dimensional=low_dimensional,
         electronic_character=electronic_character,
         electronic_character_source=electronic_character_source,
         electronic_character_confidence=electronic_character_confidence,
@@ -188,15 +191,17 @@ def _find_disorder_warnings(structure: Structure) -> tuple[str, ...]:
 def _analyze_dimensionality(
     structure: Structure,
 ) -> tuple[Dimensionality, bool, tuple[str, ...]]:
-    """Return dimensionality, a low-dimensional/vacuum heuristic, and warnings.
+    """Return dimensionality, a low-dimensional heuristic, and warnings.
 
     Uses pymatgen's CrystalNN graph and Larsen dimensionality algorithm. The
     heuristic is connectivity-derived, not a measurement of cell vacuum.
     Disordered structures are not passed to CrystalNN because its graph path
     does not support them; they get a conservative ``"unknown"`` default with a
-    warning. When CrystalNN or Larsen fails on an ordered structure,
-    :class:`DimensionalityClassificationError` propagates -- the recommendation
-    cannot proceed without dimensionality (see #133).
+    warning (disordered is a known limitation, not an unexpected failure). When
+    CrystalNN or Larsen fails on an ordered structure,
+    :class:`DimensionalityClassificationError` propagates -- an ordered-structure
+    failure is unexpected, so it surfaces hard rather than silently degrading
+    the recommendation (see #133).
     """
     if not structure.is_ordered:
         return (
@@ -204,7 +209,7 @@ def _analyze_dimensionality(
             False,
             (
                 "Dimensionality detection is not supported for disordered "
-                "structures; defaulted to unknown with the low-dimensional/vacuum "
+                "structures; defaulted to unknown with the low-dimensional "
                 "heuristic disabled. Set CalculationHints(use_vdw=True) explicitly "
                 "if a vdW correction is needed.",
             ),
@@ -217,8 +222,8 @@ def _analyze_dimensionality(
         raise DimensionalityClassificationError(structure) from error
 
     dimensionality = _DIMENSIONALITY_BY_VALUE.get(dim_value, "unknown")
-    has_vacuum = bool(dimensionality != "unknown" and dim_value < 3)
-    return dimensionality, has_vacuum, ()
+    low_dimensional = bool(dimensionality != "unknown" and dim_value < 3)
+    return dimensionality, low_dimensional, ()
 
 
 def _analyze_symmetry(structure: Structure) -> dict[str, str | int]:

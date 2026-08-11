@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from goldilocks_core.contracts import (
-    CalculationHints,
     MagnetismAdvice,
     Provenance,
+    SpinHints,
     StructureAnalysisRecord,
 )
 
 
 def advise_magnetism(
     analysis: StructureAnalysisRecord,
-    hints: CalculationHints,
+    hints: SpinHints,
 ) -> MagnetismAdvice:
     if hints.spin_polarized is not None:
         return MagnetismAdvice(

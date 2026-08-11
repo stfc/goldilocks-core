@@ -126,11 +126,15 @@ the default listing is names alone -- enough to pick one and install it:
 
 ```
 $ gl pp available
-NAME                              STATE
-pseudodojo-pbesol-efficiency-sr * installed
-pseudodojo-pbesol-precision-sr
-pseudodojo-pbe-efficiency-sr
+NAME                             STATE
+pseudodojo-pbesol-efficiency-sr  installed
+pseudodojo-pbesol-precision-sr   uninstalled
+pseudodojo-pbe-efficiency-sr     uninstalled
 ...
+
+  `gl pp install` with no name installs pseudodojo-pbesol-efficiency-sr
+  install a specific one with `gl pp install NAME`
+  source, version and coverage with `gl pp available -v`
 ```
 
 `-v` adds what a name cannot carry -- where the table is fetched from, which
@@ -139,23 +143,24 @@ symbols for lanthanides and actinides):
 
 ```
 $ gl pp available -v
-NAME                              SOURCE         VERSION  XC      REL  ACCURACY     ELEMENTS  Ln  An     SIZE  STATE
-pseudodojo-pbesol-efficiency-sr * pseudodojo     0.4      PBEsol  SR   efficiency         72   2   0   5.2 MB  installed
-pseudodojo-pbesol-precision-sr    pseudodojo     0.4      PBEsol  SR   precision          72   2   0   5.4 MB
-pseudodojo-pbe-efficiency-sr      pseudodojo     0.4      PBE     SR   efficiency         72   2   0   5.2 MB
-pseudodojo-pbe-precision-sr       pseudodojo     0.4      PBE     SR   precision          72   2   0   5.4 MB
-pseudodojo-lda-efficiency-sr      pseudodojo     0.4      LDA     SR   efficiency         70   0   0   4.9 MB
-pseudodojo-lda-precision-sr       pseudodojo     0.4      LDA     SR   precision          70   0   0   5.2 MB
-pseudodojo-pbe-lanthanides-sr     pseudodojo     0.4      PBE     SR   efficiency         14  14   0   1.4 MB
-pseudodojo-pbesol-efficiency-fr   pseudodojo     0.4      PBEsol  FR   efficiency         71   1   0   6.7 MB
-pseudodojo-pbesol-precision-fr    pseudodojo     0.4      PBEsol  FR   precision          71   1   0   7.1 MB
-pseudodojo-pbe-efficiency-fr      pseudodojo     0.4      PBE     FR   efficiency         70   0   0   6.6 MB
-pseudodojo-pbe-precision-fr       pseudodojo     0.4      PBE     FR   precision          72   2   0   7.3 MB
-sssp-pbesol-efficiency-sr         materialscloud 1.3.0    PBEsol  SR   efficiency        103  15  15  60.5 MB
+NAME                             SOURCE         VERSION  XC      REL  ACCURACY     ELEMENTS  Ln  An     SIZE  STATE
+pseudodojo-pbesol-efficiency-sr  pseudodojo     0.4      PBEsol  SR   efficiency         72   2   0   5.2 MB  installed
+pseudodojo-pbesol-precision-sr   pseudodojo     0.4      PBEsol  SR   precision          72   2   0   5.4 MB  uninstalled
+pseudodojo-pbe-efficiency-sr     pseudodojo     0.4      PBE     SR   efficiency         72   2   0   5.2 MB  uninstalled
+pseudodojo-pbe-precision-sr      pseudodojo     0.4      PBE     SR   precision          72   2   0   5.4 MB  uninstalled
+pseudodojo-lda-efficiency-sr     pseudodojo     0.4      LDA     SR   efficiency         70   0   0   4.9 MB  uninstalled
+pseudodojo-lda-precision-sr      pseudodojo     0.4      LDA     SR   precision          70   0   0   5.2 MB  uninstalled
+pseudodojo-pbe-lanthanides-sr    pseudodojo     0.4      PBE     SR   efficiency         14  14   0   1.4 MB  uninstalled
+pseudodojo-pbesol-efficiency-fr  pseudodojo     0.4      PBEsol  FR   efficiency         71   1   0   6.7 MB  uninstalled
+pseudodojo-pbesol-precision-fr   pseudodojo     0.4      PBEsol  FR   precision          71   1   0   7.1 MB  uninstalled
+pseudodojo-pbe-efficiency-fr     pseudodojo     0.4      PBE     FR   efficiency         70   0   0   6.6 MB  uninstalled
+pseudodojo-pbe-precision-fr      pseudodojo     0.4      PBE     FR   precision          72   2   0   7.3 MB  uninstalled
+sssp-pbesol-efficiency-sr        materialscloud 1.3.0    PBEsol  SR   efficiency        103  15  15  60.5 MB  uninstalled
 ```
 
-`*` marks the default (`pseudodojo-pbesol-efficiency-sr`): cheapest, cleanest
-licence (CC-BY-4.0, PseudoDojo redistributes nothing GPL), PBEsol.
+The default is `pseudodojo-pbesol-efficiency-sr` -- cheapest, cleanest licence
+(CC-BY-4.0, PseudoDojo redistributes nothing GPL), PBEsol. Both listings name
+it in their footer rather than marking it with a symbol.
 
 **Why 12, not aiida-pseudo's 13.** aiida-pseudo's PseudoDojo family offers 13
 configurations; SSSP is a separate, uncounted 13th-and-beyond family entirely.

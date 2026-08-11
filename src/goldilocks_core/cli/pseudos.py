@@ -13,8 +13,8 @@ from goldilocks_core.pseudo.table_registry import (
     load_tables,
 )
 
-_NAME_WIDTH = 34
-"""Wide enough for the longest name plus the default marker, with a space left."""
+_NAME_WIDTH = 33
+"""Wide enough for the longest registered name, with a separating space left."""
 
 _BRIEF_HEADER = f"{'NAME':<{_NAME_WIDTH}}STATE"
 
@@ -73,22 +73,21 @@ def _available(*, verbose: bool = False) -> int:
 
     print(_DETAILED_HEADER if verbose else _BRIEF_HEADER)
     for table in registry.values():
-        name = f"{table.name} *" if table is default else table.name
-        state = "installed" if installer.is_installed(table) else ""
+        state = "installed" if installer.is_installed(table) else "uninstalled"
 
         if verbose:
             row = (
-                f"{name:<{_NAME_WIDTH}}{table.provider:<15}{table.version:<9}"
+                f"{table.name:<{_NAME_WIDTH}}{table.provider:<15}{table.version:<9}"
                 f"{table.functional:<8}{table.relativistic:<5}{table.accuracy:<12}"
                 f"{len(table.elements):>9}{len(table.lanthanides):>4}"
                 f"{len(table.actinides):>4}{_megabytes(table):>9}  {state}"
             )
         else:
-            row = f"{name:<{_NAME_WIDTH}}{state}"
-        print(row.rstrip())
+            row = f"{table.name:<{_NAME_WIDTH}}{state}"
+        print(row)
 
-    print(f"\n  * installed by `{installer.INSTALL_COMMAND}` when no table is named")
-    print(f"  install one with `{installer.INSTALL_COMMAND} NAME`")
+    print(f"\n  `{installer.INSTALL_COMMAND}` with no name installs {default.name}")
+    print(f"  install a specific one with `{installer.INSTALL_COMMAND} NAME`")
     if not verbose:
         print(f"  source, version and coverage with `{installer.AVAILABLE_COMMAND} -v`")
     return 0

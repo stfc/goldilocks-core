@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from goldilocks_core.cli import core as cli_core
-from goldilocks_core.pseudo.table_registry import load_tables
+from goldilocks_core.pseudo.table_registry import default_table, load_tables
 
 
 @pytest.fixture(autouse=True)
@@ -55,9 +55,37 @@ def test_the_verbose_listing_carries_source_and_version(capsys):
     assert "1.3.0" in output
 
 
-def test_the_default_marker_does_not_run_into_the_next_column(capsys):
-    """The longest name plus the marker has to still leave a separator."""
+def test_every_table_states_whether_it_is_installed(capsys):
+    """Silence is ambiguous: a blank state reads as a rendering failure."""
     for argv in ((), ("-v",)):
-        for line in run_available(capsys, *argv).splitlines():
-            assert " *P" not in line
-            assert " *p" not in line
+        output = run_available(capsys, *argv)
+        rows = [
+            line
+            for line in output.splitlines()
+            if line.startswith(("pseudodojo", "sssp"))
+        ]
+
+        assert len(rows) == len(load_tables())
+        assert all(row.endswith(("installed", "uninstalled")) for row in rows)
+
+
+def test_the_default_is_named_rather_than_marked(capsys):
+    """A symbol in a column needs a legend; the name needs nothing."""
+    output = run_available(capsys)
+
+    assert "*" not in output
+    assert f"installs {default_table().name}" in output
+
+
+def test_no_column_runs_into_the_next(capsys):
+    """The longest name has to leave a separator before the column beside it."""
+    longest = max(load_tables(), key=len)
+
+    for argv in ((), ("-v",)):
+        row = next(
+            line
+            for line in run_available(capsys, *argv).splitlines()
+            if line.startswith(longest)
+        )
+
+        assert row[len(longest)] == " "

@@ -39,6 +39,7 @@ licence        = "CC-BY-4.0"
 upstream_url   = "https://www.pseudo-dojo.org/"
 citation       = "van Setten et al., Comput. Phys. Commun. 226, 39 (2018)"
 transfer_bytes = 5201271
+installed_bytes = 18231870
 default        = true
 note = """
 The default. Covers everything except lanthanides beyond La and Lu, and all actinides."""
@@ -62,6 +63,7 @@ licence        = "CC-BY-4.0"
 upstream_url   = "https://www.pseudo-dojo.org/"
 citation       = "van Setten et al., Comput. Phys. Commun. 226, 39 (2018)"
 transfer_bytes = 5420063
+installed_bytes = 18957926
 note = """
 Harder pseudopotentials than the efficiency table. Recommended cutoffs are identical for
 most elements: the difference is in the pseudopotentials, not the plane-wave basis."""
@@ -85,6 +87,7 @@ licence        = "CC-BY-4.0"
 upstream_url   = "https://www.pseudo-dojo.org/"
 citation       = "van Setten et al., Comput. Phys. Commun. 226, 39 (2018)"
 transfer_bytes = 5230385
+installed_bytes = 20195322
 note = """
 Use when the calculation is PBE. A PBEsol table in a PBE run is an inconsistency Core
 refuses to emit."""
@@ -108,6 +111,7 @@ licence        = "CC-BY-4.0"
 upstream_url   = "https://www.pseudo-dojo.org/"
 citation       = "van Setten et al., Comput. Phys. Commun. 226, 39 (2018)"
 transfer_bytes = 5448379
+installed_bytes = 20901065
 note = """
 Use when the calculation is PBE."""
 elements = [
@@ -130,6 +134,7 @@ licence        = "CC-BY-4.0"
 upstream_url   = "https://www.pseudo-dojo.org/"
 citation       = "van Setten et al., Comput. Phys. Commun. 226, 39 (2018)"
 transfer_bytes = 4940384
+installed_bytes = 18221078
 note = """
 Perdew-Wang LDA. Two elements fewer than the GGA tables, and no lanthanides at all."""
 elements = [
@@ -152,6 +157,7 @@ licence        = "CC-BY-4.0"
 upstream_url   = "https://www.pseudo-dojo.org/"
 citation       = "van Setten et al., Comput. Phys. Commun. 226, 39 (2018)"
 transfer_bytes = 5173731
+installed_bytes = 18949225
 note = """
 Perdew-Wang LDA. Two elements fewer than the GGA tables, and no lanthanides at all."""
 elements = [
@@ -174,6 +180,7 @@ licence        = "CC-BY-4.0"
 upstream_url   = "https://www.pseudo-dojo.org/"
 citation       = "van Setten et al., Comput. Phys. Commun. 226, 39 (2018)"
 transfer_bytes = 1439256
+installed_bytes = 5040916
 note = """
 Lanthanides only, f-in-core: assumes a trivalent ion, wrong for Eu/Yb/Ce. PBE, not
 PBEsol: PseudoDojo publishes no PBEsol 3+ table, so using this changes the functional
@@ -197,6 +204,7 @@ licence        = "CC-BY-4.0"
 upstream_url   = "https://www.pseudo-dojo.org/"
 citation       = "van Setten et al., Comput. Phys. Commun. 226, 39 (2018)"
 transfer_bytes = 6717147
+installed_bytes = 23438806
 note = """
 Fully relativistic. Required for spin-orbit coupling; no scalar-relativistic table can serve
 it."""
@@ -220,6 +228,7 @@ licence        = "CC-BY-4.0"
 upstream_url   = "https://www.pseudo-dojo.org/"
 citation       = "van Setten et al., Comput. Phys. Commun. 226, 39 (2018)"
 transfer_bytes = 7071203
+installed_bytes = 24599107
 note = """
 Fully relativistic. Required for spin-orbit coupling."""
 elements = [
@@ -242,6 +251,7 @@ licence        = "CC-BY-4.0"
 upstream_url   = "https://www.pseudo-dojo.org/"
 citation       = "van Setten et al., Comput. Phys. Commun. 226, 39 (2018)"
 transfer_bytes = 6597203
+installed_bytes = 23028433
 note = """
 Fully relativistic PBE. Covers two elements fewer than its precision counterpart, which is
 not what the naming suggests."""
@@ -265,6 +275,7 @@ licence        = "CC-BY-4.0"
 upstream_url   = "https://www.pseudo-dojo.org/"
 citation       = "van Setten et al., Comput. Phys. Commun. 226, 39 (2018)"
 transfer_bytes = 7261726
+installed_bytes = 25315620
 note = """
 Fully relativistic PBE."""
 elements = [
@@ -293,6 +304,7 @@ licence        = "mixed; the record is CC-BY-4.0 but individual files include GP
 upstream_url   = "https://archive.materialscloud.org/records/rcyfm-68h65"
 citation       = "Prandini et al., npj Comput. Mater. 4, 72 (2018); DOI 10.24435/materialscloud:f3-ym"
 transfer_bytes = 59513522
+installed_bytes = 166288427
 note = """
 PBE is the functional SSSP actually tested: the cutoffs here were measured with the SSSP
 protocol rather than inherited. Fetched from the Materials Cloud Archive, never redistributed
@@ -323,6 +335,7 @@ licence        = "mixed; the record is CC-BY-4.0 but individual files include GP
 upstream_url   = "https://archive.materialscloud.org/records/rcyfm-68h65"
 citation       = "Prandini et al., npj Comput. Mater. 4, 72 (2018); DOI 10.24435/materialscloud:f3-ym"
 transfer_bytes = 62963841
+installed_bytes = 176410606
 note = """
 PBE is the functional SSSP actually tested: the cutoffs here were measured with the SSSP
 protocol rather than inherited. Fetched from the Materials Cloud Archive, never redistributed
@@ -353,6 +366,7 @@ licence        = "mixed; the record is CC-BY-4.0 but individual files include GP
 upstream_url   = "https://archive.materialscloud.org/records/rcyfm-68h65"
 citation       = "Prandini et al., npj Comput. Mater. 4, 72 (2018); DOI 10.24435/materialscloud:f3-ym"
 transfer_bytes = 60464715
+installed_bytes = 169202220
 note = """
 SSSP does not guarantee its own PBEsol library: these pseudopotentials reuse the PBE ones'
 input parameters and cutoffs and were not tested with the SSSP protocol. Fetched from the
@@ -385,6 +399,7 @@ licence        = "mixed; the record is CC-BY-4.0 but individual files include GP
 upstream_url   = "https://archive.materialscloud.org/records/rcyfm-68h65"
 citation       = "Prandini et al., npj Comput. Mater. 4, 72 (2018); DOI 10.24435/materialscloud:f3-ym"
 transfer_bytes = 63907272
+installed_bytes = 179311462
 note = """
 SSSP does not guarantee its own PBEsol library: these pseudopotentials reuse the PBE ones'
 input parameters and cutoffs and were not tested with the SSSP protocol. Fetched from the

@@ -59,7 +59,11 @@ class PseudoTable:
         upstream_url: where the table comes from.
         citation: what a user should cite for having used it.
         elements: element symbols the table covers.
-        transfer_bytes: bytes crossing the network, where known.
+        transfer_bytes: bytes crossing the network, where known. Compressed,
+            so a fraction of what lands on disk -- see ``installed_bytes``.
+        installed_bytes: bytes the table occupies once unpacked. Roughly 3x
+            ``transfer_bytes`` for these tables, which is what a user with a
+            full disk needs to be told, so it is what the listing quotes.
         note: what a user has to know before choosing it.
         default: whether this is the table Core reaches for unprompted.
     """
@@ -77,6 +81,7 @@ class PseudoTable:
     elements: tuple[str, ...]
     record: str | None = None
     transfer_bytes: int | None = None
+    installed_bytes: int | None = None
     note: str = ""
     default: bool = False
 
@@ -122,6 +127,7 @@ def load_tables(path: PathLike | None = None) -> dict[str, PseudoTable]:
             elements=tuple(entry["elements"]),
             record=entry.get("record"),
             transfer_bytes=entry.get("transfer_bytes"),
+            installed_bytes=entry.get("installed_bytes"),
             note=entry.get("note", "").strip(),
             default=entry.get("default", False),
         )

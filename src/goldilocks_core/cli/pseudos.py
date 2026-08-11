@@ -24,12 +24,15 @@ _BRIEF_HEADER = f"{_NUMBER}{'NAME':<{_NAME_WIDTH}}STATE"
 
 _DETAILED_HEADER = (
     f"{_NUMBER}{'NAME':<{_NAME_WIDTH}}{'VERSION':<9}{'ELEMENTS':>9}"
-    f"{'Ln':>4}{'An':>4}  STATE"
+    f"{'Ln':>4}{'An':>4}{'ON DISK':>10}  STATE"
 )
 """Functional, relativistic treatment and accuracy are not columns: all three
 are already in the name, which is why the names are shaped the way they are.
-Neither are transfer size and source URL -- ``gl pp install`` prints both
-before fetching, which is when they decide anything."""
+Neither is the source URL -- ``gl pp install`` prints it before fetching.
+
+``ON DISK``, not download size: the compressed archive is about a third of
+what it unpacks to, and the number a user needs before installing is the one
+that has to fit."""
 
 
 def add_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -107,7 +110,8 @@ def _available(*, verbose: bool = False) -> int:
             row = (
                 f"{number:>3}  {table.name:<{_NAME_WIDTH}}{table.version:<9}"
                 f"{len(table.elements):>9}{len(table.lanthanides):>4}"
-                f"{len(table.actinides):>4}  {state}"
+                f"{len(table.actinides):>4}"
+                f"{_megabytes(table.installed_bytes):>10}  {state}"
             )
         else:
             row = f"{number:>3}  {table.name:<{_NAME_WIDTH}}{state}"
@@ -276,16 +280,20 @@ def _announce_total(registry: dict[str, PseudoTable], wanted: list[str]) -> None
     if not outstanding:
         return
 
-    total = sum(table.transfer_bytes or 0 for table in outstanding)
+    fetched = sum(table.transfer_bytes or 0 for table in outstanding)
+    on_disk = sum(table.installed_bytes or 0 for table in outstanding)
     print(
-        f"Installing {len(outstanding)} tables, {total / 1e6:.0f} MB in total, "
-        "from the providers listed below.\n"
+        f"Installing {len(outstanding)} tables: {fetched / 1e6:.0f} MB to fetch, "
+        f"{on_disk / 1e6:.0f} MB on disk once unpacked.\n"
     )
 
 
 def _announce(table: PseudoTable) -> None:
     """Say what is about to be fetched, under what terms, and what to cite."""
-    print(f"{table.name}  {_megabytes(table)}  {table.licence}")
+    print(
+        f"{table.name}  {_megabytes(table.transfer_bytes)} to fetch, "
+        f"{_megabytes(table.installed_bytes)} on disk  {table.licence}"
+    )
     print(f"  from {table.upstream_url}")
     print(f"  cite {table.citation}")
     if table.note:
@@ -299,8 +307,8 @@ def _announce(table: PseudoTable) -> None:
         )
 
 
-def _megabytes(table: PseudoTable) -> str:
-    """Format the transfer size as the user will see it quoted."""
-    if not table.transfer_bytes:
+def _megabytes(size: int | None) -> str:
+    """Format a byte count as the user will see it quoted."""
+    if not size:
         return "-"
-    return f"{table.transfer_bytes / 1e6:.1f} MB"
+    return f"{size / 1e6:.1f} MB"

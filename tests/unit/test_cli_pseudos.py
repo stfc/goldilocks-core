@@ -112,13 +112,23 @@ def test_the_verbose_listing_carries_version_and_coverage(capsys):
 def test_the_verbose_listing_repeats_nothing_the_name_already_says(capsys):
     """Functional, relativistic mode and accuracy are all in the name.
 
-    Source and size are absent too: `gl pp install` prints both before
-    fetching, which is when they decide anything.
+    The source URL is absent too: `gl pp install` prints it before fetching.
     """
     output = run_available(capsys, "-v")
 
-    for column in ("XC", "REL", "ACCURACY", "SIZE", "SOURCE"):
+    for column in ("XC", "REL", "ACCURACY", "SOURCE"):
         assert column not in output
+
+
+def test_the_verbose_listing_quotes_the_unpacked_size(capsys):
+    """The compressed archive is a third of what it becomes; the disk sees
+    the larger number, so that is the one to show before installing."""
+    output = run_available(capsys, "-v")
+    default = default_table()
+
+    assert "ON DISK" in output
+    assert f"{default.installed_bytes / 1e6:.1f} MB" in output
+    assert f"{default.transfer_bytes / 1e6:.1f} MB" not in output
 
 
 def test_no_listing_prints_a_url(capsys):
@@ -226,13 +236,20 @@ def test_install_all_takes_every_registered_table(capsys, never_fetches):
 
 
 def test_install_all_quotes_the_whole_bill_first(capsys, never_fetches):
-    """Naming a table is a decision about a known quantity; --all is not."""
+    """Naming a table is a decision about a known quantity; --all is not.
+
+    Both figures, because they differ by 600 MB across the whole catalogue:
+    quoting only the download would understate the disk cost threefold.
+    """
     _status, out, _err = run_install(capsys, "--all")
-    total = sum(t.transfer_bytes for t in load_tables().values())
+    tables = load_tables().values()
+    fetched = sum(t.transfer_bytes for t in tables)
+    on_disk = sum(t.installed_bytes for t in tables)
 
     headline = out.splitlines()[0]
     assert f"{len(load_tables())} tables" in headline
-    assert f"{total / 1e6:.0f} MB" in headline
+    assert f"{fetched / 1e6:.0f} MB" in headline
+    assert f"{on_disk / 1e6:.0f} MB" in headline
 
 
 def test_install_all_refuses_to_also_take_a_name(capsys, never_fetches):

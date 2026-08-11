@@ -198,14 +198,17 @@ def require_installed(
         return installed
 
     default = default_table(tables)
-    megabytes = (default.transfer_bytes or 0) / 1e6
+    fetched = (default.transfer_bytes or 0) / 1e6
+    on_disk = (default.installed_bytes or 0) / 1e6
 
     raise NoPseudopotentials(
         "no pseudopotential table is installed.\n\n"
         "  Nothing is downloaded unless you ask. To install the default table:\n\n"
         f"      {INSTALL_COMMAND}\n\n"
         f"  That fetches {default.name}\n"
-        f"  ({megabytes:.1f} MB, {default.licence}, from {default.upstream_url}).\n"
+        f"  ({fetched:.1f} MB to fetch, {on_disk:.1f} MB on disk, "
+        f"{default.licence},\n"
+        f"  from {default.upstream_url}).\n"
         f"  Cite: {default.citation}\n\n"
         f"  To see every table:      {AVAILABLE_COMMAND}\n"
         "  To use one you already have:  --pseudo-root PATH"

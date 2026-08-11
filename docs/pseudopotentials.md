@@ -138,30 +138,37 @@ $ gl pp available
   version and element coverage with `gl pp available -v`
 ```
 
-`-v` adds only what a name cannot carry -- the upstream version and coverage
-(`Ln`/`An` are the standard generic symbols for lanthanides and actinides).
-Functional, relativistic treatment and accuracy are deliberately absent: all
-three are already in the name. So are source URL and transfer size, which
-`gl pp install` prints before fetching, which is when they decide anything:
+`-v` adds only what a name cannot carry -- the upstream version, coverage
+(`Ln`/`An` are the standard generic symbols for lanthanides and actinides),
+and what the table costs on disk. Functional, relativistic treatment and
+accuracy are deliberately absent: all three are already in the name. So is the
+source URL, which `gl pp install` prints before fetching.
+
+**`ON DISK` is the unpacked size, not the download.** These archives roughly
+triple when unpacked -- 3.5x for PseudoDojo, 2.8x for SSSP -- so the default
+table is 5.2 MB to fetch but 18.2 MB once installed, and the whole catalogue
+is 307 MB to fetch but **908 MB on disk**. The disk is what has to have room,
+so the listing quotes that; `gl pp install` prints both before fetching, when
+transfer time matters too:
 
 ```
 $ gl pp available -v
-  #  NAME                             VERSION   ELEMENTS  Ln  An  STATE
-  1  pseudodojo-pbesol-efficiency-sr  0.4             72   2   0  installed (default)
-  2  pseudodojo-pbesol-precision-sr   0.4             72   2   0  uninstalled
-  3  pseudodojo-pbe-efficiency-sr     0.4             72   2   0  uninstalled
-  4  pseudodojo-pbe-precision-sr      0.4             72   2   0  uninstalled
-  5  pseudodojo-lda-efficiency-sr     0.4             70   0   0  uninstalled
-  6  pseudodojo-lda-precision-sr      0.4             70   0   0  uninstalled
-  7  pseudodojo-pbe-lanthanides-sr    0.4             14  14   0  uninstalled
-  8  pseudodojo-pbesol-efficiency-fr  0.4             71   1   0  uninstalled
-  9  pseudodojo-pbesol-precision-fr   0.4             71   1   0  uninstalled
- 10  pseudodojo-pbe-efficiency-fr     0.4             70   0   0  uninstalled
- 11  pseudodojo-pbe-precision-fr      0.4             72   2   0  uninstalled
- 12  sssp-pbe-efficiency-sr           1.3.0          103  15  15  uninstalled
- 13  sssp-pbe-precision-sr            1.3.0          103  15  15  uninstalled
- 14  sssp-pbesol-efficiency-sr        1.3.0          103  15  15  uninstalled
- 15  sssp-pbesol-precision-sr         1.3.0          103  15  15  uninstalled
+  #  NAME                             VERSION   ELEMENTS  Ln  An   ON DISK  STATE
+  1  pseudodojo-pbesol-efficiency-sr  0.4             72   2   0   18.2 MB  installed (default)
+  2  pseudodojo-pbesol-precision-sr   0.4             72   2   0   19.0 MB  uninstalled
+  3  pseudodojo-pbe-efficiency-sr     0.4             72   2   0   20.2 MB  uninstalled
+  4  pseudodojo-pbe-precision-sr      0.4             72   2   0   20.9 MB  uninstalled
+  5  pseudodojo-lda-efficiency-sr     0.4             70   0   0   18.2 MB  uninstalled
+  6  pseudodojo-lda-precision-sr      0.4             70   0   0   18.9 MB  uninstalled
+  7  pseudodojo-pbe-lanthanides-sr    0.4             14  14   0    5.0 MB  uninstalled
+  8  pseudodojo-pbesol-efficiency-fr  0.4             71   1   0   23.4 MB  uninstalled
+  9  pseudodojo-pbesol-precision-fr   0.4             71   1   0   24.6 MB  uninstalled
+ 10  pseudodojo-pbe-efficiency-fr     0.4             70   0   0   23.0 MB  uninstalled
+ 11  pseudodojo-pbe-precision-fr      0.4             72   2   0   25.3 MB  uninstalled
+ 12  sssp-pbe-efficiency-sr           1.3.0          103  15  15  166.3 MB  uninstalled
+ 13  sssp-pbe-precision-sr            1.3.0          103  15  15  176.4 MB  uninstalled
+ 14  sssp-pbesol-efficiency-sr        1.3.0          103  15  15  169.2 MB  uninstalled
+ 15  sssp-pbesol-precision-sr         1.3.0          103  15  15  179.3 MB  uninstalled
 
   the default is pseudodojo-pbesol-efficiency-sr; `gl pp install` with no argument installs it
   install others by name or number: `gl pp install NAME|N`
@@ -239,7 +246,7 @@ gl pp available -v           # also version and element coverage
 gl pp list                   # what is actually on disk, and where
 gl pp install                # install the default
 gl pp install NAME|N ...     # install tables by name or by listing number
-gl pp install --all          # install every registered table (~307 MB)
+gl pp install --all          # install every table (307 MB down, 908 MB on disk)
 gl pp delete NAME|N ...      # remove installed tables from disk
 ```
 
@@ -446,8 +453,10 @@ To register another PseudoDojo or SSSP/Materials Cloud table:
    *provider* calls it -- the download URL is built from this, never from
    your key), `version`, `functional`, `relativistic` (`SR`/`FR`/`NR`),
    `accuracy` (`efficiency`/`precision`), `licence`, `upstream_url`,
-   `citation`, `elements`, and measured `transfer_bytes`. `sssp` entries also
-   need `record` (the Archive record ID).
+   `citation`, `elements`, and measured `transfer_bytes` and
+   `installed_bytes`. `sssp` entries also need `record` (the Archive record
+   ID). `scripts/survey_pseudo_tables.py` measures all of these for PseudoDojo
+   tables and reports any that drift from what the registry claims.
 3. **Name it `<ours>-<functional>-<accuracy>-{sr,fr,nr}`**, matching the
    convention above.
 4. **Append it** rather than inserting it, so the listing numbers `gl pp

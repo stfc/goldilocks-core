@@ -84,6 +84,18 @@ def test_every_table_declares_what_it_will_transfer(packaged):
         assert table.transfer_bytes and table.transfer_bytes > 0
 
 
+def test_every_table_declares_what_it_costs_on_disk(packaged):
+    """The compressed size is not the number that has to fit."""
+    for table in packaged.values():
+        assert table.installed_bytes and table.installed_bytes > 0
+
+
+def test_installed_size_exceeds_transfer_size_everywhere(packaged):
+    """A table smaller unpacked than compressed would mean the two were swapped."""
+    for table in packaged.values():
+        assert table.installed_bytes > table.transfer_bytes
+
+
 def test_covers_and_missing_from(packaged):
     table = packaged["pseudodojo-pbesol-efficiency-sr"]
 

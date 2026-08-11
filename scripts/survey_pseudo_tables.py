@@ -64,6 +64,42 @@ def transfer_bytes(table: str) -> int:
     return int(response.headers["Content-Length"])
 
 
+def installed_bytes(table: str, elements: set[str]) -> int:
+    """Return what the table occupies once unpacked, sidecar included.
+
+    Streamed and summed rather than estimated. A gzip ISIZE trailer would be
+    one range request instead of a download, but it counts tar headers and
+    512-byte padding, which overstates an archive of many small files by
+    nearly 2x -- measured against the dojo reports, 112640 against 59760.
+    """
+    total = 0
+    for suffix, extension in (("_upf", ".upf"), ("_djrepo", ".djrepo")):
+        archive = requests.get(
+            f"{PSEUDO_DOJO_BASE}/{table}{suffix}.tgz", timeout=_TIMEOUT_SECONDS
+        ).content
+        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
+            total += sum(
+                member.size
+                for member in tar.getmembers()
+                if member.isfile() and member.name.lower().endswith(extension)
+            )
+
+    cutoffs = {element: {"cutoff_wfc": 0.0, "cutoff_rho": 0.0} for element in elements}
+    return total + len(json.dumps(cutoffs, indent=2))
+
+
+def _survey(table):
+    """Measure one table: coverage, hints, transfer size and unpacked size."""
+    elements, with_hint = published_elements(table.upstream_table)
+    return (
+        table,
+        elements,
+        with_hint,
+        transfer_bytes(table.upstream_table),
+        installed_bytes(table.upstream_table, elements),
+    )
+
+
 def main() -> int:
     """Compare the registry against the published tables. Return 1 on drift."""
     registry = load_tables()
@@ -73,16 +109,9 @@ def main() -> int:
     drifted = False
 
     with ThreadPoolExecutor(max_workers=5) as pool:
-        surveys = pool.map(
-            lambda t: (
-                t,
-                *published_elements(t.upstream_table),
-                transfer_bytes(t.upstream_table),
-            ),
-            fetchable,
-        )
+        surveys = pool.map(_survey, fetchable)
 
-        for table, elements, with_hint, size in surveys:
+        for table, elements, with_hint, size, unpacked in surveys:
             recorded = set(table.elements)
             problems = []
 
@@ -95,6 +124,10 @@ def main() -> int:
                 )
             if size != table.transfer_bytes:
                 problems.append(f"transfer_bytes {table.transfer_bytes} -> {size}")
+            if unpacked != table.installed_bytes:
+                problems.append(
+                    f"installed_bytes {table.installed_bytes} -> {unpacked}"
+                )
 
             status = "; ".join(problems) if problems else "matches"
             drifted = drifted or bool(problems)

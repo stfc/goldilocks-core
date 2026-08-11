@@ -13,9 +13,14 @@ from goldilocks_core.pseudo.table_registry import (
     load_tables,
 )
 
-_AVAILABLE_HEADER = (
-    f"{'NAME':<32}{'XC':<8}{'REL':<5}{'ACCURACY':<12}"
-    f"{'ELEMENTS':>9}{'Ln':>4}{'An':>4}{'SIZE':>9}  STATE"
+_NAME_WIDTH = 34
+"""Wide enough for the longest name plus the default marker, with a space left."""
+
+_BRIEF_HEADER = f"{'NAME':<{_NAME_WIDTH}}STATE"
+
+_DETAILED_HEADER = (
+    f"{'NAME':<{_NAME_WIDTH}}{'SOURCE':<15}{'VERSION':<9}{'XC':<8}{'REL':<5}"
+    f"{'ACCURACY':<12}{'ELEMENTS':>9}{'Ln':>4}{'An':>4}{'SIZE':>9}  STATE"
 )
 
 
@@ -26,7 +31,16 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:
     )
     commands = pseudos.add_subparsers(dest="pp_command", required=True)
 
-    commands.add_parser("available", help="Show every table Core can install.")
+    available = commands.add_parser(
+        "available", help="Show every table Core can install."
+    )
+    available.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Also show source, version, functional, coverage and size.",
+    )
+
     commands.add_parser("list", help="Show installed tables and where they are.")
 
     install = commands.add_parser("install", help="Install one or more tables.")
@@ -40,29 +54,43 @@ def add_parser(subparsers: argparse._SubParsersAction) -> None:
 def run(args: argparse.Namespace) -> int:
     """Dispatch a ``gl pp`` subcommand."""
     if args.pp_command == "available":
-        return _available()
+        return _available(verbose=args.verbose)
     if args.pp_command == "list":
         return _installed()
     return _install(args.tables)
 
 
-def _available() -> int:
-    """Print the catalogue: everything Core knows how to install."""
+def _available(*, verbose: bool = False) -> int:
+    """Print the catalogue: everything Core knows how to install.
+
+    A name already encodes provider, functional, accuracy and relativistic
+    treatment, so the default listing is names alone -- enough to pick one and
+    pass it to ``gl pp install``. ``-v`` adds the facts a name cannot carry:
+    where it is fetched from, which upstream version, and what it covers.
+    """
     registry = load_tables()
     default = default_table(registry)
 
-    print(_AVAILABLE_HEADER)
+    print(_DETAILED_HEADER if verbose else _BRIEF_HEADER)
     for table in registry.values():
-        marker = " *" if table is default else ""
-        state = "installed" if installer.is_installed(table) else "-"
-        print(
-            f"{table.name + marker:<32}{table.functional:<8}{table.relativistic:<5}"
-            f"{table.accuracy:<12}{len(table.elements):>9}{len(table.lanthanides):>4}"
-            f"{len(table.actinides):>4}{_megabytes(table):>9}  {state}"
-        )
+        name = f"{table.name} *" if table is default else table.name
+        state = "installed" if installer.is_installed(table) else ""
+
+        if verbose:
+            row = (
+                f"{name:<{_NAME_WIDTH}}{table.provider:<15}{table.version:<9}"
+                f"{table.functional:<8}{table.relativistic:<5}{table.accuracy:<12}"
+                f"{len(table.elements):>9}{len(table.lanthanides):>4}"
+                f"{len(table.actinides):>4}{_megabytes(table):>9}  {state}"
+            )
+        else:
+            row = f"{name:<{_NAME_WIDTH}}{state}"
+        print(row.rstrip())
 
     print(f"\n  * installed by `{installer.INSTALL_COMMAND}` when no table is named")
     print(f"  install one with `{installer.INSTALL_COMMAND} NAME`")
+    if not verbose:
+        print(f"  source, version and coverage with `{installer.AVAILABLE_COMMAND} -v`")
     return 0
 
 

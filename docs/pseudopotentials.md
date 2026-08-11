@@ -121,21 +121,37 @@ opening the TOML.
 
 ### Current catalogue (12 tables)
 
+A name encodes provider, functional, accuracy and relativistic treatment, so
+the default listing is names alone -- enough to pick one and install it:
+
 ```
 $ gl pp available
-NAME                            XC      REL  ACCURACY     ELEMENTS  Ln  An     SIZE
-pseudodojo-pbesol-efficiency-sr *PBEsol  SR   efficiency         72   2   0   5.2 MB
-pseudodojo-pbesol-precision-sr  PBEsol  SR   precision          72   2   0   5.4 MB
-pseudodojo-pbe-efficiency-sr    PBE     SR   efficiency         72   2   0   5.2 MB
-pseudodojo-pbe-precision-sr     PBE     SR   precision          72   2   0   5.4 MB
-pseudodojo-lda-efficiency-sr    LDA     SR   efficiency         70   0   0   4.9 MB
-pseudodojo-lda-precision-sr     LDA     SR   precision          70   0   0   5.2 MB
-pseudodojo-pbe-lanthanides-sr   PBE     SR   efficiency         14  14   0   1.4 MB
-pseudodojo-pbesol-efficiency-fr PBEsol  FR   efficiency         71   1   0   6.7 MB
-pseudodojo-pbesol-precision-fr  PBEsol  FR   precision          71   1   0   7.1 MB
-pseudodojo-pbe-efficiency-fr    PBE     FR   efficiency         70   0   0   6.6 MB
-pseudodojo-pbe-precision-fr     PBE     FR   precision          72   2   0   7.3 MB
-sssp-pbesol-efficiency-sr       PBEsol  SR   efficiency        103  15  15  60.5 MB
+NAME                              STATE
+pseudodojo-pbesol-efficiency-sr * installed
+pseudodojo-pbesol-precision-sr
+pseudodojo-pbe-efficiency-sr
+...
+```
+
+`-v` adds what a name cannot carry -- where the table is fetched from, which
+upstream version, and what it covers (`Ln`/`An` are the standard generic
+symbols for lanthanides and actinides):
+
+```
+$ gl pp available -v
+NAME                              SOURCE         VERSION  XC      REL  ACCURACY     ELEMENTS  Ln  An     SIZE  STATE
+pseudodojo-pbesol-efficiency-sr * pseudodojo     0.4      PBEsol  SR   efficiency         72   2   0   5.2 MB  installed
+pseudodojo-pbesol-precision-sr    pseudodojo     0.4      PBEsol  SR   precision          72   2   0   5.4 MB
+pseudodojo-pbe-efficiency-sr      pseudodojo     0.4      PBE     SR   efficiency         72   2   0   5.2 MB
+pseudodojo-pbe-precision-sr       pseudodojo     0.4      PBE     SR   precision          72   2   0   5.4 MB
+pseudodojo-lda-efficiency-sr      pseudodojo     0.4      LDA     SR   efficiency         70   0   0   4.9 MB
+pseudodojo-lda-precision-sr       pseudodojo     0.4      LDA     SR   precision          70   0   0   5.2 MB
+pseudodojo-pbe-lanthanides-sr     pseudodojo     0.4      PBE     SR   efficiency         14  14   0   1.4 MB
+pseudodojo-pbesol-efficiency-fr   pseudodojo     0.4      PBEsol  FR   efficiency         71   1   0   6.7 MB
+pseudodojo-pbesol-precision-fr    pseudodojo     0.4      PBEsol  FR   precision          71   1   0   7.1 MB
+pseudodojo-pbe-efficiency-fr      pseudodojo     0.4      PBE     FR   efficiency         70   0   0   6.6 MB
+pseudodojo-pbe-precision-fr       pseudodojo     0.4      PBE     FR   precision          72   2   0   7.3 MB
+sssp-pbesol-efficiency-sr         materialscloud 1.3.0    PBEsol  SR   efficiency        103  15  15  60.5 MB
 ```
 
 `*` marks the default (`pseudodojo-pbesol-efficiency-sr`): cheapest, cleanest
@@ -199,7 +215,8 @@ in the data as well: the PBEsol rows link to the *same* PBE cutoff file.
 ## Installing: `gl pp`
 
 ```
-gl pp available            # every table Core can install, and its terms
+gl pp available            # the names of every table Core can install
+gl pp available -v         # also source, version, functional, coverage, size
 gl pp list                 # what is actually on disk, and where
 gl pp install [NAME ...]   # install the default, or named tables
 ```

@@ -32,6 +32,8 @@ All notable changes to goldilocks-core are documented here.
 - Analyze uses the runtime-owned CGCNN metallicity model when configured and records provenance and confidence; the structure heuristic remains the fallback.
 - K-point selection is a sibling record: `SelectionRecord` contains pseudopotentials and warnings, while `CoreResult`, input generation, and the QE writer receive `k_points` separately.
 - Orchestration moved to `goldilocks_core.runtime`: stage-agnostic `runtime/graph.py`, the SCF task in `runtime/scf.py`, `CoreRuntime` (model lifecycle only) and `TaskDispatcher` (task registry + dispatch) in `runtime/core.py` + `runtime/dispatch.py`, entrypoints in `runtime/jobs.py`. Tasks register a `TaskHandler` (graph + context builder + result assembler) and dispatch by `intent.task`.
+- The `runtime` package facade is task-agnostic: `SCF_TASK`, `ScfContext`, and `assemble_core_result` are imported from `goldilocks_core.runtime.scf`, not re-exported by `goldilocks_core.runtime`.
+- The SCF task is registered as the default lazily on first dispatch, so `import goldilocks_core.runtime` no longer eagerly loads the stage implementations (29 vs 50 `goldilocks_core` submodules at import).
 - `CoreJobRequest` split into `PresetRequest` (preset run: `mode`/`output_dir`) and `QueryRequest` (explicit query: `outputs` required at construction). `run_core_job` takes `PresetRequest`; `query_records` takes `QueryRequest`. The old cross-field runtime validation is gone — each request type carries only its own selector, so the invariant is structural.
 
 

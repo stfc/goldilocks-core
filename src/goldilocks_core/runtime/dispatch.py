@@ -4,10 +4,11 @@ The dispatcher holds no model state; it borrows a
 :class:`~goldilocks_core.runtime.core.CoreRuntime` for services (kmesh,
 metallicity) and an open-state guard, and owns the task registry. Tasks
 register a :class:`~goldilocks_core.runtime.task.TaskHandler` (graph +
-context builder + result assembler); the SCF task is pre-registered. The
-dispatcher imports task-specific code only to pre-register the SCF default
-— the dispatch path itself is task-agnostic, so a new task (nscf, phonons)
-registers without the runtime or the executor changing.
+context builder + result assembler). The SCF task is the shipped default,
+registered lazily on first dispatch so importing this module does not pull
+in the stage implementations (and their ``ml.*`` dependencies); the dispatch
+path itself is task-agnostic, so a new task (nscf, phonons) registers without
+the runtime or the executor changing.
 """
 
 from __future__ import annotations
@@ -23,7 +24,6 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.runtime.core import CoreRuntime
 from goldilocks_core.runtime.graph import execute
-from goldilocks_core.runtime.scf import SCF_HANDLER
 from goldilocks_core.runtime.task import TaskHandler
 
 
@@ -38,15 +38,32 @@ class TaskDispatcher:
     def __init__(self, runtime: CoreRuntime) -> None:
         self._runtime = runtime
         self._tasks: dict[str, TaskHandler] = {}
-        self.register(SCF_HANDLER)
+        self._default_pending = True
 
     def register(self, handler: TaskHandler) -> None:
         """Register a task for dispatch by ``intent.task``."""
         self._tasks[handler.spec.task] = handler
 
+    def _ensure_default(self) -> None:
+        """Register the shipped SCF default once, on first dispatch.
+
+        Deferred so ``import goldilocks_core.runtime`` does not eagerly load
+        the stage implementations or their ``ml.*`` dependencies. An explicitly
+        registered handler for the SCF task name is left in place — explicit
+        registration wins over the default, matching eager registration order.
+        """
+        if not self._default_pending:
+            return
+        self._default_pending = False
+        from goldilocks_core.runtime.scf import SCF_HANDLER
+
+        if SCF_HANDLER.spec.task not in self._tasks:
+            self.register(SCF_HANDLER)
+
     def recommend(self, request: PresetRequest) -> CoreResult:
         """Execute the task's recommend preset and assemble a full result."""
         self._ensure_open()
+        self._ensure_default()
         handler = self._handler_for(request)
         task = handler.spec
         records = execute(
@@ -64,6 +81,7 @@ class TaskDispatcher:
     ) -> CoreResult:
         """Execute the task's generate preset and optionally publish a bundle."""
         self._ensure_open()
+        self._ensure_default()
         handler = self._handler_for(request)
         task = handler.spec
         records = execute(
@@ -79,6 +97,7 @@ class TaskDispatcher:
     def compute(self, request: QueryRequest) -> CoreRecords:
         """Execute the minimal subgraph for ``request.outputs`` on the task."""
         self._ensure_open()
+        self._ensure_default()
         handler = self._handler_for(request)
         return execute(
             handler.spec,

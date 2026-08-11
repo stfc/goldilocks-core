@@ -1,18 +1,14 @@
-import json
 import math
 
-import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.contracts import (
-    CalculationHints,
+    KmeshHints,
     KPointSelection,
     Provenance,
-    to_jsonable,
 )
 from goldilocks_core.kmesh import resolve_kpoints
 from goldilocks_core.kmesh.math import (
-    build_k_distance_intervals,
     build_kmesh_entries,
     generate_candidate_k_distances,
     k_distance_to_mesh,
@@ -34,7 +30,7 @@ def test_resolve_kpoints_prefers_explicit_grid_hint() -> None:
 
     selection = resolve_kpoints(
         structure,
-        CalculationHints(k_grid=(2, 3, 4), k_spacing=0.25),
+        KmeshHints(k_grid=(2, 3, 4), k_spacing=0.25),
         _fail_backend,
     )
 
@@ -58,7 +54,7 @@ def test_resolve_kpoints_converts_spacing_hint() -> None:
 
     selection = resolve_kpoints(
         structure,
-        CalculationHints(k_spacing=0.25),
+        KmeshHints(k_spacing=0.25),
         _fail_backend,
     )
 
@@ -87,7 +83,7 @@ def test_resolve_kpoints_consults_backend_without_hints() -> None:
             provenance=Provenance(source="model", reason="stub"),
         )
 
-    selection = resolve_kpoints(structure, CalculationHints(), backend)
+    selection = resolve_kpoints(structure, KmeshHints(), backend)
 
     assert selection.grid == (5, 5, 5)
     assert selection.provenance.source == "model"
@@ -141,27 +137,8 @@ def test_generate_candidate_k_distances_returns_sorted_values() -> None:
     assert math.isclose(candidates[-1], round(reciprocal_length / 3, 8))
 
 
-def test_build_k_distance_intervals_records_mesh_intervals() -> None:
-    """Build k-distance intervals and their corresponding meshes."""
-    structure = Structure(
-        lattice=Lattice.cubic(3.5),
-        species=["Si"],
-        coords=[[0.0, 0.0, 0.0]],
-    )
-
-    candidates = generate_candidate_k_distances(structure, max_index=4)
-    intervals = build_k_distance_intervals(structure, candidates)
-
-    assert len(intervals) > 0
-    assert intervals[0][0] == (1, 1, 1)
-    assert math.isinf(intervals[0][1][1])
-    assert any(mesh == (2, 2, 2) for mesh, _ in intervals)
-    assert any(mesh == (3, 3, 3) for mesh, _ in intervals)
-    assert any(mesh == (4, 4, 4) for mesh, _ in intervals)
-
-
-def test_build_kmesh_entries_returns_indexed_entries() -> None:
-    """Build indexed KMeshEntry objects from candidate k-distances."""
+def test_build_kmesh_entries_returns_indexed_mesh_entries() -> None:
+    """Build indexed (k_index, mesh) entries from candidate k-distances."""
     structure = Structure(
         lattice=Lattice.cubic(3.5),
         species=["Si"],
@@ -174,48 +151,7 @@ def test_build_kmesh_entries_returns_indexed_entries() -> None:
     assert len(entries) > 0
     assert entries[0].k_index == 1
     assert entries[0].mesh == (1, 1, 1)
-    assert entries[0].k_distance_interval == (candidates[0], None)
-    assert entries[1].k_distance_interval == (candidates[1], candidates[0])
-    assert entries[0].k_pra == 1.0
-    assert entries[0].n_reduced_kpoints == 1
-    assert entries[0].k_line_density_interval is not None
-
-
-def test_kmesh_entries_serialize_open_ended_intervals_as_null() -> None:
-    """Represent the unbounded top interval without a non-finite JSON number."""
-    structure = Structure(
-        lattice=Lattice.cubic(3.5),
-        species=["Si"],
-        coords=[[0.0, 0.0, 0.0]],
-    )
-
-    entries = build_kmesh_entries(
-        structure,
-        generate_candidate_k_distances(structure, max_index=4),
-    )
-
-    data = to_jsonable(entries[0])
-
-    assert data["k_distance_interval"][1] is None
-    assert json.dumps(data, allow_nan=False)
-
-
-def test_build_kmesh_entries_propagates_invalid_density_interval(monkeypatch) -> None:
-    """A mesh with no valid scalar k-line-density interval surfaces, not nulls."""
-    structure = Structure(
-        lattice=Lattice.cubic(3.5),
-        species=["Si"],
-        coords=[[0.0, 0.0, 0.0]],
-    )
-    candidates = generate_candidate_k_distances(structure, max_index=4)
-
-    def raise_invalid(*_args, **_kwargs) -> tuple[float, float]:
-        raise ValueError("Mesh does not correspond to a valid scalar interval")
-
-    monkeypatch.setattr(
-        "goldilocks_core.kmesh.math.mesh_to_k_line_density_interval",
-        raise_invalid,
-    )
-
-    with pytest.raises(ValueError, match="valid scalar interval"):
-        build_kmesh_entries(structure, candidates)
+    assert entries[-1].k_index == len(entries)
+    # The mesh ordering is load-bearing: the ML k-index maps onto this table.
+    meshes = [entry.mesh for entry in entries]
+    assert meshes == [(index, index, index) for index in range(1, len(entries) + 1)]

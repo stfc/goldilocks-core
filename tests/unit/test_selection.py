@@ -7,10 +7,11 @@ from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
+    KmeshHints,
     ParameterAdvice,
+    PseudoMetadata,
 )
 from goldilocks_core.kmesh import resolve_kpoints
-from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.selection import (
     _metadata_matches_mode,
     _rank_pseudo_candidate,
@@ -334,7 +335,7 @@ def test_select_parameters_distinguishes_missing_cutoff_warning() -> None:
 def test_select_parameters_keeps_explicit_grid_hint() -> None:
     """Use a Kmesh-stage explicit grid without recalculating spacing."""
     structure = make_structure()
-    hints = CalculationHints(k_grid=(2, 2, 1))
+    hints = KmeshHints(k_grid=(2, 2, 1))
 
     k_points = resolve_kpoints(structure, hints, lambda s: None)
 

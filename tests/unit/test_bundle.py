@@ -54,7 +54,7 @@ def test_build_bundle_manifest_records_file_metadata_without_content() -> None:
     """Build a manifest containing stage outputs and generated file metadata."""
     manifest = build_bundle_manifest(make_result())
 
-    assert manifest["manifest_version"] == 1
+    assert manifest["manifest_version"] == 2
     assert manifest["intent"]["code"] == "quantum_espresso"
     assert manifest["analysis"]["elements"] == ["Si"]
     assert manifest["k_points"]["mesh_type"] == "monkhorst-pack"

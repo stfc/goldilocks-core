@@ -12,10 +12,10 @@ from pymatgen.core import Structure
 from goldilocks_core.contracts import (
     ParameterAdvice,
     Provenance,
+    PseudoMetadata,
     PseudopotentialSelection,
     SelectionRecord,
 )
-from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.pseudo.pp_selector import select_pseudos
 
 _CUTOFF_FIELDS = ("ecutwfc_ry", "ecutrho_ry")

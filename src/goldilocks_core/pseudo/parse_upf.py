@@ -5,8 +5,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from goldilocks_core.contracts import PseudoMetadata
 from goldilocks_core.functionals import normalize_functional_label
-from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 
 def _read_text(path: Path) -> str:

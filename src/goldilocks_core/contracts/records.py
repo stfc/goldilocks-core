@@ -28,12 +28,13 @@ from goldilocks_core.contracts.validate import (
     _validate_finite_positive,
     _validate_kpoint_grid,
     _validate_optional_boolean,
+    _validate_optional_nonempty_str,
     _validate_positive_integer,
+    _validate_relativistic_mode,
     _validate_smearing,
     _validate_vdw_method,
 )
 from goldilocks_core.functionals import normalize_functional_label
-from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 
 @dataclass(slots=True)
@@ -80,6 +81,64 @@ class ModelSpec:
     revision: str | None = None
 
 
+@dataclass(slots=True)
+class PseudoMetadata:
+    """Structured pseudopotential metadata extracted from a UPF file.
+
+    Produced by ``parse_upf_metadata()`` and consumed by pseudo
+    selection. Not frozen: callers may mutate fields when
+    synthesizing test metadata.
+
+    Attributes:
+        filepath: full path to the UPF file on disk.
+        filename: basename of the UPF file (e.g. ``Si.UPF``).
+        header_format: UPF header format: ``attr`` or ``text``.
+        library: pseudo library name (e.g. ``SSSP``), extracted
+            from the file path.
+        source_set: source set within the library (e.g.
+            ``efficiency``, ``precision``).
+        element: element symbol this pseudo is for (e.g.
+            ``Si``).
+        pseudo_type: normalized pseudo type: ``NC``, ``USPP``,
+            or ``PAW``.
+        functional: normalized functional label (e.g. ``PBE``,
+            ``PBEsol``, ``LDA``).
+        relativistic: normalized relativistic mode: ``scalar``,
+            ``full``, or ``non-relativistic``.
+        z_valence: valence charge.
+        pseudo_info: raw header fields not mapped to typed
+            attributes.
+        is_sssp: whether this pseudo is from the SSSP library.
+        source_pseudopotential: original pseudo identifier from
+            the UPF header.
+        sssp_recommended_cutoff: SSSP recommended cutoffs dict
+            with ``ecutwfc_ry`` and ``ecutrho_ry`` in Rydberg.
+    """
+
+    filepath: str
+    filename: str
+    header_format: str
+    library: str | None = None
+    source_set: str | None = None
+    element: str | None = None
+    pseudo_type: str | None = None
+    functional: str | None = None
+    relativistic: str | None = None
+    z_valence: float | None = None
+    pseudo_info: dict[str, Any] = field(default_factory=dict)
+    is_sssp: bool = False
+    source_pseudopotential: str | None = None
+    sssp_recommended_cutoff: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        """Canonicalize supported functional labels from metadata producers."""
+        self.functional = normalize_functional_label(self.functional)
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
 @dataclass(frozen=True, slots=True)
 class KMeshEntry:
     """One indexed k-mesh entry produced from a structure scan.
@@ -90,21 +149,10 @@ class KMeshEntry:
     Attributes:
         k_index: 1-based index into the ordered k-mesh table.
         mesh: uniform k-point grid for this entry.
-        k_distance_interval: VASP-style k-distance range (Å⁻¹)
-            that maps to this mesh. ``None`` as the upper endpoint means
-            the interval is unbounded above.
-        k_line_density_interval: k-line-density range, or None if
-            mesh is invalid for a scalar density.
-        k_pra: k-points-per-reciprocal-atom for this mesh.
-        n_reduced_kpoints: number of symmetry-reduced k-points.
     """
 
     k_index: int
     mesh: KPointGrid
-    k_distance_interval: tuple[float, float | None]
-    k_line_density_interval: tuple[float, float] | None
-    k_pra: float
-    n_reduced_kpoints: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,7 +210,7 @@ class CalculationIntent:
 
     def __post_init__(self) -> None:
         """Require named targets and normalize the functional."""
-        for field_name in ("code", "task"):
+        for field_name in ("code", "task", "pseudo_mode"):
             value = getattr(self, field_name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(
@@ -181,6 +229,61 @@ class CalculationIntent:
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class KmeshHints:
+    """Kmesh-stage operator overrides for k-point selection.
+
+    A narrow view over a ``CalculationHints`` slice, owned by the Kmesh stage.
+    Constructed from a validated ``CalculationHints``; not validated itself
+    (trusted internal record).
+    """
+
+    k_grid: KPointGrid | None = None
+    k_spacing: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SmearingHints:
+    """Smearing-stage operator overrides."""
+
+    smearing_type: str | None = None
+    smearing_width_ry: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SpinHints:
+    """Spin-stage operator overrides shared by magnetism and SOC advice."""
+
+    spin_polarized: bool | None = None
+    spin_orbit_coupling: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PseudoHints:
+    """Pseudopotential-stage operator overrides."""
+
+    pseudo_mode: str | None = None
+    pseudo_type: str | None = None
+    relativistic_mode: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ConvergenceHints:
+    """Convergence-stage operator overrides."""
+
+    conv_thr: float | None = None
+    mixing_beta: float | None = None
+    electron_maxstep: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VdwHints:
+    """Van der Waals-stage operator overrides."""
+
+    use_vdw: bool | None = None
+    vdw_method: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,6 +381,53 @@ class CalculationHints:
             raise ValueError(
                 "CalculationHints.vdw_method must be None when use_vdw is False"
             )
+        _validate_optional_nonempty_str(
+            self.pseudo_mode, "CalculationHints.pseudo_mode"
+        )
+        _validate_optional_nonempty_str(
+            self.pseudo_type, "CalculationHints.pseudo_type"
+        )
+        _validate_relativistic_mode(
+            self.relativistic_mode, "CalculationHints.relativistic_mode"
+        )
+
+    @property
+    def kmesh(self) -> KmeshHints:
+        return KmeshHints(k_grid=self.k_grid, k_spacing=self.k_spacing)
+
+    @property
+    def smearing(self) -> SmearingHints:
+        return SmearingHints(
+            smearing_type=self.smearing_type,
+            smearing_width_ry=self.smearing_width_ry,
+        )
+
+    @property
+    def spin(self) -> SpinHints:
+        return SpinHints(
+            spin_polarized=self.spin_polarized,
+            spin_orbit_coupling=self.spin_orbit_coupling,
+        )
+
+    @property
+    def pseudo(self) -> PseudoHints:
+        return PseudoHints(
+            pseudo_mode=self.pseudo_mode,
+            pseudo_type=self.pseudo_type,
+            relativistic_mode=self.relativistic_mode,
+        )
+
+    @property
+    def convergence(self) -> ConvergenceHints:
+        return ConvergenceHints(
+            conv_thr=self.conv_thr,
+            mixing_beta=self.mixing_beta,
+            electron_maxstep=self.electron_maxstep,
+        )
+
+    @property
+    def vdw(self) -> VdwHints:
+        return VdwHints(use_vdw=self.use_vdw, vdw_method=self.vdw_method)
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -337,7 +487,7 @@ class StructureAnalysisRecord:
         dimensionality: structure dimensionality from a bonded-cluster
             analysis (``3d``, ``2d``, ``1d``, ``molecule``), or
             ``unknown`` when detection fails.
-        has_vacuum: connectivity-derived low-dimensional/vacuum heuristic:
+        low_dimensional: connectivity-derived low-dimensional heuristic:
             True when bonded dimensionality is below 3D. This is not a
             measured cell-vacuum quantity.
         electronic_character: electronic-character classification from the
@@ -365,7 +515,7 @@ class StructureAnalysisRecord:
     space_group_number: str | int | SymmetryUnavailable | None = None
     crystal_system: str | int | SymmetryUnavailable | None = None
     dimensionality: Dimensionality = "unknown"
-    has_vacuum: bool = False
+    low_dimensional: bool = False
     electronic_character: ElectronicCharacter = "unknown"
     electronic_character_source: str = "heuristic"
     electronic_character_confidence: float | None = None
@@ -522,7 +672,7 @@ class VdwAdvice:
     ``vdw_corr='grimme-d3'`` with ``dftd3_version=4``).
 
     The built-in Advise stage treats its connectivity-derived
-    low-dimensional/vacuum heuristic as a conservative D3BJ default because
+    low-dimensional heuristic as a conservative D3BJ default because
     dispersion may be important. It does not establish that dispersion
     dominates; the operator can override the setting or method with
     ``CalculationHints``. Heavy elements only mark SOC for consideration

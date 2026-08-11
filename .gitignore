@@ -33,3 +33,7 @@ goldilocks_output/
 
 # Stray planning scratch files
 plan-*.md
+
+# Graphify code-graph output (local only)
+graphify-out/
+graph.json

@@ -5,21 +5,21 @@ from __future__ import annotations
 from typing import cast
 
 from goldilocks_core.contracts import (
-    CalculationHints,
     Provenance,
     StructureAnalysisRecord,
     VdwAdvice,
+    VdwHints,
     VdwMethod,
 )
 
 
 def advise_vdw(
     analysis: StructureAnalysisRecord,
-    hints: CalculationHints,
+    hints: VdwHints,
 ) -> VdwAdvice:
     """Return vdW dispersion advice.
 
-    User hints win. Otherwise, a connectivity-derived low-dimensional/vacuum
+    User hints win. Otherwise, a connectivity-derived low-dimensional
     heuristic makes D3BJ a conservative package default because dispersion may
     be important for slabs, wires, and molecules. It does not establish that
     dispersion dominates; the operator can override the setting or method with
@@ -37,17 +37,17 @@ def advise_vdw(
             ),
         )
 
-    if analysis.has_vacuum:
+    if analysis.low_dimensional:
         method = _resolve_vdw_method(hints)
         reason = (
             f"Connectivity-derived {analysis.dimensionality} classification "
-            "indicates a low-dimensional/vacuum heuristic; D3BJ is the "
+            "indicates a low-dimensional heuristic; D3BJ is the "
             "conservative package default because dispersion may be important. "
             "Override with CalculationHints(use_vdw=..., vdw_method=...) as needed."
             if hints.vdw_method is None
             else (
                 f"Connectivity-derived {analysis.dimensionality} classification "
-                "indicates a low-dimensional/vacuum heuristic; use the "
+                "indicates a low-dimensional heuristic; use the "
                 f"operator-provided {method} vdW method. Override with "
                 "CalculationHints(use_vdw=...) as needed."
             )
@@ -82,7 +82,7 @@ def advise_vdw(
     )
 
 
-def _resolve_vdw_method(hints: CalculationHints) -> VdwMethod:
+def _resolve_vdw_method(hints: VdwHints) -> VdwMethod:
     """Return the validated vdW method, defaulting to D3BJ.
 
     ``CalculationHints`` validates ``vdw_method`` at construction, so the cast

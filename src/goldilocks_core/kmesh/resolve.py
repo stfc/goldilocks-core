@@ -5,8 +5,8 @@ from __future__ import annotations
 from pymatgen.core import Structure
 
 from goldilocks_core.contracts import (
-    CalculationHints,
     KMeshAdvisor,
+    KmeshHints,
     KPointSelection,
     Provenance,
 )
@@ -15,7 +15,7 @@ from goldilocks_core.kmesh.math import k_distance_to_mesh
 
 def resolve_kpoints(
     structure: Structure,
-    hints: CalculationHints,
+    hints: KmeshHints,
     backend: KMeshAdvisor,
 ) -> KPointSelection:
     """Resolve operator k-point hints into a mesh, else delegate to a model.

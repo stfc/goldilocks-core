@@ -14,7 +14,7 @@ def make_analysis(
     heavy_elements: tuple[str, ...] = (),
     electronic_character: str = "unknown",
     dimensionality: str = "unknown",
-    has_vacuum: bool = False,
+    low_dimensional: bool = False,
 ) -> StructureAnalysisRecord:
     """Build an analysis record for advice tests."""
     return StructureAnalysisRecord(
@@ -30,7 +30,7 @@ def make_analysis(
         heavy_elements=heavy_elements,
         electronic_character=electronic_character,
         dimensionality=dimensionality,
-        has_vacuum=has_vacuum,
+        low_dimensional=low_dimensional,
     )
 
 
@@ -128,6 +128,24 @@ def test_calculation_hints_validate_before_advice() -> None:
         CalculationHints(conv_thr=0.0)
 
 
+def test_calculation_hints_validate_pseudo_fields() -> None:
+    """Reject invalid pseudo/relativistic hint values at the boundary."""
+    with pytest.raises(ValueError, match="relativistic_mode"):
+        CalculationHints(relativistic_mode="garbage")
+
+    with pytest.raises(ValueError, match="pseudo_mode"):
+        CalculationHints(pseudo_mode="")
+
+    with pytest.raises(ValueError, match="pseudo_type"):
+        CalculationHints(pseudo_type="   ")
+
+
+def test_calculation_intent_validates_pseudo_mode() -> None:
+    """Reject an empty pseudo_mode on calculation intent at the boundary."""
+    with pytest.raises(ValueError, match="pseudo_mode"):
+        CalculationIntent(pseudo_mode="")
+
+
 def test_advise_parameters_vdw_defaults_off() -> None:
     """Leave vdW off by default for unknown dimensionality."""
     advice = advise_parameters(make_analysis())
@@ -172,7 +190,7 @@ def test_calculation_hints_reject_unknown_vdw_method() -> None:
 
 def test_advise_parameters_enables_vdw_for_low_dimensional_system() -> None:
     """Use D3BJ as a conservative default for the connectivity heuristic."""
-    advice = advise_parameters(make_analysis(dimensionality="2d", has_vacuum=True))
+    advice = advise_parameters(make_analysis(dimensionality="2d", low_dimensional=True))
 
     assert advice.vdw.use_vdw is True
     assert advice.vdw.method == "d3bj"
@@ -185,7 +203,7 @@ def test_advise_parameters_enables_vdw_for_low_dimensional_system() -> None:
 def test_advise_parameters_heuristic_honors_explicit_vdw_method() -> None:
     """Respect an operator vdW method when the heuristic enables vdW."""
     advice = advise_parameters(
-        make_analysis(dimensionality="molecule", has_vacuum=True),
+        make_analysis(dimensionality="molecule", low_dimensional=True),
         hints=CalculationHints(vdw_method="ts"),
     )
 
@@ -199,7 +217,9 @@ def test_advise_parameters_heuristic_honors_explicit_vdw_method() -> None:
 
 def test_advise_parameters_leaves_vdw_off_for_3d_bulk() -> None:
     """Keep vdW off for fully bonded 3D bulk without an explicit hint."""
-    advice = advise_parameters(make_analysis(dimensionality="3d", has_vacuum=False))
+    advice = advise_parameters(
+        make_analysis(dimensionality="3d", low_dimensional=False)
+    )
 
     assert advice.vdw.use_vdw is False
     assert advice.vdw.provenance.source == "default"
@@ -208,7 +228,7 @@ def test_advise_parameters_leaves_vdw_off_for_3d_bulk() -> None:
 def test_advise_parameters_hint_overrides_low_dimensional_heuristic() -> None:
     """Let an explicit use_vdw=False override the low-dimensional heuristic."""
     advice = advise_parameters(
-        make_analysis(dimensionality="2d", has_vacuum=True),
+        make_analysis(dimensionality="2d", low_dimensional=True),
         hints=CalculationHints(use_vdw=False),
     )
 

@@ -6,6 +6,12 @@ subgraph for the requested outputs, and passes one opaque context object to
 every stage as ``ctx``. It knows nothing about what stages do or what services
 they need -- those belong to the task definition and the runtime that builds
 the context.
+
+Transport-safe task descriptions (:func:`describe_task`) read the same specs
+the executor runs, so a task's published description cannot drift from the
+graph that actually executes. Stage and record identifiers are backend-owned
+stable strings (see :func:`goldilocks_core.contracts.record_type_id`); no
+Python class names or callables cross the transport boundary.
 """
 
 from __future__ import annotations
@@ -14,7 +20,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from goldilocks_core.contracts import CoreRecords
+from goldilocks_core.contracts import (
+    CoreRecords,
+    JsonDict,
+    record_type_id,
+    to_jsonable,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,12 +33,18 @@ class StageSpec:
     """One record-producing stage and its record dependencies.
 
     ``call`` receives the matched upstream records positionally plus the run
-    context as the keyword ``ctx`` and returns its output record.
+    context as the keyword ``ctx`` and returns its output record. ``id``,
+    ``name``, and ``description`` are stable transport metadata read by
+    :func:`describe_task`; they live on the stage so the published description
+    cannot drift from the stage that executes.
     """
 
     output: type
     inputs: tuple[type, ...]
     call: Callable[..., Any]
+    id: str = ""
+    name: str = ""
+    description: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,11 +57,22 @@ class Preset:
 
 @dataclass(frozen=True, slots=True)
 class TaskSpec:
-    """The stages and named output sets for one task."""
+    """The stages and named output sets for one task.
+
+    ``task`` is the stable task identifier; ``name``, ``description``, and
+    ``revision`` are semantic metadata surfaced by :func:`describe_task`.
+    ``selectable_outputs`` is the set of record types a query caller may
+    request from this task's graph -- the task owns it because what is
+    selectable is a task decision, not an executor one.
+    """
 
     task: str
     stages: tuple[StageSpec, ...]
     presets: tuple[Preset, ...]
+    name: str = ""
+    description: str = ""
+    revision: str = "1"
+    selectable_outputs: tuple[type, ...] = ()
 
     def preset(self, name: str) -> Preset:
         """Return the preset with the given name."""
@@ -52,6 +80,95 @@ class TaskSpec:
             if preset.name == name:
                 return preset
         raise KeyError(name)
+
+
+@dataclass(frozen=True, slots=True)
+class StageDescription:
+    """Transport-safe description of one graph stage."""
+
+    id: str
+    name: str
+    description: str
+    input_record_ids: tuple[str, ...]
+    output_record_id: str
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class PresetDescription:
+    """Transport-safe description of one named output preset."""
+
+    id: str
+    name: str
+    output_record_ids: tuple[str, ...]
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class TaskGraphDescription:
+    """Backend-owned, transport-safe description of one task.
+
+    Carries stable task, stage, and record identifiers plus semantic names and
+    descriptions. It never exposes Python callables or class names and carries
+    no frontend or layout metadata.
+    """
+
+    id: str
+    revision: str
+    name: str
+    description: str
+    stages: tuple[StageDescription, ...]
+    presets: tuple[PresetDescription, ...]
+    selectable_record_ids: tuple[str, ...]
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
+def describe_task(task: TaskSpec) -> TaskGraphDescription:
+    """Serialize a :class:`TaskSpec` into a transport-safe description.
+
+    Stage and record identifiers are stable backend-owned strings read from the
+    spec itself; no Python callables or class names are serialized.
+    """
+    stages = tuple(
+        StageDescription(
+            id=stage.id,
+            name=stage.name,
+            description=stage.description,
+            input_record_ids=tuple(record_type_id(item) for item in stage.inputs),
+            output_record_id=record_type_id(stage.output),
+        )
+        for stage in task.stages
+    )
+    presets = tuple(
+        PresetDescription(
+            id=preset.name,
+            name=preset.name,
+            output_record_ids=tuple(
+                record_type_id(output) for output in preset.outputs
+            ),
+        )
+        for preset in task.presets
+    )
+    return TaskGraphDescription(
+        id=task.task,
+        revision=task.revision,
+        name=task.name,
+        description=task.description,
+        stages=stages,
+        presets=presets,
+        selectable_record_ids=tuple(
+            record_type_id(output) for output in task.selectable_outputs
+        ),
+    )
 
 
 def execute(

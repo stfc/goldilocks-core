@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+from goldilocks_core.contracts.outputs import (
+    OUTPUT_RECORD_TYPES,
+    OUTPUT_TYPES_BY_ID,
+    resolve_output_types,
+)
 from goldilocks_core.contracts.protocols import KMeshAdvisor, KMeshService
 from goldilocks_core.contracts.records import (
+    RECORD_TYPE_IDS,
     BundleRecord,
     CalculationHints,
     CalculationIntent,
@@ -36,6 +42,7 @@ from goldilocks_core.contracts.records import (
     SymmetryUnavailable,
     VdwAdvice,
     VdwHints,
+    record_type_id,
 )
 from goldilocks_core.contracts.serial import to_jsonable
 from goldilocks_core.contracts.types import (
@@ -51,8 +58,11 @@ from goldilocks_core.contracts.types import (
     ModelType,
     PathLike,
     ProvenanceSource,
+    RecordId,
     SmearingType,
+    StageId,
     StructureInput,
+    TaskId,
     VdwMethod,
 )
 
@@ -83,6 +93,8 @@ __all__ = [
     "ModelSource",
     "ModelSpec",
     "ModelType",
+    "OUTPUT_RECORD_TYPES",
+    "OUTPUT_TYPES_BY_ID",
     "ParameterAdvice",
     "PathLike",
     "PresetRequest",
@@ -93,18 +105,24 @@ __all__ = [
     "PseudopotentialAdvice",
     "PseudopotentialSelection",
     "QueryRequest",
+    "RECORD_TYPE_IDS",
+    "RecordId",
     "SelectionRecord",
     "SmearingAdvice",
     "SmearingHints",
     "SmearingType",
     "SpinHints",
     "SpinOrbitAdvice",
+    "StageId",
     "StructureAnalysisRecord",
     "StructureFeatureVector",
     "StructureInput",
     "SymmetryUnavailable",
+    "TaskId",
     "VdwAdvice",
     "VdwHints",
     "VdwMethod",
+    "record_type_id",
+    "resolve_output_types",
     "to_jsonable",
 ]

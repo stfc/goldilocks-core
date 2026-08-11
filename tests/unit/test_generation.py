@@ -13,8 +13,6 @@ from goldilocks_core.contracts import (
     ParameterAdvice,
     Provenance,
     PseudoMetadata,
-    PseudopotentialSelection,
-    SelectionRecord,
     SmearingType,
     VdwMethod,
 )
@@ -582,35 +580,23 @@ def test_generate_inputs_rejects_disordered_structure() -> None:
         generate_inputs(structure, advice_context(), advice, selection, k_points)
 
 
-def test_generate_inputs_raises_when_pseudo_missing_for_element() -> None:
-    """A missing pseudopotential for a structure element is not silently skipped."""
-    structure = Structure(
-        lattice=Lattice.cubic(4.0),
-        species=["Si", "Ge"],
-        coords=[[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]],
-    )
+def test_generate_inputs_rejects_incomplete_pseudopotential_selection() -> None:
+    """Reject a valid fallback selection that cannot produce QE syntax."""
+    structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection = select_parameters(structure, advice, metadata_list=[])
     k_points = KPointSelection(
         grid=(2, 2, 2),
         shift=(0, 0, 0),
         mesh_type="monkhorst-pack",
         provenance=Provenance(source="model", reason="stub"),
     )
-    selection = SelectionRecord(
-        pseudopotentials=(
-            PseudopotentialSelection(
-                element="Si",
-                filename="Si.UPF",
-                filepath="/pseudo/Si.UPF",
-                ecutwfc_ry=35.0,
-                ecutrho_ry=140.0,
-                provenance=Provenance(source="model", reason="stub"),
-            ),
-        ),
-    )
 
-    with pytest.raises(KeyError):
+    with pytest.raises(
+        ValueError,
+        match="Pseudopotential selection for Si is incomplete",
+    ):
         generate_inputs(structure, advice_context(), advice, selection, k_points)
 
 

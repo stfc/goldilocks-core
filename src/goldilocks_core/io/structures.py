@@ -9,6 +9,10 @@ from pymatgen.core import Structure
 from goldilocks_core.contracts import StructureInput
 
 
+class StructureInputError(ValueError):
+    """A structure path or file cannot be used as a periodic structure."""
+
+
 def load_structure(structure: StructureInput) -> Structure:
     """Load a structure input into a pymatgen Structure.
 
@@ -26,8 +30,8 @@ def load_structure(structure: StructureInput) -> Structure:
     ------
     FileNotFoundError
         If the provided structure path does not exist.
-    ValueError
-        If the file format is not supported as a periodic structure input.
+    StructureInputError
+        If the path is not a file or its format is not supported.
     TypeError
         If the input is neither a Structure nor a valid path-like value.
     """
@@ -38,11 +42,13 @@ def load_structure(structure: StructureInput) -> Structure:
         structure_path = Path(structure)
         if not structure_path.exists():
             raise FileNotFoundError(f"Structure file not found: {structure_path}")
+        if not structure_path.is_file():
+            raise StructureInputError(f"Structure path is not a file: {structure_path}")
 
         try:
             return Structure.from_file(structure_path)
         except ValueError as exc:
-            raise ValueError(
+            raise StructureInputError(
                 "Unsupported structure file format. "
                 "goldilocks-core currently supports periodic structure files "
                 "readable by pymatgen.Structure."

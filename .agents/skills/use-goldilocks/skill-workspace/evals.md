@@ -4,13 +4,13 @@
 
 Prompt: There are CIFs in a folder. Pick one, use Goldilocks to get the DFT numbers, but write the Quantum ESPRESSO SCF input yourself rather than using generation.
 
-Why it matters: Exercises the main distinction between `recommend` and `generate`/`bundle`.
+Why it matters: Exercises the distinction between recommendation and generation.
 
 Expected behavior:
 
 - Load `use-goldilocks` and `use-uv`.
 - Inspect candidate CIFs with pymatgen.
-- Use `recommend(...)` with pseudo metadata to get k-grid, pseudos, cutoffs, smearing, convergence.
+- Use `CoreService.recommend(PresetRequest(...))` with pseudo metadata to get k-grid, pseudos, cutoffs, smearing, and convergence.
 - Write QE input manually from selected records.
 - Report warnings and output paths.
 
@@ -22,7 +22,7 @@ Why it matters: Exercises the fastest ordinary CLI path.
 
 Expected behavior:
 
-- Use `uv run goldilocks-core bundle ...`.
+- Use `uv run goldilocks-core generate ... --out RUN_DIR`.
 - Avoid reading source unless command fails.
 - Report bundle layout, key selected values, and warnings.
 

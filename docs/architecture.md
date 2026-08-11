@@ -25,6 +25,7 @@ outputs. Stages remain pure functions with no stage base classes.
 | `runtime/core.py` | `CoreRuntime`: kmesh/metallicity model lifecycle (load/reset/close), exposed as read-only services. |
 | `runtime/dispatch.py` | `TaskDispatcher`: task registry and dispatch by `intent.task` through `TaskHandler`s. |
 | `runtime/jobs.py` | `run_core_job` (preset) and `query_records` (query) entrypoints. |
+| `runtime/service.py` | `CoreService`: process-owned lifecycle, locking, operations, and discovery shared by every entry point. |
 | `io/structures.py` | Structure loading. |
 | `analysis.py` | Structure facts. |
 | `advice/` | Scientific and numerical recommendations. |
@@ -32,6 +33,8 @@ outputs. Stages remain pure functions with no stage base classes.
 | `selection.py` | Pseudopotentials and cutoffs. |
 | `generation/` | Calculation-specific file generation. |
 | `bundle.py` | Generated files and manifest output. |
+| `server/request.py` | Canonical JSON request deserialization shared by transports. |
+| `server/http.py`, `server/mcp.py` | Thin optional HTTP and MCP adapters over one `CoreService`. |
 
 Stages communicate through dataclasses. They do not need to inherit from a Core
 class, and callers can invoke any stage function directly.
@@ -39,14 +42,16 @@ class, and callers can invoke any stage function directly.
 ## Standard workflow
 
 `PresetRequest` carries a preset run (`mode` = `recommend`/`generate`);
-`QueryRequest` carries an explicit record query (`outputs`). `run_core_job` runs a
-preset and `query_records` runs a query; each delegates to a fresh `CoreRuntime`
-(model lifecycle) and `TaskDispatcher` (task dispatch) unless the caller supplies
-a runtime for reuse. The dispatcher runs the registered `scf_single_point` task.
+`QueryRequest` carries an explicit record query (`outputs`). `CoreService`
+exposes `recommend`, `generate`, and `compute` over a process-owned
+`CoreRuntime` and `TaskDispatcher`, serializing dispatch so lazy model state is
+safe to reuse. `run_core_job` and `query_records` are short-lived convenience
+entry points. The dispatcher runs the registered `scf_single_point` task.
 
 ```python
-request = PresetRequest(structure="Fe.cif", mode="generate")
-result = run_core_job(request)
+with CoreService() as core:
+    request = PresetRequest(structure="Fe.cif")
+    result = core.generate(request, output_dir="run")
 ```
 
 `mode` selects a task preset:
@@ -100,5 +105,6 @@ Scientific choices belong in Analyze, Advise, Kmesh, and Select. Generate maps
 completed choices to calculation syntax. Optional bundle publication writes
 files but does not run calculations or copy pseudopotential libraries.
 
-Runner/AiiDA workflows, schedulers, auth, HTTP transport, frontend state, and
-completed-output analysis are outside this package.
+Runner/AiiDA workflows, schedulers, auth, frontend state, and completed-output
+analysis are outside this package. HTTP and MCP are optional thin transports;
+they do not add queues, persistence, sessions, or pod management.

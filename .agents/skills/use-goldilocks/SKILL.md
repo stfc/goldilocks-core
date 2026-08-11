@@ -1,107 +1,115 @@
 ---
 name: use-goldilocks
-description: Use goldilocks-core quickly for DFT input recommendation workflows. Trigger when running or scripting recommendations, extracting parameters from structures, generating or bundling Quantum ESPRESSO SCF inputs, or manually writing inputs from Goldilocks-selected numbers.
+description: Use goldilocks-core quickly for DFT input recommendation workflows. Trigger when running or scripting recommendations, extracting parameters from structures, generating or publishing Quantum ESPRESSO SCF inputs, or manually writing inputs from Goldilocks-selected records.
 ---
 
 # Use Goldilocks
 
-Operational quickstart for using `goldilocks-core` without rereading the implementation.
-
-Goldilocks Core recommends and prepares DFT inputs from a structure, intent, hints, and pseudopotential metadata. It currently generates Quantum ESPRESSO SCF single-point inputs.
+Operational quickstart for using `goldilocks-core` without rereading the
+implementation. Core currently recommends and generates Quantum ESPRESSO SCF
+single-point inputs.
 
 ## Progressive disclosure
 
-Start here. Only read supporting files when the task needs the detail.
+Start here. Read supporting files only for the needed branch:
 
-- `references/workflows.md` — CLI and Python patterns for recommend/generate/bundle/manual QE input writing.
-- `references/qe-scf-template.md` — mechanical Quantum ESPRESSO SCF template for manually writing an input from selected values.
+- `references/workflows.md` — Python and CLI operation patterns, record queries,
+  model selection, and bundle publication.
+- `references/qe-scf-template.md` — mechanical Quantum ESPRESSO SCF template for
+  manually writing an input from selected values.
 
-Pair this skill with:
+Pair with:
 
-- `use-uv` when running Python, CLI, tests, or scripts.
-- `dft-basics` when deciding or changing physics-bearing policy: k-points, smearing, pseudopotentials, SOC, convergence.
-- `write-a-test` when changing public behavior or capturing a discovered regression.
+- `use-uv` for Python, CLI, tests, or dependency work.
+- `dft-basics` for physics-bearing choices: k-points, smearing,
+  pseudopotentials, SOC, or convergence.
+- `write-a-test` when changing public behavior or capturing a regression.
 
 ## Mental model
 
-The fixed Core graph is:
+The shipped task is a typed dependency graph:
 
 ```text
-Load → Analyze → Advise → Kmesh → Select → Generate → Bundle
+Load -> Analyze -> Advise -> Select
+Load -> Kmesh
+Load + Advice + Select + Kmesh -> Generate
 ```
 
-Modes stop at different points:
+Choose the operation from the needed output:
 
-```text
-recommend -> Load → Analyze → Advise → Kmesh → Select
-generate  -> Load → Analyze → Advise → Kmesh → Select → Generate
-bundle    -> Load → Analyze → Advise → Kmesh → Select → Generate → Bundle
-```
+- Complete recommendation records: `CoreService.recommend(PresetRequest(...))`.
+- Generated files in memory: `CoreService.generate(PresetRequest(...))`.
+- Generated files on disk: `CoreService.generate(..., output_dir=...)`.
+- Selected records only: `CoreService.compute(QueryRequest(...))`.
+- Repeated calls or discovery: keep one `CoreService` open.
+- One call: `run_core_job` or `query_records`.
 
-Use this distinction to avoid unnecessary source reading:
+Bundle publication is a side effect of Generate, not a separate mode.
 
-- Need numbers only? Use `recommend`.
-- Need generated files in memory? Use `generate`.
-- Need files on disk? Use `bundle` or `write_bundle`.
-- Need to hand-write an input? Run `recommend`, extract values, then write the target-code file yourself.
-
-## Inputs to identify first
-
-Before running anything, identify:
+## Inputs to identify
 
 1. Structure path or `pymatgen.Structure`.
-2. Target intent: code, task, functional, pseudo mode.
-3. Operator hints: k-grid or k-spacing, smearing, spin/SOC, pseudo type, convergence.
-4. Pseudopotential metadata source: usually a local directory of `.UPF` files.
-5. Desired output style: numbers only, generated file, or bundle directory.
+2. Target code, task, functional, and pseudo mode.
+3. Operator hints: k-grid or k-spacing, smearing, spin/SOC, pseudo type,
+   convergence.
+4. Pseudopotential metadata source, usually a local directory of `.UPF` files.
+5. Required output: full recommendation, selected records, generated text, or
+   published directory.
 
 ## Canonical API surface
 
-Use the public API from `goldilocks_core`, not internal modules, unless debugging or modifying Core itself:
+Use the root facade for application operations:
 
 ```python
 from goldilocks_core import (
     CalculationHints,
     CalculationIntent,
-    CoreJobRequest,
-    generate,
-    recommend,
+    CoreService,
+    PresetRequest,
+    QueryRequest,
+    query_records,
     run_core_job,
-    write_bundle,
 )
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 ```
 
-The CLI entry point is:
+CLI operations map one-to-one to the service:
 
 ```bash
 uv run goldilocks-core recommend STRUCTURE --json
-uv run goldilocks-core generate STRUCTURE --pseudo-root PSEUDOS --json
-uv run goldilocks-core bundle STRUCTURE --pseudo-root PSEUDOS --out RUN_DIR --json
+uv run goldilocks-core generate STRUCTURE --pseudo-root PSEUDOS --out RUN_DIR --json
+uv run goldilocks-core compute STRUCTURE --outputs analysis,k_points
+uv run goldilocks-core serve http
+uv run goldilocks-core serve mcp
 ```
+
+HTTP and MCP require the `[http]` and `[mcp]` extras. Both transports keep one
+`CoreService` alive and expose recommend, generate, compute, task discovery,
+code discovery, and model discovery.
 
 ## Common pitfalls
 
-- Use `uv run`, not bare `python`, `pip`, or manual virtualenv activation.
-- Current built-in generation target is `quantum_espresso` + `scf_single_point`.
-- Generators are mechanical. Scientific choices must already exist in advice/selection records.
-- User hints win over defaults and model-backed choices.
-- Pseudopotential matching is functional-sensitive: `PBE`, `PBESOL`, `LDA`, etc.
-- UPF files may parse but lack cutoff metadata. Generation requires complete pseudo and cutoff selections.
-- Heavy elements make SOC worth considering; Core does not silently enable expensive SOC.
+- Use `uv run` and `uv sync`; persistent project environments are uv-owned.
+- The only shipped target is `quantum_espresso` + `scf_single_point`.
+- Generators are mechanical. Scientific choices must already exist in records.
+- Explicit user hints win over model-backed choices.
+- Pseudopotential matching is functional-sensitive: `PBE`, `PBEsol`, `LDA`.
+- Generation requires selected pseudo filenames and both cutoffs for every
+  element; recommendation may instead return fallback records and warnings.
 - Structure-only electronic character is uncertain. Inspect smearing warnings.
-- Core is not Runner/AiiDA/scheduler/frontend. It prepares recommendations and input files only.
+- Core prepares input files; it does not run DFT, schedule jobs, or manage
+  AiiDA, auth, sessions, pods, or frontend state.
 
-## Verification checklist
+## Completion check
 
-For any produced input or parameter list, report:
+For every produced input or parameter list, report:
 
-- structure and reduced formula
-- functional and target code/task
-- k-grid and shift
-- pseudopotentials by element
-- `ecutwfc` / `ecutrho`
-- smearing and degauss, or fixed occupations
-- convergence values
-- warnings from the result
-- output files or bundle path
+- structure and reduced formula;
+- functional and target code/task;
+- k-grid and shift;
+- pseudopotential filename by element;
+- `ecutwfc` and `ecutrho`;
+- smearing/degauss or fixed occupations;
+- convergence values;
+- warnings;
+- generated paths and bundle path, when present.

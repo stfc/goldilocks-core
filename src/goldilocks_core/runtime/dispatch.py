@@ -27,6 +27,10 @@ from goldilocks_core.runtime.graph import TaskGraphDescription, describe_task, e
 from goldilocks_core.runtime.task import TaskHandler
 
 
+class UnknownTaskError(ValueError):
+    """A request names no registered Core task."""
+
+
 class TaskDispatcher:
     """Dispatch Core task graphs through registered :class:`TaskHandler`s.
 
@@ -121,7 +125,7 @@ class TaskDispatcher:
         handler = self._tasks.get(request.intent.task)
         if handler is None:
             available = ", ".join(sorted(self._tasks)) or "none"
-            raise ValueError(
+            raise UnknownTaskError(
                 f"No Core task registered for task={request.intent.task!r}. "
                 f"Available: {available}"
             )

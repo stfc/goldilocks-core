@@ -1,65 +1,91 @@
 # Pipeline
 
-Goldilocks provides a standard staged workflow and public functions for using
-each stage independently.
+Goldilocks Core exposes one staged SCF workflow through `CoreService`. The same
+service backs Python, CLI, HTTP, and MCP entry points.
 
-## Standard use
+## Reusable service
 
-```python
-from goldilocks_core import CalculationHints, generate
-
-result = generate(
-    "Fe.cif",
-    hints=CalculationHints(k_grid=(6, 6, 6), spin_polarized=True),
-    pseudo_metadata=metadata,
-)
-
-for generated_file in result.generated_files:
-    print(generated_file.path)
-```
-
-The convenience functions are:
-
-- `recommend(...)`: analyze, advise, resolve k-points, and select resources;
-- `generate(...)`: also generate input files and, when `output_dir` is given,
-  publish them with `manifest.json`.
-
-Both return `CoreResult`.
-
-## Request and dispatch
-
-Use `CoreJobRequest` when an application needs one serializable job object.
-`run_core_job` delegates to a fresh `CoreRuntime`, or reuses a caller-supplied
-runtime. The runtime owns model lifecycle and executes the registered SCF task
-graph.
+Use one service for repeated work. It owns lazy model state and closes resources
+when the context exits.
 
 ```python
-from goldilocks_core import CoreJobRequest, run_core_job
+from goldilocks_core import CalculationHints, CoreService, PresetRequest
+from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
-request = CoreJobRequest(
+request = PresetRequest(
     structure="Fe.cif",
-    mode="generate",
-    pseudo_metadata=tuple(metadata),
+    hints=CalculationHints(k_grid=(6, 6, 6), spin_polarized=True),
+    pseudo_metadata=tuple(load_pseudo_metadata("pseudos")),
 )
-result = run_core_job(request)
+
+with CoreService() as core:
+    recommendation = core.recommend(request)
+    generated = core.generate(request, output_dir="run")
+
+print(recommendation.selection.pseudopotentials)
+for generated_file in generated.generated_files:
+    print(generated_file.path)
+print(generated.bundle.path)
 ```
 
-`mode` controls how far the SCF graph runs: `recommend` stops after Select;
-`generate` runs through Generate and publishes a bundle when `output_dir` is
-set.
+`recommend` runs through Select. `generate` also runs Generate; its optional
+`output_dir` publishes the generated files and `manifest.json` into a new
+directory.
+
+## Selected record queries
+
+`compute` asks the DAG for selected record types and runs only their
+prerequisites:
+
+```python
+from goldilocks_core import CalculationHints, CoreService, QueryRequest
+from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
+
+request = QueryRequest(
+    structure="Fe.cif",
+    outputs=(StructureAnalysisRecord, KPointSelection),
+    hints=CalculationHints(k_grid=(6, 6, 6)),
+)
+
+with CoreService() as core:
+    records = core.compute(request)
+
+print(records[StructureAnalysisRecord].reduced_formula)
+print(records[KPointSelection].grid)
+```
+
+Record type IDs on CLI and transport boundaries are `analysis`, `advice`,
+`k_points`, `selection`, and `generated_files`. Python requests use the record
+types themselves.
+
+## One-call entry points
+
+For a single operation, `run_core_job` and `query_records` create a short-lived
+service:
+
+```python
+from goldilocks_core import PresetRequest, QueryRequest, query_records, run_core_job
+from goldilocks_core.contracts import StructureAnalysisRecord
+
+result = run_core_job(PresetRequest(structure="Fe.cif", mode="recommend"))
+records = query_records(
+    QueryRequest(structure="Fe.cif", outputs=(StructureAnalysisRecord,))
+)
+```
+
+Use `CoreService` when multiple calls should reuse loaded models or when task,
+code, and model discovery is needed.
 
 ## K-point backends
 
-K-points are resolved by `resolve_kpoints(structure, hints, backend)`:
-explicit `k_grid` wins over `k_spacing`, and both beat the model backend. The
-default backend is the built-in QRF k-distance model; explicit hints bypass
-model loading entirely.
+K-points are resolved by `resolve_kpoints(structure, hints, backend)`. An
+explicit `k_grid` wins over `k_spacing`; both bypass model loading. Without a
+k-point hint, the configured QRF k-distance model is loaded lazily.
 
-To use a local k-index model instead of the default, put a `ModelSpec` on the
-request:
+Put a `ModelSpec` on either request type to select a local k-index model:
 
 ```python
-from goldilocks_core import CoreJobRequest, run_core_job
+from goldilocks_core import CoreService, PresetRequest
 from goldilocks_core.contracts import ModelSpec
 
 spec = ModelSpec(
@@ -72,54 +98,64 @@ spec = ModelSpec(
     location="model.joblib",
 )
 
-result = run_core_job(
-    CoreJobRequest(structure="Fe.cif", mode="recommend", kmesh_model=spec)
-)
+with CoreService() as core:
+    result = core.recommend(
+        PresetRequest(structure="Fe.cif", kmesh_model=spec)
+    )
 ```
 
-The model spec is request data, so it serializes alongside the rest of the job.
+The model specification is request data and is included in serialized requests.
 
 ## Task graph
 
-`SCF_TASK` declares each stage's input and output record types and the
-`recommend` and `generate` presets. `CoreRuntime.compute(...)` asks the
-executor for arbitrary output types; the executor resolves and runs only their
-prerequisites. New calculation tasks use another `TaskSpec` rather than a
-hand-coded dispatch path.
+The built-in `SCF_TASK` declares each stage's inputs and output record type.
+`TaskDispatcher` selects the graph from `CalculationIntent.task`; the executor
+resolves the minimal subgraph for a preset or query. `CoreRuntime` owns only
+model lifecycle.
 
-## Compose stages directly
+```text
+Load -> Analyze -> Advise -> Select
+Load -> Kmesh
+Load + Advice + Select + Kmesh -> Generate
+```
 
-Callers are not required to use `run_core_job`:
+The shipped task is `scf_single_point`. New calculation tasks register another
+`TaskHandler` containing a `TaskSpec`, context builder, and result assembler;
+the executor itself remains task-agnostic.
+
+## Direct stage composition
+
+The service is not an access restriction. Scientific stages remain ordinary
+functions:
 
 ```python
 from goldilocks_core.advice import advise_parameters
 from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.advisors import default_kmesh_advisor
+from goldilocks_core.generation import generate_inputs
 from goldilocks_core.io.structures import load_structure
 from goldilocks_core.kmesh import resolve_kpoints
 from goldilocks_core.selection import select_parameters
 
-structure = load_structure("Fe.cif")
-analysis = analyze_structure(structure)
+loaded = load_structure("Fe.cif")
+analysis = analyze_structure(loaded)
 advice = advise_parameters(analysis, intent, hints)
-kpoints = resolve_kpoints(structure, hints, default_kmesh_advisor())
-selection = select_parameters(structure, advice, metadata)
+k_points = resolve_kpoints(loaded, hints, default_kmesh_advisor())
+selection = select_parameters(loaded, advice, metadata)
+files = generate_inputs(loaded, intent, advice, selection, k_points)
 ```
 
-Use this form to inspect intermediate records, insert project-specific work,
-reuse only part of the pipeline, or drive a calculation family with a different
-sequence.
+Use direct composition for intermediate inspection or project-specific work,
+not to reproduce service dispatch in another wrapper.
 
 ## Stage responsibilities
 
-- **Load** reads a `pymatgen.Structure` or structure file.
+- **Load** reads a `pymatgen.Structure` or periodic structure file.
 - **Analyze** reports structure facts.
 - **Advise** recommends physics and numerical settings with provenance.
 - **Kmesh** resolves operator hints or a model into a concrete grid.
 - **Select** chooses pseudopotentials and cutoffs.
-- **Generate** creates one or more calculation input files from Advice,
-  Kmesh, and Select records.
+- **Generate** creates target-code input files from completed records.
 
-Analyze and Kmesh are parallel dependencies of the SCF task. Select depends on
-Load and Advise, not Kmesh. Bundle publication is an optional side effect of
-the `generate` preset rather than a separate mode.
+Bundle publication is a filesystem side effect of generation, not a separate
+stage preset or job mode.

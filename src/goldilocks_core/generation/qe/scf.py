@@ -14,6 +14,7 @@ from goldilocks_core.contracts import (
     ParameterAdvice,
     SelectionRecord,
 )
+from goldilocks_core.generation.errors import GenerationError
 
 # Code-agnostic vdW method labels → (QE ``vdw_corr`` value, ``dftd3_version``).
 # QE has no separate D3-BJ keyword: both D3 variants use ``vdw_corr='grimme-d3'``
@@ -51,9 +52,9 @@ def write_qe_scf(
     Returns:
         A one-element tuple holding the rendered QE SCF input file.
 
-    Raises:
-        ValueError: If the structure is disordered or the advice carries an
-            unsupported smearing or vdW method for the QE target.
+        GenerationError: If the structure is disordered or the advice carries
+            incomplete pseudopotential selections, unsupported smearing, or an
+            unsupported vdW method for the QE target.
     """
     return (
         GeneratedFile(
@@ -86,7 +87,7 @@ def _render_qe_scf(
         Complete QE input text ending with a trailing newline.
     """
     if not structure.is_ordered:
-        raise ValueError(
+        raise GenerationError(
             "Cannot generate Quantum ESPRESSO input for disordered structures"
         )
 
@@ -97,12 +98,29 @@ def _render_qe_scf(
         pseudo.element: pseudo for pseudo in selection.pseudopotentials
     }
     selected_pseudos = tuple(pseudo_by_element[element] for element in elements)
-    ecutwfc = max(float(pseudo.ecutwfc_ry) for pseudo in selected_pseudos)
-    ecutrho = max(float(pseudo.ecutrho_ry) for pseudo in selected_pseudos)
 
     for pseudo in selected_pseudos:
+        missing = [
+            name
+            for name, value in (
+                ("filename", pseudo.filename),
+                ("ecutwfc_ry", pseudo.ecutwfc_ry),
+                ("ecutrho_ry", pseudo.ecutrho_ry),
+            )
+            if value is None
+        ]
+        if missing:
+            raise GenerationError(
+                f"Pseudopotential selection for {pseudo.element} is incomplete: "
+                f"missing {', '.join(missing)}"
+            )
         if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", pseudo.filename) is None:
-            raise ValueError(f"Unsafe pseudopotential filename: {pseudo.filename!r}")
+            raise GenerationError(
+                f"Unsafe pseudopotential filename: {pseudo.filename!r}"
+            )
+
+    ecutwfc = max(float(pseudo.ecutwfc_ry) for pseudo in selected_pseudos)
+    ecutrho = max(float(pseudo.ecutrho_ry) for pseudo in selected_pseudos)
 
     lines: list[str] = []
     lines.extend(_control_section())
@@ -168,12 +186,12 @@ def _smearing_lines(advice: ParameterAdvice) -> list[str]:
         return ["  occupations = 'fixed'"]
     qe_smearing = _QE_SMEARING.get(smearing_type)
     if qe_smearing is None:
-        raise ValueError(
+        raise GenerationError(
             "Quantum ESPRESSO smearing advice is invalid: unsupported "
             f"method {smearing_type!r}"
         )
     if advice.smearing.width_ry is None:
-        raise ValueError("Smearing width is required when smearing is enabled")
+        raise GenerationError("Smearing width is required when smearing is enabled")
     return [
         "  occupations = 'smearing'",
         f"  smearing = '{qe_smearing}'",
@@ -195,7 +213,7 @@ def _vdw_lines(advice: ParameterAdvice) -> list[str]:
     method = advice.vdw.method
     if advice.vdw.use_vdw:
         if method not in _QE_VDW_CORR:
-            raise ValueError(
+            raise GenerationError(
                 "Quantum ESPRESSO vdW advice is invalid: enabled vdW requires "
                 f"a supported method; got {method!r}"
             )
@@ -205,7 +223,7 @@ def _vdw_lines(advice: ParameterAdvice) -> list[str]:
             lines.append(f"  dftd3_version = {dftd3_version}")
         return lines
     if method is not None:
-        raise ValueError(
+        raise GenerationError(
             "Quantum ESPRESSO vdW advice is invalid: disabled vdW requires "
             f"method=None; got {method!r}"
         )

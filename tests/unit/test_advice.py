@@ -70,6 +70,7 @@ def test_advise_parameters_uses_analysis_without_silently_enabling_soc() -> None
     assert advice.spin_orbit.consider is True
     assert advice.spin_orbit.enabled is False
     assert advice.spin_orbit.provenance.source == "analysis"
+    assert advice.spin_orbit.heavy_elements == ("I",)
     assert advice.pseudopotentials.functional == "PBEsol"
     assert advice.pseudopotentials.relativistic_mode == "scalar"
     assert advice.pseudopotentials.provenance.warnings
@@ -134,6 +135,29 @@ def test_advise_smearing_defaults_to_fixed_occupations_for_non_metals() -> None:
     assert advice.smearing.smearing_type == "fixed"
     assert advice.smearing.width_ry is None
     assert advice.smearing.provenance.source == "default"
+
+
+def test_advise_spin_orbit_user_hint_records_provenance_and_heavy_elements() -> None:
+    """An operator SOC hint overrides the decision and carries heavy elements."""
+    advice = advise_parameters(
+        make_analysis(heavy_elements=("I",)),
+        hints=CalculationHints(spin_orbit_coupling=True),
+    )
+
+    assert advice.spin_orbit.enabled is True
+    assert advice.spin_orbit.consider is False
+    assert advice.spin_orbit.heavy_elements == ("I",)
+    assert advice.spin_orbit.provenance.source == "user_hint"
+
+
+def test_advise_spin_orbit_defaults_to_disabled_without_heavy_elements() -> None:
+    """With no heavy elements and no hint, SOC is disabled by default."""
+    advice = advise_parameters(make_analysis())
+
+    assert advice.spin_orbit.enabled is False
+    assert advice.spin_orbit.consider is False
+    assert advice.spin_orbit.heavy_elements == ()
+    assert advice.spin_orbit.provenance.source == "default"
 
 
 def test_advise_parameters_records_convergence_hints() -> None:

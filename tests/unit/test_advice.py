@@ -106,6 +106,36 @@ def test_advise_parameters_uses_likely_metal_smearing_from_analysis() -> None:
     assert advice.smearing.provenance.source == "analysis"
 
 
+def test_advise_parameters_uses_metal_smearing_from_ml_classification() -> None:
+    """A model-classified metal gets the same metallic smearing as a likely metal."""
+    advice = advise_parameters(make_analysis(electronic_character="metal"))
+
+    assert advice.smearing.smearing_type == "cold"
+    assert advice.smearing.width_ry == 0.01
+    assert advice.smearing.provenance.source == "analysis"
+
+
+def test_advise_smearing_records_user_hint_provenance_when_hinted() -> None:
+    """Operator smearing hints are tagged with user_hint provenance."""
+    advice = advise_parameters(
+        make_analysis(),
+        hints=CalculationHints(smearing_type="gaussian", smearing_width_ry=0.02),
+    )
+
+    assert advice.smearing.smearing_type == "gaussian"
+    assert advice.smearing.width_ry == 0.02
+    assert advice.smearing.provenance.source == "user_hint"
+
+
+def test_advise_smearing_defaults_to_fixed_occupations_for_non_metals() -> None:
+    """Non-metallic, un-hinted structures get fixed occupations by default."""
+    advice = advise_parameters(make_analysis(electronic_character="insulator"))
+
+    assert advice.smearing.smearing_type == "fixed"
+    assert advice.smearing.width_ry is None
+    assert advice.smearing.provenance.source == "default"
+
+
 def test_advise_parameters_records_convergence_hints() -> None:
     """Let operator-provided convergence settings override defaults."""
     advice = advise_parameters(

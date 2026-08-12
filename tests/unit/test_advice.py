@@ -160,6 +160,66 @@ def test_advise_spin_orbit_defaults_to_disabled_without_heavy_elements() -> None
     assert advice.spin_orbit.provenance.source == "default"
 
 
+def test_advise_pseudopotentials_records_user_hint_source_without_soc() -> None:
+    """Pseudo hints without SOC record user_hint provenance and no warnings."""
+    advice = advise_parameters(
+        make_analysis(),
+        hints=CalculationHints(pseudo_mode="precision"),
+    )
+
+    assert advice.pseudopotentials.provenance.source == "user_hint"
+    assert advice.pseudopotentials.provenance.warnings == ()
+
+
+def test_advise_pseudopotentials_records_default_source_without_hints() -> None:
+    """No pseudo hints and no SOC record default provenance and no warnings."""
+    advice = advise_parameters(make_analysis())
+
+    assert advice.pseudopotentials.provenance.source == "default"
+    assert advice.pseudopotentials.provenance.warnings == ()
+
+
+def test_advise_pseudopotentials_records_analysis_source_when_soc_enabled() -> None:
+    """SOC enabled with no relativistic hint derives pseudo provenance from analysis."""
+    advice = advise_parameters(
+        make_analysis(),
+        hints=CalculationHints(spin_orbit_coupling=True),
+    )
+
+    assert advice.pseudopotentials.provenance.source == "analysis"
+    assert advice.pseudopotentials.relativistic_mode == "full"
+
+
+def test_advise_magnetism_user_hint_carries_magnetic_elements() -> None:
+    """An operator spin hint carries the detected magnetic elements."""
+    advice = advise_parameters(
+        make_analysis(magnetic_elements=("Fe",)),
+        hints=CalculationHints(spin_polarized=True),
+    )
+
+    assert advice.magnetism.spin_polarized is True
+    assert advice.magnetism.magnetic_elements == ("Fe",)
+    assert advice.magnetism.provenance.source == "user_hint"
+
+
+def test_advise_magnetism_analysis_carries_magnetic_elements() -> None:
+    """Detected magnetic elements trigger spin polarization with analysis provenance."""
+    advice = advise_parameters(make_analysis(magnetic_elements=("Fe",)))
+
+    assert advice.magnetism.spin_polarized is True
+    assert advice.magnetism.magnetic_elements == ("Fe",)
+    assert advice.magnetism.provenance.source == "analysis"
+
+
+def test_advise_magnetism_defaults_without_magnetic_elements() -> None:
+    """No magnetic elements and no hint defaults to unpolarized with no elements."""
+    advice = advise_parameters(make_analysis())
+
+    assert advice.magnetism.spin_polarized is False
+    assert advice.magnetism.magnetic_elements == ()
+    assert advice.magnetism.provenance.source == "default"
+
+
 def test_advise_parameters_records_convergence_hints() -> None:
     """Let operator-provided convergence settings override defaults."""
     advice = advise_parameters(

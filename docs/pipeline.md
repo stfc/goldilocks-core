@@ -26,44 +26,39 @@ The convenience functions are:
 
 All return `CoreResult`.
 
-## Request and pipeline
+## Request and dispatch
 
 Use `CoreJobRequest` when an application needs one serializable job object.
-Use `Pipeline` to replace stage implementations without putting Python
-callables in that request.
+`run_core_job` dispatches on `intent.task` to a path function that composes the
+stages for that calculation. The SCF path (`scf_single_point`) is built in;
+future paths (magnetic, NSCF, phonons) are added the same way.
 
 ```python
-from goldilocks_core import CoreJobRequest, Pipeline, run_core_job
+from goldilocks_core import CoreJobRequest, run_core_job
 
 request = CoreJobRequest(
     structure="Fe.cif",
     mode="generate",
     pseudo_metadata=tuple(metadata),
 )
-result = run_core_job(request, pipeline=Pipeline())
+result = run_core_job(request)
 ```
 
-`Pipeline()` supplies the built-in Analyze, Advise, Kmesh, Select, Generate,
-and Bundle functions. Its fields are plain callables.
+`mode` controls how far the SCF path runs: `recommend` stops after Select,
+`generate` after Generate, `bundle` after Bundle.
 
-## Replace a stage
+## K-point backends
 
-K-point selection is the common replacement point:
+K-points are resolved by `resolve_kpoints(structure, hints, backend)`:
+explicit `k_grid` wins over `k_spacing`, and both beat the model backend. The
+default backend is the built-in QRF k-distance model; explicit hints bypass
+model loading entirely.
 
-```python
-from goldilocks_core import Pipeline, recommend
-from goldilocks_core.kmesh import resolve_kpoints_from_advice
-
-result = recommend(
-    "Fe.cif",
-    pipeline=Pipeline(kmesh=resolve_kpoints_from_advice),
-)
-```
-
-A local model can be supplied the same way:
+To use a local k-index model instead of the default, put a `ModelSpec` on the
+request:
 
 ```python
-from goldilocks_core.advisors import ml_kmesh_advisor
+from goldilocks_core import CoreJobRequest, run_core_job
 from goldilocks_core.contracts import ModelSpec
 
 spec = ModelSpec(
@@ -76,54 +71,38 @@ spec = ModelSpec(
     location="model.joblib",
 )
 
-pipeline = Pipeline(kmesh=ml_kmesh_advisor(spec))
-```
-
-## Add a calculation task
-
-The shared intent accepts task names beyond the built-in SCF task. A custom
-Generate callable can implement one while reusing the earlier stages:
-
-```python
-from goldilocks_core import CalculationIntent, Pipeline, generate
-from goldilocks_core.contracts import GeneratedFile
-
-
-def generate_magnetic_nscf(structure, intent, advice, selection):
-    if intent.task != "magnetic_nscf":
-        raise ValueError(f"unsupported task: {intent.task}")
-    return (
-        GeneratedFile(path="inputs/scf.in", content=render_scf(...)),
-        GeneratedFile(path="inputs/nscf.in", content=render_nscf(...)),
-    )
-
-
-result = generate(
-    "Fe.cif",
-    intent=CalculationIntent(task="magnetic_nscf"),
-    pipeline=Pipeline(generate=generate_magnetic_nscf),
-    pseudo_metadata=metadata,
+result = run_core_job(
+    CoreJobRequest(structure="Fe.cif", mode="recommend", kmesh_model=spec)
 )
 ```
 
-The built-in `generate_inputs` remains explicit: it supports Quantum ESPRESSO
-`scf_single_point` and rejects other target/task combinations.
+The model spec is request data, so it serializes alongside the rest of the job.
+
+## Adding calculation tasks
+
+`run_core_job` dispatches `intent.task` through a `_PATHS` table in `jobs.py`,
+mapping each task to a path function. The built-in entry is
+`scf_single_point` -> `run_scf`. A new task (magnetic, NSCF, phonons) is added
+by registering another path function that composes the shared stages. For
+one-off or experimental sequences, compose the stage functions directly
+instead.
 
 ## Compose stages directly
 
-Callers are not required to use `Pipeline` or `run_core_job`:
+Callers are not required to use `run_core_job`:
 
 ```python
 from goldilocks_core.advice import advise_parameters
 from goldilocks_core.analysis import analyze_structure
+from goldilocks_core.advisors import default_kmesh_advisor
 from goldilocks_core.io.structures import load_structure
-from goldilocks_core.kmesh import resolve_kpoints_from_advice
+from goldilocks_core.kmesh import resolve_kpoints
 from goldilocks_core.selection import select_parameters
 
 structure = load_structure("Fe.cif")
 analysis = analyze_structure(structure)
 advice = advise_parameters(analysis, intent, hints)
-kpoints = resolve_kpoints_from_advice(structure, hints, advice.k_points)
+kpoints = resolve_kpoints(structure, hints, default_kmesh_advisor())
 selection = select_parameters(structure, advice, kpoints, metadata)
 ```
 
@@ -136,7 +115,7 @@ sequence.
 - **Load** reads a `pymatgen.Structure` or structure file.
 - **Analyze** reports structure facts.
 - **Advise** recommends physics and numerical settings with provenance.
-- **Kmesh** resolves k-point advice to a concrete grid.
+- **Kmesh** resolves operator hints or a model into a concrete grid.
 - **Select** chooses pseudopotentials and cutoffs.
 - **Generate** creates one or more calculation input files.
 - **Bundle** writes generated files and a manifest to a new directory.

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.ml import cgcnn, metallicity
+from goldilocks_core.ml.qrf import cgcnn, metallicity
 
 
 def test_load_metallicity_model_reconstructs_checkpoint_and_enters_eval_mode(

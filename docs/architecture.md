@@ -16,14 +16,14 @@ plugin registry, service container, or stage base classes.
 
 | Module | Responsibility |
 | --- | --- |
-| `contracts.py` | Data records shared between stages. |
-| `jobs.py` | `Pipeline`, `run_core_job`, and convenience functions. |
+| `contracts/` | Data records and serialization shared between stages. |
+| `jobs.py` | `run_core_job` path dispatch and convenience functions. |
 | `io/structures.py` | Structure loading. |
 | `analysis.py` | Structure facts. |
-| `advice.py` | Scientific and numerical recommendations. |
-| `kmesh.py`, `advisors/` | Concrete k-point selection. |
+| `advice/` | Scientific and numerical recommendations. |
+| `kmesh/`, `advisors/` | Concrete k-point selection. |
 | `selection.py` | Pseudopotentials and cutoffs. |
-| `generation.py` | Calculation-specific file generation. |
+| `generation/` | Calculation-specific file generation. |
 | `bundle.py` | Generated files and manifest output. |
 
 Stages communicate through dataclasses. They do not need to inherit from a Core
@@ -31,43 +31,44 @@ class, and callers can invoke any stage function directly.
 
 ## Standard workflow
 
-`CoreJobRequest` contains job data. `Pipeline` contains the callables used to
-process it. Keeping these separate allows requests to be serialized while
-Python callers replace implementations.
+`CoreJobRequest` carries serializable job data. `run_core_job` dispatches on
+`intent.task` to a path function (the built-in SCF path is `run_scf`) that
+composes the stages for that calculation.
 
 ```python
 request = CoreJobRequest(structure="Fe.cif", mode="generate")
-result = run_core_job(request, pipeline=Pipeline())
+result = run_core_job(request)
 ```
 
-`mode` controls where the standard workflow stops:
+`mode` controls where the SCF path stops:
 
 - `recommend`: after Select
 - `generate`: after Generate
 - `bundle`: after Bundle
 
 `CalculationIntent.task` describes the calculation. Task names are not closed
-in the shared contract. The built-in generator currently accepts only
-`scf_single_point`; another generator may support additional tasks and emit
+in the shared contract. The built-in path currently accepts only
+`scf_single_point`; another path may support additional tasks and emit
 multiple `GeneratedFile` records.
 
 ## Flexible Python use
 
-The pipeline is optional convenience, not an access restriction. Advanced
+`run_core_job` is optional convenience, not an access restriction. Advanced
 callers can import stage functions and compose them themselves:
 
 ```python
 from goldilocks_core.advice import advise_parameters
 from goldilocks_core.analysis import analyze_structure
+from goldilocks_core.advisors import default_kmesh_advisor
 from goldilocks_core.generation import generate_inputs
 from goldilocks_core.io.structures import load_structure
-from goldilocks_core.kmesh import resolve_kpoints_from_advice
+from goldilocks_core.kmesh import resolve_kpoints
 from goldilocks_core.selection import select_parameters
 
 structure = load_structure("Fe.cif")
 analysis = analyze_structure(structure)
 advice = advise_parameters(analysis, intent, hints)
-kpoints = resolve_kpoints_from_advice(structure, hints, advice.k_points)
+kpoints = resolve_kpoints(structure, hints, default_kmesh_advisor())
 selection = select_parameters(structure, advice, kpoints, metadata)
 files = generate_inputs(structure, intent, advice, selection)
 ```

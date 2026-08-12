@@ -16,6 +16,9 @@ All notable changes to goldilocks-core are documented here.
 - Job-level warnings now include de-duplicated scientific caveats from Advise as well as Analyze, Kmesh, and Select.
 - Bundle output uses a straightforward no-overwrite directory writer.
 - Default exchange-correlation functional changed from PBE to PBEsol. This changes generated inputs and the pseudopotentials selected on a default run; pass `--functional PBE` to restore the previous behaviour.
+- `run_core_job` now dispatches `intent.task` to a path function (`run_scf` for SCF) instead of a fixed `Pipeline`. The `Pipeline` dataclass and `pipeline=` parameter are removed.
+- K-points are resolved by `resolve_kpoints(structure, hints, backend)`; the `KMeshAdvisor` signature is `(Structure) -> KPointSelection`.
+- CLI `--model` now sets `CoreJobRequest.kmesh_model` (a `ModelSpec` on the request) instead of swapping a `Pipeline` backend.
 
 
 ### Fixed
@@ -30,6 +33,12 @@ All notable changes to goldilocks-core are documented here.
 - Exact runtime reconstruction and local artifact hashing from QRF provenance.
 
 - `CalculationIntent.accuracy_level` and CLI `--accuracy-level`; the advertised levels had no implemented scientific effect. This is an intentional API and serialized-schema change with no compatibility alias.
+- Heuristic k-points: `KPointAdvice` record, `ParameterAdvice.k_points` field, `advise_k_points`, `DEFAULT_K_SPACING`, `resolve_kpoints_from_advice`, and CLI `--heuristic-kpoints`. The model-free default-spacing fallback is gone; use explicit hints or the QRF model.
+- `Pipeline` dataclass and the `AnalyzeStage`/`AdviseStage`/`SelectStage`/`GenerateStage`/`BundleStage` Callable aliases.
+- `AdvicePolicies` injectable container and its policy type aliases; `advise_parameters` calls the policy functions directly.
+- `MetallicityClassifier` injection on `analyze_structure`; it always uses `heuristic_metallicity`.
+- `register_writer` and the mutable writer dispatch table; the table is now a static tuple.
+- Dead `parse_upf` dataframe layer (`metadata_to_row`/`metadata_list_to_rows`/`metadata_list_to_dataframe`) and the helpers only it used.
 
 ## [0.1.0] - 2026-06-10
 

@@ -13,14 +13,11 @@ from goldilocks_core.contracts import (
     ModelSpec,
     Provenance,
 )
-from goldilocks_core.kmesh import (
+from goldilocks_core.kmesh.math import (
     build_kmesh_entries,
     generate_candidate_k_distances,
-    resolve_kpoints_from_advice,
 )
-from goldilocks_core.ml.features import extract_cslr_features
-from goldilocks_core.ml.inference import predict
-from goldilocks_core.ml.models import load_model
+from goldilocks_core.ml.kindex import predict_kindex
 
 
 def _select_kmesh_entry(
@@ -38,9 +35,7 @@ def _select_kmesh_entry(
 def ml_kmesh_advisor(spec: ModelSpec) -> KMeshAdvisor:
     """Return a Kmesh-stage backend that uses an ML model when no hint is set."""
 
-    def advisor(structure, hints, kpoint_advice):
-        if hints.k_grid is not None or hints.k_spacing is not None:
-            return resolve_kpoints_from_advice(structure, hints, kpoint_advice)
+    def advisor(structure: Structure) -> KPointSelection:
         return advise_kpoints(structure, spec)
 
     return advisor
@@ -51,9 +46,7 @@ def advise_kpoints(
     spec: ModelSpec,
 ) -> KPointSelection:
     """Select a k-point grid from an ML-predicted k-index."""
-    features = extract_cslr_features(structure)
-    model = load_model(spec)
-    predicted_k_index = predict(model, features)
+    predicted_k_index = predict_kindex(structure, spec)
 
     candidate_distances = generate_candidate_k_distances(structure)
     entries = build_kmesh_entries(structure, candidate_distances)

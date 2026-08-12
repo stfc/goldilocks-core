@@ -90,3 +90,25 @@ def _validate_vdw_method(method: object, field_name: str) -> None:
     if not isinstance(method, str) or method not in _VALID_VDW_METHODS:
         valid = ", ".join(sorted(_VALID_VDW_METHODS))
         raise ValueError(f"{field_name} must be one of {valid}; got {method!r}")
+
+
+_VALID_RELATIVISTIC_MODES: frozenset[str] = frozenset(
+    {"scalar", "full", "non-relativistic"}
+)
+
+
+def _validate_optional_nonempty_str(value: object, field_name: str) -> None:
+    """Require None or a non-empty (after strip) string."""
+    if value is not None and (not isinstance(value, str) or not value.strip()):
+        raise ValueError(
+            f"{field_name} must be a non-empty string, or None; got {value!r}"
+        )
+
+
+def _validate_relativistic_mode(value: object, field_name: str) -> None:
+    """Require None or a supported relativistic mode label."""
+    if value is not None and (
+        not isinstance(value, str) or value not in _VALID_RELATIVISTIC_MODES
+    ):
+        valid = ", ".join(sorted(_VALID_RELATIVISTIC_MODES))
+        raise ValueError(f"{field_name} must be one of {valid}, or None; got {value!r}")

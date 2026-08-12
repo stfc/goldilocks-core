@@ -6,11 +6,12 @@ from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
     ConvergenceAdvice,
-    CoreJobRequest,
+    CoreRecords,
     CoreResult,
     KPointSelection,
     MagnetismAdvice,
     ParameterAdvice,
+    PresetRequest,
     Provenance,
     PseudopotentialAdvice,
     SelectionRecord,
@@ -68,17 +69,18 @@ def _make_advice() -> ParameterAdvice:
     )
 
 
-def _make_selection() -> SelectionRecord:
+def _make_k_points() -> KPointSelection:
     provenance = Provenance(source="default", reason="baseline default")
-    return SelectionRecord(
-        k_points=KPointSelection(
-            grid=(4, 4, 4),
-            shift=(0, 0, 0),
-            mesh_type="monkhorst-pack",
-            provenance=provenance,
-        ),
-        pseudopotentials=(),
+    return KPointSelection(
+        grid=(4, 4, 4),
+        shift=(0, 0, 0),
+        mesh_type="monkhorst-pack",
+        provenance=provenance,
     )
+
+
+def _make_selection() -> SelectionRecord:
+    return SelectionRecord(pseudopotentials=())
 
 
 def test_contracts_serialize_to_json_safe_dicts() -> None:
@@ -87,15 +89,28 @@ def test_contracts_serialize_to_json_safe_dicts() -> None:
         intent=CalculationIntent(),
         analysis=_make_analysis(),
         advice=_make_advice(),
+        k_points=_make_k_points(),
         selection=_make_selection(),
     )
 
     data = result.to_dict()
 
     assert data["analysis"]["elements"] == ["Si"]
-    assert data["selection"]["k_points"]["grid"] == [4, 4, 4]
+    assert data["k_points"]["grid"] == [4, 4, 4]
     assert "grid" not in data
     assert "contains_heavy_elements" not in data
+
+
+def test_core_records_maps_requested_types_and_serializes_record_names() -> None:
+    """Expose only requested DAG records and serialize their type names."""
+    analysis = _make_analysis()
+    records = CoreRecords({StructureAnalysisRecord: analysis})
+
+    assert records[StructureAnalysisRecord] is analysis
+    assert tuple(records) == (StructureAnalysisRecord,)
+    assert records.to_dict() == {
+        "StructureAnalysisRecord": analysis.to_dict(),
+    }
 
 
 def test_calculation_intent_omits_removed_accuracy_control() -> None:
@@ -111,6 +126,41 @@ def test_hints_serialize_explicit_grid_as_list() -> None:
     data = CalculationHints(k_grid=(2, 2, 1)).to_dict()
 
     assert data["k_grid"] == [2, 2, 1]
+
+
+def test_calculation_hints_expose_per_stage_views() -> None:
+    """CalculationHints decomposes into one narrow hint view per stage."""
+    hints = CalculationHints(
+        k_grid=(2, 2, 1),
+        k_spacing=0.25,
+        smearing_type="cold",
+        smearing_width_ry=0.01,
+        spin_polarized=True,
+        spin_orbit_coupling=False,
+        pseudo_mode="precision",
+        pseudo_type="NC",
+        relativistic_mode="full",
+        conv_thr=1e-8,
+        mixing_beta=0.2,
+        electron_maxstep=120,
+        use_vdw=True,
+        vdw_method="ts",
+    )
+
+    assert hints.kmesh.k_grid == (2, 2, 1)
+    assert hints.kmesh.k_spacing == 0.25
+    assert hints.smearing.smearing_type == "cold"
+    assert hints.smearing.smearing_width_ry == 0.01
+    assert hints.spin.spin_polarized is True
+    assert hints.spin.spin_orbit_coupling is False
+    assert hints.pseudo.pseudo_mode == "precision"
+    assert hints.pseudo.pseudo_type == "NC"
+    assert hints.pseudo.relativistic_mode == "full"
+    assert hints.convergence.conv_thr == 1e-8
+    assert hints.convergence.mixing_beta == 0.2
+    assert hints.convergence.electron_maxstep == 120
+    assert hints.vdw.use_vdw is True
+    assert hints.vdw.vdw_method == "ts"
 
 
 def test_feature_vectors_serialize_numpy_values_as_json_lists() -> None:
@@ -129,35 +179,28 @@ def test_job_records_serialize_to_json_safe_dicts() -> None:
         intent=CalculationIntent(),
         analysis=_make_analysis(),
         advice=_make_advice(),
+        k_points=_make_k_points(),
         selection=_make_selection(),
-        bundle=BundleRecord(path="run/", manifest={"manifest_version": 1}),
+        bundle=BundleRecord(path="run/", manifest={"manifest_version": 2}),
     )
 
     data = result.to_dict()
 
     assert data["bundle"]["path"] == "run/"
-    assert data["selection"]["k_points"]["grid"] == [4, 4, 4]
+    assert data["k_points"]["grid"] == [4, 4, 4]
 
 
-def test_core_job_request_validates_mode_and_bundle_output_dir() -> None:
-    """CoreJobRequest raises at construction for invalid mode or missing output_dir."""
-    CoreJobRequest(structure="Si.cif", mode="recommend")
-    CoreJobRequest(structure="Si.cif", mode="generate")
-    CoreJobRequest(structure="Si.cif", mode="bundle", output_dir="run/")
+def test_preset_request_validates_mode() -> None:
+    """PresetRequest raises at construction for invalid modes."""
+    PresetRequest(structure="Si.cif", mode="recommend")
+    PresetRequest(structure="Si.cif", mode="generate")
 
     try:
-        CoreJobRequest(structure="Si.cif", mode="invalid")
+        PresetRequest(structure="Si.cif", mode="invalid")
     except ValueError:
         pass
     else:
         raise AssertionError("expected ValueError for invalid mode")
-
-    try:
-        CoreJobRequest(structure="Si.cif", mode="bundle")
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("expected ValueError for bundle mode without output_dir")
 
 
 def test_calculation_intent_defaults_to_pbesol() -> None:

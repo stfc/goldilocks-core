@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from goldilocks_core import CalculationHints, recommend
+from goldilocks_core import CalculationHints, PresetRequest, run_core_job
 from goldilocks_core.examples import available_structures, structure, structures_path
 
 
@@ -23,10 +23,14 @@ def test_structure_rejects_an_unknown_name() -> None:
 @pytest.mark.parametrize("name", ["Si.cif", "Fe_bcc.cif", "Pt_fcc.cif"])
 def test_every_bundled_structure_runs_through_the_pipeline(name: str) -> None:
     """Load each example from disk and carry it to a complete recommendation."""
-    result = recommend(structure(name), hints=CalculationHints(k_grid=(4, 4, 4)))
+    result = run_core_job(
+        PresetRequest(
+            structure=structure(name), hints=CalculationHints(k_grid=(4, 4, 4))
+        )
+    )
 
     assert result.analysis.reduced_formula
-    assert result.selection.k_points.grid == (4, 4, 4)
+    assert result.k_points.grid == (4, 4, 4)
 
 
 def test_bundled_structures_exercise_distinct_advice_branches() -> None:
@@ -36,9 +40,11 @@ def test_bundled_structures_exercise_distinct_advice_branches() -> None:
     changes, either the example set or that documentation is stale.
     """
     hints = CalculationHints(k_grid=(4, 4, 4))
-    silicon = recommend(structure("Si.cif"), hints=hints)
-    iron = recommend(structure("Fe_bcc.cif"), hints=hints)
-    platinum = recommend(structure("Pt_fcc.cif"), hints=hints)
+    silicon = run_core_job(PresetRequest(structure=structure("Si.cif"), hints=hints))
+    iron = run_core_job(PresetRequest(structure=structure("Fe_bcc.cif"), hints=hints))
+    platinum = run_core_job(
+        PresetRequest(structure=structure("Pt_fcc.cif"), hints=hints)
+    )
 
     # Silicon: the non-magnetic, light-element, no-SOC baseline.
     assert silicon.advice.magnetism.spin_polarized is False

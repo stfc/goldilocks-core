@@ -32,19 +32,18 @@ def make_result() -> CoreResult:
         heavy_elements=(),
     )
     advice = advise_parameters(analysis)
-    selection = SelectionRecord(
-        k_points=KPointSelection(
-            grid=(4, 4, 4),
-            shift=(0, 0, 0),
-            mesh_type="monkhorst-pack",
-            provenance=Provenance(source="default", reason="test"),
-        ),
-        pseudopotentials=(),
+    k_points = KPointSelection(
+        grid=(4, 4, 4),
+        shift=(0, 0, 0),
+        mesh_type="monkhorst-pack",
+        provenance=Provenance(source="default", reason="test"),
     )
+    selection = SelectionRecord(pseudopotentials=())
     return CoreResult(
         intent=CalculationIntent(),
         analysis=analysis,
         advice=advice,
+        k_points=k_points,
         selection=selection,
         generated_files=(GeneratedFile(path="inputs/qe.in", content="&CONTROL\n/\n"),),
         warnings=("test warning",),
@@ -55,11 +54,11 @@ def test_build_bundle_manifest_records_file_metadata_without_content() -> None:
     """Build a manifest containing stage outputs and generated file metadata."""
     manifest = build_bundle_manifest(make_result())
 
-    assert manifest["manifest_version"] == 1
+    assert manifest["manifest_version"] == 2
     assert manifest["intent"]["code"] == "quantum_espresso"
     assert manifest["analysis"]["elements"] == ["Si"]
-    assert manifest["selection"]["k_points"]["mesh_type"] == "monkhorst-pack"
-    assert manifest["selection"]["k_points"]["grid"] == [4, 4, 4]
+    assert manifest["k_points"]["mesh_type"] == "monkhorst-pack"
+    assert manifest["k_points"]["grid"] == [4, 4, 4]
     assert manifest["generated_files"] == [
         {
             "path": "inputs/qe.in",

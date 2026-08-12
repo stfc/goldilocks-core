@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -26,12 +28,13 @@ from goldilocks_core.contracts.validate import (
     _validate_finite_positive,
     _validate_kpoint_grid,
     _validate_optional_boolean,
+    _validate_optional_nonempty_str,
     _validate_positive_integer,
+    _validate_relativistic_mode,
     _validate_smearing,
     _validate_vdw_method,
 )
 from goldilocks_core.functionals import normalize_functional_label
-from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 
 
 @dataclass(slots=True)
@@ -78,6 +81,64 @@ class ModelSpec:
     revision: str | None = None
 
 
+@dataclass(slots=True)
+class PseudoMetadata:
+    """Structured pseudopotential metadata extracted from a UPF file.
+
+    Produced by ``parse_upf_metadata()`` and consumed by pseudo
+    selection. Not frozen: callers may mutate fields when
+    synthesizing test metadata.
+
+    Attributes:
+        filepath: full path to the UPF file on disk.
+        filename: basename of the UPF file (e.g. ``Si.UPF``).
+        header_format: UPF header format: ``attr`` or ``text``.
+        library: pseudo library name (e.g. ``SSSP``), extracted
+            from the file path.
+        source_set: source set within the library (e.g.
+            ``efficiency``, ``precision``).
+        element: element symbol this pseudo is for (e.g.
+            ``Si``).
+        pseudo_type: normalized pseudo type: ``NC``, ``USPP``,
+            or ``PAW``.
+        functional: normalized functional label (e.g. ``PBE``,
+            ``PBEsol``, ``LDA``).
+        relativistic: normalized relativistic mode: ``scalar``,
+            ``full``, or ``non-relativistic``.
+        z_valence: valence charge.
+        pseudo_info: raw header fields not mapped to typed
+            attributes.
+        is_sssp: whether this pseudo is from the SSSP library.
+        source_pseudopotential: original pseudo identifier from
+            the UPF header.
+        sssp_recommended_cutoff: SSSP recommended cutoffs dict
+            with ``ecutwfc_ry`` and ``ecutrho_ry`` in Rydberg.
+    """
+
+    filepath: str
+    filename: str
+    header_format: str
+    library: str | None = None
+    source_set: str | None = None
+    element: str | None = None
+    pseudo_type: str | None = None
+    functional: str | None = None
+    relativistic: str | None = None
+    z_valence: float | None = None
+    pseudo_info: dict[str, Any] = field(default_factory=dict)
+    is_sssp: bool = False
+    source_pseudopotential: str | None = None
+    sssp_recommended_cutoff: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        """Canonicalize supported functional labels from metadata producers."""
+        self.functional = normalize_functional_label(self.functional)
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
 @dataclass(frozen=True, slots=True)
 class KMeshEntry:
     """One indexed k-mesh entry produced from a structure scan.
@@ -88,21 +149,10 @@ class KMeshEntry:
     Attributes:
         k_index: 1-based index into the ordered k-mesh table.
         mesh: uniform k-point grid for this entry.
-        k_distance_interval: VASP-style k-distance range (Å⁻¹)
-            that maps to this mesh. ``None`` as the upper endpoint means
-            the interval is unbounded above.
-        k_line_density_interval: k-line-density range, or None if
-            mesh is invalid for a scalar density.
-        k_pra: k-points-per-reciprocal-atom for this mesh.
-        n_reduced_kpoints: number of symmetry-reduced k-points.
     """
 
     k_index: int
     mesh: KPointGrid
-    k_distance_interval: tuple[float, float | None]
-    k_line_density_interval: tuple[float, float] | None
-    k_pra: float
-    n_reduced_kpoints: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,7 +210,7 @@ class CalculationIntent:
 
     def __post_init__(self) -> None:
         """Require named targets and normalize the functional."""
-        for field_name in ("code", "task"):
+        for field_name in ("code", "task", "pseudo_mode"):
             value = getattr(self, field_name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(
@@ -179,6 +229,61 @@ class CalculationIntent:
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class KmeshHints:
+    """Kmesh-stage operator overrides for k-point selection.
+
+    A narrow view over a ``CalculationHints`` slice, owned by the Kmesh stage.
+    Constructed from a validated ``CalculationHints``; not validated itself
+    (trusted internal record).
+    """
+
+    k_grid: KPointGrid | None = None
+    k_spacing: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SmearingHints:
+    """Smearing-stage operator overrides."""
+
+    smearing_type: str | None = None
+    smearing_width_ry: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SpinHints:
+    """Spin-stage operator overrides shared by magnetism and SOC advice."""
+
+    spin_polarized: bool | None = None
+    spin_orbit_coupling: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PseudoHints:
+    """Pseudopotential-stage operator overrides."""
+
+    pseudo_mode: str | None = None
+    pseudo_type: str | None = None
+    relativistic_mode: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ConvergenceHints:
+    """Convergence-stage operator overrides."""
+
+    conv_thr: float | None = None
+    mixing_beta: float | None = None
+    electron_maxstep: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VdwHints:
+    """Van der Waals-stage operator overrides."""
+
+    use_vdw: bool | None = None
+    vdw_method: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -276,10 +381,74 @@ class CalculationHints:
             raise ValueError(
                 "CalculationHints.vdw_method must be None when use_vdw is False"
             )
+        _validate_optional_nonempty_str(
+            self.pseudo_mode, "CalculationHints.pseudo_mode"
+        )
+        _validate_optional_nonempty_str(
+            self.pseudo_type, "CalculationHints.pseudo_type"
+        )
+        _validate_relativistic_mode(
+            self.relativistic_mode, "CalculationHints.relativistic_mode"
+        )
+
+    @property
+    def kmesh(self) -> KmeshHints:
+        return KmeshHints(k_grid=self.k_grid, k_spacing=self.k_spacing)
+
+    @property
+    def smearing(self) -> SmearingHints:
+        return SmearingHints(
+            smearing_type=self.smearing_type,
+            smearing_width_ry=self.smearing_width_ry,
+        )
+
+    @property
+    def spin(self) -> SpinHints:
+        return SpinHints(
+            spin_polarized=self.spin_polarized,
+            spin_orbit_coupling=self.spin_orbit_coupling,
+        )
+
+    @property
+    def pseudo(self) -> PseudoHints:
+        return PseudoHints(
+            pseudo_mode=self.pseudo_mode,
+            pseudo_type=self.pseudo_type,
+            relativistic_mode=self.relativistic_mode,
+        )
+
+    @property
+    def convergence(self) -> ConvergenceHints:
+        return ConvergenceHints(
+            conv_thr=self.conv_thr,
+            mixing_beta=self.mixing_beta,
+            electron_maxstep=self.electron_maxstep,
+        )
+
+    @property
+    def vdw(self) -> VdwHints:
+        return VdwHints(use_vdw=self.use_vdw, vdw_method=self.vdw_method)
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class SymmetryUnavailable:
+    """Typed marker that symmetry facts could not be determined.
+
+    Stored in ``StructureAnalysisRecord`` symmetry fields when spglib cannot
+    analyze a structure (e.g. disordered sites). Carries a ``reason`` so the
+    manifest records why the field is unavailable instead of a bare null.
+    Symmetry is reporting-only; a recommendation stays complete with one of
+    these in place of a crystal-system/space-group value.
+
+    Attributes:
+        reason: why symmetry analysis was unavailable.
+    """
+
+    reason: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -309,20 +478,23 @@ class StructureAnalysisRecord:
             occupancies.
         disordered_site_count: number of sites with partial
             occupancies.
-        space_group_symbol: Hermann-Mauguin symbol, or None for
-            disordered structures.
+        space_group_symbol: Hermann-Mauguin symbol, or
+            ``SymmetryUnavailable`` when spglib cannot analyze, or None.
         space_group_number: International space group number
-            (1–230), or None.
+            (1–230), or ``SymmetryUnavailable``, or None.
         crystal_system: crystal system name (e.g. ``cubic``), or
-            None.
+            ``SymmetryUnavailable``, or None.
         dimensionality: structure dimensionality from a bonded-cluster
             analysis (``3d``, ``2d``, ``1d``, ``molecule``), or
             ``unknown`` when detection fails.
-        has_vacuum: connectivity-derived low-dimensional/vacuum heuristic:
+        low_dimensional: connectivity-derived low-dimensional heuristic:
             True when bonded dimensionality is below 3D. This is not a
             measured cell-vacuum quantity.
-        electronic_character: conservative electronic-character
-            heuristic.
+        electronic_character: electronic-character classification from the
+            runtime model or structure-only fallback.
+        electronic_character_source: origin of the classification, such as
+            ``model`` or ``heuristic``.
+        electronic_character_confidence: optional confidence score in [0, 1].
         analysis_warnings: warnings about heuristic limitations
             (e.g. metallicity uncertainty).
     """
@@ -339,12 +511,14 @@ class StructureAnalysisRecord:
     heavy_elements: tuple[str, ...]
     disorder_warnings: tuple[str, ...] = ()
     disordered_site_count: int = 0
-    space_group_symbol: str | None = None
-    space_group_number: int | None = None
-    crystal_system: str | None = None
+    space_group_symbol: str | int | SymmetryUnavailable | None = None
+    space_group_number: str | int | SymmetryUnavailable | None = None
+    crystal_system: str | int | SymmetryUnavailable | None = None
     dimensionality: Dimensionality = "unknown"
-    has_vacuum: bool = False
+    low_dimensional: bool = False
     electronic_character: ElectronicCharacter = "unknown"
+    electronic_character_source: str = "heuristic"
+    electronic_character_confidence: float | None = None
     analysis_warnings: tuple[str, ...] = ()
 
     def to_dict(self) -> JsonDict:
@@ -498,7 +672,7 @@ class VdwAdvice:
     ``vdw_corr='grimme-d3'`` with ``dftd3_version=4``).
 
     The built-in Advise stage treats its connectivity-derived
-    low-dimensional/vacuum heuristic as a conservative D3BJ default because
+    low-dimensional heuristic as a conservative D3BJ default because
     dispersion may be important. It does not establish that dispersion
     dominates; the operator can override the setting or method with
     ``CalculationHints``. Heavy elements only mark SOC for consideration
@@ -609,19 +783,14 @@ class PseudopotentialSelection:
 
 @dataclass(frozen=True, slots=True)
 class SelectionRecord:
-    """Complete Select-stage output.
-
-    Contains the Kmesh-stage grid, pseudopotential selections, and any
-    accumulated warnings from the selection process.
+    """Complete Select-stage pseudopotential output.
 
     Attributes:
-        k_points: resolved k-point grid and shift.
         pseudopotentials: one selection per element.
         warnings: warnings from pseudo selection (e.g. missing
             pseudos, incomplete cutoffs).
     """
 
-    k_points: KPointSelection
     pseudopotentials: tuple[PseudopotentialSelection, ...]
     warnings: tuple[str, ...] = ()
 
@@ -654,12 +823,15 @@ class GeneratedFile:
         return to_jsonable(self)
 
 
+type GeneratedFiles = tuple[GeneratedFile, ...]
+"""Immutable collection produced by the Generate stage."""
+
+
 @dataclass(frozen=True, slots=True)
 class BundleRecord:
-    """Terminal Bundle-stage output: where files were written and the manifest.
+    """Bundle publication output: where files were written and the manifest.
 
-    This is a stage record like every other: one stage produces one record.
-    It is only populated in bundle mode.
+    It is populated when generate publishes files to an output directory.
 
     Attributes:
         path: bundle root directory path.
@@ -674,34 +846,65 @@ class BundleRecord:
         return to_jsonable(self)
 
 
+class CoreRecords(Mapping[type, Any]):
+    """Requested DAG records keyed by their record types.
+
+    Only explicitly requested record types are present.
+    """
+
+    __slots__ = ("_records",)
+
+    def __init__(self, records: Mapping[type, Any] | None = None) -> None:
+        self._records = dict(records or {})
+
+    def __getitem__(self, record_type: type) -> Any:
+        return self._records[record_type]
+
+    def __iter__(self) -> Iterator[type]:
+        return iter(self._records)
+
+    def __len__(self) -> int:
+        return len(self._records)
+
+    def to_dict(self) -> JsonDict:
+        """Return records as a JSON-serializable dictionary."""
+        return to_jsonable(
+            {
+                record_type.__name__: record
+                for record_type, record in self._records.items()
+            }
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class CoreResult:
     """Records produced by a recommendation or generation workflow.
 
-    Scientific records are populated as their stages run. ``generated_files``
-    is populated in generate/bundle modes. ``bundle`` is set only in bundle
-    mode. The request is not echoed here — the caller already has it;
-    CLI/HTTP layers echo it themselves in their serialized output.
+    Scientific records are populated as their stages run. ``k_points`` is the
+    Kmesh-stage output alongside the Select-stage pseudopotentials.
+    ``generated_files`` is populated in generate mode. ``bundle`` is set only
+    when generate is given an output directory. The request is not echoed here
+    — the caller already has it; CLI/HTTP layers echo it themselves.
 
     Attributes:
         intent: what the operator asked for.
         analysis: structure facts from the Analyze stage.
         advice: provenance-backed recommendations from the Advise
             stage.
-        selection: concrete values from the Select stage.
-        generated_files: generated input files, populated by
-            Generate or Bundle modes.
+        k_points: concrete grid and shift from the Kmesh stage.
+        selection: concrete pseudopotentials from the Select stage.
+        generated_files: generated input files, populated by Generate mode.
         warnings: aggregated warnings from analysis, Kmesh, and
             selection.
-        bundle: terminal Bundle-stage record, set only in bundle
-            mode.
+        bundle: output bundle record, set only when generate writes files.
     """
 
     intent: CalculationIntent
     analysis: StructureAnalysisRecord
     advice: ParameterAdvice
+    k_points: KPointSelection
     selection: SelectionRecord
-    generated_files: tuple[GeneratedFile, ...] = ()
+    generated_files: GeneratedFiles = ()
     warnings: tuple[str, ...] = ()
     bundle: BundleRecord | None = None
 
@@ -711,25 +914,24 @@ class CoreResult:
 
 
 @dataclass(frozen=True, slots=True)
-class CoreJobRequest:
-    """Request for running the standard Core workflow.
+class PresetRequest:
+    """Operator request for a named-preset Core run (recommend/generate).
 
-    One request model shared by Python API, CLI, and future HTTP
-    wrappers. ``mode`` controls how far the pipeline runs.
+    Passed to :func:`run_core_job` (or a dispatcher's ``recommend``/``generate``).
+    ``mode`` selects the preset; ``output_dir`` is meaningful only with
+    ``generate``.
 
     Attributes:
-        structure: structure input — a pymatgen Structure or a
-            path to a structure file.
+        structure: structure input — a pymatgen Structure or a path to a
+            structure file.
         intent: what to calculate.
         hints: optional operator overrides.
-        mode: pipeline mode: ``recommend``, ``generate``, or
-            ``bundle``.
+        mode: preset mode: ``recommend`` or ``generate``.
         pseudo_metadata: pseudopotential metadata for selection.
-        output_dir: output directory path, required when mode is
-            ``bundle``.
-        kmesh_model: optional local k-index model spec; when set, the
-            SCF path uses it for k-point selection instead of the default
-            QRF k-distance model.
+        output_dir: optional output directory, meaningful only with
+            ``generate``. The generate entrypoint handles publishing there.
+        kmesh_model: optional local k-index model spec; when set, the SCF path
+            uses it for k-point selection instead of the default QRF model.
     """
 
     structure: StructureInput
@@ -741,13 +943,54 @@ class CoreJobRequest:
     kmesh_model: ModelSpec | None = None
 
     def __post_init__(self) -> None:
-        """Validate request invariants at construction."""
-        if self.mode not in {"recommend", "generate", "bundle"}:
+        """Validate the preset mode at construction."""
+        if self.mode not in {"recommend", "generate"}:
             raise ValueError(f"Unsupported Core job mode: {self.mode}")
-
-        if self.mode == "bundle" and self.output_dir is None:
-            raise ValueError("output_dir is required for bundle mode")
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
-        return to_jsonable(self)
+        return {
+            "structure": to_jsonable(self.structure),
+            "intent": to_jsonable(self.intent),
+            "hints": to_jsonable(self.hints),
+            "mode": self.mode,
+            "pseudo_metadata": to_jsonable(self.pseudo_metadata),
+            "output_dir": self.output_dir,
+            "kmesh_model": to_jsonable(self.kmesh_model),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class QueryRequest:
+    """Operator request for an explicit record query.
+
+    Passed to :func:`query_records` (or a dispatcher's ``compute``). ``outputs``
+    is required: it names the DAG record types to compute.
+
+    Attributes:
+        structure: structure input — a pymatgen Structure or a path to a
+            structure file.
+        outputs: requested DAG record types (required, non-None).
+        intent: what to calculate.
+        hints: optional operator overrides.
+        pseudo_metadata: pseudopotential metadata for selection.
+        kmesh_model: optional local k-index model spec.
+    """
+
+    structure: StructureInput
+    outputs: tuple[type, ...]
+    intent: CalculationIntent = field(default_factory=CalculationIntent)
+    hints: CalculationHints = field(default_factory=CalculationHints)
+    pseudo_metadata: tuple[PseudoMetadata, ...] = ()
+    kmesh_model: ModelSpec | None = None
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary with output type names."""
+        return {
+            "structure": to_jsonable(self.structure),
+            "outputs": [output_type.__name__ for output_type in self.outputs],
+            "intent": to_jsonable(self.intent),
+            "hints": to_jsonable(self.hints),
+            "pseudo_metadata": to_jsonable(self.pseudo_metadata),
+            "kmesh_model": to_jsonable(self.kmesh_model),
+        }

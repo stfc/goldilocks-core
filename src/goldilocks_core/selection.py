@@ -10,13 +10,12 @@ import numpy as np
 from pymatgen.core import Structure
 
 from goldilocks_core.contracts import (
-    KPointSelection,
     ParameterAdvice,
     Provenance,
+    PseudoMetadata,
     PseudopotentialSelection,
     SelectionRecord,
 )
-from goldilocks_core.pseudo.pp_metadata import PseudoMetadata
 from goldilocks_core.pseudo.pp_selector import select_pseudos
 
 _CUTOFF_FIELDS = ("ecutwfc_ry", "ecutrho_ry")
@@ -25,7 +24,6 @@ _CUTOFF_FIELDS = ("ecutwfc_ry", "ecutrho_ry")
 def select_parameters(
     structure: Structure,
     advice: ParameterAdvice,
-    k_points: KPointSelection,
     metadata_list: Sequence[PseudoMetadata] | None = None,
 ) -> SelectionRecord:
     """Resolve advice into concrete pseudopotential selections.
@@ -33,13 +31,12 @@ def select_parameters(
     Args:
         structure: Structure whose elements require pseudopotentials.
         advice: Parameter advice produced by the Advise stage.
-        k_points: Concrete k-point selection produced by the Kmesh stage.
         metadata_list: Available pseudopotential metadata. Missing or empty
             metadata is allowed and produces fallback selections with warnings.
 
     Returns:
-        A ``SelectionRecord`` containing the supplied k-point selection,
-        one pseudopotential selection per element, and selection warnings.
+        A ``SelectionRecord`` containing one pseudopotential selection per
+        element and selection warnings.
     """
     pseudo_selections = _select_pseudopotentials(
         structure,
@@ -51,7 +48,6 @@ def select_parameters(
     )
 
     return SelectionRecord(
-        k_points=k_points,
         pseudopotentials=pseudo_selections,
         warnings=warnings,
     )

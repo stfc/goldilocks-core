@@ -21,17 +21,17 @@ for generated_file in result.generated_files:
 The convenience functions are:
 
 - `recommend(...)`: analyze, advise, resolve k-points, and select resources;
-- `generate(...)`: also generate input files;
-- `write_bundle(...)`: also write files and `manifest.json`.
+- `generate(...)`: also generate input files and, when `output_dir` is given,
+  publish them with `manifest.json`.
 
-All return `CoreResult`.
+Both return `CoreResult`.
 
 ## Request and dispatch
 
 Use `CoreJobRequest` when an application needs one serializable job object.
-`run_core_job` dispatches on `intent.task` to a path function that composes the
-stages for that calculation. The SCF path (`scf_single_point`) is built in;
-future paths (magnetic, NSCF, phonons) are added the same way.
+`run_core_job` delegates to a fresh `CoreRuntime`, or reuses a caller-supplied
+runtime. The runtime owns model lifecycle and executes the registered SCF task
+graph.
 
 ```python
 from goldilocks_core import CoreJobRequest, run_core_job
@@ -44,8 +44,9 @@ request = CoreJobRequest(
 result = run_core_job(request)
 ```
 
-`mode` controls how far the SCF path runs: `recommend` stops after Select,
-`generate` after Generate, `bundle` after Bundle.
+`mode` controls how far the SCF graph runs: `recommend` stops after Select;
+`generate` runs through Generate and publishes a bundle when `output_dir` is
+set.
 
 ## K-point backends
 
@@ -78,14 +79,13 @@ result = run_core_job(
 
 The model spec is request data, so it serializes alongside the rest of the job.
 
-## Adding calculation tasks
+## Task graph
 
-`run_core_job` dispatches `intent.task` through a `_PATHS` table in `jobs.py`,
-mapping each task to a path function. The built-in entry is
-`scf_single_point` -> `run_scf`. A new task (magnetic, NSCF, phonons) is added
-by registering another path function that composes the shared stages. For
-one-off or experimental sequences, compose the stage functions directly
-instead.
+`SCF_TASK` declares each stage's input and output record types and the
+`recommend` and `generate` presets. `CoreRuntime.compute(...)` asks the
+executor for arbitrary output types; the executor resolves and runs only their
+prerequisites. New calculation tasks use another `TaskSpec` rather than a
+hand-coded dispatch path.
 
 ## Compose stages directly
 
@@ -103,7 +103,7 @@ structure = load_structure("Fe.cif")
 analysis = analyze_structure(structure)
 advice = advise_parameters(analysis, intent, hints)
 kpoints = resolve_kpoints(structure, hints, default_kmesh_advisor())
-selection = select_parameters(structure, advice, kpoints, metadata)
+selection = select_parameters(structure, advice, metadata)
 ```
 
 Use this form to inspect intermediate records, insert project-specific work,
@@ -117,8 +117,9 @@ sequence.
 - **Advise** recommends physics and numerical settings with provenance.
 - **Kmesh** resolves operator hints or a model into a concrete grid.
 - **Select** chooses pseudopotentials and cutoffs.
-- **Generate** creates one or more calculation input files.
-- **Bundle** writes generated files and a manifest to a new directory.
+- **Generate** creates one or more calculation input files from Advice,
+  Kmesh, and Select records.
 
-The standard graph is intentionally simple. More complex workflows belong in
-calling Python code or Runner rather than a DAG system inside Core.
+Analyze and Kmesh are parallel dependencies of the SCF task. Select depends on
+Load and Advise, not Kmesh. Bundle publication is an optional side effect of
+the `generate` preset rather than a separate mode.

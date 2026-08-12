@@ -1,4 +1,10 @@
-"""Convenience entrypoints for Core jobs."""
+"""Convenience entrypoints for Core jobs.
+
+Both route through a short-lived :class:`~goldilocks_core.runtime.service.CoreService`
+so the per-call library path and the long-lived server path share one backend
+surface. A caller-owned runtime is reused and left open; an owned runtime is
+created and closed per call.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +15,7 @@ from goldilocks_core.contracts import (
     QueryRequest,
 )
 from goldilocks_core.runtime.core import CoreRuntime
-from goldilocks_core.runtime.dispatch import TaskDispatcher
+from goldilocks_core.runtime.service import CoreService
 
 
 def run_core_job(
@@ -22,9 +28,9 @@ def run_core_job(
     Use :func:`query_records` for an explicit record subset.
     """
     if runtime is None:
-        with CoreRuntime() as owned:
-            return TaskDispatcher(owned).run_preset(request)
-    return TaskDispatcher(runtime).run_preset(request)
+        with CoreService() as service:
+            return service.run_preset(request)
+    return CoreService(runtime).run_preset(request)
 
 
 def query_records(
@@ -37,6 +43,6 @@ def query_records(
     Use :func:`run_core_job` to run a named preset instead.
     """
     if runtime is None:
-        with CoreRuntime() as owned:
-            return TaskDispatcher(owned).compute(request)
-    return TaskDispatcher(runtime).compute(request)
+        with CoreService() as service:
+            return service.compute(request)
+    return CoreService(runtime).compute(request)

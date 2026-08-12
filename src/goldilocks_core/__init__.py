@@ -12,6 +12,7 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.runtime import (
     CoreRuntime,
+    CoreService,
     TaskDispatcher,
     query_records,
     run_core_job,
@@ -23,6 +24,7 @@ __all__ = [
     "CalculationIntent",
     "CoreResult",
     "CoreRuntime",
+    "CoreService",
     "PresetRequest",
     "QueryRequest",
     "TaskDispatcher",

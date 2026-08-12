@@ -46,6 +46,11 @@ metallicity_graph_radius = 10.0
 metallicity_max_neighbors = 12
 
 [defaults.kpoints.metallicity]
+name = "test-metallicity-model"
+version = "0"
+model_type = "cgcnn"
+target = "metallicity"
+feature_set = "cgcnn_radius_graph"
 source = "local"
 location = "/models/metallicity"
 revision = "artifact-revision"
@@ -63,6 +68,9 @@ def test_packaged_registry_loads_qrf_resources() -> None:
     assert config.feature_settings.soap_r_cut == 10.0
     assert config.confidence == 0.9
     assert config.metallicity_checkpoint_file == "is_metal.ckpt"
+    assert config.metallicity_model.name == "metallicity-goldilocks-CGCNN"
+    assert config.metallicity_model.model_type == "cgcnn"
+    assert config.metallicity_model.target == "metallicity"
 
 
 def test_explicit_registry_replaces_model_and_artifacts(tmp_path: Path) -> None:
@@ -75,6 +83,7 @@ def test_explicit_registry_replaces_model_and_artifacts(tmp_path: Path) -> None:
     assert config.model.location == "/models/qrf.joblib"
     assert config.correction == 0.01
     assert config.metallicity.location == "/models/metallicity"
+    assert config.metallicity_model.name == "test-metallicity-model"
     assert config.metallicity_atom_init_file == "elements.json"
 
 

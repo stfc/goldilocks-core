@@ -32,6 +32,11 @@ metallicity_graph_radius = 10.0
 metallicity_max_neighbors = 12
 
 [defaults.kpoints.metallicity]
+name = "metallicity-goldilocks-CGCNN"
+version = "1"
+model_type = "cgcnn"
+target = "metallicity"
+feature_set = "cgcnn_radius_graph"
 source = "huggingface"
 location = "JunwenYin/metallicity-goldilocks-CGCNN"
 revision = "a95dc7d8902c8088f709e13c602864167838cc17"

@@ -19,6 +19,7 @@ from goldilocks_core.analysis import heuristic_metallicity
 from goldilocks_core.contracts import (
     ElectronicCharacter,
     KMeshService,
+    ModelSpec,
     PathLike,
 )
 
@@ -152,6 +153,21 @@ class CoreRuntime:
         """The runtime-owned metallicity classifier."""
         return self._metallicity
 
+    def describe_models(self) -> list[dict[str, str | None]]:
+        """Return transport-safe descriptions of all registered ML models.
+
+        Lists every model in the runtime's registry: the default QRF k-distance
+        model and the CGCNN metallicity classifier it depends on. Local models
+        supplied per-request via ``kmesh_model`` are not listed here.
+        """
+        from goldilocks_core.ml.model_registry import load_default_qrf_config
+
+        config = load_default_qrf_config(self._registry_path)
+        return [
+            _model_spec_to_dict(config.model),
+            _model_spec_to_dict(config.metallicity_model),
+        ]
+
     @property
     def is_closed(self) -> bool:
         """Return whether this runtime has been closed."""
@@ -175,3 +191,17 @@ class CoreRuntime:
 
     def __exit__(self, *exc: object) -> None:
         self.close()
+
+
+def _model_spec_to_dict(spec: ModelSpec) -> dict[str, str | None]:
+    """Serialize a ModelSpec to a transport-safe dictionary."""
+    return {
+        "name": spec.name,
+        "version": spec.version,
+        "model_type": spec.model_type,
+        "target": spec.target,
+        "feature_set": spec.feature_set,
+        "source": spec.source,
+        "location": spec.location,
+        "revision": spec.revision,
+    }

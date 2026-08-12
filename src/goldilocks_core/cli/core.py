@@ -7,7 +7,6 @@ import json
 import sys
 from pathlib import Path
 
-from goldilocks_core import contracts
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
@@ -15,20 +14,12 @@ from goldilocks_core.contracts import (
     ModelSpec,
     PresetRequest,
     QueryRequest,
+    resolve_output_types,
 )
 from goldilocks_core.examples import structures_path
 from goldilocks_core.generation import available_codes, available_tasks
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 from goldilocks_core.runtime import query_records, run_core_job
-
-_OUTPUT_TYPE_NAMES = (
-    "StructureAnalysisRecord",
-    "ParameterAdvice",
-    "KPointSelection",
-    "SelectionRecord",
-    "GeneratedFiles",
-)
-_OUTPUT_TYPES = {name: getattr(contracts, name) for name in _OUTPUT_TYPE_NAMES}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -53,7 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
     compute.add_argument(
         "--outputs",
         required=True,
-        help="Comma-separated record type names to compute.",
+        help="Comma-separated record type ids to compute.",
     )
 
     examples = subparsers.add_parser(
@@ -231,19 +222,11 @@ def _request_from_args(args: argparse.Namespace) -> PresetRequest | QueryRequest
 
 
 def _parse_outputs(value: str) -> tuple[type, ...]:
-    """Resolve comma-separated contract record names to output types."""
+    """Resolve comma-separated record type ids to output types."""
     names = [name.strip() for name in value.split(",")]
-    if not names or any(not name for name in names):
-        raise ValueError("--outputs must contain comma-separated record type names")
-
-    unknown = [name for name in names if name not in _OUTPUT_TYPES]
-    if unknown:
-        available = ", ".join(_OUTPUT_TYPE_NAMES)
-        invalid = ", ".join(unknown)
-        raise ValueError(
-            f"Unknown output record type(s): {invalid}. Available: {available}"
-        )
-    return tuple(_OUTPUT_TYPES[name] for name in names)
+    if any(not name for name in names):
+        raise ValueError("--outputs must contain comma-separated record type ids")
+    return resolve_output_types(names)
 
 
 def _model_spec_from_args(args: argparse.Namespace) -> ModelSpec | None:

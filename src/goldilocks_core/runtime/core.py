@@ -18,7 +18,7 @@ from goldilocks_core.advisors.kdistance_advisor import QrfKDistanceBackend
 from goldilocks_core.analysis import heuristic_metallicity
 from goldilocks_core.contracts import (
     ElectronicCharacter,
-    KMeshAdvisor,
+    KMeshService,
     PathLike,
 )
 
@@ -103,7 +103,7 @@ class MetallicityService:
 class CoreRuntime:
     """Own the lifecycle of the kmesh and metallicity model services.
 
-    Exposes ``kmesh_backend`` and ``metallicity`` as read-only services for
+    Exposes ``kmesh_service`` and ``metallicity`` as read-only services for
     task handlers, and owns their ``reset``/``close``. Holds no task registry
     and dispatches no graphs — use
     :class:`~goldilocks_core.runtime.dispatch.TaskDispatcher` for that.
@@ -115,13 +115,13 @@ class CoreRuntime:
         registry_path: PathLike | None = None,
         metallicity_checkpoint: PathLike | None = None,
         metallicity_atom_init: PathLike | None = None,
-        kmesh_backend: KMeshAdvisor | None = None,
+        kmesh_service: KMeshService | None = None,
     ) -> None:
         self._registry_path = registry_path
         self._metallicity_checkpoint = metallicity_checkpoint
         self._metallicity_atom_init = metallicity_atom_init
         self._backend = (
-            kmesh_backend if kmesh_backend is not None else self._build_backend()
+            kmesh_service if kmesh_service is not None else self._build_backend()
         )
         self._metallicity = self._build_metallicity()
         self._closed = False
@@ -143,8 +143,8 @@ class CoreRuntime:
         )
 
     @property
-    def kmesh_backend(self) -> KMeshAdvisor:
-        """The runtime-owned kmesh backend."""
+    def kmesh_service(self) -> KMeshService:
+        """The runtime-owned kmesh service."""
         return self._backend
 
     @property

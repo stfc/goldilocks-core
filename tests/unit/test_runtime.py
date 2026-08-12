@@ -207,7 +207,7 @@ def test_compute_returns_each_requested_record_type(record_type: type) -> None:
 def test_select_only_compute_does_not_invoke_kmesh(monkeypatch) -> None:
     backend = TrackingBackend(raise_on_call=True)
 
-    with CoreRuntime(kmesh_backend=backend) as runtime:
+    with CoreRuntime(kmesh_service=backend) as runtime:
         dispatcher = TaskDispatcher(runtime)
         records = dispatcher.compute(make_query_request((SelectionRecord,)))
 
@@ -218,7 +218,7 @@ def test_select_only_compute_does_not_invoke_kmesh(monkeypatch) -> None:
 def test_reset_close_and_context_manager_delegate_to_backend(monkeypatch) -> None:
     backend = TrackingBackend()
 
-    with CoreRuntime(kmesh_backend=backend) as runtime:
+    with CoreRuntime(kmesh_service=backend) as runtime:
         runtime.reset()
         assert runtime.is_closed is False
 
@@ -262,7 +262,7 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
         pseudo_metadata=(make_metadata(),),
     )
     runtime = CoreRuntime(
-        kmesh_backend=backend,
+        kmesh_service=backend,
         metallicity_checkpoint="metal.ckpt",
         metallicity_atom_init="atom-init.json",
     )

@@ -48,13 +48,13 @@ from goldilocks_core.selection import select_parameters
 class ScfContext:
     """Request data and runtime services for the SCF task graph.
 
-    The services (``kmesh_backend``, ``metallicity_classifier``) are required;
+    The services (``kmesh_advisor``, ``metallicity_classifier``) are required;
     the runtime always supplies them. The operator request data (``intent``,
     ``hints``, ``pseudo_metadata``) carries task defaults.
     """
 
     structure_input: StructureInput
-    kmesh_backend: KMeshAdvisor
+    kmesh_advisor: KMeshAdvisor
     metallicity_classifier: Callable[
         [Structure], tuple[ElectronicCharacter, str, float | None]
     ]
@@ -82,7 +82,7 @@ SCF_TASK = TaskSpec(
             output=KPointSelection,
             inputs=(Structure,),
             call=lambda structure, *, ctx: resolve_kpoints(
-                structure, ctx.hints, ctx.kmesh_backend
+                structure, ctx.hints, ctx.kmesh_advisor
             ),
         ),
         StageSpec(
@@ -136,12 +136,12 @@ def build_scf_context(
     runtime: CoreRuntime,
 ) -> ScfContext:
     """Build a fresh SCF run context from a request and the runtime's services."""
-    backend: KMeshAdvisor = runtime.kmesh_backend
+    backend: KMeshAdvisor = runtime.kmesh_service
     if request.kmesh_model is not None:
         backend = ml_kmesh_advisor(request.kmesh_model)
     return ScfContext(
         structure_input=request.structure,
-        kmesh_backend=backend,
+        kmesh_advisor=backend,
         metallicity_classifier=runtime.metallicity,
         intent=request.intent,
         hints=request.hints,

@@ -40,8 +40,8 @@ Primary docs:
      plus task/code/model discovery.
    - `run_core_job(PresetRequest)` and `query_records(QueryRequest)` are
      short-lived Python conveniences.
-   - CLI `goldilocks-core` implements `recommend`, `generate`, `compute`,
-     `serve`, and `examples`; `goldilocks-kmesh` remains standalone.
+   - The unified `goldilocks` CLI implements `recommend`, `generate`, `compute`,
+     `serve`, `examples`, and explicit `assets` lifecycle commands.
    - Optional `[http]` and `[mcp]` transports are implemented over one service.
    - Generate can publish a bundle directory; there is no bundle operation.
    - Runner, AiiDA, frontend, auth, and workspace concerns are out of scope.

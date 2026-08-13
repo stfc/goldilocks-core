@@ -76,11 +76,11 @@ from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 CLI operations map one-to-one to the service:
 
 ```bash
-uv run goldilocks-core recommend STRUCTURE --json
-uv run goldilocks-core generate STRUCTURE --pseudo-root PSEUDOS --out RUN_DIR --json
-uv run goldilocks-core compute STRUCTURE --outputs analysis,k_points
-uv run goldilocks-core serve http
-uv run goldilocks-core serve mcp
+uv run goldilocks recommend STRUCTURE --json
+uv run goldilocks generate STRUCTURE --pseudo-root PSEUDOS --out RUN_DIR --json
+uv run goldilocks compute STRUCTURE --outputs analysis,k_points
+uv run goldilocks serve http
+uv run goldilocks serve mcp
 ```
 
 HTTP and MCP require the `[http]` and `[mcp]` extras. Both transports keep one

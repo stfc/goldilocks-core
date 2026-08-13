@@ -37,6 +37,28 @@ def test_from_dict_parses_complete_generate_request(
     assert request.pseudo_metadata[0].element == "Si"
 
 
+def test_from_dict_uses_installed_pseudos_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+    sample_structure_path: str,
+    pseudo_metadata: dict[str, object],
+) -> None:
+    """Resolve the installed table when a transport request has no override."""
+    parsed = from_dict(
+        {
+            "structure": sample_structure_path,
+            "pseudo_metadata": [pseudo_metadata],
+        }
+    )
+    monkeypatch.setattr(
+        "goldilocks_core.server.request.load_installed_pseudo_metadata",
+        lambda: parsed.pseudo_metadata,
+    )
+
+    request = from_dict({"structure": sample_structure_path})
+
+    assert request.pseudo_metadata == parsed.pseudo_metadata
+
+
 def test_from_dict_resolves_output_record_names(sample_structure_path: str) -> None:
     """Resolve query output names through the shared contract catalogue."""
     request = from_dict(

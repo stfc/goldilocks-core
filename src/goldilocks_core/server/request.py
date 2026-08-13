@@ -30,7 +30,10 @@ from goldilocks_core.contracts import (
     QueryRequest,
     resolve_output_types,
 )
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
+from goldilocks_core.pseudo.pp_registry import (
+    load_installed_pseudo_metadata,
+    load_pseudo_metadata,
+)
 
 __all__ = ["RequestError", "from_dict"]
 
@@ -261,7 +264,9 @@ def _parse_pseudo_metadata(data: Mapping[str, Any]) -> tuple[PseudoMetadata, ...
         if not _is_sequence(value):
             raise RequestError("Field 'pseudo_metadata' must be a list or null.")
         return tuple(_parse_pseudo(item) for item in value)
-    root = data.get("pseudo_root")
+    if "pseudo_root" not in data:
+        return load_installed_pseudo_metadata()
+    root = data["pseudo_root"]
     if root is None:
         return ()
     if not isinstance(root, str):

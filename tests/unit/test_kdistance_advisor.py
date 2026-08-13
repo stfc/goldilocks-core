@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import numpy as np
 import pytest
 from pymatgen.core import Lattice, Structure
@@ -26,6 +28,16 @@ def make_features() -> StructureFeatureVector:
 
 def make_structure() -> Structure:
     return Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
+
+
+def local_config():
+    """Return packaged behavior with explicit local resource paths."""
+    config = load_default_qrf_config()
+    return replace(
+        config,
+        model=replace(config.model, source="local", location="model.pkl"),
+        model_asset=None,
+    )
 
 
 def patch_inference(monkeypatch, *, model=None) -> None:
@@ -101,7 +113,7 @@ def test_qrf_backend_loads_lazily_and_reuses_resources(monkeypatch) -> None:
     patch_inference(monkeypatch)
     monkeypatch.setattr("goldilocks_core.ml.models.load_model", load_model)
     backend = QrfKDistanceBackend(
-        config=load_default_qrf_config(),
+        config=local_config(),
         metallicity_checkpoint="checkpoint.ckpt",
         metallicity_atom_init="atom-init.json",
     )
@@ -120,7 +132,7 @@ def test_qrf_backend_model_loading_errors_propagate(monkeypatch) -> None:
 
     monkeypatch.setattr("goldilocks_core.ml.models.load_model", fail)
     backend = QrfKDistanceBackend(
-        config=load_default_qrf_config(),
+        config=local_config(),
         metallicity_checkpoint="checkpoint.ckpt",
         metallicity_atom_init="atom-init.json",
     )
@@ -135,7 +147,7 @@ def test_qrf_backend_loads_registry_config_on_first_model_call(monkeypatch) -> N
     def load_config(path=None):
         nonlocal loads
         loads += 1
-        return load_default_qrf_config()
+        return local_config()
 
     monkeypatch.setattr(
         "goldilocks_core.advisors.kdistance_advisor.load_default_qrf_config",

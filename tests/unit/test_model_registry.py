@@ -82,7 +82,7 @@ def test_explicit_registry_replaces_model_and_artifacts(tmp_path: Path) -> None:
     assert config.model.name == "replacement-qrf"
     assert config.model.location == "/models/qrf.joblib"
     assert config.correction == 0.01
-    assert config.metallicity.location == "/models/metallicity"
+    assert config.metallicity_model.location == "/models/metallicity"
     assert config.metallicity_model.name == "test-metallicity-model"
     assert config.metallicity_atom_init_file == "elements.json"
 

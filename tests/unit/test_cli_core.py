@@ -1,6 +1,7 @@
 import json
 import sys
 from dataclasses import fields
+from types import SimpleNamespace
 
 import pytest
 
@@ -22,6 +23,12 @@ from goldilocks_core.contracts import (
 )
 
 _VDW_METHODS = ("d3", "d3bj", "ts", "mbd")
+
+
+@pytest.fixture(autouse=True)
+def installed_pseudos(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep request-construction tests independent of the user asset store."""
+    monkeypatch.setattr(cli_core, "load_installed_pseudo_metadata", tuple)
 
 
 def make_result(request: PresetRequest | QueryRequest) -> CoreResult:
@@ -286,7 +293,7 @@ def test_main_rejects_disabled_vdw_method_before_job_execution(
         sys,
         "argv",
         [
-            "goldilocks-core",
+            "goldilocks",
             "recommend",
             "Si.cif",
             "--use-vdw",
@@ -325,7 +332,7 @@ def test_main_rejects_model_metadata_without_model_before_job_execution(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["goldilocks-core", "recommend", "Si.cif", option, "metadata"],
+        ["goldilocks", "recommend", "Si.cif", option, "metadata"],
     )
 
     with pytest.raises(SystemExit) as error:
@@ -358,7 +365,7 @@ def test_main_compute_prints_requested_analysis_and_advice(monkeypatch, capsys) 
         sys,
         "argv",
         [
-            "goldilocks-core",
+            "goldilocks",
             "compute",
             "Si.cif",
             "--outputs",
@@ -385,7 +392,7 @@ def test_main_compute_prints_only_requested_analysis(monkeypatch, capsys) -> Non
         sys,
         "argv",
         [
-            "goldilocks-core",
+            "goldilocks",
             "compute",
             "Si.cif",
             "--outputs",
@@ -411,7 +418,7 @@ def test_main_compute_rejects_unknown_output_type(monkeypatch, capsys) -> None:
         sys,
         "argv",
         [
-            "goldilocks-core",
+            "goldilocks",
             "compute",
             "Si.cif",
             "--outputs",
@@ -441,7 +448,7 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
         sys,
         "argv",
         [
-            "goldilocks-core",
+            "goldilocks",
             "recommend",
             "Si.cif",
             "--k-grid",
@@ -480,7 +487,7 @@ def test_main_builds_request_with_model_backend(monkeypatch, capsys) -> None:
         sys,
         "argv",
         [
-            "goldilocks-core",
+            "goldilocks",
             "recommend",
             "Si.cif",
             "--model",
@@ -521,7 +528,7 @@ def test_main_builds_generate_request_with_output_dir(monkeypatch, capsys) -> No
     monkeypatch.setattr(
         sys,
         "argv",
-        ["goldilocks-core", "generate", "Si.cif", "--out", "run"],
+        ["goldilocks", "generate", "Si.cif", "--out", "run"],
     )
 
     cli_core.main()
@@ -529,3 +536,73 @@ def test_main_builds_generate_request_with_output_dir(monkeypatch, capsys) -> No
     assert captured["request"].mode == "generate"
     assert captured["request"].output_dir == "run"
     assert "bundle: run" in capsys.readouterr().out
+
+
+def test_main_installs_default_profile_only_with_explicit_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Honor network consent before constructing a runtime request."""
+    installed: list[str] = []
+    monkeypatch.setattr(cli_core, "install_assets", installed.append)
+    monkeypatch.setattr(cli_core, "run_core_job", make_result)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["goldilocks", "recommend", "Si.cif", "--fetch-missing"],
+    )
+
+    cli_core.main()
+
+    assert installed == ["default"]
+    assert "formula: Si" in capsys.readouterr().out
+
+
+def test_main_prints_asset_status_without_installing(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Inspect the default profile without invoking acquisition."""
+    monkeypatch.setattr(
+        cli_core,
+        "asset_statuses",
+        lambda name: (("qrf-kpoints", "QRF95", "missing"),),
+    )
+    monkeypatch.setattr(
+        cli_core,
+        "install_assets",
+        lambda name: pytest.fail("status must not install assets"),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["goldilocks", "assets", "status"],
+    )
+
+    cli_core.main()
+
+    assert capsys.readouterr().out == "qrf-kpoints@QRF95: missing\n"
+
+
+def test_main_installs_named_asset(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Install exactly the asset selected by the operator."""
+    names: list[str] = []
+
+    def fake_install(name: str) -> tuple[SimpleNamespace, ...]:
+        names.append(name)
+        return (SimpleNamespace(id=name, version="1"),)
+
+    monkeypatch.setattr(cli_core, "install_assets", fake_install)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["goldilocks", "assets", "install", "qrf-kpoints"],
+    )
+
+    cli_core.main()
+
+    assert names == ["qrf-kpoints"]
+    assert capsys.readouterr().out == "qrf-kpoints@1: installed\n"

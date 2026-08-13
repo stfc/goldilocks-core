@@ -54,7 +54,7 @@ class AssetStore:
         with self._lock(spec.id, spec.version):
             try:
                 return self.verify(spec.id, spec.version)
-            except AssetNotInstalled:
+            except (AssetNotInstalled, AssetCorrupt):
                 pass
             destination = self._asset_path(spec.id, spec.version)
             destination.parent.mkdir(parents=True, exist_ok=True)

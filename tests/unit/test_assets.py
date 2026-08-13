@@ -72,6 +72,20 @@ def test_verify_detects_changed_and_extra_files(tmp_path: Path) -> None:
         store.verify("example", "1")
 
 
+def test_install_repairs_a_corrupt_asset(tmp_path: Path) -> None:
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"payload")
+    store = AssetStore(tmp_path / "store")
+    spec = source_spec(source)
+    installed = store.install(spec)
+    installed.path("data/payload.bin").write_bytes(b"changed")
+
+    repaired = store.install(spec)
+
+    assert repaired.path("data/payload.bin").read_bytes() == b"payload"
+    assert store.status("example", "1") == "installed"
+
+
 def test_resolve_names_explicit_install_command(tmp_path: Path) -> None:
     store = AssetStore(tmp_path / "store")
 

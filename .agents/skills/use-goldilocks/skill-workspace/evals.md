@@ -22,7 +22,7 @@ Why it matters: Exercises the fastest ordinary CLI path.
 
 Expected behavior:
 
-- Use `uv run goldilocks-core generate ... --out RUN_DIR`.
+- Use `uv run goldilocks generate ... --out RUN_DIR`.
 - Avoid reading source unless command fails.
 - Report bundle layout, key selected values, and warnings.
 

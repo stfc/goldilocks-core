@@ -8,7 +8,7 @@ build `PresetRequest`; `compute` builds `QueryRequest`.
 ### recommend
 
 ```bash
-goldilocks recommend structure.cif [options]
+uv run goldilocks recommend structure.cif [options]
 ```
 
 Runs Load → Analyze → Advise → Kmesh → Select. Outputs a recommendation without generated files.
@@ -16,7 +16,7 @@ Runs Load → Analyze → Advise → Kmesh → Select. Outputs a recommendation 
 ### generate
 
 ```bash
-goldilocks generate structure.cif [options]
+uv run goldilocks generate structure.cif [options]
 ```
 
 Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a recommendation with generated input files. Pass `--out run/` to publish the files and manifest as a portable bundle; the destination must not already exist.
@@ -24,7 +24,7 @@ Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a re
 ### compute
 
 ```bash
-goldilocks compute structure.cif --outputs analysis,k_points [options]
+uv run goldilocks compute structure.cif --outputs analysis,k_points [options]
 ```
 
 Runs the minimal task subgraph needed for the comma-separated stable record IDs
@@ -34,28 +34,28 @@ and always prints the selected records as JSON. Available IDs are `analysis`,
 ### assets
 
 ```bash
-goldilocks assets install [default|ASSET_ID]
-goldilocks assets status [default|ASSET_ID]
-goldilocks assets verify [default|ASSET_ID]
+uv run goldilocks assets install [default|ASSET_ID]
+uv run goldilocks assets status [default|ASSET_ID]
+uv run goldilocks assets verify [default|ASSET_ID]
 ```
 
-The default profile pins exact QRF, metallicity, and PseudoDojo table versions.
-Installation downloads into a staging directory, verifies declared source
-digests, normalizes provider files, inventories the result, and atomically
-publishes a manifest-backed asset. `status` reports `installed`, `missing`, or
-`corrupt`; `verify` checks every installed file.
+Install `default` before the first normal run. It contains the QRF k-point
+model, the metallicity model, and the default PBEsol pseudopotential table.
+Use an asset ID to install one different model or pseudopotential table.
 
-The store root is `$GOLDILOCKS_ASSET_ROOT` when set. Otherwise it is
-`$XDG_DATA_HOME/goldilocks/assets`, falling back to
-`~/.local/share/goldilocks/assets`. Installed versions live at
-`<root>/<asset-id>/<version>/`; staging archives are removed after installation.
-See [Pseudopotential tables](pseudopotentials.md) for the installed table
-layout, provider normalization, licensing, and citations.
+`status` reports `installed`, `missing`, or `corrupt`. `verify` checks the
+installed files. The default store is
+`$XDG_DATA_HOME/goldilocks/assets`, or
+`~/.local/share/goldilocks/assets` when `XDG_DATA_HOME` is not set. Set
+`GOLDILOCKS_ASSET_ROOT` to use a different store.
+
+See [Pseudopotential tables](pseudopotentials.md) to choose a table for PBE,
+PBEsol, SOC, lanthanides, or actinides.
 
 ### examples
 
 ```bash
-goldilocks examples path
+uv run goldilocks examples path
 ```
 
 Prints the directory holding the example structures installed with the package. It takes none of the common options below.
@@ -63,7 +63,7 @@ Prints the directory holding the example structures installed with the package. 
 Use it to run the pipeline without supplying a structure of your own:
 
 ```bash
-goldilocks recommend "$(goldilocks examples path)/Si.cif" --json
+uv run goldilocks recommend "$(uv run goldilocks examples path)/Si.cif" --json
 ```
 
 The directory's `README.md` explains what each example exercises. From Python, use `goldilocks_core.examples.structure("Si.cif")` rather than building the path by hand.
@@ -71,8 +71,8 @@ The directory's `README.md` explains what each example exercises. From Python, u
 ### serve
 
 ```bash
-goldilocks serve http [--host 127.0.0.1] [--port 8000]
-goldilocks serve mcp
+uv run goldilocks serve http [--host 127.0.0.1] [--port 8000]
+uv run goldilocks serve mcp
 ```
 
 The HTTP and MCP transports require their optional dependencies:
@@ -129,8 +129,6 @@ Every `CalculationIntent` field maps directly to a CLI option. Every
 the CLI sets `CalculationIntent.pseudo_mode` with `--pseudo-mode` instead of
 exposing a second override for the same effective pseudopotential-family choice.
 
-`accuracy_level` and `--accuracy-level` were intentionally removed because no
-stage implemented different scientific behavior for the advertised levels.
 
 ## Boolean options
 
@@ -192,7 +190,7 @@ model and reports model loading or inference errors directly. Explicit
 `--model` selects a local CSLR k-index model instead of the default:
 
 ```bash
-goldilocks recommend structure.cif --model model.joblib --json
+uv run goldilocks recommend structure.cif --model model.joblib --json
 ```
 
 The CLI builds a `ModelSpec` from `--model`, `--model-name`, and
@@ -204,7 +202,7 @@ are rejected unless `--model` is set.
 Hint precedence still applies:
 
 ```bash
-goldilocks recommend structure.cif --model model.joblib --k-grid 4 4 4
+uv run goldilocks recommend structure.cif --model model.joblib --k-grid 4 4 4
 ```
 
 This uses the explicit grid and records `provenance.source="user_hint"`; the model is not consulted for k-points.

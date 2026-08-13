@@ -9,7 +9,8 @@ from pathlib import Path
 from zipfile import ZipFile
 
 _REQUIRED_PACKAGE_FILES = (
-    "goldilocks_core/model_registry.toml",
+    "goldilocks_core/ml/registry.toml",
+    "goldilocks_core/pseudo/registry.toml",
     "goldilocks_core/examples/structures/Si.cif",
     "goldilocks_core/examples/structures/Fe_bcc.cif",
     "goldilocks_core/examples/structures/Pt_fcc.cif",

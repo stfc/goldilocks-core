@@ -177,8 +177,7 @@ Milestones group issues into deliverables. Every open issue should belong to one
 gh api repos/stfc/goldilocks-core/milestones --jq '.[] | "\(.number) | \(.title) | open=\(.open_issues) closed=\(.closed_issues)"'
 
 # Create one (returns the new milestone id)
-gh api repos/stfc/goldilocks-core/milestones --method POST \
-  -f title='M1 — ...' -f description='...' -f state='open' --jq '.number'
+gh api repos/stfc/goldilocks-core/milestones --method POST -f title='M1 — ...' -f description='...' -f state='open' --jq '.number'
 
 # Assign an issue to a milestone (the API takes the numeric milestone id)
 gh api repos/stfc/goldilocks-core/issues/<N> --method PATCH -F milestone=<id>
@@ -192,8 +191,7 @@ Periodic board hygiene. The `triage` skill runs the full pass; these are the bui
 
 ```bash
 # Open issues with no milestone
-gh issue list --repo stfc/goldilocks-core --state open --limit 200 \
-  --json number,milestone --jq '.[] | select(.milestone == null) | .number'
+gh issue list --repo stfc/goldilocks-core --state open --limit 200 --json number,milestone --jq '.[] | select(.milestone == null) | .number'
 
 # Recently updated (to tell stale from active)
 gh issue list --repo stfc/goldilocks-core --state all --limit 10 --search "sort:updated-desc"

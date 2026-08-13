@@ -94,11 +94,20 @@ Primary docs:
    ```
 
 ## Style
-- Context check: a follow-up phrase must not introduce a subject that the reader has not encountered. Introduce the subject first, or remove the phrase if it has no purpose.
 
-- Be terse.
-- Use short sections.
-- Use examples over prose.
+- Start each document and section with the reader's task or question.
+- Give the next action before caveats or implementation details.
+- Context check every sentence and section. If a phrase refers to an earlier
+  design, an unnamed asset, or a failure the reader has not met, introduce the
+  subject first or remove the phrase.
+- Example: write `Period-5 elements can need SOC consideration`, not `This
+  replaced the earlier Z >= 57 rule`.
+- Example: name each asset that the user must install. Do not write `the other
+  two assets` unless the preceding text names them.
+- Keep user guides about user tasks. Put implementation guarantees and module
+  design in `docs/architecture.md`.
+- Be terse. Use short sections and examples.
+- Use one-line shell commands. Do not use `\` line continuations.
 - Avoid roadmap promises in user-facing docs.
 - If something is future work, say `not implemented yet`.
 - Do not use flowery language.

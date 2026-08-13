@@ -10,7 +10,7 @@ the stage implementations.
 
 from goldilocks_core.contracts import PresetRequest, QueryRequest
 from goldilocks_core.runtime.core import CoreRuntime
-from goldilocks_core.runtime.dispatch import TaskDispatcher
+from goldilocks_core.runtime.dispatch import TaskDispatcher, UnknownTaskError
 from goldilocks_core.runtime.graph import (
     Preset,
     StageSpec,
@@ -31,6 +31,7 @@ __all__ = [
     "QueryRequest",
     "StageSpec",
     "TaskDispatcher",
+    "UnknownTaskError",
     "TaskGraphDescription",
     "TaskHandler",
     "TaskSpec",

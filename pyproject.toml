@@ -13,7 +13,6 @@ requires-python = ">=3.12"
 dependencies = [
     "certifi>=2026.2.25",
     "dscribe>=2.1",
-    "huggingface_hub>=0.23",
     "joblib==1.5.3",
     "matminer>=0.10.1",
     "numpy>=2.4.4",

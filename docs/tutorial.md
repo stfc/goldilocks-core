@@ -224,10 +224,8 @@ requires a non-empty `outputs` list. Request errors use a stable
 
 ```bash
 uv run goldilocks recommend structure.cif --k-grid 4 4 4 --json
-uv run goldilocks generate structure.cif \
-    --pseudo-root pseudos --k-grid 4 4 4 --out run --json
-uv run goldilocks compute structure.cif \
-    --outputs analysis,k_points --k-grid 4 4 4
+uv run goldilocks generate structure.cif --pseudo-root pseudos --k-grid 4 4 4 --out run --json
+uv run goldilocks compute structure.cif --outputs analysis,k_points --k-grid 4 4 4
 ```
 
 Install and run the optional servers with:

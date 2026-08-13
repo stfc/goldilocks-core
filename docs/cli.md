@@ -24,8 +24,7 @@ Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a re
 ### compute
 
 ```bash
-goldilocks compute structure.cif \
-    --outputs analysis,k_points [options]
+goldilocks compute structure.cif --outputs analysis,k_points [options]
 ```
 
 Runs the minimal task subgraph needed for the comma-separated stable record IDs

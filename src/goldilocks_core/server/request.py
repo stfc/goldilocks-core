@@ -32,6 +32,7 @@ from goldilocks_core.contracts import (
     QueryRequest,
     resolve_output_types,
 )
+from goldilocks_core.pseudo.pp_registry import load_installed_pseudo_metadata
 
 __all__ = ["RequestError", "from_dict"]
 
@@ -85,18 +86,22 @@ def from_dict(data: Mapping[str, Any]) -> PresetRequest | QueryRequest:
     intent = _parse_intent(data.get("intent"))
     hints = _parse_hints(data.get("hints"))
 
+    pseudo_metadata = load_installed_pseudo_metadata()
+
     if outputs is not None:
         return QueryRequest(
             structure=structure,
             outputs=outputs,
             intent=intent,
             hints=hints,
+            pseudo_metadata=pseudo_metadata,
         )
     return PresetRequest(
         structure=structure,
         intent=intent,
         hints=hints,
         mode=mode,
+        pseudo_metadata=pseudo_metadata,
     )
 
 

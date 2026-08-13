@@ -17,6 +17,7 @@ from goldilocks_core.contracts import (
     SelectionRecord,
 )
 from goldilocks_core.pseudo.pp_selector import select_pseudos
+from goldilocks_core.pseudo.registry import load_tables
 
 _CUTOFF_FIELDS = ("ecutwfc_ry", "ecutrho_ry")
 
@@ -92,15 +93,12 @@ def _select_pseudopotential_for_element(
     )
 
     if not candidates:
-        warning = (
-            "No pseudopotential metadata matched "
-            f"{element} / {pseudo_advice.functional} / "
-            f"{pseudo_advice.relativistic_mode}."
-        )
+        warning = _missing_pseudo_warning(element, advice, metadata_list)
         return PseudopotentialSelection(
             element=element,
             filename=None,
             filepath=None,
+            functional=None,
             ecutwfc_ry=None,
             ecutrho_ry=None,
             provenance=Provenance(
@@ -124,6 +122,7 @@ def _select_pseudopotential_for_element(
         element=element,
         filename=selected.filename,
         filepath=selected.filepath,
+        functional=selected.functional,
         ecutwfc_ry=cutoffs["ecutwfc_ry"][0],
         ecutrho_ry=cutoffs["ecutrho_ry"][0],
         provenance=Provenance(
@@ -163,10 +162,8 @@ def _metadata_matches_mode(metadata: PseudoMetadata, pseudo_mode: str) -> bool:
     )
     if mode in searchable:
         return True
-
     if "efficiency" in searchable or "precision" in searchable:
         return False
-
     return metadata.is_sssp or (metadata.library or "").lower() == "sssp"
 
 
@@ -204,12 +201,19 @@ def _selection_warnings(
     cutoffs: dict[str, tuple[float | None, str | None, Any]],
 ) -> tuple[str, ...]:
     """Return actionable warnings about the selected pseudo metadata."""
-    warnings: list[str] = []
+    warnings: list[str] = list(selected.pseudo_info.get("warnings", ()))
 
     if not _metadata_matches_mode(selected, pseudo_mode):
         warnings.append(
             f"Selected pseudopotential for {element} does not explicitly match "
             f"pseudo mode '{pseudo_mode}'."
+        )
+
+    if selected.pseudo_info.get("f_in_core"):
+        warnings.append(
+            f"Selected 3+ lanthanide pseudopotential for {element} freezes 4f "
+            "electrons in the core and assumes a trivalent ion; verify this is "
+            "appropriate, especially for Ce, Eu, or Yb."
         )
 
     missing = [
@@ -235,3 +239,50 @@ def _selection_warnings(
         )
 
     return tuple(warnings)
+
+
+def _missing_pseudo_warning(
+    element: str,
+    advice: ParameterAdvice,
+    metadata_list: list[PseudoMetadata],
+) -> str:
+    """Explain the first failed constraint and name a registry remedy."""
+    requested = advice.pseudopotentials
+    element_candidates = [item for item in metadata_list if item.element == element]
+    if not element_candidates:
+        reason = f"No installed pseudopotential contains element {element}."
+    elif not any(
+        item.functional == requested.functional for item in element_candidates
+    ):
+        available = ", ".join(
+            sorted({item.functional or "unknown" for item in element_candidates})
+        )
+        reason = (
+            f"Installed pseudopotentials for {element} do not match functional "
+            f"{requested.functional}; available: {available}."
+        )
+    elif requested.relativistic_mode == "full" and not any(
+        item.functional == requested.functional and item.relativistic == "full"
+        for item in element_candidates
+    ):
+        reason = (
+            f"No installed fully-relativistic {requested.functional} "
+            f"pseudopotential covers {element}."
+        )
+    else:
+        reason = (
+            f"No installed pseudopotential for {element} matches type "
+            f"{requested.pseudo_type or 'any'} and requested table metadata."
+        )
+    registry_mode = {"scalar": "SR", "full": "FR", "non-relativistic": "NR"}
+    remedies = [
+        table.id
+        for table in load_tables().values()
+        if table.covers(element)
+        and table.functional == requested.functional
+        and table.relativistic == registry_mode.get(requested.relativistic_mode)
+        and table.accuracy == requested.pseudo_mode
+    ]
+    if remedies:
+        reason += f" Install {remedies[0]} to provide it."
+    return reason

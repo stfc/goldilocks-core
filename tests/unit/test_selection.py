@@ -367,7 +367,8 @@ def test_select_parameters_warns_when_pseudo_is_missing() -> None:
     assert pseudo.provenance.reason == "No matching pseudopotential was available."
     assert pseudo.provenance.warnings == pseudo.warnings
     assert pseudo.warnings == (
-        "No pseudopotential metadata matched Si / PBEsol / scalar.",
+        "Installed pseudopotentials for Si do not match functional PBEsol; "
+        "available: PBE. Install pseudodojo-pbesol-efficiency-sr to provide it.",
     )
 
 
@@ -386,7 +387,8 @@ def test_select_parameters_aggregates_pseudo_warnings_into_record() -> None:
 
     pseudo = selection.pseudopotentials[0]
     assert pseudo.warnings == (
-        "No pseudopotential metadata matched Si / PBEsol / scalar.",
+        "Installed pseudopotentials for Si do not match functional PBEsol; "
+        "available: PBE. Install pseudodojo-pbesol-efficiency-sr to provide it.",
     )
     assert selection.warnings == pseudo.warnings
 

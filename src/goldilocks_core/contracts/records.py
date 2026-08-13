@@ -772,6 +772,7 @@ class PseudopotentialSelection:
     element: str
     filename: str | None
     filepath: str | None
+    functional: str | None
     ecutwfc_ry: float | None
     ecutrho_ry: float | None
     provenance: Provenance

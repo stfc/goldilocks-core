@@ -99,6 +99,7 @@ def _render_qe_scf(
     }
     selected_pseudos = tuple(pseudo_by_element[element] for element in elements)
 
+    expected_functional = advice.pseudopotentials.functional
     for pseudo in selected_pseudos:
         missing = [
             name
@@ -113,6 +114,12 @@ def _render_qe_scf(
             raise GenerationError(
                 f"Pseudopotential selection for {pseudo.element} is incomplete: "
                 f"missing {', '.join(missing)}"
+            )
+        if pseudo.functional != expected_functional:
+            raise GenerationError(
+                f"Pseudopotential functional mismatch for {pseudo.element}: "
+                f"calculation requires {expected_functional}, selected "
+                f"{pseudo.functional or 'unknown'}"
             )
         if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", pseudo.filename) is None:
             raise GenerationError(

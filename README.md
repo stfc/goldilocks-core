@@ -69,35 +69,36 @@ See the [tutorial](docs/tutorial.md) and
 
 ## CLI and transports
 
+Install the exact default runtime profile once, then run offline:
+
 ```bash
-uv run goldilocks-core recommend structure.cif --json
-uv run goldilocks-core generate structure.cif \
+uv run goldilocks assets install default
+uv run goldilocks assets verify default
+uv run goldilocks recommend structure.cif --json
+uv run goldilocks generate structure.cif \
     --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
-uv run goldilocks-core compute structure.cif \
+uv run goldilocks compute structure.cif \
     --outputs analysis,k_points --k-grid 4 4 4
 ```
 
-Bundle output requires a new destination directory. See the
-[CLI reference](docs/cli.md) for all controls.
+`GOLDILOCKS_ASSET_ROOT` overrides the default
+`$XDG_DATA_HOME/goldilocks/assets` store. Normal commands never download.
+Pass `--fetch-missing` to explicitly install the complete default profile
+before one command. Bundle output requires a new destination directory. See
+the [CLI reference](docs/cli.md) for all controls.
 
-Example structures are installed with the package, so there is something to run straight away:
-
-```bash
-uv run goldilocks-core recommend "$(uv run goldilocks-core examples path)/Si.cif" --json
-```
-
-The standalone model-oriented entry point remains available:
+Example structures are installed with the package:
 
 ```bash
-uv run goldilocks-kmesh structure.cif --model path/to/model.joblib
+uv run goldilocks recommend "$(uv run goldilocks examples path)/Si.cif" --json
 ```
 
 HTTP and MCP are optional:
 
 ```bash
 uv sync --all-extras
-uv run goldilocks-core serve http --host 127.0.0.1 --port 8000
-uv run goldilocks-core serve mcp
+uv run goldilocks serve http --host 127.0.0.1 --port 8000
+uv run goldilocks serve mcp
 ```
 
 HTTP publishes `/recommend`, `/generate`, `/compute`, `/tasks`, `/codes`,

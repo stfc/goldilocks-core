@@ -19,6 +19,11 @@ def test_registry_declares_complete_provider_assets() -> None:
         "archive.materialscloud.org/api" in file.url for file in sssp.asset.files
     )
     assert all("rcyfm-68h65" in file.url for file in sssp.asset.files)
+    assert all(
+        file.checksum is not None and file.size is not None
+        for table in tables.values()
+        for file in table.asset.files
+    )
 
 
 def test_registry_has_one_exact_default() -> None:

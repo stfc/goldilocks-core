@@ -78,6 +78,11 @@ def test_packaged_registry_loads_qrf_resources() -> None:
         "checkpoint",
         "atom_init",
     }
+    assert all(
+        file.checksum is not None and file.size is not None
+        for spec in (config.model_asset, config.metallicity_asset)
+        for file in spec.files
+    )
 
 
 def test_explicit_registry_replaces_model_and_artifacts(tmp_path: Path) -> None:

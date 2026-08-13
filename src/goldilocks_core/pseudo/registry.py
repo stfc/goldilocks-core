@@ -84,9 +84,19 @@ def _parse_table(
         base = sources["pseudodojo"]["base_url"].rstrip("/")
         files = (
             AssetFile(
-                "pseudopotentials", "source/upf.tgz", f"{base}/{upstream}_upf.tgz"
+                "pseudopotentials",
+                "source/upf.tgz",
+                f"{base}/{upstream}_upf.tgz",
+                f"sha256:{entry['source_pseudopotentials_sha256']}",
+                entry["source_pseudopotentials_size"],
             ),
-            AssetFile("metadata", "source/djrepo.tgz", f"{base}/{upstream}_djrepo.tgz"),
+            AssetFile(
+                "metadata",
+                "source/djrepo.tgz",
+                f"{base}/{upstream}_djrepo.tgz",
+                f"sha256:{entry['source_metadata_sha256']}",
+                entry["source_metadata_size"],
+            ),
         )
     elif provider == "sssp":
         api = sources["sssp"]["api_url"].rstrip("/")
@@ -98,9 +108,15 @@ def _parse_table(
                 "pseudopotentials",
                 "source/table.tar.gz",
                 f"{prefix}/{encoded}.tar.gz/content",
+                f"sha256:{entry['source_pseudopotentials_sha256']}",
+                entry["source_pseudopotentials_size"],
             ),
             AssetFile(
-                "metadata", "source/table.json", f"{prefix}/{encoded}.json/content"
+                "metadata",
+                "source/table.json",
+                f"{prefix}/{encoded}.json/content",
+                f"sha256:{entry['source_metadata_sha256']}",
+                entry["source_metadata_size"],
             ),
         )
     else:

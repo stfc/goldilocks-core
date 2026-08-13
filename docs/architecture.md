@@ -108,11 +108,16 @@ to the same installed table manifest; selection reads that manifest and never
 infers table identity from directory names. Model loaders receive verified
 local paths and perform no network access.
 
-The canonical store is external to the package:
-`$XDG_DATA_HOME/goldilocks/assets`, overridden by
-`GOLDILOCKS_ASSET_ROOT`. A shipped runtime profile pins exact asset ids and
+The canonical store is external to the package. Its root is
+`$GOLDILOCKS_ASSET_ROOT` when set, otherwise
+`$XDG_DATA_HOME/goldilocks/assets`, falling back to
+`~/.local/share/goldilocks/assets`. Immutable versions are published at
+`<root>/<asset-id>/<version>/`; temporary downloads and source archives are
+removed after installation. A shipped runtime profile pins exact asset ids and
 versions. The CLI installs profiles explicitly; server request handling only
-resolves already-installed assets.
+resolves already-installed assets. See
+[Pseudopotential tables](pseudopotentials.md) for the normalized table layout
+and licensing model.
 
 ## Boundaries
 

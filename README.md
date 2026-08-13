@@ -110,6 +110,7 @@ discovery calls as tools over stdio.
 - [Tutorial](docs/tutorial.md)
 - [Pipeline and stage behavior](docs/pipeline.md)
 - [Scientific conventions](docs/conventions.md)
+- [Pseudopotential tables, storage, and licensing](docs/pseudopotentials.md)
 - [CLI reference](docs/cli.md)
 - [Architecture and extension points](docs/architecture.md)
 
@@ -130,8 +131,10 @@ Tests use synthetic structures, temporary files, small UPF snippets, and fake mo
 
 Code is licensed under the [BSD 3-Clause License](LICENSE).
 
-Documentation under `docs/` and the example structures under `examples/` are
-licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Documentation under `docs/` and the example structures under
+`src/goldilocks_core/examples/structures/` are licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
-Bundled and user-supplied pseudopotentials carry their own upstream licences —
-see [docs/pseudopotentials.md](docs/pseudopotentials.md).
+Pseudopotential files are downloaded only by explicit asset installation and
+retain their upstream licences; they are not bundled in the wheel or source
+archive. See [Pseudopotential tables](docs/pseudopotentials.md).

@@ -40,14 +40,18 @@ goldilocks assets status [default|ASSET_ID]
 goldilocks assets verify [default|ASSET_ID]
 ```
 
-The default profile pins the QRF, metallicity, and PseudoDojo table versions
-shipped with this release. Installation downloads into a staging directory,
-checks declared source digests when available, normalizes provider files,
-inventories the result, and atomically publishes a manifest-backed asset.
-`status` reports `installed`, `missing`, or `corrupt`; `verify` checks every
-installed file. The store defaults to `$XDG_DATA_HOME/goldilocks/assets` (or
-`~/.local/share/goldilocks/assets`) and can be overridden with
-`GOLDILOCKS_ASSET_ROOT`.
+The default profile pins exact QRF, metallicity, and PseudoDojo table versions.
+Installation downloads into a staging directory, verifies declared source
+digests, normalizes provider files, inventories the result, and atomically
+publishes a manifest-backed asset. `status` reports `installed`, `missing`, or
+`corrupt`; `verify` checks every installed file.
+
+The store root is `$GOLDILOCKS_ASSET_ROOT` when set. Otherwise it is
+`$XDG_DATA_HOME/goldilocks/assets`, falling back to
+`~/.local/share/goldilocks/assets`. Installed versions live at
+`<root>/<asset-id>/<version>/`; staging archives are removed after installation.
+See [Pseudopotential tables](pseudopotentials.md) for the installed table
+layout, provider normalization, licensing, and citations.
 
 ### examples
 

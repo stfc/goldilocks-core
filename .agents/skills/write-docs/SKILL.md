@@ -22,6 +22,8 @@ Primary docs:
 - `docs/architecture.md` — module ownership, pipeline boundaries, data contracts, extension points.
 - `AGENTS.md` — durable project rules for future agents.
 
+- `docs/pseudopotentials.md` — table installation, storage, provider normalization, licensing, and citation.
+
 ## Workflow
 
 1. Check current code before writing.

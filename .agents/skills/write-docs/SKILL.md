@@ -94,6 +94,7 @@ Primary docs:
    ```
 
 ## Style
+- Context check: a follow-up phrase must not introduce a subject that the reader has not encountered. Introduce the subject first, or remove the phrase if it has no purpose.
 
 - Be terse.
 - Use short sections.

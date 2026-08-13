@@ -75,10 +75,8 @@ Install the exact default runtime profile once, then run offline:
 uv run goldilocks assets install default
 uv run goldilocks assets verify default
 uv run goldilocks recommend structure.cif --json
-uv run goldilocks generate structure.cif \
-    --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
-uv run goldilocks compute structure.cif \
-    --outputs analysis,k_points --k-grid 4 4 4
+uv run goldilocks generate structure.cif --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
+uv run goldilocks compute structure.cif --outputs analysis,k_points --k-grid 4 4 4
 ```
 
 `GOLDILOCKS_ASSET_ROOT` overrides the default

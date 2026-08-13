@@ -1,14 +1,14 @@
 # CLI reference
 
-The `goldilocks-core` command is a thin wrapper over `CoreService`. Preset
-commands build `PresetRequest`; `compute` builds `QueryRequest`.
+The `goldilocks` command is a thin wrapper over `CoreService`. Preset commands
+build `PresetRequest`; `compute` builds `QueryRequest`.
 
 ## Commands
 
 ### recommend
 
 ```bash
-goldilocks-core recommend structure.cif [options]
+goldilocks recommend structure.cif [options]
 ```
 
 Runs Load → Analyze → Advise → Kmesh → Select. Outputs a recommendation without generated files.
@@ -16,7 +16,7 @@ Runs Load → Analyze → Advise → Kmesh → Select. Outputs a recommendation 
 ### generate
 
 ```bash
-goldilocks-core generate structure.cif [options]
+goldilocks generate structure.cif [options]
 ```
 
 Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a recommendation with generated input files. Pass `--out run/` to publish the files and manifest as a portable bundle; the destination must not already exist.
@@ -24,7 +24,7 @@ Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a re
 ### compute
 
 ```bash
-goldilocks-core compute structure.cif \
+goldilocks compute structure.cif \
     --outputs analysis,k_points [options]
 ```
 
@@ -32,10 +32,27 @@ Runs the minimal task subgraph needed for the comma-separated stable record IDs
 and always prints the selected records as JSON. Available IDs are `analysis`,
 `advice`, `k_points`, `selection`, and `generated_files`.
 
+### assets
+
+```bash
+goldilocks assets install [default|ASSET_ID]
+goldilocks assets status [default|ASSET_ID]
+goldilocks assets verify [default|ASSET_ID]
+```
+
+The default profile pins the QRF, metallicity, and PseudoDojo table versions
+shipped with this release. Installation downloads into a staging directory,
+checks declared source digests when available, normalizes provider files,
+inventories the result, and atomically publishes a manifest-backed asset.
+`status` reports `installed`, `missing`, or `corrupt`; `verify` checks every
+installed file. The store defaults to `$XDG_DATA_HOME/goldilocks/assets` (or
+`~/.local/share/goldilocks/assets`) and can be overridden with
+`GOLDILOCKS_ASSET_ROOT`.
+
 ### examples
 
 ```bash
-goldilocks-core examples path
+goldilocks examples path
 ```
 
 Prints the directory holding the example structures installed with the package. It takes none of the common options below.
@@ -43,7 +60,7 @@ Prints the directory holding the example structures installed with the package. 
 Use it to run the pipeline without supplying a structure of your own:
 
 ```bash
-goldilocks-core recommend "$(goldilocks-core examples path)/Si.cif" --json
+goldilocks recommend "$(goldilocks examples path)/Si.cif" --json
 ```
 
 The directory's `README.md` explains what each example exercises. From Python, use `goldilocks_core.examples.structure("Si.cif")` rather than building the path by hand.
@@ -51,8 +68,8 @@ The directory's `README.md` explains what each example exercises. From Python, u
 ### serve
 
 ```bash
-goldilocks-core serve http [--host 127.0.0.1] [--port 8000]
-goldilocks-core serve mcp
+goldilocks serve http [--host 127.0.0.1] [--port 8000]
+goldilocks serve mcp
 ```
 
 The HTTP and MCP transports require their optional dependencies:
@@ -79,6 +96,7 @@ one `CoreService` for its lifetime.
 | `--pseudo-type` | str | None | `CalculationHints.pseudo_type` |
 | `--relativistic-mode` | str | None | `CalculationHints.relativistic_mode` |
 | `--pseudo-root` | path | None | Loads UPF files recursively into `pseudo_metadata` |
+| `--fetch-missing` | flag | False | Explicitly install the complete default runtime profile before running |
 | `--model` | path | None | request `kmesh_model` (local k-index model) |
 | `--model-name` | str | `cli-kmesh-model` with `--model` | Model name recorded in Kmesh provenance; requires `--model` |
 | `--model-version` | str | `unknown` with `--model` | Model version recorded in `ModelSpec`; requires `--model` |
@@ -147,7 +165,13 @@ warnings:
 
 ## Pseudo loading
 
-`--pseudo-root` recursively searches the given directory for `.upf` and `.UPF` files, parses each one with `parse_upf_metadata()`, and passes the resulting `PseudoMetadata` list to the selection stage. CLI functional intent and parsed UPF functional metadata use the same canonical labels. Supported PBEsol spellings match; unrecognized labels remain distinct rather than falling back to PBE or another functional.
+Without `--pseudo-root`, the CLI verifies and loads the installed default
+PseudoDojo table manifest. A missing or corrupt table fails with an asset
+diagnostic; the CLI does not download unless `--fetch-missing` is present.
+`--pseudo-root` instead recursively loads `.upf` and `.UPF` files from an
+explicit local directory and searches nearby JSON metadata for complete
+cutoffs. CLI intent and parsed UPF metadata use the same canonical functional
+labels. Unrecognized labels remain distinct rather than silently falling back.
 
 ## Kmesh backend selection
 
@@ -159,7 +183,7 @@ model and reports model loading or inference errors directly. Explicit
 `--model` selects a local CSLR k-index model instead of the default:
 
 ```bash
-goldilocks-core recommend structure.cif --model model.joblib --json
+goldilocks recommend structure.cif --model model.joblib --json
 ```
 
 The CLI builds a `ModelSpec` from `--model`, `--model-name`, and
@@ -171,25 +195,13 @@ are rejected unless `--model` is set.
 Hint precedence still applies:
 
 ```bash
-goldilocks-core recommend structure.cif --model model.joblib --k-grid 4 4 4
+goldilocks recommend structure.cif --model model.joblib --k-grid 4 4 4
 ```
 
 This uses the explicit grid and records `provenance.source="user_hint"`; the model is not consulted for k-points.
 
 When no k-point hint is set, the model supplies the grid and the resulting `KPointSelection` records `provenance.source="model"`.
 
-Default remote locations and full 40-character commit revisions come from the
-model registry. Set `GOLDILOCKS_MODEL_REGISTRY` to an alternate TOML registry to
-replace them. Hub artifacts use the `huggingface_hub` cache; because joblib
-artifacts can execute code while loading, only select registries and revisions
-you trust.
-
-## Standalone kmesh CLI
-
-The `goldilocks-kmesh` command continues to expose the ML advisor directly:
-
-```bash
-goldilocks-kmesh structure.cif --model model.joblib
-```
-
-It returns only a k-point recommendation. Use `goldilocks-core ... --model` when the prediction should be part of the staged Core pipeline.
+Default model files are resolved from the verified asset store. Set
+`GOLDILOCKS_MODEL_REGISTRY` only to use an explicit complete model registry;
+model loading itself never performs network access.

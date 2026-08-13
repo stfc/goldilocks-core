@@ -18,6 +18,9 @@ outputs. Stages remain pure functions with no stage base classes.
 
 | Module | Responsibility |
 | --- | --- |
+| `assets/` | Immutable asset records, profiles, download integrity, transactional installation, and verification. |
+| `ml/model_registry.py` | Complete model runtime configuration and model asset declarations. |
+| `pseudo/registry.py`, `pseudo/import_*` | Complete pseudopotential table declarations and provider-specific normalization. |
 | `contracts/` | Data records and serialization shared between stages. |
 | `runtime/graph.py` | Stage-agnostic, type-keyed DAG executor (`TaskSpec`/`StageSpec`/`Preset`/`execute`). |
 | `runtime/task.py` | `TaskHandler`: a task's graph plus its context-builder and result-assembler hooks. |
@@ -87,6 +90,29 @@ files = generate_inputs(structure, intent, advice, selection, kpoints)
 
 This supports custom ordering, extra project-specific steps, intermediate
 inspection, and calculation-specific generation without extending a framework.
+
+## Runtime assets
+
+Models and pseudopotential tables share one lifecycle, not one scientific
+registry:
+
+```text
+domain registry -> download -> verify sources -> prepare -> inventory
+                -> atomic publish -> resolve verified local paths
+```
+
+Each domain owns its complete declarations and interpretation. `AssetStore`
+owns only acquisition, integrity, locking, installed manifests, and path
+resolution. PseudoDojo and SSSP preparers convert different upstream layouts
+to the same installed table manifest; selection reads that manifest and never
+infers table identity from directory names. Model loaders receive verified
+local paths and perform no network access.
+
+The canonical store is external to the package:
+`$XDG_DATA_HOME/goldilocks/assets`, overridden by
+`GOLDILOCKS_ASSET_ROOT`. A shipped runtime profile pins exact asset ids and
+versions. The CLI installs profiles explicitly; server request handling only
+resolves already-installed assets.
 
 ## Boundaries
 

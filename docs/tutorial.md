@@ -223,10 +223,10 @@ requires a non-empty `outputs` list. Request errors use a stable
 ## CLI and optional transports
 
 ```bash
-uv run goldilocks-core recommend structure.cif --k-grid 4 4 4 --json
-uv run goldilocks-core generate structure.cif \
+uv run goldilocks recommend structure.cif --k-grid 4 4 4 --json
+uv run goldilocks generate structure.cif \
     --pseudo-root pseudos --k-grid 4 4 4 --out run --json
-uv run goldilocks-core compute structure.cif \
+uv run goldilocks compute structure.cif \
     --outputs analysis,k_points --k-grid 4 4 4
 ```
 
@@ -234,8 +234,8 @@ Install and run the optional servers with:
 
 ```bash
 uv sync --all-extras
-uv run goldilocks-core serve http --host 127.0.0.1 --port 8000
-uv run goldilocks-core serve mcp
+uv run goldilocks serve http --host 127.0.0.1 --port 8000
+uv run goldilocks serve mcp
 ```
 
 The HTTP server exposes operation and discovery endpoints. The MCP stdio server

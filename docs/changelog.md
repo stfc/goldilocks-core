@@ -6,8 +6,11 @@ All notable changes to goldilocks-core are documented here.
 
 ### Added
 
+- Transactional runtime asset store with exact profiles, checksum verification,
+  provider normalization, installed manifests, integrity status, and explicit
+  `goldilocks assets install/status/verify` commands.
 - CLI `--use-vdw` and `--vdw-method` options matching the Python hint controls.
-- Example structures (`Si`, `Fe_bcc`, `Pt_fcc`) installed with the package, reachable from `goldilocks_core.examples` and `goldilocks-core examples path`.
+- Example structures (`Si`, `Fe_bcc`, `Pt_fcc`) installed with the package, reachable from `goldilocks_core.examples` and `goldilocks examples path`.
 - `DimensionalityClassificationError` and `SymmetryAnalysisError` (in `goldilocks_core.analysis`); `SymmetryUnavailable` typed value (in `goldilocks_core.contracts`), recorded in symmetry fields when spglib cannot analyze.
 - A typed DAG executor with frozen stage/task/preset specifications, registered SCF presets, and `CoreRecords` query results.
 - `CoreRuntime` as the explicit lifecycle owner for reusable kmesh and metallicity models.
@@ -22,6 +25,9 @@ All notable changes to goldilocks-core are documented here.
 
 ### Changed
 
+- The sole console entry point is now `goldilocks`; model and pseudopotential
+  defaults resolve from the same external asset store and normal execution is
+  offline unless `--fetch-missing` is explicitly supplied.
 - CLI model name/version metadata now requires the local `--model` backend.
 - Loaded-model quantiles are checked before QRF confidence is reported.
 - Job-level warnings now include de-duplicated scientific caveats from Advise as well as Analyze, Kmesh, and Select.
@@ -56,6 +62,8 @@ All notable changes to goldilocks-core are documented here.
 - QE generation rejects unsupported smearing labels, unsafe pseudopotential filenames, and duplicate, missing, or extraneous pseudopotential selections.
 
 ### Removed
+- The `goldilocks-core` and `goldilocks-kmesh` console entry points; use the
+  unified `goldilocks` command.
 
 - Operational stage traces from `CoreResult`.
 - Bundle content hashes, byte counts, atomic publication machinery, and platform-specific path simulation.

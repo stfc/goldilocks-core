@@ -101,7 +101,9 @@ def load_qrf_resources(
     model = config.model
     if config.model_asset is not None:
         installed = store.resolve(config.model_asset.id, config.model_asset.version)
-        model = replace(model, source="local", location=str(installed.path(config.model_file)))
+        model = replace(
+            model, source="local", location=str(installed.path(config.model_file))
+        )
     return QrfResources(
         model=load_model(model),
         metal_model=load_metallicity_model(checkpoint),

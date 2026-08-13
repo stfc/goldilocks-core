@@ -71,6 +71,13 @@ def test_packaged_registry_loads_qrf_resources() -> None:
     assert config.metallicity_model.name == "metallicity-goldilocks-CGCNN"
     assert config.metallicity_model.model_type == "cgcnn"
     assert config.metallicity_model.target == "metallicity"
+    assert config.model_asset is not None
+    assert config.model_asset.id == "qrf-kpoints"
+    assert config.metallicity_asset is not None
+    assert {file.role for file in config.metallicity_asset.files} == {
+        "checkpoint",
+        "atom_init",
+    }
 
 
 def test_explicit_registry_replaces_model_and_artifacts(tmp_path: Path) -> None:

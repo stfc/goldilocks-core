@@ -30,11 +30,13 @@ uv run goldilocks recommend structure.cif
 
 ## Choose a different table
 
-The table must match the calculation functional, accuracy mode, and relativistic
-mode.
+Select an exact table ID with `--pseudo-table` or `PresetRequest.pseudo_table`.
+The table must agree with the calculation functional, accuracy tier,
+relativistic treatment, and every element in the structure. Core reports all
+disagreements before selection.
 
 - Use an `efficiency` table for normal calculations.
-- Use a `precision` table when accuracy is more important than cost.
+- Use a `precision` table with `--pseudo-accuracy precision`.
 - Use an `sr` table for a calculation without SOC.
 - Use an `fr` table for a calculation with SOC.
 - Use an SSSP table for lanthanides or actinides.
@@ -55,23 +57,23 @@ mode.
 - `pseudodojo-pbe-efficiency-fr`
 - `pseudodojo-pbe-precision-fr`
 
-Install the table:
+Install the table, then select the same ID:
 
 ```bash
 uv run goldilocks assets install pseudodojo-pbesol-efficiency-fr
+uv run goldilocks recommend structure.cif --spin-orbit-coupling true --pseudo-table pseudodojo-pbesol-efficiency-fr
 ```
 
-Load that table in Python and enable SOC:
+Python requests carry the ID; Core verifies and loads its installed manifest
+only when Select is required:
 
 ```python
 from goldilocks_core import CalculationHints, CoreService, PresetRequest
-from goldilocks_core.pseudo.pp_registry import load_installed_pseudo_metadata
 
-metadata = load_installed_pseudo_metadata("pseudodojo-pbesol-efficiency-fr")
 request = PresetRequest(
     structure="structure.cif",
     hints=CalculationHints(spin_orbit_coupling=True),
-    pseudo_metadata=metadata,
+    pseudo_table="pseudodojo-pbesol-efficiency-fr",
 )
 
 with CoreService() as core:
@@ -83,28 +85,29 @@ relativistic UPFs that an SOC calculation needs.
 
 ### SSSP tables
 
-SSSP tables cover the lanthanides and actinides. Selection uses SSSP for these
-elements when the request contains SSSP metadata.
+SSSP tables cover the lanthanides and actinides as well as the lighter
+elements. Select the one table matching the calculation:
 
 - `sssp-pbesol-efficiency-sr`
 - `sssp-pbesol-precision-sr`
 - `sssp-pbe-efficiency-sr`
 - `sssp-pbe-precision-sr`
 
-Install the SSSP table that matches the functional and accuracy mode. Then pass
-it to `PresetRequest` with `load_installed_pseudo_metadata()`, as in the SOC
-example above.
+Install the table, then put its exact ID on the CLI or Python request. The
+default profile does not include an SSSP table.
 
-The default profile does not include an SSSP table.
+SSSP 1.3.0 PBEsol tables reuse pseudopotentials and input parameters from the
+PBE library; SSSP did not validate those PBEsol tables with its convergence
+protocol. Goldilocks preserves this provenance rather than presenting the
+cutoffs as PBEsol-validated.
 
-The registry also contains `pseudodojo-pbe-lanthanides-sr`. Goldilocks does not
-select this table automatically. It assumes trivalent f-in-core ions and is not
-suitable for all lanthanides.
+The registry also contains `pseudodojo-pbe-lanthanides-sr`. Select it only
+explicitly. It assumes trivalent f-in-core ions and is not suitable for every
+lanthanide.
 
-The CLI uses the installed default table unless you give it `--pseudo-root`.
-Installing a different table does not change that default. Use
-`load_installed_pseudo_metadata(TABLE_ID)` in Python to select a different
-installed table.
+Installing a table does not change the request default. Without an explicit
+source, Core uses `pseudodojo-pbesol-efficiency-sr`; it does not choose among
+installed tables by scanning the asset store.
 
 ## Check an installed table
 
@@ -120,8 +123,8 @@ Check every installed file:
 uv run goldilocks assets verify pseudodojo-pbesol-efficiency-fr
 ```
 
-The state is `installed`, `missing`, or `corrupt`. Run `assets install` again to
-repair a corrupt table.
+The state is `installed`, `missing`, or `corrupt`. Run `assets install` again
+to replace a corrupt table transactionally.
 
 ## Use your own UPF files
 
@@ -131,9 +134,15 @@ Use `--pseudo-root` to read a directory that you manage:
 uv run goldilocks generate structure.cif --pseudo-root pseudos --k-grid 4 4 4 --out run
 ```
 
-Goldilocks reads `.upf` and `.UPF` files below the directory. It does not copy or
-change them. The UPF data or nearby JSON metadata must provide enough
-information to select one file and two positive cutoffs for each element.
+Goldilocks reads `.upf` and `.UPF` files recursively. It does not copy or
+change them. The UPF header or a recognized provider sidecar must identify the
+scientific metadata and provide two finite positive cutoffs for every selected
+element. Arbitrary JSON files and filename words are not treated as scientific
+facts.
+
+`pseudo_metadata`, `pseudo_root`, and `pseudo_table` are mutually exclusive.
+Explicit metadata is useful for in-memory callers; an explicit root remains
+operator-managed; an exact table ID resolves through the verified asset store.
 
 ## Find installed files
 

@@ -12,20 +12,27 @@ All notable changes to goldilocks-core are documented here.
 - HTTP and MCP operations for recommendations, input generation, record
   queries, and capability discovery.
 - CLI controls for van der Waals advice.
+- Exact pseudopotential-table selection on Python, CLI, HTTP, and MCP requests.
+- Provider-normalized PseudoDojo and SSSP installation into verified manifests.
 
 ### Changed
 
 - The only console command is now `goldilocks`.
 - The default functional is now PBEsol. Use `--functional PBE` for PBE.
-- Runtime models and pseudopotential tables must be installed before normal
-  execution. Use `--fetch-missing` to allow one CLI command to install the
-  default profile.
+- Runtime models and pseudopotential tables must be installed before the paths
+  that use them. Pseudopotential sources resolve lazily from explicit metadata,
+  an operator root, an exact installed table ID, or the registered default.
+  `--fetch-missing` installs only the exact missing dependencies reported by
+  Core.
 - `recommend`, `generate`, and `compute` use one `CoreService` interface across
   Python, CLI, HTTP, and MCP.
 - CLI record queries use the stable output names `analysis`, `advice`,
   `k_points`, `selection`, and `generated_files`.
 - Invalid requests and incomplete Quantum ESPRESSO inputs now fail with
   specific errors.
+- Pseudopotential selection now consumes one normalized metadata interface;
+  registry access, provider parsing, and filesystem discovery live behind the
+  source-resolution stage.
 
 ### Removed
 
@@ -37,6 +44,8 @@ All notable changes to goldilocks-core are documented here.
   `--k-grid` or `--k-spacing`.
 - `CalculationIntent.accuracy_level` and `--accuracy-level`, which did not
   change scientific behaviour.
+- `CalculationIntent.pseudo_mode` and `--pseudo-mode`. Use the validated
+  efficiency/precision control `pseudo_accuracy` or `--pseudo-accuracy`.
 
 ## [0.1.0] - 2026-06-10
 

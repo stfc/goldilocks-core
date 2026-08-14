@@ -37,7 +37,7 @@ This is the same convention as VASP's `KSPACING` tag. It differs from some codes
 | metallic smearing width | 0.01 | Ry | `advice/smearing.py` `METALLIC_SMEARING_WIDTH_RY` |
 | smearing type (metallic) | cold | — | `advice/smearing.py` |
 | smearing type (unknown) | fixed | — | `advice/smearing.py` |
-| pseudo mode | efficiency | — | `CalculationIntent.pseudo_mode` |
+| pseudo accuracy | efficiency | — | `CalculationIntent.pseudo_accuracy` |
 | functional | PBEsol | — | `CalculationIntent.functional` |
 
 ## Heavy-element heuristic
@@ -75,4 +75,7 @@ that choice.
 | `full` | Fully relativistic (required when SOC is enabled) |
 | `non-relativistic` | No relativistic treatment (rarely used) |
 
-When `SpinOrbitAdvice.enabled` is `True` but `CalculationHints.relativistic_mode` is not set, the Advise stage automatically sets `PseudopotentialAdvice.relativistic_mode` to `"full"` and records `analysis` provenance.
+When `SpinOrbitAdvice.enabled` is `True` and
+`CalculationHints.relativistic_mode` is not set, Advise sets
+`PseudopotentialRequirements.relativistic` to `"full"` with
+analysis-backed provenance.

@@ -6,8 +6,8 @@ flow is staged so later calculation types can reuse analysis, advice, resource
 selection, and output handling.
 
 ```text
-Load -> Analyze -> Advise -> Resolve Pseudos -> Select
-Load -> Kmesh
+Load -> Analyze -> Advise -> Kmesh
+Load + Advice + Kmesh -> Select
 Load + Advice + Select + Kmesh -> Generate
 ```
 
@@ -61,7 +61,7 @@ with CoreService() as core:
 
 `mode` selects a task preset:
 
-- `recommend`: request Analyze, Advise, Resolve Pseudos, Kmesh, and Select
+- `recommend`: request Analyze, Advise, Kmesh, and Select
   records
 - `generate`: additionally request GeneratedFiles and optionally publish them
   when `output_dir` is set
@@ -142,9 +142,10 @@ Intermediate records remain ordinary Python data. Custom stage authors are
 responsible for returning coherent records; Core does not defensively re-check
 every possible malformed internal object.
 
-Scientific choices belong in Analyze, Advise, Kmesh, and Select. Resolve
-Pseudos materializes the caller's selected source without making scientific
-policy. Generate maps completed choices to calculation syntax. Optional bundle
+Scientific choices belong in Analyze, Advise, Kmesh, and Select. Select
+resolves the configured source and chooses a concrete pseudopotential per
+element without making scientific policy beyond the stated requirements.
+Generate maps completed choices to calculation syntax. Optional bundle
 publication writes files but does not run calculations or copy
 pseudopotential libraries.
 

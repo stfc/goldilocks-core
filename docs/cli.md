@@ -11,8 +11,8 @@ build `PresetRequest`; `compute` builds `QueryRequest`.
 uv run goldilocks recommend structure.cif [options]
 ```
 
-Runs the SCF graph through Select: Load, Analyze, Advise, Resolve Pseudos,
-Kmesh, and Select. Outputs a recommendation without generated files.
+Runs the SCF graph through Select: Load, Analyze, Advise, Kmesh, and Select.
+Outputs a recommendation without generated files.
 
 ### generate
 

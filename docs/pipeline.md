@@ -113,8 +113,8 @@ resolves the minimal subgraph for a preset or query. `CoreRuntime` owns only
 model lifecycle.
 
 ```text
-Load -> Analyze -> Advise -> Resolve Pseudos -> Select
-Load -> Kmesh
+Load -> Analyze -> Advise -> Kmesh
+Load + Advice + Kmesh -> Select
 Load + Advice + Select + Kmesh -> Generate
 ```
 
@@ -154,9 +154,9 @@ not to reproduce service dispatch in another wrapper.
 - **Load** reads a `pymatgen.Structure` or periodic structure file.
 - **Analyze** reports structure facts.
 - **Advise** recommends physics and numerical settings with provenance.
-- **Resolve Pseudos** verifies and loads exactly one request-selected source.
 - **Kmesh** resolves operator hints or a model into a concrete grid.
-- **Select** chooses pseudopotentials and cutoffs from resolved metadata.
+- **Select** resolves the configured pseudopotential source and chooses
+  pseudopotentials and cutoffs from the available metadata.
 - **Generate** creates target-code input files from completed records.
 
 Bundle publication is a filesystem side effect of generation, not a separate

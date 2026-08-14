@@ -1,9 +1,10 @@
-"""Normalize verified SSSP source files into an installed table."""
+"""Normalize verified SSSP sources into one installed table."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import re
 import tarfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -12,10 +13,13 @@ from typing import Any
 from goldilocks_core.pseudo.installed import write_table_manifest
 from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
 from goldilocks_core.pseudo.registry import PseudoTable
+from goldilocks_core.pseudo.validation import (
+    PseudoImportError,
+    finite_positive_cutoff,
+    required_functional,
+)
 
-
-class TableIncomplete(RuntimeError):
-    """The SSSP archive and its metadata do not form one complete table."""
+_MD5 = re.compile(r"[0-9a-fA-F]{32}")
 
 
 def preparer(table: PseudoTable):
@@ -24,9 +28,26 @@ def preparer(table: PseudoTable):
         raise ValueError(f"not an SSSP table: {table.id}")
 
     def prepare(sources: Mapping[str, Path], destination: Path) -> None:
-        metadata = json.loads(sources["metadata"].read_text())
-        entries = _extract_pseudos(sources["pseudopotentials"], destination, metadata)
-        write_table_manifest(destination, table, entries)
+        try:
+            metadata = json.loads(sources["metadata"].read_text(encoding="utf-8"))
+            if not isinstance(metadata, dict) or not metadata:
+                raise PseudoImportError("SSSP metadata must be a non-empty object")
+            entries = _extract_pseudos(
+                sources["pseudopotentials"], destination, metadata, table
+            )
+            write_table_manifest(destination, table, entries)
+        except PseudoImportError:
+            raise
+        except (
+            KeyError,
+            OSError,
+            UnicodeError,
+            json.JSONDecodeError,
+            tarfile.TarError,
+        ) as error:
+            raise PseudoImportError(
+                f"cannot normalize SSSP table {table.id}: {error}"
+            ) from error
 
     return prepare
 
@@ -35,10 +56,27 @@ def _extract_pseudos(
     archive: Path,
     destination: Path,
     metadata: dict[str, dict[str, Any]],
+    table: PseudoTable,
 ) -> list[dict[str, Any]]:
-    by_filename = {
-        entry["filename"]: (element, entry) for element, entry in metadata.items()
-    }
+    """Extract UPFs after validating sidecar, header, and table agreement."""
+    by_filename: dict[str, tuple[str, dict[str, Any]]] = {}
+    for element, facts in metadata.items():
+        if not isinstance(element, str) or not isinstance(facts, dict):
+            raise PseudoImportError("SSSP metadata entries must be element objects")
+        filename = facts.get("filename")
+        if (
+            not isinstance(filename, str)
+            or not filename
+            or Path(filename).name != filename
+        ):
+            raise PseudoImportError(f"SSSP entry for {element} has an unsafe filename")
+        if filename in by_filename:
+            raise PseudoImportError(f"duplicate SSSP filename {filename}")
+        digest = facts.get("md5")
+        if not isinstance(digest, str) or _MD5.fullmatch(digest) is None:
+            raise PseudoImportError(f"SSSP entry for {element} has invalid md5")
+        by_filename[filename] = (element, facts)
+
     entries: list[dict[str, Any]] = []
     seen: set[str] = set()
     pseudos = destination / "pseudos"
@@ -50,13 +88,13 @@ def _extract_pseudos(
             filename = Path(member.name).name
             expected = by_filename.get(filename)
             if expected is None:
-                raise TableIncomplete(f"{filename} has no SSSP metadata entry")
+                raise PseudoImportError(f"{filename} has no SSSP metadata entry")
             element, facts = expected
             if element in seen:
-                raise TableIncomplete(f"duplicate SSSP entry for {element}")
+                raise PseudoImportError(f"duplicate SSSP entry for {element}")
             source = tar.extractfile(member)
             if source is None:
-                raise TableIncomplete(f"cannot extract {member.name}")
+                raise PseudoImportError(f"cannot extract {member.name}")
             target = pseudos / filename
             digest = hashlib.md5()
             with target.open("xb") as output:
@@ -64,10 +102,41 @@ def _extract_pseudos(
                     digest.update(chunk)
                     output.write(chunk)
             if digest.hexdigest().lower() != facts["md5"].lower():
-                raise TableIncomplete(f"{filename} does not match SSSP md5")
+                raise PseudoImportError(f"{filename} does not match SSSP md5")
+
             parsed = parse_upf_metadata(target)
-            ecutwfc = _positive_cutoff(facts, "cutoff_wfc")
-            ecutrho = _positive_cutoff(facts, "cutoff_rho")
+            if parsed.element != element:
+                raise PseudoImportError(
+                    f"{element}: UPF element is {parsed.element or 'unknown'}"
+                )
+            if facts.get("element") not in {None, element}:
+                raise PseudoImportError(
+                    f"{element}: SSSP sidecar element is {facts['element']!r}"
+                )
+            upf_functional = required_functional(
+                parsed.functional, f"UPF functional for {element}"
+            )
+            if upf_functional != table.functional:
+                raise PseudoImportError(
+                    f"{element}: UPF functional {upf_functional} does not match "
+                    f"table functional {table.functional}"
+                )
+            if "functional" in facts:
+                sidecar_functional = required_functional(
+                    facts["functional"], f"SSSP functional for {element}"
+                )
+                if sidecar_functional != table.functional:
+                    raise PseudoImportError(
+                        f"{element}: SSSP functional {sidecar_functional} does not "
+                        f"match table functional {table.functional}"
+                    )
+            if parsed.relativistic != table.relativistic:
+                raise PseudoImportError(
+                    f"{element}: UPF relativistic treatment "
+                    f"{parsed.relativistic or 'unknown'} does not match table "
+                    f"treatment {table.relativistic}"
+                )
+
             entries.append(
                 {
                     "element": element,
@@ -76,26 +145,21 @@ def _extract_pseudos(
                     "header_format": parsed.header_format,
                     "pseudo_type": parsed.pseudo_type,
                     "z_valence": parsed.z_valence,
-                    "ecutwfc_ry": ecutwfc,
-                    "ecutrho_ry": ecutrho,
-                    "source_pseudopotential": facts.get("pseudopotential"),
-                    "f_in_core": False,
+                    "ecutwfc_ry": finite_positive_cutoff(
+                        facts.get("cutoff_wfc"), f"SSSP {element} cutoff_wfc"
+                    ),
+                    "ecutrho_ry": finite_positive_cutoff(
+                        facts.get("cutoff_rho"), f"SSSP {element} cutoff_rho"
+                    ),
+                    "source_identifier": facts.get("pseudopotential"),
+                    "frozen_4f_core": False,
                 }
             )
             seen.add(element)
+
     missing = set(metadata) - seen
     if missing:
-        raise TableIncomplete(
+        raise PseudoImportError(
             "SSSP metadata describes absent UPFs: " + ", ".join(sorted(missing))
         )
     return entries
-
-
-def _positive_cutoff(facts: dict[str, Any], key: str) -> float:
-    try:
-        value = float(facts[key])
-    except (KeyError, TypeError, ValueError) as error:
-        raise TableIncomplete(f"SSSP entry lacks numeric {key}") from error
-    if value <= 0:
-        raise TableIncomplete(f"SSSP entry has non-positive {key}")
-    return value

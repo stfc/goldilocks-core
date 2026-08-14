@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.contracts import PseudoMetadata
+from goldilocks_core.contracts import PseudoCutoffs, PseudoMetadata
 
 
 @pytest.fixture
@@ -37,6 +37,7 @@ def pseudo_metadata_factory() -> Callable[..., PseudoMetadata]:
         functional: str = "PBEsol",
         pseudo_type: str = "NC",
         relativistic: str = "scalar",
+        accuracy: str | None = "efficiency",
         root: Path = Path("/pseudo"),
     ) -> PseudoMetadata:
         filename = f"{element}.UPF"
@@ -44,15 +45,17 @@ def pseudo_metadata_factory() -> Callable[..., PseudoMetadata]:
             filepath=str(root / filename),
             filename=filename,
             header_format="attr",
-            library="synthetic-test-library",
+            provider="synthetic-test",
+            accuracy=accuracy,
             element=element,
             pseudo_type=pseudo_type,
             functional=functional,
             relativistic=relativistic,
-            sssp_recommended_cutoff={
-                "ecutwfc_ry": ecutwfc_ry,
-                "ecutrho_ry": ecutrho_ry,
-            },
+            cutoffs=PseudoCutoffs(
+                ecutwfc_ry=ecutwfc_ry,
+                ecutrho_ry=ecutrho_ry,
+            ),
+            source_identifier=f"synthetic/{filename}",
         )
 
     return make_metadata

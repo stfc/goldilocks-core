@@ -25,7 +25,9 @@ def test_every_bundled_structure_runs_through_the_pipeline(name: str) -> None:
     """Load each example from disk and carry it to a complete recommendation."""
     result = run_core_job(
         PresetRequest(
-            structure=structure(name), hints=CalculationHints(k_grid=(4, 4, 4))
+            structure=structure(name),
+            hints=CalculationHints(k_grid=(4, 4, 4)),
+            pseudo_metadata=(),
         )
     )
 
@@ -40,10 +42,18 @@ def test_bundled_structures_exercise_distinct_advice_branches() -> None:
     changes, either the example set or that documentation is stale.
     """
     hints = CalculationHints(k_grid=(4, 4, 4))
-    silicon = run_core_job(PresetRequest(structure=structure("Si.cif"), hints=hints))
-    iron = run_core_job(PresetRequest(structure=structure("Fe_bcc.cif"), hints=hints))
+    silicon = run_core_job(
+        PresetRequest(structure=structure("Si.cif"), hints=hints, pseudo_metadata=())
+    )
+    iron = run_core_job(
+        PresetRequest(
+            structure=structure("Fe_bcc.cif"), hints=hints, pseudo_metadata=()
+        )
+    )
     platinum = run_core_job(
-        PresetRequest(structure=structure("Pt_fcc.cif"), hints=hints)
+        PresetRequest(
+            structure=structure("Pt_fcc.cif"), hints=hints, pseudo_metadata=()
+        )
     )
 
     # Silicon: the non-magnetic, light-element, no-SOC baseline.

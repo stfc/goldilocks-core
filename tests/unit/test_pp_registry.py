@@ -1,23 +1,25 @@
+import hashlib
+import json
 from pathlib import Path
 
-from goldilocks_core.pseudo.pp_registry import (
-    filter_by_element,
-    filter_by_functional,
-    filter_by_pseudo_type,
-    filter_by_relativistic,
-    load_pseudo_metadata,
+import pytest
+
+from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
+from goldilocks_core.pseudo.validation import (
+    AmbiguousCutoffMetadata,
+    PseudoImportError,
 )
 
 
 def make_upf(
     *,
-    element: str,
-    pseudo_type: str,
-    functional: str,
-    relativistic: str,
-    z_valence: str,
+    element: str = "Si",
+    pseudo_type: str = "NC",
+    functional: str = "PBEsol",
+    relativistic: str = "scalar",
+    z_valence: str = "4.0",
 ) -> str:
-    """Build a minimal UPF string for tests."""
+    """Build a minimal UPF document."""
     return (
         "<UPF>"
         f'<PP_HEADER element="{element}" '
@@ -29,191 +31,121 @@ def make_upf(
     )
 
 
-def test_load_pseudo_metadata_loads_upf_files_under_root(tmp_path: Path) -> None:
-    """Load pseudopotential metadata from a synthetic pseudo root."""
-    pseudo_root = tmp_path / "pseudopotentials" / "pslibrary"
-    pseudo_root.mkdir(parents=True)
-
-    pseudo_path = pseudo_root / "Hg.pbe-n-rrkjus_psl.1.0.0.UPF"
-    pseudo_path.write_text(
-        make_upf(
-            element="Hg",
-            pseudo_type="USPP",
-            functional="PBE",
-            relativistic="scalar",
-            z_valence="12.0",
-        )
-    )
-
-    metadata_list = load_pseudo_metadata(tmp_path / "pseudopotentials")
-
-    assert len(metadata_list) == 1
-    assert metadata_list[0].filename == "Hg.pbe-n-rrkjus_psl.1.0.0.UPF"
-    assert metadata_list[0].library == "pslibrary"
-    assert metadata_list[0].element == "Hg"
-
-
-def test_filter_by_element_returns_matching_pseudos_only(tmp_path: Path) -> None:
-    """Filter loaded pseudopotential metadata by element."""
-    pseudo_root = tmp_path / "pseudopotentials" / "pslibrary"
-    pseudo_root.mkdir(parents=True)
-
-    (pseudo_root / "Hg.pbe-n-rrkjus_psl.1.0.0.UPF").write_text(
-        make_upf(
-            element="Hg",
-            pseudo_type="USPP",
-            functional="PBE",
-            relativistic="scalar",
-            z_valence="12.0",
-        )
-    )
-    (pseudo_root / "Si.pbe-n-rrkjus_psl.1.0.0.UPF").write_text(
-        make_upf(
-            element="Si",
-            pseudo_type="USPP",
-            functional="PBE",
-            relativistic="scalar",
-            z_valence="4.0",
-        )
-    )
-
-    metadata_list = load_pseudo_metadata(tmp_path / "pseudopotentials")
-    filtered = filter_by_element(metadata_list, "Hg")
-
-    assert len(filtered) == 1
-    assert filtered[0].element == "Hg"
-    assert filtered[0].filename == "Hg.pbe-n-rrkjus_psl.1.0.0.UPF"
-
-
-def test_filter_by_functional_returns_matching_pseudos_only(
+def test_load_pseudo_metadata_parses_only_upfs_under_explicit_root(
     tmp_path: Path,
 ) -> None:
-    """Filter loaded pseudopotential metadata by functional."""
-    pseudo_root = tmp_path / "pseudopotentials" / "pslibrary"
-    pseudo_root.mkdir(parents=True)
+    """Load a local UPF without inventing provider or accuracy metadata."""
+    nested = tmp_path / "operator" / "pseudos"
+    nested.mkdir(parents=True)
+    path = nested / "Si.custom.UPF"
+    path.write_text(make_upf())
+    (nested / "notes.txt").write_text("not a pseudopotential")
 
-    (pseudo_root / "Hg.pbe-n-rrkjus_psl.1.0.0.UPF").write_text(
-        make_upf(
-            element="Hg",
-            pseudo_type="USPP",
-            functional="PBE",
-            relativistic="scalar",
-            z_valence="12.0",
-        )
-    )
-    (pseudo_root / "Hg.pbesol-n-rrkjus_psl.1.0.0.UPF").write_text(
-        make_upf(
-            element="Hg",
-            pseudo_type="USPP",
-            functional="PBESOL",
-            relativistic="scalar",
-            z_valence="12.0",
-        )
+    metadata = load_pseudo_metadata(tmp_path)
+
+    assert len(metadata) == 1
+    assert metadata[0].filepath == str(path)
+    assert metadata[0].provider is None
+    assert metadata[0].accuracy is None
+    assert metadata[0].cutoffs is None
+    assert metadata[0].warnings == (
+        f"No recognized cutoff metadata found for Si under "
+        f"custom pseudopotential root {tmp_path.resolve()}.",
     )
 
-    metadata_list = load_pseudo_metadata(tmp_path / "pseudopotentials")
-    filtered = filter_by_functional(metadata_list, "PBE")
 
-    assert len(filtered) == 1
-    assert filtered[0].functional == "PBE"
-    assert filtered[0].filename == "Hg.pbe-n-rrkjus_psl.1.0.0.UPF"
-
-
-def test_filter_by_functional_excludes_malformed_recognized_aliases(
-    tmp_path: Path,
-) -> None:
-    """Filter only exact recognized aliases, never labels with extra tokens."""
-    pseudo_root = tmp_path / "pseudopotentials" / "pslibrary"
-    pseudo_root.mkdir(parents=True)
-    for filename, functional in (
-        ("Hg.pbesol.UPF", "SLA PW PSX PSC"),
-        ("Hg.rpbe-psx-psc.UPF", "RPBE PSX PSC"),
-        ("Hg.pbx-pbc-experimental.UPF", "PBX PBC experimental"),
-        ("Hg.pz-experimental.UPF", "PZ experimental"),
-        ("Hg.pbesol-experimental.UPF", "SLA PW PSX PSC experimental"),
-    ):
-        (pseudo_root / filename).write_text(
-            make_upf(
-                element="Hg",
-                pseudo_type="USPP",
-                functional=functional,
-                relativistic="scalar",
-                z_valence="12.0",
-            )
-        )
-
-    metadata_list = load_pseudo_metadata(tmp_path / "pseudopotentials")
-
-    assert [
-        metadata.filename for metadata in filter_by_functional(metadata_list, "PBE-sol")
-    ] == ["Hg.pbesol.UPF"]
-    assert filter_by_functional(metadata_list, "PBE") == []
-    assert filter_by_functional(metadata_list, "LDA") == []
-
-
-def test_filter_by_pseudo_type_returns_matching_pseudos_only(
-    tmp_path: Path,
-) -> None:
-    """Filter loaded pseudopotential metadata by pseudo type."""
-    pseudo_root = tmp_path / "pseudopotentials" / "pslibrary"
-    pseudo_root.mkdir(parents=True)
-
-    (pseudo_root / "Hg.pbe-n-rrkjus_psl.1.0.0.UPF").write_text(
-        make_upf(
-            element="Hg",
-            pseudo_type="USPP",
-            functional="PBE",
-            relativistic="scalar",
-            z_valence="12.0",
-        )
-    )
-    (pseudo_root / "Hg.pbe-n-kjpaw_psl.1.0.0.UPF").write_text(
-        make_upf(
-            element="Hg",
-            pseudo_type="PAW",
-            functional="PBE",
-            relativistic="scalar",
-            z_valence="12.0",
+def test_sibling_dojo_report_supplies_exact_filename_cutoffs(tmp_path: Path) -> None:
+    """Use a sibling djrepo only when its digest and functional match the UPF."""
+    upf = tmp_path / "Si.upf"
+    upf.write_text(make_upf())
+    digest = hashlib.md5(upf.read_bytes()).hexdigest()
+    (tmp_path / "Si.djrepo").write_text(
+        json.dumps(
+            {
+                "md5_upf": digest,
+                "xc": "PBEsol",
+                "hints": {
+                    "low": {"ecut": 10},
+                    "normal": {"ecut": 15},
+                    "high": {"ecut": 20},
+                },
+            }
         )
     )
 
-    metadata_list = load_pseudo_metadata(tmp_path / "pseudopotentials")
-    filtered = filter_by_pseudo_type(metadata_list, "PAW")
+    metadata = load_pseudo_metadata(tmp_path)[0]
 
-    assert len(filtered) == 1
-    assert filtered[0].pseudo_type == "PAW"
-    assert filtered[0].filename == "Hg.pbe-n-kjpaw_psl.1.0.0.UPF"
+    assert metadata.provider == "pseudodojo"
+    assert metadata.accuracy is None
+    assert metadata.cutoffs is not None
+    assert metadata.cutoffs.ecutwfc_ry == 40.0
+    assert metadata.cutoffs.ecutrho_ry is None
 
 
-def test_filter_by_relativistic_returns_matching_pseudos_only(
-    tmp_path: Path,
-) -> None:
-    """Filter loaded pseudopotential metadata by relativistic mode."""
-    pseudo_root = tmp_path / "pseudopotentials" / "pslibrary"
-    pseudo_root.mkdir(parents=True)
-
-    (pseudo_root / "Hg.pbe-n-rrkjus_psl.1.0.0.UPF").write_text(
-        make_upf(
-            element="Hg",
-            pseudo_type="USPP",
-            functional="PBE",
-            relativistic="scalar",
-            z_valence="12.0",
-        )
-    )
-    (pseudo_root / "Hg.rel-pbe-n-rrkjus_psl.1.0.0.UPF").write_text(
-        make_upf(
-            element="Hg",
-            pseudo_type="USPP",
-            functional="PBE",
-            relativistic="full",
-            z_valence="12.0",
+def test_mismatched_dojo_report_is_rejected(tmp_path: Path) -> None:
+    """Do not publish cutoff data from a report for another UPF."""
+    (tmp_path / "Si.upf").write_text(make_upf())
+    (tmp_path / "Si.djrepo").write_text(
+        json.dumps(
+            {
+                "md5_upf": "0" * 32,
+                "xc": "PBEsol",
+                "hints": {
+                    "low": {"ecut": 10},
+                    "normal": {"ecut": 15},
+                    "high": {"ecut": 20},
+                },
+            }
         )
     )
 
-    metadata_list = load_pseudo_metadata(tmp_path / "pseudopotentials")
-    filtered = filter_by_relativistic(metadata_list, "full")
+    with pytest.raises(PseudoImportError, match="does not match"):
+        load_pseudo_metadata(tmp_path)
 
-    assert len(filtered) == 1
-    assert filtered[0].relativistic == "full"
-    assert filtered[0].filename == "Hg.rel-pbe-n-rrkjus_psl.1.0.0.UPF"
+
+def test_multiple_exact_cutoff_sidecars_are_ambiguous(tmp_path: Path) -> None:
+    """Reject conflicting provider records instead of choosing by filename order."""
+    upf = tmp_path / "Si.upf"
+    upf.write_text(make_upf())
+    digest = hashlib.md5(upf.read_bytes()).hexdigest()
+    (tmp_path / "Si.djrepo").write_text(
+        json.dumps(
+            {
+                "md5_upf": digest,
+                "xc": "PBEsol",
+                "hints": {
+                    "low": {"ecut": 10},
+                    "normal": {"ecut": 15},
+                    "high": {"ecut": 20},
+                },
+            }
+        )
+    )
+    (tmp_path / "sssp.json").write_text(
+        json.dumps(
+            {
+                "Si": {
+                    "filename": "Si.upf",
+                    "md5": digest,
+                    "functional": "PBEsol",
+                    "cutoff_wfc": 35,
+                    "cutoff_rho": 140,
+                }
+            }
+        )
+    )
+
+    with pytest.raises(AmbiguousCutoffMetadata, match="multiple cutoff records"):
+        load_pseudo_metadata(tmp_path)
+
+
+def test_unrelated_json_does_not_supply_cutoffs(tmp_path: Path) -> None:
+    """Ignore arbitrary JSON whose schema does not identify the exact UPF."""
+    (tmp_path / "Si.upf").write_text(make_upf())
+    (tmp_path / "wrong.json").write_text(
+        json.dumps({"Si": {"filename": "Other.upf", "cutoff_wfc": 1}})
+    )
+
+    metadata = load_pseudo_metadata(tmp_path)[0]
+
+    assert metadata.cutoffs is None

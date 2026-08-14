@@ -5,7 +5,7 @@ from goldilocks_core import (
     PresetRequest,
     run_core_job,
 )
-from goldilocks_core.contracts import PseudoMetadata
+from goldilocks_core.contracts import PseudoCutoffs, PseudoMetadata
 
 
 def _make_si_structure() -> Structure:
@@ -21,12 +21,17 @@ def _make_si_metadata() -> PseudoMetadata:
         filepath="/pseudo/Si.UPF",
         filename="Si.UPF",
         header_format="attr",
-        library="SSSP",
+        provider="sssp",
+        accuracy="efficiency",
         element="Si",
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        sssp_recommended_cutoff={"ecutwfc_ry": 30, "ecutrho_ry": 120},
+        cutoffs=PseudoCutoffs(
+            ecutwfc_ry=30,
+            ecutrho_ry=120,
+        ),
+        source_identifier="synthetic/Si.UPF",
     )
 
 
@@ -91,6 +96,7 @@ def test_core_result_serializes_to_manifest_style_dict() -> None:
         PresetRequest(
             structure=structure,
             hints=CalculationHints(k_grid=(8, 8, 8)),
+            pseudo_metadata=(),
         )
     )
     manifest = result.to_dict()

@@ -20,6 +20,7 @@ from goldilocks_core.contracts import (
     CoreRecords,
     CoreResult,
     ParameterAdvice,
+    PseudoCutoffs,
     PseudoMetadata,
     StructureAnalysisRecord,
     StructureFeatureVector,
@@ -42,12 +43,17 @@ def make_metadata() -> PseudoMetadata:
         filepath="/pseudo/Si.UPF",
         filename="Si.UPF",
         header_format="attr",
-        library="SSSP",
+        provider="sssp",
+        accuracy="efficiency",
         element="Si",
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        sssp_recommended_cutoff={"ecutwfc_ry": 35, "ecutrho_ry": 140},
+        cutoffs=PseudoCutoffs(
+            ecutwfc_ry=35,
+            ecutrho_ry=140,
+        ),
+        source_identifier="synthetic/Si.UPF",
     )
 
 

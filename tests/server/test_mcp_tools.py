@@ -66,6 +66,31 @@ def test_mcp_rejects_unknown_root_arguments(test_service, request_body) -> None:
         )
 
 
+def test_mcp_pseudo_table_mismatch_maps_to_tool_error(
+    test_service, request_body
+) -> None:
+    """Surface an incompatible table as a structured MCP tool error."""
+    server = create_server(test_service)
+    body = {
+        name: value for name, value in request_body.items() if name != "pseudo_metadata"
+    }
+    body["pseudo_table"] = "sssp-pbe-precision-sr"
+
+    with pytest.raises(ToolError, match="functional"):
+        asyncio.run(server.call_tool("recommend", body))
+
+
+def test_mcp_missing_asset_maps_to_tool_error(test_service, request_body) -> None:
+    """Surface a missing installed asset as a structured MCP tool error."""
+    server = create_server(test_service)
+    body = {
+        name: value for name, value in request_body.items() if name != "pseudo_metadata"
+    }
+
+    with pytest.raises(ToolError, match="is not installed"):
+        asyncio.run(server.call_tool("recommend", body))
+
+
 def test_mcp_generate_returns_core_result_and_bundle(
     test_service, request_body, tmp_path
 ) -> None:

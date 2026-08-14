@@ -9,14 +9,6 @@ from goldilocks_core.examples import structure
 from goldilocks_core.runtime import CoreService
 
 
-@pytest.fixture(autouse=True)
-def installed_pseudos(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep transport tests independent of the user asset store."""
-    monkeypatch.setattr(
-        "goldilocks_core.server.request.load_installed_pseudo_metadata", tuple
-    )
-
-
 @pytest.fixture
 def sample_structure_path() -> str:
     """Return the bundled silicon structure path."""
@@ -36,18 +28,18 @@ def pseudo_metadata() -> dict[str, object]:
         "filepath": "/pseudo/Si.UPF",
         "filename": "Si.UPF",
         "header_format": "attr",
-        "library": "SSSP",
-        "source_set": "efficiency",
+        "provider": "sssp",
+        "accuracy": "efficiency",
         "element": "Si",
         "pseudo_type": "NC",
         "functional": "PBEsol",
         "relativistic": "scalar",
         "z_valence": 4.0,
-        "is_sssp": True,
-        "sssp_recommended_cutoff": {
+        "cutoffs": {
             "ecutwfc_ry": 30.0,
             "ecutrho_ry": 120.0,
         },
+        "source_identifier": "synthetic/Si.UPF",
     }
 
 

@@ -111,8 +111,7 @@ Before ending, glance at the board. A session that only adds issues and never su
 
 ```bash
 # how many open issues have no milestone?
-gh issue list --repo stfc/goldilocks-core --state open --limit 200 \
-  --json number,milestone --jq '[.[] | select(.milestone == null)] | length'
+gh issue list --repo stfc/goldilocks-core --state open --limit 200 --json number,milestone --jq '[.[] | select(.milestone == null)] | length'
 ```
 
 If the count is non-zero, or the board has accumulated stale/superseded/duplicate/decision-only issues, suggest running `triage` before the next session starts.

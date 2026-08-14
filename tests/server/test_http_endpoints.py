@@ -139,6 +139,67 @@ def test_unknown_task_maps_to_422_with_message(test_service, request_body) -> No
     assert "No Core task registered" in response.json()["error"]["message"]
 
 
+def test_asset_corrupt_maps_to_424(test_service, request_body, monkeypatch) -> None:
+    """Expose a corrupt installed asset as a deployment integrity error."""
+    from goldilocks_core.assets import AssetCorrupt
+
+    def raise_corrupt(service, request):
+        del service, request
+        raise AssetCorrupt("installed pseudopotential manifest is invalid")
+
+    monkeypatch.setattr(type(test_service), "run_preset", raise_corrupt)
+
+    with TestClient(create_app(test_service)) as client:
+        response = client.post("/recommend", json=request_body)
+
+    assert response.status_code == 424
+    assert response.json()["error"]["kind"] == "asset_corrupt"
+    assert "manifest is invalid" in response.json()["error"]["message"]
+
+
+def test_asset_not_installed_maps_to_424(
+    test_service, request_body, tmp_path, monkeypatch
+) -> None:
+    """Expose a missing runtime asset as a structured dependency error."""
+    from goldilocks_core.assets import AssetNotInstalled, AssetReference
+
+    reference = AssetReference("pseudopotentials/pseudodojo", "0.4")
+
+    def raise_missing(service, request):
+        del service, request
+        raise AssetNotInstalled(reference, tmp_path / "assets")
+
+    monkeypatch.setattr(type(test_service), "run_preset", raise_missing)
+
+    with TestClient(create_app(test_service)) as client:
+        response = client.post("/recommend", json=request_body)
+
+    assert response.status_code == 424
+    assert response.json()["error"]["kind"] == "asset_not_installed"
+    assert response.json()["error"]["asset_id"] == "pseudopotentials/pseudodojo"
+    assert response.json()["error"]["version"] == "0.4"
+
+
+def test_pseudo_table_mismatch_maps_to_422(
+    test_service, request_body, monkeypatch
+) -> None:
+    """Expose a table that cannot satisfy the request as invalid input."""
+    from goldilocks_core.pseudo.source import PseudoTableMismatch
+
+    def raise_mismatch(service, request):
+        del service, request
+        raise PseudoTableMismatch("table cannot satisfy the request")
+
+    monkeypatch.setattr(type(test_service), "run_preset", raise_mismatch)
+
+    with TestClient(create_app(test_service)) as client:
+        response = client.post("/recommend", json=request_body)
+
+    assert response.status_code == 422
+    assert response.json()["error"]["kind"] == "pseudo_table_mismatch"
+    assert "cannot satisfy" in response.json()["error"]["message"]
+
+
 def test_unexpected_value_error_remains_a_500(
     test_service, request_body, monkeypatch
 ) -> None:

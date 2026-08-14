@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gc
+import hashlib
 import json
 import weakref
 from dataclasses import dataclass
@@ -16,16 +17,21 @@ from goldilocks_core import (
     QueryRequest,
     TaskDispatcher,
 )
+from goldilocks_core.assets import AssetFile, AssetSpec, AssetStore
 from goldilocks_core.contracts import (
     CalculationIntent,
     CoreResult,
     KPointSelection,
     ParameterAdvice,
     Provenance,
+    PseudoCutoffs,
     PseudoMetadata,
     SelectionRecord,
     StructureAnalysisRecord,
 )
+from goldilocks_core.pseudo.installed import write_table_manifest
+from goldilocks_core.pseudo.registry import PseudoTable
+from goldilocks_core.pseudo.source import PseudoTableMismatch
 from goldilocks_core.runtime import (
     Preset,
     StageSpec,
@@ -45,13 +51,76 @@ def make_metadata() -> PseudoMetadata:
         filepath="/pseudo/Si.UPF",
         filename="Si.UPF",
         header_format="attr",
-        library="SSSP",
+        provider="sssp",
+        accuracy="efficiency",
         element="Si",
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        sssp_recommended_cutoff={"ecutwfc_ry": 35, "ecutrho_ry": 140},
+        cutoffs=PseudoCutoffs(
+            ecutwfc_ry=35,
+            ecutrho_ry=140,
+        ),
+        source_identifier="synthetic/Si.UPF",
     )
+
+
+def installed_pseudo_table(tmp_path) -> tuple[AssetStore, PseudoTable]:
+    """Install one normalized table for runtime source-resolution tests."""
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"source")
+    spec = AssetSpec(
+        "sssp-fixture",
+        "1",
+        (AssetFile("source", "source.bin", source.as_uri()),),
+    )
+    table = PseudoTable(
+        id=spec.id,
+        provider="sssp",
+        upstream_table="fixture",
+        version=spec.version,
+        functional="PBEsol",
+        relativistic="scalar",
+        accuracy="efficiency",
+        licence="fixture licence",
+        citation="fixture citation",
+        elements=("Si",),
+        asset=spec,
+    )
+
+    def prepare(sources, destination):
+        del sources
+        pseudos = destination / "pseudos"
+        pseudos.mkdir()
+        upf = pseudos / "Si.upf"
+        payload = (
+            '<UPF><PP_HEADER element="Si" pseudo_type="NC" '
+            'functional="PBEsol" relativistic="scalar" '
+            'z_valence="4.0"/></UPF>'
+        )
+        upf.write_text(payload)
+        write_table_manifest(
+            destination,
+            table,
+            [
+                {
+                    "element": "Si",
+                    "path": "pseudos/Si.upf",
+                    "md5": hashlib.md5(payload.encode()).hexdigest(),
+                    "header_format": "attr",
+                    "pseudo_type": "NC",
+                    "z_valence": 4.0,
+                    "ecutwfc_ry": 35.0,
+                    "ecutrho_ry": 140.0,
+                    "source_identifier": "fixture/Si.upf",
+                    "frozen_4f_core": False,
+                }
+            ],
+        )
+
+    store = AssetStore(tmp_path / "store")
+    store.install(spec, prepare)
+    return store, table
 
 
 def make_request(*, mode: str = "recommend") -> PresetRequest:
@@ -66,14 +135,19 @@ def make_request(*, mode: str = "recommend") -> PresetRequest:
 
 def make_query_request(outputs, **kw) -> QueryRequest:
     """Build a query request with explicit outputs and the same defaults."""
-    return QueryRequest(
+    request = QueryRequest(
         structure=kw.pop("structure", make_structure()),
         outputs=outputs,
         intent=kw.pop("intent", CalculationIntent()),
         hints=kw.pop("hints", CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC")),
         pseudo_metadata=kw.pop("pseudo_metadata", (make_metadata(),)),
+        pseudo_root=kw.pop("pseudo_root", None),
+        pseudo_table=kw.pop("pseudo_table", None),
         kmesh_model=kw.pop("kmesh_model", None),
     )
+    if kw:
+        raise TypeError(f"unsupported test request fields: {sorted(kw)}")
+    return request
 
 
 class TrackingBackend:
@@ -213,6 +287,86 @@ def test_select_only_compute_does_not_invoke_kmesh(monkeypatch) -> None:
 
     assert isinstance(records[SelectionRecord], SelectionRecord)
     assert backend.calls == 0
+
+
+def test_analysis_query_does_not_resolve_pseudopotential_source(tmp_path) -> None:
+    """An analysis-only query never reads the pseudo registry or asset store."""
+    request = make_query_request(
+        (StructureAnalysisRecord,),
+        pseudo_metadata=None,
+        pseudo_table="not-a-real-table",
+    )
+
+    with CoreRuntime(asset_store=AssetStore(tmp_path / "empty")) as runtime:
+        records = TaskDispatcher(runtime).compute(request)
+
+    assert records[StructureAnalysisRecord].reduced_formula == "Si"
+
+
+def test_explicit_metadata_selection_does_not_read_registry(
+    monkeypatch,
+) -> None:
+    """The explicit source adapter keeps Select independent of registries."""
+    from goldilocks_core.pseudo import source
+
+    monkeypatch.setattr(
+        source,
+        "load_tables",
+        lambda path: pytest.fail("explicit metadata must not read the registry"),
+    )
+
+    with CoreRuntime() as runtime:
+        records = TaskDispatcher(runtime).compute(
+            make_query_request((SelectionRecord,))
+        )
+
+    assert records[SelectionRecord].pseudopotentials[0].filename == "Si.UPF"
+
+
+def test_runtime_resolves_one_explicit_installed_table(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """Resolve the requested table ID and its normalized installed manifest."""
+    from goldilocks_core.pseudo import source
+
+    store, table = installed_pseudo_table(tmp_path)
+    monkeypatch.setattr(source, "load_tables", lambda path: {table.id: table})
+    request = PresetRequest(
+        structure=make_structure(),
+        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+        pseudo_table=table.id,
+    )
+
+    with CoreRuntime(asset_store=store) as runtime:
+        result = TaskDispatcher(runtime).recommend(request)
+
+    selected = result.selection.pseudopotentials[0]
+    assert selected.filename == "Si.upf"
+    assert selected.provenance.data_source == table.id
+
+
+def test_explicit_table_must_satisfy_scientific_requirements(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """Reject an exact installed table rather than weakening the request."""
+    from goldilocks_core.pseudo import source
+
+    store, table = installed_pseudo_table(tmp_path)
+    monkeypatch.setattr(source, "load_tables", lambda path: {table.id: table})
+    request = PresetRequest(
+        structure=make_structure(),
+        intent=CalculationIntent(functional="PBE"),
+        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+        pseudo_table=table.id,
+    )
+
+    with (
+        CoreRuntime(asset_store=store) as runtime,
+        pytest.raises(PseudoTableMismatch, match="functional is PBEsol"),
+    ):
+        TaskDispatcher(runtime).recommend(request)
 
 
 def test_reset_close_and_context_manager_delegate_to_backend(monkeypatch) -> None:

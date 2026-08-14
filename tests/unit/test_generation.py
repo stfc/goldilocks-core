@@ -12,14 +12,15 @@ from goldilocks_core.contracts import (
     KPointSelection,
     ParameterAdvice,
     Provenance,
+    PseudoCutoffs,
     PseudoMetadata,
     SmearingType,
     VdwMethod,
 )
-from goldilocks_core.generation import generate_inputs
+from goldilocks_core.generation import GenerationError, generate_inputs
 from goldilocks_core.generation.qe.scf import _QE_SMEARING, _QE_VDW_CORR
 from goldilocks_core.kmesh import resolve_kpoints
-from goldilocks_core.selection import select_parameters
+from goldilocks_core.selection import select_pseudopotentials
 
 
 def make_structure() -> Structure:
@@ -47,12 +48,17 @@ def make_metadata() -> PseudoMetadata:
         filepath="/pseudo/Si.UPF",
         filename="Si.UPF",
         header_format="attr",
-        library="SSSP",
+        provider="sssp",
+        accuracy="efficiency",
         element="Si",
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        sssp_recommended_cutoff={"ecutwfc_ry": 35, "ecutrho_ry": 140},
+        cutoffs=PseudoCutoffs(
+            ecutwfc_ry=35,
+            ecutrho_ry=140,
+        ),
+        source_identifier="synthetic/Si.UPF",
     )
 
 
@@ -75,7 +81,9 @@ def select_from_advice(
 ):
     """Resolve k-points through Kmesh and run Select; return (selection, k_points)."""
     k_points = resolve_kpoints(structure, hints.kmesh, _stub_backend)
-    selection = select_parameters(structure, advice, metadata_list=metadata_list)
+    selection = select_pseudopotentials(
+        structure, advice.pseudopotential_requirements, metadata_list
+    )
     return selection, k_points
 
 
@@ -121,8 +129,31 @@ def test_generate_inputs_writes_qe_values_from_advice_and_selection() -> None:
     assert "3  3  2  0  0  0" in content
 
 
-@pytest.mark.parametrize("shift", [(1, 0, 0), (0, 1, 0), (0, 0, 1)])
-def test_generate_inputs_writes_each_k_points_component_in_order(shift) -> None:
+def test_generate_inputs_rejects_selected_functional_disagreement() -> None:
+    """Generation cannot render a selection from another XC functional."""
+    structure = make_structure()
+    hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
+    advice = advise_parameters(analyze_structure(structure), hints=hints)
+    selection, k_points = select_from_advice(
+        structure,
+        advice,
+        hints=hints,
+        metadata_list=[make_metadata()],
+    )
+    selected = replace(selection.pseudopotentials[0], functional="PBE")
+    mismatched = replace(selection, pseudopotentials=(selected,))
+
+    with pytest.raises(GenerationError, match="functional mismatch for Si"):
+        generate_inputs(
+            structure,
+            advice_context(),
+            advice,
+            mismatched,
+            k_points,
+        )
+
+
+def test_generate_inputs_writes_each_k_points_component_in_order() -> None:
     """Non-uniform K_POINTS grids and shifts render each component in position."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
@@ -135,7 +166,7 @@ def test_generate_inputs_writes_each_k_points_component_in_order(shift) -> None:
     )
     k_points = KPointSelection(
         grid=(2, 3, 4),
-        shift=shift,
+        shift=(1, 2, 3),
         mesh_type="monkhorst-pack",
         provenance=Provenance(source="user_hint", reason="distinct components"),
     )
@@ -148,14 +179,13 @@ def test_generate_inputs_writes_each_k_points_component_in_order(shift) -> None:
         k_points=k_points,
     )
 
-    assert f"  2  3  4  {shift[0]}  {shift[1]}  {shift[2]}" in files[0].content
+    assert "  2  3  4  1  2  3" in files[0].content
 
 
 def test_generate_inputs_uses_noncollinear_soc_without_nspin() -> None:
     """Write QE SOC flags without collinear nspin syntax."""
     structure = make_structure()
-    metadata = make_metadata()
-    metadata.relativistic = "full"
+    metadata = replace(make_metadata(), relativistic="full")
     hints = CalculationHints(
         k_grid=(3, 3, 3),
         pseudo_type="NC",
@@ -615,7 +645,9 @@ def test_generate_inputs_rejects_incomplete_pseudopotential_selection() -> None:
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
-    selection = select_parameters(structure, advice, metadata_list=[])
+    selection = select_pseudopotentials(
+        structure, advice.pseudopotential_requirements, ()
+    )
     k_points = KPointSelection(
         grid=(2, 2, 2),
         shift=(0, 0, 0),

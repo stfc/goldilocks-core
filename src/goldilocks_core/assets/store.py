@@ -8,13 +8,14 @@ import json
 import os
 import shutil
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Protocol
 
 from goldilocks_core.assets.download import download
 from goldilocks_core.assets.records import (
+    AssetPreparer,
+    AssetReference,
     AssetSpec,
     InstalledAsset,
     InstalledFile,
@@ -22,20 +23,29 @@ from goldilocks_core.assets.records import (
 
 ASSET_ROOT_ENV = "GOLDILOCKS_ASSET_ROOT"
 _MANIFEST = "manifest.json"
+_MANIFEST_SCHEMA_VERSION = 1
 
 
 class AssetNotInstalled(FileNotFoundError):
-    """The requested asset is absent or incomplete."""
+    """One exact runtime asset is absent from a configured store."""
+
+    def __init__(
+        self,
+        reference: AssetReference,
+        root: Path,
+        *,
+        reason: str = "is not installed",
+    ) -> None:
+        self.reference = reference
+        self.root = root
+        super().__init__(
+            f"runtime asset {reference.id}@{reference.version} {reason} in {root}; "
+            f"run 'goldilocks assets install {reference.id}'"
+        )
 
 
 class AssetCorrupt(ValueError):
-    """An installed asset does not match its manifest."""
-
-
-class AssetPreparer(Protocol):
-    """Convert verified source files into a normalized installed asset."""
-
-    def __call__(self, sources: Mapping[str, Path], destination: Path) -> None: ...
+    """An installed asset does not match its strict manifest."""
 
 
 class AssetStore:
@@ -56,8 +66,14 @@ class AssetStore:
                 return self.verify(spec.id, spec.version)
             except (AssetNotInstalled, AssetCorrupt):
                 pass
+
+            asset_directory = self.root / spec.id
+            if asset_directory.is_symlink() or (
+                asset_directory.exists() and not asset_directory.is_dir()
+            ):
+                asset_directory.unlink()
+            asset_directory.mkdir(parents=True, exist_ok=True)
             destination = self._asset_path(spec.id, spec.version)
-            destination.parent.mkdir(parents=True, exist_ok=True)
             staging_root = Path(
                 tempfile.mkdtemp(prefix=f".{spec.id}-{spec.version}-", dir=self.root)
             )
@@ -76,8 +92,7 @@ class AssetStore:
                 if not files:
                     raise ValueError("asset preparation produced no files")
                 _write_manifest(installed_dir, spec.id, spec.version, files)
-                if destination.exists():
-                    shutil.rmtree(destination)
+                _remove_corrupt_destination(destination)
                 os.replace(installed_dir, destination)
             finally:
                 shutil.rmtree(staging_root, ignore_errors=True)
@@ -85,47 +100,57 @@ class AssetStore:
 
     def resolve(self, asset_id: str, version: str) -> InstalledAsset:
         """Return one installed asset after verifying its manifest."""
-        try:
-            return self.verify(asset_id, version)
-        except AssetNotInstalled as error:
-            raise AssetNotInstalled(
-                f"runtime asset {asset_id}@{version} is not installed in {self.root}; "
-                f"run 'goldilocks assets install {asset_id}'"
-            ) from error
+        return self.verify(asset_id, version)
 
     def verify(self, asset_id: str, version: str) -> InstalledAsset:
-        """Verify every installed file against the immutable manifest."""
+        """Strictly parse the manifest and verify every installed path."""
+        reference = AssetReference(asset_id, version)
         root = self._asset_path(asset_id, version)
-        manifest_path = root / _MANIFEST
-        if not manifest_path.is_file():
-            raise AssetNotInstalled(
-                f"runtime asset {asset_id}@{version} is not installed"
-            )
-        try:
-            data = json.loads(manifest_path.read_text())
-            if data["id"] != asset_id or data["version"] != version:
-                raise AssetCorrupt(
-                    "installed manifest identity does not match its path"
-                )
-            files = tuple(InstalledFile(**entry) for entry in data["files"])
-        except (KeyError, TypeError, json.JSONDecodeError) as error:
+        if root.is_symlink() or (root.exists() and not root.is_dir()):
             raise AssetCorrupt(
-                f"invalid installed manifest: {manifest_path}"
-            ) from error
+                f"asset destination is not a directory for {asset_id}@{version}: {root}"
+            )
+        if not root.exists():
+            raise AssetNotInstalled(reference, self.root)
+
+        manifest_path = root / _MANIFEST
+        if manifest_path.is_symlink():
+            raise AssetCorrupt(f"installed manifest is a symlink: {manifest_path}")
+        if not manifest_path.exists():
+            raise AssetNotInstalled(
+                reference, self.root, reason="has no complete manifest"
+            )
+        if not manifest_path.is_file():
+            raise AssetCorrupt(
+                f"installed manifest is not a regular file: {manifest_path}"
+            )
+
+        files = _read_manifest(manifest_path, reference)
         expected_paths = {file.path for file in files}
-        actual_paths = {
-            path.relative_to(root).as_posix()
-            for path in root.rglob("*")
-            if path.is_file() and path.name != _MANIFEST
-        }
+        actual_paths: set[str] = set()
+        for path in root.rglob("*"):
+            relative = path.relative_to(root).as_posix()
+            if path.is_symlink():
+                raise AssetCorrupt(f"installed asset contains a symlink: {path}")
+            if path.is_file():
+                if relative != _MANIFEST:
+                    actual_paths.add(relative)
+            elif not path.is_dir():
+                raise AssetCorrupt(
+                    f"installed asset contains a non-regular path: {path}"
+                )
         if actual_paths != expected_paths:
             raise AssetCorrupt(
                 f"installed file set differs from manifest for {asset_id}@{version}"
             )
+
         for file in files:
             path = root / file.path
-            if path.stat().st_size != file.size or _sha256(path) != file.sha256:
-                raise AssetCorrupt(f"installed file changed: {path}")
+            try:
+                if path.stat().st_size != file.size or _sha256(path) != file.sha256:
+                    raise AssetCorrupt(f"installed file changed: {path}")
+            except OSError as error:
+                raise AssetCorrupt(f"cannot verify installed file: {path}") from error
         return InstalledAsset(asset_id, version, root, files)
 
     def status(self, asset_id: str, version: str) -> str:
@@ -139,13 +164,19 @@ class AssetStore:
         return "installed"
 
     def _asset_path(self, asset_id: str, version: str) -> Path:
-        for value, label in ((asset_id, "asset id"), (version, "asset version")):
-            if not value or value in {".", ".."} or "/" in value or "\\" in value:
-                raise ValueError(f"{label} must be one path component: {value!r}")
-        return self.root / asset_id / version
+        reference = AssetReference(asset_id, version)
+        asset_directory = self.root / reference.id
+        if asset_directory.is_symlink() or (
+            asset_directory.exists() and not asset_directory.is_dir()
+        ):
+            raise AssetCorrupt(
+                f"asset id destination is not a directory: {asset_directory}"
+            )
+        return asset_directory / reference.version
 
     @contextmanager
-    def _lock(self, asset_id: str, version: str):
+    def _lock(self, asset_id: str, version: str) -> Iterator[None]:
+        AssetReference(asset_id, version)
         locks = self.root / ".locks"
         locks.mkdir(parents=True, exist_ok=True)
         lock_path = locks / f"{asset_id}-{version}.lock"
@@ -182,15 +213,22 @@ def _copy_sources(spec: AssetSpec) -> AssetPreparer:
 
 
 def _inventory(root: Path) -> tuple[InstalledFile, ...]:
-    return tuple(
-        InstalledFile(
-            path=path.relative_to(root).as_posix(),
-            sha256=_sha256(path),
-            size=path.stat().st_size,
-        )
-        for path in sorted(root.rglob("*"))
-        if path.is_file() and path.name != _MANIFEST
-    )
+    files: list[InstalledFile] = []
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            raise ValueError(f"asset preparation produced a symlink: {path}")
+        if path.is_file():
+            if path.name != _MANIFEST:
+                files.append(
+                    InstalledFile(
+                        path=path.relative_to(root).as_posix(),
+                        sha256=_sha256(path),
+                        size=path.stat().st_size,
+                    )
+                )
+        elif not path.is_dir():
+            raise ValueError(f"asset preparation produced a non-regular path: {path}")
+    return tuple(files)
 
 
 def _write_manifest(
@@ -200,7 +238,7 @@ def _write_manifest(
     files: tuple[InstalledFile, ...],
 ) -> None:
     data = {
-        "schema_version": 1,
+        "schema_version": _MANIFEST_SCHEMA_VERSION,
         "id": asset_id,
         "version": version,
         "files": [
@@ -208,7 +246,61 @@ def _write_manifest(
             for file in files
         ],
     }
-    (root / _MANIFEST).write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    (root / _MANIFEST).write_text(
+        json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
+def _read_manifest(
+    path: Path,
+    reference: AssetReference,
+) -> tuple[InstalledFile, ...]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or set(data) != {
+            "schema_version",
+            "id",
+            "version",
+            "files",
+        }:
+            raise ValueError("manifest fields are invalid")
+        if (
+            isinstance(data["schema_version"], bool)
+            or data["schema_version"] != _MANIFEST_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                f"unsupported manifest schema_version {data['schema_version']!r}"
+            )
+        if data["id"] != reference.id or data["version"] != reference.version:
+            raise ValueError("installed manifest identity does not match its path")
+        raw_files = data["files"]
+        if not isinstance(raw_files, list) or not raw_files:
+            raise ValueError("installed manifest file inventory must be non-empty")
+        files: list[InstalledFile] = []
+        for entry in raw_files:
+            if not isinstance(entry, dict) or set(entry) != {"path", "sha256", "size"}:
+                raise ValueError("installed manifest file entry is invalid")
+            files.append(InstalledFile(**entry))
+        paths = [file.path for file in files]
+        if len(paths) != len(set(paths)):
+            raise ValueError("installed manifest paths must be unique")
+        return tuple(files)
+    except (
+        KeyError,
+        TypeError,
+        UnicodeError,
+        json.JSONDecodeError,
+        ValueError,
+    ) as error:
+        raise AssetCorrupt(f"invalid installed manifest: {path}: {error}") from error
+
+
+def _remove_corrupt_destination(path: Path) -> None:
+    """Remove one confined old destination after replacement staging succeeds."""
+    if path.is_symlink() or (path.exists() and not path.is_dir()):
+        path.unlink()
+    elif path.exists():
+        shutil.rmtree(path)
 
 
 def _sha256(path: Path) -> str:

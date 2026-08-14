@@ -30,7 +30,6 @@ from goldilocks_core.contracts import (
     KPointSelection,
     ParameterAdvice,
     PresetRequest,
-    PseudoMetadata,
     QueryRequest,
     SelectionRecord,
     StructureAnalysisRecord,
@@ -39,19 +38,19 @@ from goldilocks_core.contracts import (
 from goldilocks_core.generation.registry import generate_inputs
 from goldilocks_core.io.structures import load_structure
 from goldilocks_core.kmesh.resolve import resolve_kpoints
+from goldilocks_core.pseudo.source import PseudoSourceResolver, source_for_request
 from goldilocks_core.runtime.core import CoreRuntime
 from goldilocks_core.runtime.graph import Preset, StageSpec, TaskSpec
 from goldilocks_core.runtime.task import TaskHandler
-from goldilocks_core.selection import select_parameters
+from goldilocks_core.selection import select_pseudopotentials
 
 
 @dataclass(frozen=True, slots=True)
 class ScfContext:
     """Request data and runtime services for the SCF task graph.
 
-    The services (``kmesh_advisor``, ``metallicity_classifier``) are required;
-    the runtime always supplies them. The operator request data (``intent``,
-    ``hints``, ``pseudo_metadata``) carries task defaults.
+    Model services and the pseudopotential source resolver are runtime-owned
+    or request-scoped. Source resolution remains lazy until Select runs.
     """
 
     structure_input: StructureInput
@@ -59,9 +58,9 @@ class ScfContext:
     metallicity_classifier: Callable[
         [Structure], tuple[ElectronicCharacter, str, float | None]
     ]
+    pseudo_source: PseudoSourceResolver
     intent: CalculationIntent = field(default_factory=CalculationIntent)
     hints: CalculationHints = field(default_factory=CalculationHints)
-    pseudo_metadata: tuple[PseudoMetadata, ...] = ()
 
 
 SCF_TASK = TaskSpec(
@@ -111,12 +110,17 @@ SCF_TASK = TaskSpec(
         StageSpec(
             output=SelectionRecord,
             inputs=(Structure, ParameterAdvice),
-            call=lambda structure, advice, *, ctx: select_parameters(
-                structure, advice, ctx.pseudo_metadata
+            call=lambda structure, advice, *, ctx: select_pseudopotentials(
+                structure,
+                advice.pseudopotential_requirements,
+                ctx.pseudo_source(structure, advice.pseudopotential_requirements),
             ),
             id="select_pseudopotentials",
             name="Select pseudopotentials",
-            description="Select a concrete pseudopotential for each element.",
+            description=(
+                "Resolve the configured source, then select a concrete "
+                "pseudopotential for each element."
+            ),
         ),
         StageSpec(
             output=GeneratedFiles,
@@ -164,10 +168,14 @@ def build_scf_context(
     return ScfContext(
         structure_input=request.structure,
         kmesh_advisor=backend,
+        pseudo_source=source_for_request(
+            request,
+            store=runtime.asset_store,
+            registry_path=runtime.pseudo_registry_path,
+        ),
         metallicity_classifier=runtime.metallicity,
         intent=request.intent,
         hints=request.hints,
-        pseudo_metadata=request.pseudo_metadata,
     )
 
 
@@ -204,7 +212,7 @@ def _advice_warnings(advice: ParameterAdvice) -> tuple[str, ...]:
         advice.smearing.provenance.warnings,
         advice.magnetism.provenance.warnings,
         advice.spin_orbit.provenance.warnings,
-        advice.pseudopotentials.provenance.warnings,
+        advice.pseudopotential_requirements.provenance.warnings,
         advice.convergence.provenance.warnings,
         advice.vdw.provenance.warnings,
     )

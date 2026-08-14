@@ -94,12 +94,28 @@ def _render_qe_scf(
     elements = tuple(
         sorted(element.symbol for element in structure.composition.elements)
     )
+    if advice.pseudopotential_requirements.functional != intent.functional:
+        raise GenerationError(
+            "Pseudopotential requirement functional mismatch: calculation "
+            f"requires {intent.functional}, advice requires "
+            f"{advice.pseudopotential_requirements.functional}"
+        )
     pseudo_by_element = {
         pseudo.element: pseudo for pseudo in selection.pseudopotentials
     }
+    if len(pseudo_by_element) != len(selection.pseudopotentials):
+        raise GenerationError("Pseudopotential selection contains duplicate elements")
+    missing_elements = sorted(set(elements) - set(pseudo_by_element))
+    extra_elements = sorted(set(pseudo_by_element) - set(elements))
+    if missing_elements or extra_elements:
+        raise GenerationError(
+            "Pseudopotential selection coverage mismatch; "
+            f"missing: {', '.join(missing_elements) or 'none'}; "
+            f"extra: {', '.join(extra_elements) or 'none'}"
+        )
     selected_pseudos = tuple(pseudo_by_element[element] for element in elements)
 
-    expected_functional = advice.pseudopotentials.functional
+    expected_functional = intent.functional
     for pseudo in selected_pseudos:
         missing = [
             name

@@ -19,7 +19,8 @@ from goldilocks_core.contracts import (
 
 class DimensionalityClassificationError(Exception):
     """Raised when CrystalNN/Larsen fails on an ordered structure.
-    Disordered structures get a conservative "unknown" default instead."""
+    Disordered structures get a conservative "unknown" default instead.
+    The real fix is a goldilocks-side classifier (see #133)."""
 
     def __init__(self, structure: Structure, /) -> None:
         self.structure = structure

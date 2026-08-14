@@ -13,6 +13,9 @@ ProvenanceSource = Literal[
     "lookup",
     "fallback",
 ]
+"""``analysis``: derived from structure facts. ``user_hint``: operator-provided.
+``default``: package default when no analysis or hint applies. ``model``: ML
+prediction. ``lookup``: resolved from metadata. ``fallback``: no data available."""
 
 JsonDict = dict[str, Any]
 
@@ -51,8 +54,12 @@ JobMode = Literal["recommend", "generate"]
 Dimensionality = Literal["3d", "2d", "1d", "molecule", "unknown"]
 
 ElectronicCharacter = Literal["metal", "insulator", "likely_metal", "unknown"]
+"""``metal``/``insulator``: model-backed. ``likely_metal``: all elements metallic,
+not confirmed. ``unknown``: cannot determine from structure alone."""
 
 VdwMethod = Literal["d3", "d3bj", "ts", "mbd"]
+"""Code-agnostic labels mapped to code-specific keywords in Generate
+(e.g. ``d3bj`` → QE ``vdw_corr='grimme-d3'`` with ``dftd3_version=4``)."""
 
 _VALID_SMEARING_TYPES: frozenset[str] = frozenset(get_args(SmearingType))
 _VALID_VDW_METHODS: frozenset[str] = frozenset(get_args(VdwMethod))

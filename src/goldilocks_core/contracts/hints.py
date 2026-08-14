@@ -98,6 +98,7 @@ class CalculationIntent:
 @dataclass(frozen=True, slots=True)
 class CalculationHints:
     """Optional operator overrides. ``None`` means let Core decide.
+    Non-None records ``user_hint`` provenance. Partial overrides supported.
     Units: ``k_spacing`` in Å⁻¹ (VASP KSPACING),
     ``smearing_width_ry`` and ``conv_thr`` in Rydberg."""
 

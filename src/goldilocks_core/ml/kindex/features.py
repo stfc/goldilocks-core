@@ -100,6 +100,10 @@ def extract_l_features(structure: Structure) -> StructureFeatureVector:
 
 
 def extract_r_features(structure: Structure) -> StructureFeatureVector:
+    """Reciprocal-lattice features. ``G_tr``/``G_tr2``/``G_det``: trace,
+    trace of square, and determinant of the reciprocal metric tensor.
+    ``G_cond``: condition number. ``bmax_over_bmin``/``bmid_over_bmin``:
+    anisotropy ratios. ``recip_orthogonality``: sum of abs cosines."""
     rec = structure.lattice.reciprocal_lattice
 
     feature_names = [

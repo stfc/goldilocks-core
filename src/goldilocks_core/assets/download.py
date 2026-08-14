@@ -4,17 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import shutil
-import ssl
 from pathlib import Path
 from urllib.parse import urlparse
-from urllib.request import urlopen
 
-import certifi
+import requests
 
 from goldilocks_core.assets.records import AssetFile
 
 _CHUNK_SIZE = 1024 * 1024
-_TLS_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+_TIMEOUT_SECONDS = 300
 
 
 class ChecksumMismatch(ValueError):
@@ -28,15 +26,16 @@ def download(file: AssetFile, destination: Path) -> None:
     if parsed.scheme == "file":
         with Path(parsed.path).open("rb") as source, destination.open("xb") as target:
             shutil.copyfileobj(source, target, length=_CHUNK_SIZE)
-    elif parsed.scheme == "https":
+    else:
         with (
-            urlopen(file.url, context=_TLS_CONTEXT) as source,
+            requests.get(
+                file.url, stream=True, timeout=_TIMEOUT_SECONDS
+            ) as response,
             destination.open("xb") as target,
         ):
-            shutil.copyfileobj(source, target, length=_CHUNK_SIZE)
-    else:
-        with urlopen(file.url) as source, destination.open("xb") as target:
-            shutil.copyfileobj(source, target, length=_CHUNK_SIZE)
+            response.raise_for_status()
+            for chunk in response.iter_content(_CHUNK_SIZE):
+                target.write(chunk)
     verify_source(file, destination)
 
 

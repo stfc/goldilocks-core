@@ -889,13 +889,13 @@ name = "goldilocks-core"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "certifi" },
     { name = "dscribe" },
     { name = "joblib" },
     { name = "matminer" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "pymatgen" },
+    { name = "requests" },
     { name = "scikit-learn" },
     { name = "sklearn-quantile" },
     { name = "torch" },
@@ -922,7 +922,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "certifi", specifier = ">=2026.2.25" },
     { name = "dscribe", specifier = ">=2.1" },
     { name = "fastapi", marker = "extra == 'http'" },
     { name = "joblib", specifier = "==1.5.3" },
@@ -931,6 +930,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.4.4" },
     { name = "pandas", specifier = ">=2.0" },
     { name = "pymatgen", specifier = ">=2026.3.23" },
+    { name = "requests", specifier = ">=2.32" },
     { name = "scikit-learn", specifier = "==1.7.2" },
     { name = "sklearn-quantile", specifier = "==0.1.1" },
     { name = "torch", specifier = ">=2.13.0" },

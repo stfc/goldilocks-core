@@ -82,6 +82,7 @@ class GraphInfo:
 
 
 def describe_task(task: TaskGraph) -> GraphInfo:
+    """Serializes a TaskGraph to string-keyed IDs. Same input as execute()."""
     stages = tuple(
         StageInfo(
             id=stage.id,

@@ -152,3 +152,29 @@ pseudopotential libraries.
 Runner/AiiDA workflows, schedulers, auth, frontend state, and completed-output
 analysis are outside this package. HTTP and MCP are optional thin transports;
 they do not add queues, persistence, sessions, or pod management.
+
+
+## Engineering invariants
+
+These are load-bearing. Changing them without intent will break import
+boundaries, concurrency safety, or the task extension model.
+
+- The SCF handler registers lazily on first dispatch so importing
+  `runtime.dispatch` does not pull in stage implementations or their
+  `ml.*` dependencies. Explicit registration wins over the default.
+- `Service` serializes dispatch with a re-entrant lock so model lazy
+  init and inference never overlap across concurrent requests.
+- `run_core_job` and `query_records` reuse a caller-owned runtime if
+  given one (left open); they create and close an owned runtime per
+  call otherwise.
+- The runtime imports no task-specific code. New tasks bring their own
+  context and stage graph; they do not edit the generic executor.
+- Importing `goldilocks_core` never imports FastAPI or the MCP SDK.
+  The `[http]` and `[mcp]` extras are lazy boundaries.
+- `server/request.py` rejects unknown keys and bad types with
+  named-field `RequestError`. Stage `ValueError`s are not caught
+  there; they surface to the transport's error handler.
+- `DimensionalityClassificationError` is an `Exception`, not a
+  `ValueError`, so HTTP maps it explicitly to 422.
+- MCP maps only known stage errors to `ToolError`; internal defects
+  remain unhandled.

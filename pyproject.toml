@@ -11,13 +11,13 @@ license = "BSD-3-Clause"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
-    "certifi>=2026.2.25",
     "dscribe>=2.1",
     "joblib==1.5.3",
     "matminer>=0.10.1",
     "numpy>=2.4.4",
     "pandas>=2.0",
     "pymatgen>=2026.3.23",
+    "requests>=2.32",
     "scikit-learn==1.7.2",
     "sklearn-quantile==0.1.1",
     # The default k-points model (QRF + CGCNN metallicity) is a core capability,

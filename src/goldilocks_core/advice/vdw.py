@@ -15,6 +15,8 @@ def advise_vdw(
     analysis: StructureAnalysisRecord,
     hints: VdwHints,
 ) -> VdwAdvice:
+    """Low-dimensional structures default to D3BJ;
+    3D/unknown defaults to no correction. Operator hints always win."""
     if hints.use_vdw is not None:
         method = _resolve_vdw_method(hints) if hints.use_vdw else None
         return VdwAdvice(

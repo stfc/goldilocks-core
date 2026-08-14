@@ -16,6 +16,8 @@ def resolve_kpoints(
     hints: KmeshHints,
     backend: KMeshAdvisor,
 ) -> KPointSelection:
+    """``k_grid`` wins over ``k_spacing``; both bypass the model backend.
+    The model is only consulted when no hint is set."""
     if hints.k_grid is not None:
         warnings = (
             ("Both k_grid and k_spacing were provided; explicit grid wins.",)

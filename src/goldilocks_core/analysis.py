@@ -18,6 +18,9 @@ from goldilocks_core.contracts import (
 
 
 class DimensionalityClassificationError(Exception):
+    """Raised when CrystalNN/Larsen fails on an ordered structure.
+    Disordered structures get a conservative "unknown" default instead."""
+
     def __init__(self, structure: Structure, /) -> None:
         self.structure = structure
         super().__init__(
@@ -27,6 +30,9 @@ class DimensionalityClassificationError(Exception):
 
 
 class SymmetryAnalysisError(Exception):
+    """Raised when spglib cannot analyze a structure.
+    ``analyze_structure`` catches this and records a ``SymmetryUnavailable``."""
+
     def __init__(self, structure: Structure, /, *, reason: str = "") -> None:
         self.structure = structure
         self.reason = reason or "symmetry analysis failed"
@@ -42,6 +48,9 @@ _DIMENSIONALITY_BY_VALUE: dict[int, Dimensionality] = {
 
 
 def heuristic_metallicity(structure: Structure) -> ElectronicCharacter:
+    """Returns ``likely_metal`` when all elements are metallic,
+    ``unknown`` otherwise. Never returns ``metal`` or ``insulator``
+    — those require electronic-structure data."""
     periodic_elements = tuple(
         Element(symbol)
         for symbol in sorted(e.symbol for e in structure.composition.elements)

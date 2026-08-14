@@ -97,6 +97,10 @@ class CalculationIntent:
 
 @dataclass(frozen=True, slots=True)
 class CalculationHints:
+    """Optional operator overrides. ``None`` means let Core decide.
+    Units: ``k_spacing`` in Å⁻¹ (VASP KSPACING),
+    ``smearing_width_ry`` and ``conv_thr`` in Rydberg."""
+
     k_spacing: float | None = None
     k_grid: KPointGrid | None = None
     smearing_type: str | None = None

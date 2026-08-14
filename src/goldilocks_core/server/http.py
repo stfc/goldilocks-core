@@ -16,9 +16,11 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from goldilocks_core.analysis import DimensionalityClassificationError
+from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled
 from goldilocks_core.contracts import QueryRequest
 from goldilocks_core.generation import GenerationError
 from goldilocks_core.io.structures import StructureInputError
+from goldilocks_core.pseudo.source import PseudoTableMismatch
 from goldilocks_core.runtime import UnknownTaskError
 from goldilocks_core.runtime.service import CoreService
 from goldilocks_core.server.request import RequestError, from_dict
@@ -102,6 +104,54 @@ def create_app(service: CoreService | None = None) -> Any:
         return JSONResponse(
             status_code=422,
             content={"error": {"kind": "dimensionality_error", "message": str(error)}},
+        )
+
+    @app.exception_handler(AssetNotInstalled)
+    async def asset_not_installed_handler(
+        request: Request, error: AssetNotInstalled
+    ) -> JSONResponse:
+        del request
+        return JSONResponse(
+            status_code=424,
+            content={
+                "error": {
+                    "kind": "asset_not_installed",
+                    "message": str(error),
+                    "asset_id": error.reference.id,
+                    "version": error.reference.version,
+                    "root": str(error.root),
+                }
+            },
+        )
+
+    @app.exception_handler(AssetCorrupt)
+    async def asset_corrupt_handler(
+        request: Request, error: AssetCorrupt
+    ) -> JSONResponse:
+        del request
+        return JSONResponse(
+            status_code=424,
+            content={
+                "error": {
+                    "kind": "asset_corrupt",
+                    "message": str(error),
+                }
+            },
+        )
+
+    @app.exception_handler(PseudoTableMismatch)
+    async def pseudo_table_mismatch_handler(
+        request: Request, error: PseudoTableMismatch
+    ) -> JSONResponse:
+        del request
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": {
+                    "kind": "pseudo_table_mismatch",
+                    "message": str(error),
+                }
+            },
         )
 
     @app.exception_handler(FileNotFoundError)

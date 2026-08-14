@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import fields
-from pathlib import Path
 from typing import Any, get_args
 
 from pymatgen.core import Structure
@@ -30,10 +29,6 @@ from goldilocks_core.contracts import (
     QueryRequest,
     resolve_output_types,
 )
-from goldilocks_core.pseudo.pp_registry import (
-    load_installed_pseudo_metadata,
-    load_pseudo_metadata,
-)
 
 __all__ = ["RequestError", "from_dict"]
 
@@ -47,6 +42,7 @@ _ALLOWED_TOP_LEVEL = frozenset(
         "output_dir",
         "pseudo_metadata",
         "pseudo_root",
+        "pseudo_table",
         "kmesh_model",
     }
 )
@@ -57,7 +53,7 @@ _MODEL_FIELDS = frozenset(field.name for field in fields(ModelSpec))
 _MODEL_REQUIRED = _MODEL_FIELDS - {"revision"}
 _STRING_HINTS = {
     "smearing_type",
-    "pseudo_mode",
+    "pseudo_accuracy",
     "pseudo_type",
     "relativistic_mode",
     "vdw_method",
@@ -94,7 +90,7 @@ def from_dict(data: Mapping[str, Any]) -> PresetRequest | QueryRequest:
     structure = _parse_structure(data["structure"])
     intent = _parse_intent(data.get("intent"))
     hints = _parse_hints(data.get("hints"))
-    pseudo_metadata = _parse_pseudo_metadata(data)
+    pseudo_metadata, pseudo_root, pseudo_table = _parse_pseudo_source(data)
     kmesh_model = _parse_kmesh_model(data.get("kmesh_model"))
 
     if outputs is not None:
@@ -104,6 +100,8 @@ def from_dict(data: Mapping[str, Any]) -> PresetRequest | QueryRequest:
             intent=intent,
             hints=hints,
             pseudo_metadata=pseudo_metadata,
+            pseudo_root=pseudo_root,
+            pseudo_table=pseudo_table,
             kmesh_model=kmesh_model,
         )
     return PresetRequest(
@@ -112,6 +110,8 @@ def from_dict(data: Mapping[str, Any]) -> PresetRequest | QueryRequest:
         hints=hints,
         mode=mode,
         pseudo_metadata=pseudo_metadata,
+        pseudo_root=pseudo_root,
+        pseudo_table=pseudo_table,
         output_dir=output_dir,
         kmesh_model=kmesh_model,
     )
@@ -256,27 +256,39 @@ def _parse_output_dir(
     return value
 
 
-def _parse_pseudo_metadata(data: Mapping[str, Any]) -> tuple[PseudoMetadata, ...]:
-    if "pseudo_metadata" in data:
+def _parse_pseudo_source(
+    data: Mapping[str, Any],
+) -> tuple[tuple[PseudoMetadata, ...] | None, str | None, str | None]:
+    metadata: tuple[PseudoMetadata, ...] | None = None
+    if "pseudo_metadata" in data and data["pseudo_metadata"] is not None:
         value = data["pseudo_metadata"]
-        if value is None:
-            return ()
         if not _is_sequence(value):
             raise RequestError("Field 'pseudo_metadata' must be a list or null.")
-        return tuple(_parse_pseudo(item) for item in value)
-    if "pseudo_root" not in data:
-        return load_installed_pseudo_metadata()
-    root = data["pseudo_root"]
-    if root is None:
-        return ()
-    if not isinstance(root, str):
-        raise RequestError("Field 'pseudo_root' must be a path string or null.")
-    try:
-        return tuple(load_pseudo_metadata(Path(root)))
-    except (OSError, TypeError, ValueError) as error:
+        metadata = tuple(_parse_pseudo(item) for item in value)
+
+    root = data.get("pseudo_root")
+    if root is not None and (not isinstance(root, str) or not root.strip()):
         raise RequestError(
-            f"Could not load pseudo metadata from {root!r}: {error}"
-        ) from error
+            "Field 'pseudo_root' must be a non-empty path string or null."
+        )
+    table = data.get("pseudo_table")
+    if table is not None and (not isinstance(table, str) or not table.strip()):
+        raise RequestError("Field 'pseudo_table' must be a non-empty string or null.")
+    if (
+        sum(
+            (
+                metadata is not None,
+                root is not None,
+                table is not None,
+            )
+        )
+        > 1
+    ):
+        raise RequestError(
+            "Request accepts only one of 'pseudo_metadata', 'pseudo_root', "
+            "or 'pseudo_table'."
+        )
+    return metadata, root, table
 
 
 def _parse_pseudo(value: Any) -> PseudoMetadata:
@@ -285,9 +297,10 @@ def _parse_pseudo(value: Any) -> PseudoMetadata:
     _reject_unknown(value, _PSEUDO_FIELDS, "pseudo_metadata")
     string_fields = _PSEUDO_FIELDS - {
         "z_valence",
+        "cutoffs",
+        "frozen_4f_core",
         "pseudo_info",
-        "is_sssp",
-        "sssp_recommended_cutoff",
+        "warnings",
     }
     for name in string_fields:
         item = value.get(name)
@@ -302,17 +315,27 @@ def _parse_pseudo(value: Any) -> PseudoMetadata:
         raise RequestError(
             "Field 'pseudo_metadata.z_valence' must be a number or null."
         )
-    if "pseudo_info" in value and not isinstance(value["pseudo_info"], Mapping):
+    pseudo_info = value.get("pseudo_info", {})
+    if not isinstance(pseudo_info, Mapping):
         raise RequestError("Field 'pseudo_metadata.pseudo_info' must be an object.")
-    if "is_sssp" in value and not isinstance(value["is_sssp"], bool):
-        raise RequestError("Field 'pseudo_metadata.is_sssp' must be a boolean.")
-    cutoff = value.get("sssp_recommended_cutoff")
-    if cutoff is not None and not isinstance(cutoff, Mapping):
+    cutoffs = value.get("cutoffs")
+    if cutoffs is not None and not isinstance(cutoffs, Mapping):
+        raise RequestError("Field 'pseudo_metadata.cutoffs' must be an object or null.")
+    frozen_4f_core = value.get("frozen_4f_core", False)
+    if not isinstance(frozen_4f_core, bool):
+        raise RequestError("Field 'pseudo_metadata.frozen_4f_core' must be a boolean.")
+    warnings = value.get("warnings", ())
+    if not _is_sequence(warnings) or any(
+        not isinstance(warning, str) for warning in warnings
+    ):
         raise RequestError(
-            "Field 'pseudo_metadata.sssp_recommended_cutoff' must be an object or null."
+            "Field 'pseudo_metadata.warnings' must be a list of strings."
         )
+    normalized = dict(value)
+    normalized["pseudo_info"] = dict(pseudo_info)
+    normalized["warnings"] = tuple(warnings)
     try:
-        return PseudoMetadata(**value)
+        return PseudoMetadata(**normalized)
     except (TypeError, ValueError) as error:
         raise RequestError(str(error)) from error
 

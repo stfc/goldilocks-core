@@ -3,46 +3,37 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
 
-from goldilocks_core.assets import AssetPreparer, AssetSpec, AssetStore, InstalledAsset
+from goldilocks_core.assets import AssetInstallation, AssetStore, InstalledAsset
 from goldilocks_core.assets.profiles import profile
 from goldilocks_core.ml.model_registry import model_asset_specs
-from goldilocks_core.pseudo.import_pseudodojo import preparer as dojo_preparer
-from goldilocks_core.pseudo.import_sssp import preparer as sssp_preparer
-from goldilocks_core.pseudo.registry import load_tables
+from goldilocks_core.pseudo.install import table_installations
 
 
-@dataclass(frozen=True, slots=True)
-class AssetRegistration:
-    """One domain-owned asset declaration and optional normalization step."""
-
-    spec: AssetSpec
-    prepare: AssetPreparer | None = None
-
-
-def catalogue() -> dict[str, AssetRegistration]:
-    """Return all assets shipped by the model and pseudopotential domains."""
-    registrations = {spec.id: AssetRegistration(spec) for spec in model_asset_specs()}
-    for table in load_tables().values():
-        prepare = (
-            dojo_preparer(table)
-            if table.provider == "pseudodojo"
-            else sssp_preparer(table)
-        )
-        registrations[table.id] = AssetRegistration(table.asset, prepare)
+def catalogue() -> dict[str, AssetInstallation]:
+    """Merge domain installations and reject duplicate asset identifiers."""
+    installations = (
+        *(AssetInstallation(spec) for spec in model_asset_specs()),
+        *table_installations(),
+    )
+    registrations: dict[str, AssetInstallation] = {}
+    for installation in installations:
+        asset_id = installation.spec.id
+        if asset_id in registrations:
+            raise ValueError(f"duplicate runtime asset id: {asset_id}")
+        registrations[asset_id] = installation
     return registrations
 
 
 def references(
-    name: str, entries: Mapping[str, AssetRegistration] | None = None
-) -> tuple[AssetRegistration, ...]:
+    name: str, entries: Mapping[str, AssetInstallation] | None = None
+) -> tuple[AssetInstallation, ...]:
     """Resolve one asset id or an exact shipped profile to registrations."""
     entries = dict(entries or catalogue())
     if name in entries:
         return (entries[name],)
     selected = profile(name)
-    resolved: list[AssetRegistration] = []
+    resolved: list[AssetInstallation] = []
     for reference in selected.assets:
         registration = entries.get(reference.id)
         if registration is None or registration.spec.version != reference.version:

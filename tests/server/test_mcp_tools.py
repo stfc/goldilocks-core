@@ -137,14 +137,14 @@ def test_mcp_list_tools_stays_responsive_during_slow_compute(
     assert elapsed < 0.5
 
 
-def test_mcp_generate_without_server_pseudopotentials_raises_tool_error(
-    test_service, request_body
-) -> None:
-    """Surface the generate rejection as a ToolError for the agent."""
+def test_mcp_generate_returns_core_result_and_files(test_service, request_body) -> None:
+    """Return generated files; output locations are server-managed."""
     server = create_server(test_service)
 
-    with pytest.raises(ToolError, match="Pseudopotential selection"):
-        _call(server, "generate", request_body)
+    data = _call(server, "generate", request_body)
+
+    assert data["generated_files"][0]["path"] == "inputs/qe.in"
+    assert data["bundle"] is None
 
 
 def test_mcp_rejects_deployment_configuration_arguments(

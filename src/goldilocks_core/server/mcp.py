@@ -17,11 +17,15 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Any, Literal
 
+from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled
 from goldilocks_core.contracts import (
+    PseudoAccuracy,
     QueryRequest,
     SmearingType,
     VdwMethod,
 )
+from goldilocks_core.pseudo.source import PseudoTableMismatch
+from goldilocks_core.pseudo.validation import PseudoImportError
 from goldilocks_core.runtime.service import CoreService
 from goldilocks_core.server.request import from_dict
 
@@ -88,7 +92,7 @@ class _Intent(BaseModel):
     code: str = "quantum_espresso"
     task: str = "scf_single_point"
     functional: str = "PBEsol"
-    pseudo_mode: str = "efficiency"
+    pseudo_accuracy: PseudoAccuracy = "efficiency"
 
 
 class _Hints(BaseModel):
@@ -102,7 +106,7 @@ class _Hints(BaseModel):
     smearing_width_ry: float | None = None
     spin_polarized: bool | None = None
     spin_orbit_coupling: bool | None = None
-    pseudo_mode: str | None = None
+    pseudo_accuracy: PseudoAccuracy | None = None
     pseudo_type: str | None = None
     relativistic_mode: str | None = None
     conv_thr: float | None = None
@@ -133,11 +137,24 @@ def _body(
 
 
 def _run(body: dict[str, Any], service: CoreService) -> dict[str, Any]:
-    """Parse, dispatch, and serialize one MCP call."""
+    """Parse, dispatch, and serialize one MCP call.
+
+    Stage ValueError subclasses that carry operator-facing diagnostics are
+    mapped to ToolError so the MCP client sees a structured tool failure, not
+    an unhandled exception. Internal defects remain unhandled.
+    """
     request = from_dict(body)
-    if isinstance(request, QueryRequest):
-        return service.compute(request).to_dict()
-    return service.run_preset(request).to_dict()
+    try:
+        if isinstance(request, QueryRequest):
+            return service.compute(request).to_dict()
+        return service.run_preset(request).to_dict()
+    except (
+        PseudoTableMismatch,
+        PseudoImportError,
+        AssetCorrupt,
+        AssetNotInstalled,
+    ) as error:
+        raise ToolError(str(error)) from error
 
 
 def create_server(

@@ -75,21 +75,17 @@ def test_recommend_returns_core_result_json(test_service, request_body) -> None:
     assert data["generated_files"] == []
 
 
-def test_generate_without_server_pseudopotentials_maps_to_422(
+def test_generate_returns_generated_files_without_bundle(
     test_service, request_body
 ) -> None:
-    """Reject generation while the server has no pseudopotential source.
-
-    Transport requests cannot carry pseudopotential metadata; until the
-    runtime resolves pseudopotentials from its own asset store, generate
-    fails with the documented selection error instead of inventing cutoffs.
-    """
+    """Return generated files; output locations are server-managed."""
     with TestClient(create_app(test_service)) as client:
         response = client.post("/generate", json=request_body)
 
-    assert response.status_code == 422
-    assert response.json()["error"]["kind"] == "generation_error"
-    assert "pseudopotential" in response.json()["error"]["message"].lower()
+    assert response.status_code == 200
+    data = response.json()
+    assert data["generated_files"][0]["path"] == "inputs/qe.in"
+    assert data["bundle"] is None
 
 
 def test_path_form_structure_maps_to_422(test_service, tmp_path) -> None:

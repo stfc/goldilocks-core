@@ -6,7 +6,6 @@ from pymatgen.core import Structure
 from goldilocks_core.contracts import (
     ParameterAdvice,
     PresetRequest,
-    PseudoMetadata,
     QueryRequest,
     StructureAnalysisRecord,
 )
@@ -21,7 +20,7 @@ def test_from_dict_parses_complete_preset_request(
     request = from_dict(
         {
             "structure": sample_structure_text,
-            "intent": {"functional": "PBEsol", "pseudo_mode": "efficiency"},
+            "intent": {"functional": "PBEsol", "pseudo_accuracy": "efficiency"},
             "hints": {"k_grid": [3, 3, 3], "use_vdw": False},
             "mode": "generate",
         }
@@ -33,32 +32,21 @@ def test_from_dict_parses_complete_preset_request(
     assert request.intent.functional == "PBEsol"
     assert request.hints.k_grid == (3, 3, 3)
     assert request.mode == "generate"
-    assert request.output_dir is None
-    assert request.pseudo_metadata == ()
+    assert request.pseudo_metadata is None
+    assert request.pseudo_root is None
+    assert request.pseudo_table is None
     assert request.kmesh_model is None
 
 
-def test_from_dict_resolves_installed_pseudos_by_default(
-    monkeypatch: pytest.MonkeyPatch,
+def test_from_dict_defers_pseudo_source_resolution(
     sample_structure_text: str,
 ) -> None:
-    """Resolve the installed table for every transport request."""
-    installed = (
-        PseudoMetadata(
-            filepath="/pseudo/Si.UPF",
-            filename="Si.UPF",
-            header_format="attr",
-            element="Si",
-        ),
-    )
-    monkeypatch.setattr(
-        "goldilocks_core.server.request.load_installed_pseudo_metadata",
-        lambda: installed,
-    )
-
+    """Leave pseudopotential resolution to the server's runtime."""
     request = from_dict({"structure": sample_structure_text})
 
-    assert request.pseudo_metadata == installed
+    assert request.pseudo_metadata is None
+    assert request.pseudo_root is None
+    assert request.pseudo_table is None
 
 
 def test_from_dict_resolves_output_record_names(sample_structure_text: str) -> None:

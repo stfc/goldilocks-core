@@ -11,6 +11,9 @@ def k_distance_to_mesh(
     structure: Structure,
     k_distance: float,
 ) -> tuple[int, int, int]:
+    """``k_distance`` is in Å⁻¹, VASP KSPACING convention:
+    mesh = ceil(recip_length / k_distance),
+    where recip_length includes the 2π factor."""
     reciprocal_lattice = structure.lattice.reciprocal_lattice
     reciprocal_lengths = (
         reciprocal_lattice.a,

@@ -28,9 +28,7 @@ def download(file: AssetFile, destination: Path) -> None:
             shutil.copyfileobj(source, target, length=_CHUNK_SIZE)
     else:
         with (
-            requests.get(
-                file.url, stream=True, timeout=_TIMEOUT_SECONDS
-            ) as response,
+            requests.get(file.url, stream=True, timeout=_TIMEOUT_SECONDS) as response,
             destination.open("xb") as target,
         ):
             response.raise_for_status()

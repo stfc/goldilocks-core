@@ -10,12 +10,11 @@ when the context exits.
 
 ```python
 from goldilocks_core import CalculationHints, CoreService, PresetRequest
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 request = PresetRequest(
     structure="Fe.cif",
     hints=CalculationHints(k_grid=(6, 6, 6), spin_polarized=True),
-    pseudo_metadata=tuple(load_pseudo_metadata("pseudos")),
+    pseudo_table="pseudodojo-pbesol-efficiency-sr",
 )
 
 with CoreService() as core:
@@ -28,9 +27,9 @@ for generated_file in generated.generated_files:
 print(generated.bundle.path)
 ```
 
-`recommend` runs through Select. `generate` also runs Generate; its optional
-`output_dir` publishes the generated files and `manifest.json` into a new
-directory.
+`recommend` runs through Select, including lazy pseudopotential source
+resolution. `generate` also runs Generate; its optional `output_dir` publishes
+the generated files and `manifest.json` into a new directory.
 
 ## Selected record queries
 
@@ -114,7 +113,7 @@ resolves the minimal subgraph for a preset or query. `CoreRuntime` owns only
 model lifecycle.
 
 ```text
-Load -> Analyze -> Advise -> Select
+Load -> Analyze -> Advise -> Resolve Pseudos -> Select
 Load -> Kmesh
 Load + Advice + Select + Kmesh -> Generate
 ```
@@ -135,13 +134,15 @@ from goldilocks_core.advisors.kdistance_advisor import QrfKDistanceBackend
 from goldilocks_core.generation import generate_inputs
 from goldilocks_core.io.structures import load_structure
 from goldilocks_core.kmesh import resolve_kpoints
-from goldilocks_core.selection import select_parameters
+from goldilocks_core.selection import select_pseudopotentials
 
 loaded = load_structure("Fe.cif")
 analysis = analyze_structure(loaded)
 advice = advise_parameters(analysis, intent, hints)
 k_points = resolve_kpoints(loaded, hints, QrfKDistanceBackend())
-selection = select_parameters(loaded, advice, metadata)
+selection = select_pseudopotentials(
+    loaded, advice.pseudopotential_requirements, metadata
+)
 files = generate_inputs(loaded, intent, advice, selection, k_points)
 ```
 
@@ -153,8 +154,9 @@ not to reproduce service dispatch in another wrapper.
 - **Load** reads a `pymatgen.Structure` or periodic structure file.
 - **Analyze** reports structure facts.
 - **Advise** recommends physics and numerical settings with provenance.
+- **Resolve Pseudos** verifies and loads exactly one request-selected source.
 - **Kmesh** resolves operator hints or a model into a concrete grid.
-- **Select** chooses pseudopotentials and cutoffs.
+- **Select** chooses pseudopotentials and cutoffs from resolved metadata.
 - **Generate** creates target-code input files from completed records.
 
 Bundle publication is a filesystem side effect of generation, not a separate

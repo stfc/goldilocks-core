@@ -11,7 +11,8 @@ build `PresetRequest`; `compute` builds `QueryRequest`.
 uv run goldilocks recommend structure.cif [options]
 ```
 
-Runs Load → Analyze → Advise → Kmesh → Select. Outputs a recommendation without generated files.
+Runs the SCF graph through Select: Load, Analyze, Advise, Resolve Pseudos,
+Kmesh, and Select. Outputs a recommendation without generated files.
 
 ### generate
 
@@ -19,7 +20,9 @@ Runs Load → Analyze → Advise → Kmesh → Select. Outputs a recommendation 
 uv run goldilocks generate structure.cif [options]
 ```
 
-Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a recommendation with generated input files. Pass `--out run/` to publish the files and manifest as a portable bundle; the destination must not already exist.
+Runs the same graph through Generate. Outputs a recommendation with generated
+input files. Pass `--out run/` to publish the files and manifest as a portable
+bundle; the destination must not already exist.
 
 ### compute
 
@@ -39,13 +42,13 @@ uv run goldilocks assets status [default|ASSET_ID]
 uv run goldilocks assets verify [default|ASSET_ID]
 ```
 
-Install `default` before the first normal run. It contains the QRF k-point
-model, the metallicity model, and the default PBEsol pseudopotential table.
-Use an asset ID to install one different model or pseudopotential table.
+Install `default` before a bare normal run. It contains the QRF k-point model,
+the metallicity model, and the default PBEsol pseudopotential table. Use an
+asset ID to install one different model or pseudopotential table.
 
-`status` reports `installed`, `missing`, or `corrupt`. `verify` checks the
-installed files. The default store is
-`$XDG_DATA_HOME/goldilocks/assets`, or
+`status` reports the configured asset-store root, then `installed`, `missing`,
+or `corrupt` for each selected asset. `verify` checks every installed file. The
+default store is `$XDG_DATA_HOME/goldilocks/assets`, or
 `~/.local/share/goldilocks/assets` when `XDG_DATA_HOME` is not set. Set
 `GOLDILOCKS_ASSET_ROOT` to use a different store.
 
@@ -101,11 +104,12 @@ path.
 | `--code` | choice | `quantum_espresso` | `CalculationIntent.code` |
 | `--task` | choice | `scf_single_point` | `CalculationIntent.task` |
 | `--functional` | str | `PBEsol` | `CalculationIntent.functional` (canonicalized; e.g. `PBESOL` → `PBEsol`) |
-| `--pseudo-mode` | str | `efficiency` | `CalculationIntent.pseudo_mode` |
+| `--pseudo-accuracy` | `efficiency` or `precision` | `efficiency` | `CalculationIntent.pseudo_accuracy` |
 | `--pseudo-type` | str | None | `CalculationHints.pseudo_type` |
 | `--relativistic-mode` | str | None | `CalculationHints.relativistic_mode` |
-| `--pseudo-root` | path | None | Loads UPF files recursively into `pseudo_metadata` |
-| `--fetch-missing` | flag | False | Explicitly install the complete default runtime profile before running |
+| `--pseudo-root` | path | None | `PresetRequest.pseudo_root` or `QueryRequest.pseudo_root` |
+| `--pseudo-table` | table ID | None | Exact installed `PresetRequest.pseudo_table` or `QueryRequest.pseudo_table` |
+| `--fetch-missing` | flag | False | Install each exact missing dependency reported by Core, then retry |
 | `--model` | path | None | request `kmesh_model` (local k-index model) |
 | `--model-name` | str | `cli-kmesh-model` with `--model` | Model name recorded in Kmesh provenance; requires `--model` |
 | `--model-version` | str | `unknown` with `--model` | Model version recorded in `ModelSpec`; requires `--model` |
@@ -125,9 +129,9 @@ path.
 ## Python/CLI control parity
 
 Every `CalculationIntent` field maps directly to a CLI option. Every
-`CalculationHints` field also maps directly except `CalculationHints.pseudo_mode`:
-the CLI sets `CalculationIntent.pseudo_mode` with `--pseudo-mode` instead of
-exposing a second override for the same effective pseudopotential-family choice.
+`CalculationHints` field also maps directly except
+`CalculationHints.pseudo_accuracy`: `--pseudo-accuracy` sets the intent default
+instead of exposing a second control for the same effective accuracy choice.
 
 
 ## Boolean options
@@ -170,15 +174,22 @@ warnings:
   - Electronic character is unknown from structure facts alone...
 ```
 
-## Pseudo loading
+## Pseudopotential source resolution
 
-Without `--pseudo-root`, the CLI verifies and loads the installed default
-PseudoDojo table manifest. A missing or corrupt table fails with an asset
-diagnostic; the CLI does not download unless `--fetch-missing` is present.
-`--pseudo-root` instead recursively loads `.upf` and `.UPF` files from an
-explicit local directory and searches nearby JSON metadata for complete
-cutoffs. CLI intent and parsed UPF metadata use the same canonical functional
-labels. Unrecognized labels remain distinct rather than silently falling back.
+The request accepts exactly one explicit source: `--pseudo-table` selects an
+exact registered table ID, while `--pseudo-root` reads an operator-managed
+directory recursively. Without either flag, Core selects the registered default
+table. Resolution happens only when the requested records depend on
+pseudopotentials, so `compute --outputs analysis` performs no asset lookup.
+
+Installed tables are verified before their normalized manifest is loaded.
+Missing or corrupt assets fail with the exact asset ID, version, and configured
+store root. `--fetch-missing` installs only a missing dependency and retries;
+it does not replace a corrupt asset. An explicit root is never downloaded or
+copied. Core parses `.upf` and `.UPF` files and only recognized provider
+sidecars; declared functionals, accuracy tiers, relativistic treatments, table
+coverage, and source checksums are validated rather than inferred from
+filenames.
 
 ## Kmesh backend selection
 

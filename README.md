@@ -32,12 +32,11 @@ request selected records.
 
 ```python
 from goldilocks_core import CalculationHints, CoreService, PresetRequest
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 request = PresetRequest(
     structure="path/to/structure.cif",
     hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
-    pseudo_metadata=tuple(load_pseudo_metadata("path/to/pseudopotentials")),
+    pseudo_table="pseudodojo-pbesol-efficiency-sr",
 )
 
 with CoreService() as core:
@@ -71,11 +70,13 @@ uv run goldilocks assets install default
 uv run goldilocks assets verify default
 ```
 
-Run a recommendation or create input files:
+Run a recommendation or create input files. Requests use the installed default
+pseudopotential table unless `--pseudo-table` or `--pseudo-root` selects another
+source:
 
 ```bash
 uv run goldilocks recommend structure.cif --json
-uv run goldilocks generate structure.cif --out run/ --json
+uv run goldilocks generate structure.cif --pseudo-table sssp-pbesol-efficiency-sr --out run/ --json
 uv run goldilocks compute structure.cif --outputs analysis,k_points --k-grid 4 4 4
 ```
 

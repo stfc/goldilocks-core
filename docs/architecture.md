@@ -24,22 +24,22 @@ resolution and bundle publication touch the filesystem.
 | `pseudo/registry.py`, `pseudo/import_*` | Complete pseudopotential table declarations and provider-specific normalization. |
 | `pseudo/source.py` | One source-resolution interface for request metadata, operator roots, and installed tables. |
 | `contracts/` | Data records and serialization shared between stages. |
-| `runtime/graph.py` | Stage-agnostic, type-keyed DAG executor (`TaskSpec`/`StageSpec`/`Preset`/`execute`). |
-| `runtime/task.py` | `TaskHandler`: a task's graph plus its context-builder and result-assembler hooks. |
+| `runtime/graph.py` | Stage-agnostic, type-keyed DAG executor (`TaskGraph`/`Stage`/`Preset`/`execute`). |
+| `runtime/task.py` | `GraphHandler`: a task's graph plus its context-builder and result-assembler hooks. |
 | `runtime/scf.py` | The SCF task: run context, stage graph, and result assembly. |
-| `runtime/core.py` | `CoreRuntime`: kmesh/metallicity model lifecycle (load/reset/close), exposed as read-only services. |
-| `runtime/dispatch.py` | `TaskDispatcher`: task registry and dispatch by `intent.task` through `TaskHandler`s. |
+| `runtime/models.py` | `Runtime`: kmesh/metallicity model lifecycle (load/reset/close), exposed as read-only services. |
+| `runtime/dispatch.py` | `Dispatcher`: task registry and dispatch by `intent.task` through `GraphHandler`s. |
 | `runtime/jobs.py` | `run_core_job` (preset) and `query_records` (query) entrypoints. |
-| `runtime/service.py` | `CoreService`: process-owned lifecycle, locking, operations, and discovery shared by every entry point. |
+| `runtime/service.py` | `Service`: process-owned lifecycle, locking, operations, and discovery shared by every entry point. |
 | `io/structures.py` | Structure loading. |
 | `analysis.py` | Structure facts. |
 | `advice/` | Scientific and numerical recommendations. |
-| `kmesh/`, `advisors/` | Concrete k-point selection. |
+| `kmesh/`, `advice/` | Concrete k-point selection. |
 | `selection.py` | Pseudopotentials and cutoffs. |
 | `generation/` | Calculation-specific file generation. |
 | `bundle.py` | Generated files and manifest output. |
 | `server/request.py` | Canonical JSON request deserialization shared by transports. |
-| `server/http.py`, `server/mcp.py` | Thin optional HTTP and MCP adapters over one `CoreService`. |
+| `server/http.py`, `server/mcp.py` | Thin optional HTTP and MCP adapters over one `Service`. |
 
 Stages communicate through dataclasses. They do not need to inherit from a Core
 class, and callers can invoke any stage function directly.
@@ -47,14 +47,14 @@ class, and callers can invoke any stage function directly.
 ## Standard workflow
 
 `PresetRequest` carries a preset run (`mode` = `recommend`/`generate`);
-`QueryRequest` carries an explicit record query (`outputs`). `CoreService`
+`QueryRequest` carries an explicit record query (`outputs`). `Service`
 exposes `recommend`, `generate`, and `compute` over a process-owned
-`CoreRuntime` and `TaskDispatcher`, serializing dispatch so lazy model state is
+`Runtime` and `Dispatcher`, serializing dispatch so lazy model state is
 safe to reuse. `run_core_job` and `query_records` are short-lived convenience
 entry points. The dispatcher runs the registered `scf_single_point` task.
 
 ```python
-with CoreService() as core:
+with Service() as core:
     request = PresetRequest(structure="Fe.cif")
     result = core.generate(request, output_dir="run")
 ```
@@ -77,7 +77,7 @@ callers can import stage functions and compose them themselves:
 ```python
 from goldilocks_core.advice import advise_parameters
 from goldilocks_core.analysis import analyze_structure
-from goldilocks_core.advisors.kdistance_advisor import QrfKDistanceBackend
+from goldilocks_core.advice.kdistance import QrfBackend
 from goldilocks_core.generation import generate_inputs
 from goldilocks_core.io.structures import load_structure
 from goldilocks_core.kmesh import resolve_kpoints
@@ -86,7 +86,7 @@ from goldilocks_core.selection import select_pseudopotentials
 structure = load_structure("Fe.cif")
 analysis = analyze_structure(structure)
 advice = advise_parameters(analysis, intent, hints)
-kpoints = resolve_kpoints(structure, hints, QrfKDistanceBackend())
+kpoints = resolve_kpoints(structure, hints, QrfBackend())
 selection = select_pseudopotentials(
     structure, advice.pseudopotential_requirements, metadata
 )
@@ -109,7 +109,7 @@ domain registry -> download -> verify sources -> prepare -> inventory
 Each domain owns its complete declarations and interpretation. `AssetStore`
 owns only acquisition, integrity, locking, installed manifests, and path
 resolution. PseudoDojo and SSSP preparers convert different upstream layouts
-to the same installed table manifest. `PseudoSourceResolver` owns source
+to the same installed table manifest. `PseudoSource` owns source
 precedence, verifies exact installed table identities against scientific
 requirements, and returns metadata through one narrow interface. Select has no
 registry or filesystem knowledge. Model loaders likewise receive verified

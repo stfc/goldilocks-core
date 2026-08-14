@@ -26,12 +26,12 @@ uv sync --group dev
 
 ## Python API
 
-`CoreService` is the main Python interface. Use `recommend()` to inspect a
+`Service` is the main Python interface. Use `recommend()` to inspect a
 complete recommendation, `generate()` to create input files, and `compute()` to
 request selected records.
 
 ```python
-from goldilocks_core import CalculationHints, CoreService, PresetRequest
+from goldilocks_core import CalculationHints, Service, PresetRequest
 
 request = PresetRequest(
     structure="path/to/structure.cif",
@@ -39,7 +39,7 @@ request = PresetRequest(
     pseudo_table="pseudodojo-pbesol-efficiency-sr",
 )
 
-with CoreService() as core:
+with Service() as core:
     result = core.generate(request)
 
 for generated_file in result.generated_files:
@@ -49,10 +49,10 @@ for generated_file in result.generated_files:
 
 The public operations are:
 
-- `CoreService.recommend(PresetRequest(...))` returns a complete recommendation.
-- `CoreService.generate(PresetRequest(...), output_dir=...)` also creates input
+- `Service.recommend(PresetRequest(...))` returns a complete recommendation.
+- `Service.generate(PresetRequest(...), output_dir=...)` also creates input
   files and can write them to a new directory.
-- `CoreService.compute(QueryRequest(...))` returns only the requested records.
+- `Service.compute(QueryRequest(...))` returns only the requested records.
 
 `recommend` and `generate` also exist as CLI commands and as HTTP and MCP
 operations. They are not top-level Python functions. For a single Python call,

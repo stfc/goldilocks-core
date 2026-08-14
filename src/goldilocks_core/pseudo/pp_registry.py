@@ -2,122 +2,187 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+from dataclasses import dataclass, replace
 from pathlib import Path
 
-from goldilocks_core.assets import AssetStore
-from goldilocks_core.contracts import PseudoMetadata
-from goldilocks_core.functionals import normalize_functional_label
-from goldilocks_core.pseudo.installed import load_installed_table
+from goldilocks_core.contracts import PseudoCutoffs, PseudoMetadata
 from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
-from goldilocks_core.pseudo.registry import default_table, load_tables
+from goldilocks_core.pseudo.validation import (
+    AmbiguousCutoffMetadata,
+    PseudoImportError,
+    finite_positive_cutoff,
+    required_functional,
+)
+
+_HARTREE_TO_RYDBERG = 2.0
+
+
+@dataclass(frozen=True, slots=True)
+class _DiscoveredCutoffs:
+    provider: str
+    source_identifier: str | None
+    cutoffs: PseudoCutoffs
 
 
 def load_pseudo_metadata(root: str | Path) -> list[PseudoMetadata]:
-    """Load UPFs under an explicit root and discover recognized cutoff metadata."""
+    """Load local UPFs and only cutoff records tied to each exact filename."""
     root = Path(root).resolve()
-    upf_files = sorted(root.rglob("*.upf")) + sorted(root.rglob("*.UPF"))
-    metadata = [parse_upf_metadata(path) for path in upf_files]
-    for item in metadata:
-        if item.sssp_recommended_cutoff is not None:
-            continue
-        cutoffs = _discover_cutoffs(Path(item.filepath), root, item.element)
-        if cutoffs is None:
+    if not root.is_dir():
+        raise ValueError(f"pseudopotential root is not a directory: {root}")
+    upf_files = sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file() and path.suffix.lower() == ".upf"
+    )
+    metadata: list[PseudoMetadata] = []
+    for upf in upf_files:
+        item = parse_upf_metadata(upf)
+        discovered = _discover_cutoffs(upf, root, item)
+        if discovered is None:
             subject = item.element or item.filename
-            item.pseudo_info.setdefault("warnings", []).append(
-                f"No complete cutoff metadata found for {subject} under custom "
-                f"pseudopotential root {root}."
+            item = replace(
+                item,
+                warnings=(
+                    f"No recognized cutoff metadata found for {subject} under "
+                    f"custom pseudopotential root {root}.",
+                ),
             )
         else:
-            item.sssp_recommended_cutoff = cutoffs
+            item = replace(
+                item,
+                provider=discovered.provider,
+                source_identifier=discovered.source_identifier,
+                cutoffs=discovered.cutoffs,
+            )
+        metadata.append(item)
     return metadata
-
-
-def load_installed_pseudo_metadata(
-    table_id: str | None = None,
-    *,
-    store: AssetStore | None = None,
-) -> tuple[PseudoMetadata, ...]:
-    """Load one verified registered table through the shared asset-store seam."""
-    tables = load_tables()
-    table = tables[table_id] if table_id is not None else default_table(tables)
-    installed = (store or AssetStore()).resolve(table.asset.id, table.asset.version)
-    return load_installed_table(installed)
-
-
-def filter_by_element(
-    metadata_list: list[PseudoMetadata],
-    element: str,
-) -> list[PseudoMetadata]:
-    """Filter pseudopotential metadata by element symbol."""
-    return [metadata for metadata in metadata_list if metadata.element == element]
-
-
-def filter_by_functional(
-    metadata_list: list[PseudoMetadata],
-    functional: str,
-) -> list[PseudoMetadata]:
-    """Filter pseudopotential metadata by canonical functional label."""
-    canonical = normalize_functional_label(functional)
-    if canonical is None:
-        return []
-    return [
-        metadata
-        for metadata in metadata_list
-        if normalize_functional_label(metadata.functional) == canonical
-    ]
-
-
-def filter_by_pseudo_type(
-    metadata_list: list[PseudoMetadata],
-    pseudo_type: str,
-) -> list[PseudoMetadata]:
-    """Filter pseudopotential metadata by pseudo type."""
-    return [
-        metadata for metadata in metadata_list if metadata.pseudo_type == pseudo_type
-    ]
-
-
-def filter_by_relativistic(
-    metadata_list: list[PseudoMetadata],
-    relativistic: str,
-) -> list[PseudoMetadata]:
-    """Filter pseudopotential metadata by relativistic mode."""
-    return [
-        metadata for metadata in metadata_list if metadata.relativistic == relativistic
-    ]
 
 
 def _discover_cutoffs(
     upf: Path,
     root: Path,
-    element: str | None,
-) -> dict[str, float] | None:
-    if element is None:
+    metadata: PseudoMetadata,
+) -> _DiscoveredCutoffs | None:
+    """Return one exact recognized sidecar or reject multiple matches."""
+    matches: list[_DiscoveredCutoffs] = []
+    dojo = upf.with_suffix(".djrepo")
+    if dojo.is_file():
+        matches.append(_load_dojo_sidecar(dojo, upf, metadata))
+
+    json_candidates = set(upf.parent.glob("*.json"))
+    if upf.parent != root:
+        json_candidates.add(upf.parent.parent / f"{upf.parent.name}.json")
+    for candidate in sorted(json_candidates):
+        if candidate.is_file():
+            match = _load_sssp_sidecar(candidate, upf, metadata)
+            if match is not None:
+                matches.append(match)
+
+    if len(matches) > 1:
+        raise AmbiguousCutoffMetadata(f"{upf.name} matches multiple cutoff records")
+    return matches[0] if matches else None
+
+
+def _load_dojo_sidecar(
+    sidecar: Path,
+    upf: Path,
+    metadata: PseudoMetadata,
+) -> _DiscoveredCutoffs:
+    """Validate one exact sibling PseudoDojo report."""
+    try:
+        report = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise PseudoImportError(f"invalid PseudoDojo sidecar {sidecar}") from error
+    if not isinstance(report, dict):
+        raise PseudoImportError(f"PseudoDojo sidecar must be an object: {sidecar}")
+    if report.get("md5_upf") != _md5(upf):
+        raise PseudoImportError(f"PseudoDojo sidecar does not match {upf.name}")
+    sidecar_functional = required_functional(
+        report.get("xc"), f"PseudoDojo XC in {sidecar}"
+    )
+    upf_functional = required_functional(
+        metadata.functional, f"UPF functional in {upf}"
+    )
+    if sidecar_functional != upf_functional:
+        raise PseudoImportError(
+            f"{upf.name} functional {upf_functional} disagrees with "
+            f"{sidecar.name} functional {sidecar_functional}"
+        )
+    hints = report.get("hints")
+    if not isinstance(hints, dict):
+        raise PseudoImportError(f"PseudoDojo sidecar lacks hints: {sidecar}")
+    values: list[tuple[str, float]] = []
+    for level in ("low", "normal", "high"):
+        hint = hints.get(level)
+        if not isinstance(hint, dict) or "ecut" not in hint:
+            raise PseudoImportError(f"PseudoDojo sidecar lacks {level} ecut: {sidecar}")
+        values.append(
+            (
+                level,
+                finite_positive_cutoff(hint["ecut"], f"{sidecar.name} {level} ecut")
+                * _HARTREE_TO_RYDBERG,
+            )
+        )
+    high = dict(values)["high"]
+    return _DiscoveredCutoffs(
+        provider="pseudodojo",
+        source_identifier=sidecar.name,
+        cutoffs=PseudoCutoffs(
+            ecutwfc_ry=high,
+        ),
+    )
+
+
+def _load_sssp_sidecar(
+    sidecar: Path,
+    upf: Path,
+    metadata: PseudoMetadata,
+) -> _DiscoveredCutoffs | None:
+    """Return an SSSP entry only when its filename names this exact UPF."""
+    try:
+        document = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
         return None
-    directory = upf.parent
-    while directory == root or root in directory.parents:
-        candidates = sorted(directory.glob("*.json"))
-        if directory.parent == root or root in directory.parent.parents:
-            candidates += [directory.parent / f"{directory.name}.json"]
-        for candidate in dict.fromkeys(candidates):
-            if not candidate.is_file():
-                continue
-            try:
-                entry = json.loads(candidate.read_text()).get(element)
-            except (AttributeError, json.JSONDecodeError):
-                continue
-            if not isinstance(entry, dict):
-                continue
-            wfc = entry.get("ecutwfc_ry", entry.get("cutoff_wfc"))
-            rho = entry.get("ecutrho_ry", entry.get("cutoff_rho"))
-            try:
-                values = {"ecutwfc_ry": float(wfc), "ecutrho_ry": float(rho)}
-            except (TypeError, ValueError):
-                continue
-            if all(value > 0 for value in values.values()):
-                return values
-        if directory == root:
-            break
-        directory = directory.parent
-    return None
+    if not isinstance(document, dict) or metadata.element is None:
+        return None
+    entry = document.get(metadata.element)
+    if not isinstance(entry, dict) or entry.get("filename") != upf.name:
+        return None
+    if "md5" in entry and entry["md5"] != _md5(upf):
+        raise PseudoImportError(f"SSSP sidecar does not match {upf.name}")
+    if "functional" in entry:
+        sidecar_functional = required_functional(
+            entry["functional"], f"SSSP functional in {sidecar}"
+        )
+        upf_functional = required_functional(
+            metadata.functional, f"UPF functional in {upf}"
+        )
+        if sidecar_functional != upf_functional:
+            raise PseudoImportError(
+                f"{upf.name} functional {upf_functional} disagrees with "
+                f"{sidecar.name} functional {sidecar_functional}"
+            )
+    return _DiscoveredCutoffs(
+        provider="sssp",
+        source_identifier=entry.get("pseudopotential"),
+        cutoffs=PseudoCutoffs(
+            ecutwfc_ry=finite_positive_cutoff(
+                entry.get("ecutwfc_ry", entry.get("cutoff_wfc")),
+                f"{sidecar.name} cutoff_wfc",
+            ),
+            ecutrho_ry=finite_positive_cutoff(
+                entry.get("ecutrho_ry", entry.get("cutoff_rho")),
+                f"{sidecar.name} cutoff_rho",
+            ),
+        ),
+    )
+
+
+def _md5(path: Path) -> str:
+    digest = hashlib.md5()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()

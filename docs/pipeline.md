@@ -1,6 +1,6 @@
 # Pipeline
 
-Goldilocks Core exposes one staged SCF workflow through `CoreService`. The same
+Goldilocks Core exposes one staged SCF workflow through `Service`. The same
 service backs Python, CLI, HTTP, and MCP entry points.
 
 ## Reusable service
@@ -9,7 +9,7 @@ Use one service for repeated work. It owns lazy model state and closes resources
 when the context exits.
 
 ```python
-from goldilocks_core import CalculationHints, CoreService, PresetRequest
+from goldilocks_core import CalculationHints, Service, PresetRequest
 
 request = PresetRequest(
     structure="Fe.cif",
@@ -17,7 +17,7 @@ request = PresetRequest(
     pseudo_table="pseudodojo-pbesol-efficiency-sr",
 )
 
-with CoreService() as core:
+with Service() as core:
     recommendation = core.recommend(request)
     generated = core.generate(request, output_dir="run")
 
@@ -37,7 +37,7 @@ the generated files and `manifest.json` into a new directory.
 prerequisites:
 
 ```python
-from goldilocks_core import CalculationHints, CoreService, QueryRequest
+from goldilocks_core import CalculationHints, Service, QueryRequest
 from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
 
 request = QueryRequest(
@@ -46,7 +46,7 @@ request = QueryRequest(
     hints=CalculationHints(k_grid=(6, 6, 6)),
 )
 
-with CoreService() as core:
+with Service() as core:
     records = core.compute(request)
 
 print(records[StructureAnalysisRecord].reduced_formula)
@@ -72,7 +72,7 @@ records = query_records(
 )
 ```
 
-Use `CoreService` when multiple calls should reuse loaded models or when task,
+Use `Service` when multiple calls should reuse loaded models or when task,
 code, and model discovery is needed.
 
 ## K-point backends
@@ -84,7 +84,7 @@ k-point hint, the configured QRF k-distance model is loaded lazily.
 Put a `ModelSpec` on either request type to select a local k-index model:
 
 ```python
-from goldilocks_core import CoreService, PresetRequest
+from goldilocks_core import Service, PresetRequest
 from goldilocks_core.contracts import ModelSpec
 
 spec = ModelSpec(
@@ -97,7 +97,7 @@ spec = ModelSpec(
     location="model.joblib",
 )
 
-with CoreService() as core:
+with Service() as core:
     result = core.recommend(
         PresetRequest(structure="Fe.cif", kmesh_model=spec)
     )
@@ -108,8 +108,8 @@ The model specification is request data and is included in serialized requests.
 ## Task graph
 
 The built-in `SCF_TASK` declares each stage's inputs and output record type.
-`TaskDispatcher` selects the graph from `CalculationIntent.task`; the executor
-resolves the minimal subgraph for a preset or query. `CoreRuntime` owns only
+`Dispatcher` selects the graph from `CalculationIntent.task`; the executor
+resolves the minimal subgraph for a preset or query. `Runtime` owns only
 model lifecycle.
 
 ```text
@@ -119,7 +119,7 @@ Load + Advice + Select + Kmesh -> Generate
 ```
 
 The shipped task is `scf_single_point`. New calculation tasks register another
-`TaskHandler` containing a `TaskSpec`, context builder, and result assembler;
+`GraphHandler` containing a `TaskGraph`, context builder, and result assembler;
 the executor itself remains task-agnostic.
 
 ## Direct stage composition
@@ -130,7 +130,7 @@ functions:
 ```python
 from goldilocks_core.advice import advise_parameters
 from goldilocks_core.analysis import analyze_structure
-from goldilocks_core.advisors.kdistance_advisor import QrfKDistanceBackend
+from goldilocks_core.advice.kdistance import QrfBackend
 from goldilocks_core.generation import generate_inputs
 from goldilocks_core.io.structures import load_structure
 from goldilocks_core.kmesh import resolve_kpoints
@@ -139,7 +139,7 @@ from goldilocks_core.selection import select_pseudopotentials
 loaded = load_structure("Fe.cif")
 analysis = analyze_structure(loaded)
 advice = advise_parameters(analysis, intent, hints)
-k_points = resolve_kpoints(loaded, hints, QrfKDistanceBackend())
+k_points = resolve_kpoints(loaded, hints, QrfBackend())
 selection = select_pseudopotentials(
     loaded, advice.pseudopotential_requirements, metadata
 )

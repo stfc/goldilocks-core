@@ -22,8 +22,6 @@ Primary docs:
 - `docs/architecture.md` — module ownership, pipeline boundaries, data contracts, extension points.
 - `AGENTS.md` — durable project rules for future agents.
 
-- `docs/pseudopotentials.md` — table installation, storage, provider normalization, licensing, and citation.
-
 ## Workflow
 
 1. Check current code before writing.
@@ -42,8 +40,8 @@ Primary docs:
      plus task/code/model discovery.
    - `run_core_job(PresetRequest)` and `query_records(QueryRequest)` are
      short-lived Python conveniences.
-   - The unified `goldilocks` CLI implements `recommend`, `generate`, `compute`,
-     `serve`, `examples`, and explicit `assets` lifecycle commands.
+   - CLI `goldilocks-core` implements `recommend`, `generate`, `compute`,
+     `serve`, and `examples`; `goldilocks-kmesh` remains standalone.
    - Optional `[http]` and `[mcp]` transports are implemented over one service.
    - Generate can publish a bundle directory; there is no bundle operation.
    - Runner, AiiDA, frontend, auth, and workspace concerns are out of scope.
@@ -95,19 +93,9 @@ Primary docs:
 
 ## Style
 
-- Start each document and section with the reader's task or question.
-- Give the next action before caveats or implementation details.
-- Context check every sentence and section. If a phrase refers to an earlier
-  design, an unnamed asset, or a failure the reader has not met, introduce the
-  subject first or remove the phrase.
-- Example: write `Period-5 elements can need SOC consideration`, not `This
-  replaced the earlier Z >= 57 rule`.
-- Example: name each asset that the user must install. Do not write `the other
-  two assets` unless the preceding text names them.
-- Keep user guides about user tasks. Put implementation guarantees and module
-  design in `docs/architecture.md`.
-- Be terse. Use short sections and examples.
-- Use one-line shell commands. Do not use `\` line continuations.
+- Be terse.
+- Use short sections.
+- Use examples over prose.
 - Avoid roadmap promises in user-facing docs.
 - If something is future work, say `not implemented yet`.
 - Do not use flowery language.

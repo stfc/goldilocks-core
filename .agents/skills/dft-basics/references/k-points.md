@@ -35,32 +35,17 @@ When touching this code, be explicit about whether a spacing is crystallographic
 
 ## Representations used in this package
 
-Goldilocks uses three k-mesh representations:
+Goldilocks may encounter several related k-mesh representations:
 
-- **k-distance / k-spacing** in Å⁻¹: the maximum reciprocal-space spacing.
-- **mesh** `(nk1, nk2, nk3)`: the selected grid dimensions.
-- **k-index**: a 1-based rank in an ordered table of distinct meshes. A local
-  k-index model predicts this value.
+- **k-distance / k-spacing** in Å⁻¹ — target maximum reciprocal-space spacing.
+- **mesh** `(nk1, nk2, nk3)` — explicit grid dimensions.
+- **k-distance interval** — range of spacing values that map to the same mesh.
+- **k-line density interval** — range of line-density values that map to the same mesh. For one axis, the admissible range is `[(n_k - 0.5) / |b*|, (n_k + 0.5) / |b*|]`, where `n_k` is the grid dimension and `|b*|` is the reciprocal vector length. For a full mesh, intersect the three per-axis ranges; if they do not overlap, the scalar interval is undefined.
+- **k-index** — integer rank for distinct meshes; the ML model predicts this kind of rank.
+- **k-pra** — k-points per reciprocal atom, typically `n_atoms × nk1 × nk2 × nk3`.
+- **n_reduced_kpoints** — number of symmetry-irreducible k-points after symmetry reduction.
 
-Keep these representations separate. Convert a spacing or model prediction to a
-mesh in the Kmesh stage. User-facing output should report the selected mesh and
-its provenance.
-
-## Related measure: k-line density
-
-Some external k-mesh datasets use k-line density instead of reciprocal-space
-spacing. Goldilocks does not expose k-line density in its current interface, but
-an importer can need the conversion.
-
-For one reciprocal axis, a grid size `n` admits this line-density interval:
-
-```text
-[(n - 0.5) / |b*|, (n + 0.5) / |b*|]
-```
-
-For a three-dimensional mesh, intersect the intervals for all three axes. If
-the intervals do not overlap, one scalar k-line density cannot represent the
-mesh.
+Do not stuff all of these into user-facing advice unless the interface actually needs them. They are useful for ranking, provenance, diagnostics, and compatibility tests.
 
 ## Trade-offs
 
@@ -69,15 +54,16 @@ mesh.
 - 2D and 1D systems need fewer k-points in non-periodic directions, but the code must know which directions are non-periodic before making that choice.
 - Symmetry can reduce the number of irreducible k-points and cost, but the full mesh still controls sampling density.
 
-## Hints, Kmesh, and generation
+## Advice vs selection
 
-- **Analysis** reports structure facts such as dimensionality and symmetry.
-- **Hints** can supply an explicit grid or spacing.
-- **Kmesh** gives an explicit grid priority over spacing. If neither is set, it
-  uses the configured model.
-- **Generation** writes the selected grid and shift in the target-code syntax.
+Keep these stages separate:
 
-Generation does not choose k-point density.
+- **Analysis** may report dimensionality, cell lengths, reciprocal lengths, and symmetry facts.
+- **Advice** may recommend a target spacing, accuracy level, or whether metallic systems need denser sampling.
+- **Selection** converts advice into a concrete mesh and shift.
+- **Generation** writes the selected mesh in the target code's syntax.
+
+Generators should not silently decide k-point density. If they need a value, it should already exist in advice or selection.
 
 ## Tests to protect
 
@@ -87,4 +73,4 @@ When changing k-point code, prefer tests that assert behaviours rather than impl
 - anisotropic cells produce anisotropic meshes
 - Gamma/shift handling matches the target code convention
 - model-predicted k-index maps to the expected mesh entry
-- explicit hints bypass model loading
+- old public fields remain available if compatibility requires them

@@ -52,7 +52,8 @@ Focus on:
 gh api repos/stfc/goldilocks-core/milestones --jq '.[] | "\(.number) | \(.title) | open=\(.open_issues)"'
 
 # Open issues with no milestone (a hygiene red flag — see AGENTS.md "Issue hygiene")
-gh issue list --repo stfc/goldilocks-core --state open --limit 100 --json number,milestone --jq '.[] | select(.milestone == null) | .number'
+gh issue list --repo stfc/goldilocks-core --state open --limit 100 \
+  --json number,milestone --jq '.[] | select(.milestone == null) | .number'
 ```
 
 If there are no milestones, or many milestone-less issues, flag it — the board is drifting.

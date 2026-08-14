@@ -26,7 +26,7 @@ print(result.k_points.provenance)
 print(result.warnings)
 ```
 
-`recommend` runs Load, Analyze, Advise, Resolve Pseudos, Kmesh, and Select. The
+`recommend` runs Load, Analyze, Advise, Kmesh, and Select. The
 result contains analysis, advice, a concrete k-point selection,
 pseudopotential selection, and aggregated warnings. This request resolves the
 installed default pseudopotential table.
@@ -63,18 +63,15 @@ eligible for structure-derived advice or the configured model.
 ## Supply an operator-managed pseudopotential source
 
 Selection consumes validated metadata records, not raw UPF contents. To use a
-directory outside the asset store, load it explicitly and put the records on
-the request:
+directory outside the asset store, point the request at it:
 
 ```python
 from goldilocks_core import CalculationHints, CoreService, PresetRequest
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
-metadata = tuple(load_pseudo_metadata("pseudos"))
 request = PresetRequest(
     structure="structure.cif",
     hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
-    pseudo_metadata=metadata,
+    pseudo_root="pseudos",
 )
 
 with CoreService() as core:

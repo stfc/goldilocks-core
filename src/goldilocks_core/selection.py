@@ -14,6 +14,19 @@ from goldilocks_core.contracts import (
     SelectionRecord,
 )
 
+LANTHANIDES = frozenset("La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu".split())
+ACTINIDES = frozenset("Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr".split())
+
+_LANTHANIDE_ACTINIDE_REASON = (
+    "is a lanthanide/actinide: only SSSP pseudopotentials are used for these "
+    "elements, because PseudoDojo's lanthanide table freezes 4f electrons in "
+    "the core assuming a trivalent ion (wrong for Eu, Yb, and Ce) and no "
+    "PseudoDojo table covers actinides at all. This also means no spin-orbit "
+    "coupling for these elements: SSSP has no fully-relativistic table. "
+    "Install SSSP with `goldilocks assets install sssp-pbesol-efficiency-sr` "
+    "and select it with `--pseudo-table sssp-pbesol-efficiency-sr`. "
+)
+
 
 def select_pseudopotentials(
     structure: Structure,
@@ -51,6 +64,8 @@ def _select_for_element(
         )
         and item.relativistic == requirements.relativistic
     ]
+    if element in LANTHANIDES or element in ACTINIDES:
+        candidates = [item for item in candidates if item.provider == "sssp"]
     exact_accuracy = [
         item for item in candidates if item.accuracy == requirements.accuracy
     ]
@@ -100,8 +115,8 @@ def _select_for_element(
     )
 
 
-def _candidate_rank(metadata: PseudoMetadata) -> tuple[int, str, str, str]:
-    """Rank complete metadata first, then provenance-only deterministic fields."""
+def _candidate_rank(metadata: PseudoMetadata) -> tuple[int, int, str, str, str]:
+    """Rank complete metadata first, then SSSP, then provenance-only fields."""
     complete_cutoffs = (
         metadata.cutoffs is not None
         and metadata.cutoffs.ecutwfc_ry is not None
@@ -109,6 +124,7 @@ def _candidate_rank(metadata: PseudoMetadata) -> tuple[int, str, str, str]:
     )
     return (
         0 if complete_cutoffs else 1,
+        0 if metadata.provider == "sssp" else 1,
         metadata.provider or "",
         metadata.source_identifier or "",
         metadata.filename,
@@ -154,6 +170,18 @@ def _missing_pseudo_warning(
     metadata: tuple[PseudoMetadata, ...],
 ) -> str:
     """Explain the first unsatisfied scientific requirement."""
+    message = _missing_pseudo_reason(element, requirements, metadata)
+    if element in LANTHANIDES or element in ACTINIDES:
+        return f"{element} {_LANTHANIDE_ACTINIDE_REASON}{message}"
+    return message
+
+
+def _missing_pseudo_reason(
+    element: str,
+    requirements: PseudopotentialRequirements,
+    metadata: tuple[PseudoMetadata, ...],
+) -> str:
+    """Return the first unsatisfied scientific requirement, without routing."""
     candidates = [item for item in metadata if item.element == element]
     if not candidates:
         return f"No available pseudopotential contains element {element}."

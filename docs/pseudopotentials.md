@@ -39,7 +39,11 @@ disagreements before selection.
 - Use a `precision` table with `--pseudo-accuracy precision`.
 - Use an `sr` table for a calculation without SOC.
 - Use an `fr` table for a calculation with SOC.
-- Use an SSSP table for lanthanides or actinides.
+- Use an SSSP table for lanthanides or actinides. Selection refuses PseudoDojo
+  pseudopotentials for these elements: its lanthanide table freezes 4f
+  electrons assuming a trivalent ion (wrong for Eu, Yb, and Ce) and no
+  PseudoDojo table covers actinides at all. SSSP has no fully-relativistic
+  table, so these elements also cannot use SOC pseudopotentials.
 
 ### PseudoDojo scalar-relativistic tables
 
@@ -101,9 +105,10 @@ PBE library; SSSP did not validate those PBEsol tables with its convergence
 protocol. Goldilocks preserves this provenance rather than presenting the
 cutoffs as PBEsol-validated.
 
-The registry also contains `pseudodojo-pbe-lanthanides-sr`. Select it only
-explicitly. It assumes trivalent f-in-core ions and is not suitable for every
-lanthanide.
+The registry also contains `pseudodojo-pbe-lanthanides-sr`. It assumes
+trivalent f-in-core ions and is not suitable for every lanthanide, so
+selection never uses it for lanthanide or actinide elements; only an SSSP
+table can serve them.
 
 Installing a table does not change the request default. Without an explicit
 source, Core uses `pseudodojo-pbesol-efficiency-sr`; it does not choose among

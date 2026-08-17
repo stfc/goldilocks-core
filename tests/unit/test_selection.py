@@ -257,6 +257,114 @@ def test_frozen_4f_core_warning_survives_selection() -> None:
     assert "Ce, Eu, or Yb" in selection.warnings[0]
 
 
+def test_lanthanide_routes_to_sssp_when_both_providers_available() -> None:
+    """Never select a PseudoDojo pseudo for a lanthanide when SSSP exists."""
+    dojo = make_metadata(
+        element="Ce",
+        filename="Ce-pdojo.UPF",
+        provider="pseudodojo",
+        frozen_4f_core=True,
+    )
+    sssp = make_metadata(element="Ce", filename="Ce-sssp.UPF", provider="sssp")
+
+    selection = select_pseudopotentials(
+        make_structure("Ce"),
+        make_requirements(),
+        [dojo, sssp],
+    )
+
+    pseudo = selection.pseudopotentials[0]
+    assert pseudo.filename == "Ce-sssp.UPF"
+    assert pseudo.provenance.data_source == "sssp"
+    assert pseudo.warnings == ()
+
+
+def test_lanthanide_without_sssp_returns_actionable_fallback() -> None:
+    """Refuse PseudoDojo lanthanide pseudos and say how to fix it."""
+    selection = select_pseudopotentials(
+        make_structure("Ce"),
+        make_requirements(),
+        [
+            make_metadata(
+                element="Ce",
+                provider="pseudodojo",
+                frozen_4f_core=True,
+            )
+        ],
+    )
+
+    pseudo = selection.pseudopotentials[0]
+    assert pseudo.filename is None
+    assert pseudo.provenance.source == "fallback"
+    assert "only SSSP pseudopotentials" in pseudo.warnings[0]
+    assert "goldilocks assets install sssp-pbesol-efficiency-sr" in pseudo.warnings[0]
+    assert "--pseudo-table sssp-pbesol-efficiency-sr" in pseudo.warnings[0]
+
+
+def test_actinide_without_sssp_returns_actionable_fallback() -> None:
+    """No PseudoDojo table covers actinides; require SSSP."""
+    selection = select_pseudopotentials(
+        make_structure("U"),
+        make_requirements(),
+        [make_metadata(element="U", provider="pseudodojo")],
+    )
+
+    pseudo = selection.pseudopotentials[0]
+    assert pseudo.filename is None
+    assert "no PseudoDojo table covers actinides" in pseudo.warnings[0]
+
+
+def test_lanthanide_full_relativistic_request_notes_no_soc() -> None:
+    """SSSP has no fully-relativistic table; say so for Ln/An with SOC."""
+    selection = select_pseudopotentials(
+        make_structure("Ce"),
+        make_requirements(relativistic="full"),
+        [make_metadata(element="Ce", relativistic="scalar")],
+    )
+
+    pseudo = selection.pseudopotentials[0]
+    assert pseudo.filename is None
+    assert "no spin-orbit coupling" in pseudo.warnings[0]
+
+
+def test_sssp_preferred_over_pseudodojo_in_ranking() -> None:
+    """Rank SSSP ahead of PseudoDojo for equal complete candidates."""
+    dojo = make_metadata(filename="A-dojo.UPF", provider="pseudodojo")
+    sssp = make_metadata(filename="Z-sssp.UPF", provider="sssp")
+
+    selection = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(),
+        [dojo, sssp],
+    )
+
+    assert selection.pseudopotentials[0].filename == "Z-sssp.UPF"
+
+
+def test_complete_cutoffs_outrank_sssp_preference() -> None:
+    """Cutoff completeness still beats provider preference in ranking."""
+    incomplete_sssp = make_metadata(
+        filename="A-sssp.UPF",
+        provider="sssp",
+        ecutwfc_ry=30,
+        ecutrho_ry=None,
+    )
+    complete_dojo = make_metadata(
+        filename="Z-dojo.UPF",
+        provider="pseudodojo",
+        ecutwfc_ry=35,
+        ecutrho_ry=140,
+    )
+
+    selection = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(),
+        [incomplete_sssp, complete_dojo],
+    )
+
+    assert selection.pseudopotentials[0].filename == "Z-dojo.UPF"
+
+
 def test_selection_is_complete_and_deterministic_for_multiple_elements() -> None:
     """Emit one element-sorted choice regardless of metadata order."""
     selection = select_pseudopotentials(

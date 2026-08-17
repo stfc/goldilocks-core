@@ -119,12 +119,7 @@ print(result.bundle.manifest)
 CLI equivalent:
 
 ```bash
-uv run goldilocks-core generate structure.cif \
-    --pseudo-root pseudos \
-    --functional PBE \
-    --k-spacing 0.2 \
-    --out run-dir \
-    --json
+uv run goldilocks generate structure.cif --pseudo-root pseudos --functional PBE --k-spacing 0.2 --out run-dir --json
 ```
 
 The destination must not exist. The published layout is:
@@ -161,9 +156,7 @@ print(records[KPointSelection])
 CLI equivalent:
 
 ```bash
-uv run goldilocks-core compute structure.cif \
-    --outputs analysis,k_points \
-    --k-grid 4 4 4
+uv run goldilocks compute structure.cif --outputs analysis,k_points --k-grid 4 4 4
 ```
 
 ## One-call runner
@@ -212,8 +205,8 @@ print(result.k_points.grid)
 
 ```bash
 uv sync --all-extras
-uv run goldilocks-core serve http --host 127.0.0.1 --port 8000
-uv run goldilocks-core serve mcp
+uv run goldilocks serve http --host 127.0.0.1 --port 8000
+uv run goldilocks serve mcp
 ```
 
 HTTP exposes `/recommend`, `/generate`, `/compute`, `/tasks`, `/codes`,

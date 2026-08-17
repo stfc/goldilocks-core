@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from goldilocks_core.contracts.records import (
-    GeneratedFiles,
-    KPointSelection,
-    ParameterAdvice,
-    SelectionRecord,
-    StructureAnalysisRecord,
-    record_type_id,
-)
+from goldilocks_core.contracts.advice import ParameterAdvice
+from goldilocks_core.contracts.analysis import StructureAnalysisRecord
+from goldilocks_core.contracts.kpoints import KPointSelection
+from goldilocks_core.contracts.registry import record_type_id
+from goldilocks_core.contracts.result import GeneratedFiles
+from goldilocks_core.contracts.selection import SelectionRecord
 
 OUTPUT_RECORD_TYPES: tuple[type, ...] = (
     StructureAnalysisRecord,

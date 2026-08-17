@@ -1,6 +1,6 @@
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.advisors.kindex_advisor import advise_kpoints, ml_kmesh_advisor
+from goldilocks_core.advice.kindex import advise_kpoints, ml_kmesh_advisor
 from goldilocks_core.contracts import ModelSpec
 
 

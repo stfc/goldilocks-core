@@ -128,10 +128,6 @@ def _composition_features(
                 impute_nan=settings.impute_nan,
             )
         else:
-            # Featurizer constructors are heterogeneous: some (e.g.
-            # Stoichiometry) do not accept ``impute_nan``. Inspect the signature
-            # once and pass it only where supported -- explicit capability
-            # detection, not a catch-all retry.
             if "impute_nan" in inspect.signature(featurizer_cls).parameters:
                 method = featurizer_cls(impute_nan=settings.impute_nan)
             else:

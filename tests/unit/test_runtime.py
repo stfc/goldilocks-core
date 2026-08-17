@@ -12,20 +12,20 @@ from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
     CalculationHints,
-    CoreRuntime,
+    Dispatcher,
     PresetRequest,
     QueryRequest,
-    TaskDispatcher,
+    Runtime,
 )
 from goldilocks_core.assets import AssetFile, AssetSpec, AssetStore
 from goldilocks_core.contracts import (
     CalculationIntent,
-    CoreResult,
     KPointSelection,
     ParameterAdvice,
     Provenance,
     PseudoCutoffs,
     PseudoMetadata,
+    Result,
     SelectionRecord,
     StructureAnalysisRecord,
 )
@@ -33,10 +33,10 @@ from goldilocks_core.pseudo.installed import write_table_manifest
 from goldilocks_core.pseudo.registry import PseudoTable
 from goldilocks_core.pseudo.source import PseudoTableMismatch
 from goldilocks_core.runtime import (
+    GraphHandler,
     Preset,
-    StageSpec,
-    TaskHandler,
-    TaskSpec,
+    Stage,
+    TaskGraph,
 )
 
 
@@ -178,11 +178,11 @@ class TrackingBackend:
 
 
 def test_recommend_returns_complete_result_without_generated_files() -> None:
-    with CoreRuntime() as runtime:
-        dispatcher = TaskDispatcher(runtime)
+    with Runtime() as runtime:
+        dispatcher = Dispatcher(runtime)
         result = dispatcher.recommend(make_request())
 
-    assert isinstance(result, CoreResult)
+    assert isinstance(result, Result)
     assert isinstance(result.analysis, StructureAnalysisRecord)
     assert isinstance(result.advice, ParameterAdvice)
     assert isinstance(result.k_points, KPointSelection)
@@ -195,8 +195,8 @@ def test_analyze_uses_heuristic_without_configured_metallicity_model(
 ) -> None:
     """Use the runtime heuristic service when no model artifacts are configured."""
 
-    with CoreRuntime() as runtime:
-        dispatcher = TaskDispatcher(runtime)
+    with Runtime() as runtime:
+        dispatcher = Dispatcher(runtime)
         records = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
 
     analysis = records[StructureAnalysisRecord]
@@ -219,11 +219,11 @@ def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
 
     monkeypatch.setattr(metallicity, "classify_metallicity", classify)
 
-    with CoreRuntime(
+    with Runtime(
         metallicity_checkpoint="metal.ckpt",
         metallicity_atom_init="atom-init.json",
     ) as runtime:
-        dispatcher = TaskDispatcher(runtime)
+        dispatcher = Dispatcher(runtime)
         records = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
 
     analysis = records[StructureAnalysisRecord]
@@ -235,8 +235,8 @@ def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
 
 
 def test_generate_returns_generated_files() -> None:
-    with CoreRuntime() as runtime:
-        dispatcher = TaskDispatcher(runtime)
+    with Runtime() as runtime:
+        dispatcher = Dispatcher(runtime)
         result = dispatcher.generate(make_request(mode="generate"))
 
     assert result.generated_files
@@ -246,8 +246,8 @@ def test_generate_returns_generated_files() -> None:
 def test_generate_with_output_dir_writes_bundle(tmp_path) -> None:
     output_dir = tmp_path / "bundle"
 
-    with CoreRuntime() as runtime:
-        dispatcher = TaskDispatcher(runtime)
+    with Runtime() as runtime:
+        dispatcher = Dispatcher(runtime)
         result = dispatcher.generate(
             make_request(mode="generate"), output_dir=str(output_dir)
         )
@@ -270,8 +270,8 @@ def test_generate_with_output_dir_writes_bundle(tmp_path) -> None:
 )
 def test_compute_returns_each_requested_record_type(record_type: type) -> None:
     """Query every public SCF intermediate as an isolated output."""
-    with CoreRuntime() as runtime:
-        dispatcher = TaskDispatcher(runtime)
+    with Runtime() as runtime:
+        dispatcher = Dispatcher(runtime)
         records = dispatcher.compute(make_query_request((record_type,)))
 
     assert tuple(records) == (record_type,)
@@ -281,8 +281,8 @@ def test_compute_returns_each_requested_record_type(record_type: type) -> None:
 def test_select_only_compute_does_not_invoke_kmesh(monkeypatch) -> None:
     backend = TrackingBackend(raise_on_call=True)
 
-    with CoreRuntime(kmesh_service=backend) as runtime:
-        dispatcher = TaskDispatcher(runtime)
+    with Runtime(kmesh_service=backend) as runtime:
+        dispatcher = Dispatcher(runtime)
         records = dispatcher.compute(make_query_request((SelectionRecord,)))
 
     assert isinstance(records[SelectionRecord], SelectionRecord)
@@ -297,8 +297,8 @@ def test_analysis_query_does_not_resolve_pseudopotential_source(tmp_path) -> Non
         pseudo_table="not-a-real-table",
     )
 
-    with CoreRuntime(asset_store=AssetStore(tmp_path / "empty")) as runtime:
-        records = TaskDispatcher(runtime).compute(request)
+    with Runtime(asset_store=AssetStore(tmp_path / "empty")) as runtime:
+        records = Dispatcher(runtime).compute(request)
 
     assert records[StructureAnalysisRecord].reduced_formula == "Si"
 
@@ -315,10 +315,8 @@ def test_explicit_metadata_selection_does_not_read_registry(
         lambda path: pytest.fail("explicit metadata must not read the registry"),
     )
 
-    with CoreRuntime() as runtime:
-        records = TaskDispatcher(runtime).compute(
-            make_query_request((SelectionRecord,))
-        )
+    with Runtime() as runtime:
+        records = Dispatcher(runtime).compute(make_query_request((SelectionRecord,)))
 
     assert records[SelectionRecord].pseudopotentials[0].filename == "Si.UPF"
 
@@ -338,8 +336,8 @@ def test_runtime_resolves_one_explicit_installed_table(
         pseudo_table=table.id,
     )
 
-    with CoreRuntime(asset_store=store) as runtime:
-        result = TaskDispatcher(runtime).recommend(request)
+    with Runtime(asset_store=store) as runtime:
+        result = Dispatcher(runtime).recommend(request)
 
     selected = result.selection.pseudopotentials[0]
     assert selected.filename == "Si.upf"
@@ -363,16 +361,16 @@ def test_explicit_table_must_satisfy_scientific_requirements(
     )
 
     with (
-        CoreRuntime(asset_store=store) as runtime,
+        Runtime(asset_store=store) as runtime,
         pytest.raises(PseudoTableMismatch, match="functional is PBEsol"),
     ):
-        TaskDispatcher(runtime).recommend(request)
+        Dispatcher(runtime).recommend(request)
 
 
 def test_reset_close_and_context_manager_delegate_to_backend(monkeypatch) -> None:
     backend = TrackingBackend()
 
-    with CoreRuntime(kmesh_service=backend) as runtime:
+    with Runtime(kmesh_service=backend) as runtime:
         runtime.reset()
         assert runtime.is_closed is False
 
@@ -415,12 +413,12 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
         hints=CalculationHints(pseudo_type="NC"),
         pseudo_metadata=(make_metadata(),),
     )
-    runtime = CoreRuntime(
+    runtime = Runtime(
         kmesh_service=backend,
         metallicity_checkpoint="metal.ckpt",
         metallicity_atom_init="atom-init.json",
     )
-    dispatcher = TaskDispatcher(runtime)
+    dispatcher = Dispatcher(runtime)
 
     first = dispatcher.recommend(request)
     second = dispatcher.recommend(request)
@@ -449,13 +447,13 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     assert backend.closes == 1
     assert model_refs[1]() is None
     assert runtime.is_closed is True
-    with pytest.raises(RuntimeError, match="CoreRuntime is closed"):
+    with pytest.raises(RuntimeError, match="Runtime is closed"):
         dispatcher.recommend(request)
 
 
 def test_runtime_dispatches_a_registered_task_via_compute(monkeypatch) -> None:
     """A registered task dispatches by intent.task through compute."""
-    monkeypatch.setattr(CoreRuntime, "_build_backend", lambda self: TrackingBackend())
+    monkeypatch.setattr(Runtime, "_build_backend", lambda self: TrackingBackend())
 
     @dataclass
     class StubRecord:
@@ -464,18 +462,18 @@ def test_runtime_dispatches_a_registered_task_via_compute(monkeypatch) -> None:
     def make_stub(*, ctx) -> StubRecord:
         return StubRecord("ran")
 
-    handler = TaskHandler(
-        spec=TaskSpec(
+    handler = GraphHandler(
+        spec=TaskGraph(
             task="stub_task",
-            stages=(StageSpec(StubRecord, (), make_stub),),
+            stages=(Stage(StubRecord, (), make_stub),),
             presets=(Preset("only", (StubRecord,)),),
         ),
         build_context=lambda request, runtime: SimpleNamespace(),
         assemble_result=lambda request, records: records,
     )
 
-    with CoreRuntime() as runtime:
-        dispatcher = TaskDispatcher(runtime)
+    with Runtime() as runtime:
+        dispatcher = Dispatcher(runtime)
         dispatcher.register(handler)
         records = dispatcher.compute(
             QueryRequest(
@@ -491,7 +489,7 @@ def test_runtime_dispatches_a_registered_task_via_compute(monkeypatch) -> None:
 
 def test_runtime_recommend_dispatches_a_registered_task_preset(monkeypatch) -> None:
     """recommend runs the task's recommend preset and the task's own assembler."""
-    monkeypatch.setattr(CoreRuntime, "_build_backend", lambda self: TrackingBackend())
+    monkeypatch.setattr(Runtime, "_build_backend", lambda self: TrackingBackend())
 
     @dataclass
     class StubRecord:
@@ -501,18 +499,18 @@ def test_runtime_recommend_dispatches_a_registered_task_preset(monkeypatch) -> N
         return StubRecord("ran")
 
     assembled = object()
-    handler = TaskHandler(
-        spec=TaskSpec(
+    handler = GraphHandler(
+        spec=TaskGraph(
             task="stub_task",
-            stages=(StageSpec(StubRecord, (), make_stub),),
+            stages=(Stage(StubRecord, (), make_stub),),
             presets=(Preset("recommend", (StubRecord,)),),
         ),
         build_context=lambda request, runtime: SimpleNamespace(),
         assemble_result=lambda request, records: assembled,
     )
 
-    with CoreRuntime() as runtime:
-        dispatcher = TaskDispatcher(runtime)
+    with Runtime() as runtime:
+        dispatcher = Dispatcher(runtime)
         dispatcher.register(handler)
         result = dispatcher.recommend(
             PresetRequest(

@@ -9,19 +9,19 @@ from pymatgen.core import Lattice, Structure
 from goldilocks_core import (
     CalculationHints,
     CalculationIntent,
-    CoreRuntime,
     PresetRequest,
     QueryRequest,
+    Runtime,
     query_records,
     run_core_job,
 )
-from goldilocks_core.advisors.kdistance_advisor import QrfKDistanceBackend
+from goldilocks_core.advice.kdistance import QrfBackend
 from goldilocks_core.contracts import (
-    CoreRecords,
-    CoreResult,
     ParameterAdvice,
     PseudoCutoffs,
     PseudoMetadata,
+    Records,
+    Result,
     StructureAnalysisRecord,
     StructureFeatureVector,
 )
@@ -67,7 +67,7 @@ def test_run_core_job_recommend_matches_public_recommendation_shape() -> None:
         )
     )
 
-    assert isinstance(result, CoreResult)
+    assert isinstance(result, Result)
     assert result.k_points.grid == (2, 2, 1)
     assert result.selection.pseudopotentials[0].filename == "Si.UPF"
     assert result.generated_files == ()
@@ -88,7 +88,7 @@ def test_query_records_returns_only_requested_records() -> None:
         "analysis",
         "advice",
     ]
-    assert isinstance(records, CoreRecords)
+    assert isinstance(records, Records)
     assert tuple(records) == (StructureAnalysisRecord, ParameterAdvice)
     assert isinstance(records[StructureAnalysisRecord], StructureAnalysisRecord)
     assert isinstance(records[ParameterAdvice], ParameterAdvice)
@@ -101,12 +101,12 @@ def test_query_records_reuses_caller_owned_runtime() -> None:
         outputs=(StructureAnalysisRecord, ParameterAdvice),
     )
 
-    with CoreRuntime() as runtime:
+    with Runtime() as runtime:
         first = query_records(request, runtime=runtime)
         second = query_records(request, runtime=runtime)
         assert runtime.is_closed is False
 
-    assert isinstance(first, CoreRecords)
+    assert isinstance(first, Records)
     assert first.to_dict() == second.to_dict()
     assert runtime.is_closed is True
 
@@ -182,10 +182,10 @@ def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> 
         ),
     )
 
-    with CoreRuntime(
+    with Runtime(
         metallicity_checkpoint=checkpoint,
         metallicity_atom_init=atom_table,
-        kmesh_service=QrfKDistanceBackend(
+        kmesh_service=QrfBackend(
             config=config,
             metallicity_checkpoint=str(checkpoint),
             metallicity_atom_init=str(atom_table),
@@ -227,7 +227,7 @@ def test_run_core_job_reuses_caller_owned_runtime() -> None:
         pseudo_metadata=(make_metadata(),),
     )
 
-    with CoreRuntime() as runtime:
+    with Runtime() as runtime:
         first = run_core_job(request, runtime=runtime)
         second = run_core_job(request, runtime=runtime)
         assert runtime.is_closed is False
@@ -260,7 +260,7 @@ def test_run_core_job_generate_with_caller_owned_runtime() -> None:
         mode="generate",
     )
 
-    with CoreRuntime() as runtime:
+    with Runtime() as runtime:
         result = run_core_job(request, runtime=runtime)
         assert runtime.is_closed is False
 

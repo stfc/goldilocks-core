@@ -45,7 +45,7 @@ def preparer(table: PseudoTable):
             tarfile.TarError,
         ) as error:
             raise PseudoImportError(
-                f"cannot normalize PseudoDojo table {table.id}: {error}"
+                f"cannot normalize Pseudo Dojo table {table.id}: {error}"
             ) from error
 
     return prepare

@@ -26,7 +26,7 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.pseudo.source import PseudoTableMismatch
 from goldilocks_core.pseudo.validation import PseudoImportError
-from goldilocks_core.runtime.service import CoreService
+from goldilocks_core.runtime.service import Service
 from goldilocks_core.server.request import from_dict
 
 try:
@@ -199,7 +199,7 @@ def _body(
     return body
 
 
-def _run(body: dict[str, Any], service: CoreService) -> dict[str, Any]:
+def _run(body: dict[str, Any], service: Service) -> dict[str, Any]:
     """Parse, dispatch, and serialize one MCP call.
 
     Stage ValueError subclasses that carry operator-facing diagnostics are
@@ -221,11 +221,11 @@ def _run(body: dict[str, Any], service: CoreService) -> dict[str, Any]:
 
 
 def create_server(
-    service: CoreService | None = None, *, name: str = "goldilocks-core"
+    service: Service | None = None, *, name: str = "goldilocks-core"
 ) -> MCPServer:
     """Create an MCP server, optionally using a caller-owned service."""
     owns_service = service is None
-    state = service if service is not None else CoreService()
+    state = service if service is not None else Service()
 
     @asynccontextmanager
     async def lifespan(server: MCPServer):
@@ -257,7 +257,7 @@ def create_server(
     async def list_models() -> dict[str, Any]:
         return {"models": state.describe_models()}
 
-    @server.tool(description="Run the recommend preset and return CoreResult JSON.")
+    @server.tool(description="Run the recommend preset and return Result JSON.")
     async def recommend(
         structure: str | _InlineStructure,
         intent: _Intent | None = None,
@@ -279,7 +279,7 @@ def create_server(
         body["mode"] = "recommend"
         return _run(body, state)
 
-    @server.tool(description="Run the generate preset and return CoreResult JSON.")
+    @server.tool(description="Run the generate preset and return Result JSON.")
     async def generate(
         structure: str | _InlineStructure,
         intent: _Intent | None = None,

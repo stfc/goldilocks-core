@@ -14,15 +14,15 @@ from goldilocks_core.cli.assets import verify as verify_assets
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
-    CoreResult,
     ModelSpec,
     PresetRequest,
     QueryRequest,
+    Result,
     resolve_output_types,
 )
 from goldilocks_core.examples import structures_path
 from goldilocks_core.generation import available_codes, available_tasks
-from goldilocks_core.runtime import CoreRuntime, query_records, run_core_job
+from goldilocks_core.runtime import Runtime, query_records, run_core_job
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -109,7 +109,7 @@ def main() -> None:
         request = _request_from_args(args)
         while True:
             try:
-                with CoreRuntime(asset_store=store) as runtime:
+                with Runtime(asset_store=store) as runtime:
                     output = (
                         query_records(request, runtime=runtime)
                         if args.command == "compute"
@@ -369,7 +369,7 @@ def _parse_optional_bool(value: str | None) -> bool | None:
     return value == "true"
 
 
-def _print_human_summary(result: CoreResult) -> None:
+def _print_human_summary(result: Result) -> None:
     """Print a small human-readable summary from the Core result."""
     grid = result.k_points.grid
     print(f"formula: {result.analysis.reduced_formula}")

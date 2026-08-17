@@ -15,15 +15,13 @@ from dataclasses import dataclass, field
 
 from pymatgen.core import Structure
 
+from goldilocks_core.advice import ml_kmesh_advisor
 from goldilocks_core.advice.parameters import advise_parameters
-from goldilocks_core.advisors import ml_kmesh_advisor
 from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.contracts import (
     OUTPUT_RECORD_TYPES,
     CalculationHints,
     CalculationIntent,
-    CoreRecords,
-    CoreResult,
     ElectronicCharacter,
     GeneratedFiles,
     KMeshAdvisor,
@@ -31,6 +29,8 @@ from goldilocks_core.contracts import (
     ParameterAdvice,
     PresetRequest,
     QueryRequest,
+    Records,
+    Result,
     SelectionRecord,
     StructureAnalysisRecord,
     StructureInput,
@@ -38,10 +38,10 @@ from goldilocks_core.contracts import (
 from goldilocks_core.generation.registry import generate_inputs
 from goldilocks_core.io.structures import load_structure
 from goldilocks_core.kmesh.resolve import resolve_kpoints
-from goldilocks_core.pseudo.source import PseudoSourceResolver, source_for_request
-from goldilocks_core.runtime.core import CoreRuntime
-from goldilocks_core.runtime.graph import Preset, StageSpec, TaskSpec
-from goldilocks_core.runtime.task import TaskHandler
+from goldilocks_core.pseudo.source import PseudoSource, source_for_request
+from goldilocks_core.runtime.graph import Preset, Stage, TaskGraph
+from goldilocks_core.runtime.models import Runtime
+from goldilocks_core.runtime.task import GraphHandler
 from goldilocks_core.selection import select_pseudopotentials
 
 
@@ -58,18 +58,18 @@ class ScfContext:
     metallicity_classifier: Callable[
         [Structure], tuple[ElectronicCharacter, str, float | None]
     ]
-    pseudo_source: PseudoSourceResolver
+    pseudo_source: PseudoSource
     intent: CalculationIntent = field(default_factory=CalculationIntent)
     hints: CalculationHints = field(default_factory=CalculationHints)
 
 
-SCF_TASK = TaskSpec(
+SCF_TASK = TaskGraph(
     task="scf_single_point",
     name="Single-point SCF",
     description=("Recommend and generate inputs for a single-point SCF calculation."),
     selectable_outputs=OUTPUT_RECORD_TYPES,
     stages=(
-        StageSpec(
+        Stage(
             output=Structure,
             inputs=(),
             call=lambda *, ctx: load_structure(ctx.structure_input),
@@ -77,7 +77,7 @@ SCF_TASK = TaskSpec(
             name="Load structure",
             description="Parse and validate the source into a Structure.",
         ),
-        StageSpec(
+        Stage(
             output=StructureAnalysisRecord,
             inputs=(Structure,),
             call=lambda structure, *, ctx: analyze_structure(
@@ -87,7 +87,7 @@ SCF_TASK = TaskSpec(
             name="Analyze",
             description="Report structure facts without parameter decisions.",
         ),
-        StageSpec(
+        Stage(
             output=KPointSelection,
             inputs=(Structure,),
             call=lambda structure, *, ctx: resolve_kpoints(
@@ -97,7 +97,7 @@ SCF_TASK = TaskSpec(
             name="Resolve k-points",
             description="Choose the k-point grid from operator hints or a model.",
         ),
-        StageSpec(
+        Stage(
             output=ParameterAdvice,
             inputs=(StructureAnalysisRecord,),
             call=lambda analysis, *, ctx: advise_parameters(
@@ -107,7 +107,7 @@ SCF_TASK = TaskSpec(
             name="Advise",
             description="Recommend provenance-backed calculation parameters.",
         ),
-        StageSpec(
+        Stage(
             output=SelectionRecord,
             inputs=(Structure, ParameterAdvice),
             call=lambda structure, advice, *, ctx: select_pseudopotentials(
@@ -122,7 +122,7 @@ SCF_TASK = TaskSpec(
                 "pseudopotential for each element."
             ),
         ),
-        StageSpec(
+        Stage(
             output=GeneratedFiles,
             inputs=(Structure, ParameterAdvice, SelectionRecord, KPointSelection),
             call=lambda structure, advice, selection, k_points, *, ctx: generate_inputs(
@@ -159,7 +159,7 @@ SCF_TASK = TaskSpec(
 
 def build_scf_context(
     request: PresetRequest | QueryRequest,
-    runtime: CoreRuntime,
+    runtime: Runtime,
 ) -> ScfContext:
     """Build a fresh SCF run context from a request and the runtime's services."""
     backend: KMeshAdvisor = runtime.kmesh_service
@@ -181,8 +181,8 @@ def build_scf_context(
 
 def assemble_core_result(
     request: PresetRequest,
-    records: CoreRecords,
-) -> CoreResult:
+    records: Records,
+) -> Result:
     """Assemble a full SCF preset result from type-keyed graph records."""
     analysis = records[StructureAnalysisRecord]
     advice = records[ParameterAdvice]
@@ -195,7 +195,7 @@ def assemble_core_result(
         k_points.provenance.warnings,
         selection.warnings,
     )
-    return CoreResult(
+    return Result(
         intent=request.intent,
         analysis=analysis,
         advice=advice,
@@ -223,7 +223,7 @@ def _unique_warnings(*groups: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(warning for group in groups for warning in group))
 
 
-SCF_HANDLER = TaskHandler(
+SCF_HANDLER = GraphHandler(
     spec=SCF_TASK,
     build_context=build_scf_context,
     assemble_result=assemble_core_result,

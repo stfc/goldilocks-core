@@ -6,6 +6,7 @@ so importing this facade (and ``goldilocks_core``) never pulls ``fastapi`` or
 ``mcp``. The shared request deserializer is re-exported here because both
 transports use it and it has no optional dependencies.
 """
+from __future__ import annotations
 
 from goldilocks_core.server.request import RequestError, from_dict
 

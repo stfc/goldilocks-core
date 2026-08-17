@@ -21,8 +21,8 @@ from goldilocks_core.contracts import QueryRequest
 from goldilocks_core.generation import GenerationError
 from goldilocks_core.io.structures import StructureInputError
 from goldilocks_core.pseudo.source import PseudoTableMismatch
-from goldilocks_core.runtime import UnknownTaskError
-from goldilocks_core.runtime.service import CoreService
+from goldilocks_core.runtime import UnknownTask
+from goldilocks_core.runtime.service import Service
 from goldilocks_core.server.request import RequestError, from_dict
 
 __all__ = ["create_app", "serve"]
@@ -33,7 +33,7 @@ _MISSING_HTTP_EXTRA = (
 )
 
 
-def create_app(service: CoreService | None = None) -> Any:
+def create_app(service: Service | None = None) -> Any:
     """Create the HTTP app, optionally using a caller-owned service."""
     try:
         from fastapi import FastAPI, Request
@@ -42,7 +42,7 @@ def create_app(service: CoreService | None = None) -> Any:
         raise ImportError(_MISSING_HTTP_EXTRA) from error
 
     owns_service = service is None
-    state = service if service is not None else CoreService()
+    state = service if service is not None else Service()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -66,9 +66,9 @@ def create_app(service: CoreService | None = None) -> Any:
             content={"error": {"kind": "invalid_request", "message": str(error)}},
         )
 
-    @app.exception_handler(UnknownTaskError)
+    @app.exception_handler(UnknownTask)
     async def unknown_task_handler(
-        request: Request, error: UnknownTaskError
+        request: Request, error: UnknownTask
     ) -> JSONResponse:
         del request
         return JSONResponse(
@@ -212,9 +212,7 @@ def create_app(service: CoreService | None = None) -> Any:
     return app
 
 
-def _execute(
-    endpoint: str, body: dict[str, Any], service: CoreService
-) -> dict[str, Any]:
+def _execute(endpoint: str, body: dict[str, Any], service: Service) -> dict[str, Any]:
     """Parse, dispatch, and serialize one transport request."""
     raw = dict(body)
     if endpoint == "compute":

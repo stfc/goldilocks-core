@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from goldilocks_core.runtime import CoreService
+from goldilocks_core.runtime import Service
 from goldilocks_core.server.http import create_app
 
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
 
 
-class _CountingService(CoreService):
+class _CountingService(Service):
     """Record preset calls made through one service instance."""
 
     def __init__(self) -> None:

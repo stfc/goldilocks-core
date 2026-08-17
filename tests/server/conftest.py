@@ -6,7 +6,7 @@ import pytest
 from pymatgen.core import Structure
 
 from goldilocks_core.examples import structure
-from goldilocks_core.runtime import CoreService
+from goldilocks_core.runtime import Service
 
 
 @pytest.fixture
@@ -56,8 +56,8 @@ def request_body(
 
 
 @pytest.fixture
-def test_service() -> Iterator[CoreService]:
+def test_service() -> Iterator[Service]:
     """Yield a Core service and close it after the test."""
-    service = CoreService()
+    service = Service()
     yield service
     service.close()

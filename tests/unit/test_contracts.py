@@ -6,14 +6,14 @@ from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
     ConvergenceAdvice,
-    CoreRecords,
-    CoreResult,
     KPointSelection,
     MagnetismAdvice,
     ParameterAdvice,
     PresetRequest,
     Provenance,
     PseudopotentialRequirements,
+    Records,
+    Result,
     SelectionRecord,
     SmearingAdvice,
     SpinOrbitAdvice,
@@ -85,7 +85,7 @@ def _make_selection() -> SelectionRecord:
 
 def test_contracts_serialize_to_json_safe_dicts() -> None:
     """Serialize nested pipeline records without tuples or dataclasses."""
-    result = CoreResult(
+    result = Result(
         intent=CalculationIntent(),
         analysis=_make_analysis(),
         advice=_make_advice(),
@@ -104,7 +104,7 @@ def test_contracts_serialize_to_json_safe_dicts() -> None:
 def test_core_records_maps_requested_types_and_serializes_record_names() -> None:
     """Expose only requested DAG records and serialize their stable ids."""
     analysis = _make_analysis()
-    records = CoreRecords({StructureAnalysisRecord: analysis})
+    records = Records({StructureAnalysisRecord: analysis})
 
     assert records[StructureAnalysisRecord] is analysis
     assert tuple(records) == (StructureAnalysisRecord,)
@@ -174,7 +174,7 @@ def test_feature_vectors_serialize_numpy_values_as_json_lists() -> None:
 
 def test_job_records_serialize_to_json_safe_dicts() -> None:
     """Serialize job result records for CLI and future HTTP callers."""
-    result = CoreResult(
+    result = Result(
         intent=CalculationIntent(),
         analysis=_make_analysis(),
         advice=_make_advice(),

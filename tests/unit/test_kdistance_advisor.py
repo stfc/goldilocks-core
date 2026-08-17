@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.advisors.kdistance_advisor import (
-    QrfKDistanceBackend,
+from goldilocks_core.advice.kdistance import (
+    QrfBackend,
     kdistance_to_selection,
 )
 from goldilocks_core.contracts import StructureFeatureVector
@@ -112,7 +112,7 @@ def test_qrf_backend_loads_lazily_and_reuses_resources(monkeypatch) -> None:
 
     patch_inference(monkeypatch)
     monkeypatch.setattr("goldilocks_core.ml.models.load_model", load_model)
-    backend = QrfKDistanceBackend(
+    backend = QrfBackend(
         config=local_config(),
         metallicity_checkpoint="checkpoint.ckpt",
         metallicity_atom_init="atom-init.json",
@@ -131,7 +131,7 @@ def test_qrf_backend_model_loading_errors_propagate(monkeypatch) -> None:
         raise FileNotFoundError("missing model")
 
     monkeypatch.setattr("goldilocks_core.ml.models.load_model", fail)
-    backend = QrfKDistanceBackend(
+    backend = QrfBackend(
         config=local_config(),
         metallicity_checkpoint="checkpoint.ckpt",
         metallicity_atom_init="atom-init.json",
@@ -150,11 +150,11 @@ def test_qrf_backend_loads_registry_config_on_first_model_call(monkeypatch) -> N
         return local_config()
 
     monkeypatch.setattr(
-        "goldilocks_core.advisors.kdistance_advisor.load_default_qrf_config",
+        "goldilocks_core.advice.kdistance.load_default_qrf_config",
         load_config,
     )
     patch_inference(monkeypatch)
-    backend = QrfKDistanceBackend(
+    backend = QrfBackend(
         metallicity_checkpoint="checkpoint.ckpt",
         metallicity_atom_init="atom-init.json",
     )

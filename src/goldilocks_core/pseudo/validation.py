@@ -10,10 +10,12 @@ from goldilocks_core.functionals import normalize_functional_label
 
 class PseudoImportError(ValueError):
     """Source files cannot form trustworthy pseudopotential metadata."""
+    pass
 
 
 class AmbiguousCutoffMetadata(PseudoImportError):
     """More than one recognized cutoff record describes a local UPF."""
+    pass
 
 
 def finite_positive_cutoff(value: object, label: str) -> float:

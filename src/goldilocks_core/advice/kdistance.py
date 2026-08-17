@@ -43,7 +43,7 @@ def kdistance_to_selection(
     )
 
 
-class QrfKDistanceBackend:
+class QrfBackend:
     """Stateful QRF k-distance advisor owning its loaded model resources.
 
     Lazily loads the QRF model + metallicity model on first use; ``reset``
@@ -72,7 +72,7 @@ class QrfKDistanceBackend:
     def __call__(self, structure: Structure) -> KPointSelection:
         """Predict a k-point selection for ``structure`` using the QRF model."""
         if self._closed:
-            raise RuntimeError("QrfKDistanceBackend is closed.")
+            raise RuntimeError("QrfBackend is closed.")
         if self._resources is None:
             self._resources = self._load_resources()
         prediction = predict_kdistance_with_resources(

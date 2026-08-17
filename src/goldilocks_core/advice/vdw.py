@@ -39,19 +39,16 @@ def advise_vdw(
 
     if analysis.low_dimensional:
         method = _resolve_vdw_method(hints)
-        reason = (
-            f"Connectivity-derived {analysis.dimensionality} classification "
-            "indicates a low-dimensional heuristic; D3BJ is the "
-            "conservative package default because dispersion may be important. "
-            "Override with CalculationHints(use_vdw=..., vdw_method=...) as needed."
-            if hints.vdw_method is None
-            else (
-                f"Connectivity-derived {analysis.dimensionality} classification "
-                "indicates a low-dimensional heuristic; use the "
-                f"operator-provided {method} vdW method. Override with "
-                "CalculationHints(use_vdw=...) as needed."
+        if hints.vdw_method is None:
+            reason = (
+                f"Low-dimensional {analysis.dimensionality} structure; D3BJ is the "
+                "conservative default because dispersion may be important."
             )
-        )
+        else:
+            reason = (
+                f"Low-dimensional {analysis.dimensionality} structure; use the "
+                f"operator-provided {method} vdW method."
+            )
         return VdwAdvice(
             use_vdw=True,
             method=method,
@@ -74,8 +71,7 @@ def advise_vdw(
         provenance=Provenance(
             source="default",
             reason=(
-                "3D bulk or undetermined dimensionality; no vdW correction by "
-                "default. Set use_vdw=True for layered or molecular systems."
+                "3D bulk or undetermined dimensionality; no vdW correction by default."
             ),
             warnings=warnings,
         ),

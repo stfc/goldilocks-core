@@ -2,48 +2,52 @@
 
 from __future__ import annotations
 
+from goldilocks_core.contracts.advice import (
+    ConvergenceAdvice,
+    MagnetismAdvice,
+    ParameterAdvice,
+    PseudopotentialRequirements,
+    SmearingAdvice,
+    SpinOrbitAdvice,
+    VdwAdvice,
+)
+from goldilocks_core.contracts.analysis import (
+    StructureAnalysisRecord,
+    SymmetryUnavailable,
+)
+from goldilocks_core.contracts.hints import (
+    CalculationHints,
+    CalculationIntent,
+    ConvergenceHints,
+    KmeshHints,
+    PseudoHints,
+    SmearingHints,
+    SpinHints,
+    VdwHints,
+)
+from goldilocks_core.contracts.kpoints import KMeshEntry, KPointSelection
+from goldilocks_core.contracts.models import ModelSpec, StructureFeatureVector
 from goldilocks_core.contracts.outputs import (
     OUTPUT_RECORD_TYPES,
     OUTPUT_TYPES_BY_ID,
     resolve_output_types,
 )
 from goldilocks_core.contracts.protocols import KMeshAdvisor, KMeshService
-from goldilocks_core.contracts.records import (
-    RECORD_TYPE_IDS,
+from goldilocks_core.contracts.provenance import Provenance
+from goldilocks_core.contracts.registry import RECORD_TYPE_IDS, record_type_id
+from goldilocks_core.contracts.requests import PresetRequest, QueryRequest
+from goldilocks_core.contracts.result import (
     BundleRecord,
-    CalculationHints,
-    CalculationIntent,
-    ConvergenceAdvice,
-    ConvergenceHints,
-    CoreRecords,
-    CoreResult,
     GeneratedFile,
     GeneratedFiles,
-    KMeshEntry,
-    KmeshHints,
-    KPointSelection,
-    MagnetismAdvice,
-    ModelSpec,
-    ParameterAdvice,
-    PresetRequest,
-    Provenance,
+    Records,
+    Result,
+)
+from goldilocks_core.contracts.selection import (
     PseudoCutoffs,
-    PseudoHints,
     PseudoMetadata,
-    PseudopotentialRequirements,
     PseudopotentialSelection,
-    QueryRequest,
     SelectionRecord,
-    SmearingAdvice,
-    SmearingHints,
-    SpinHints,
-    SpinOrbitAdvice,
-    StructureAnalysisRecord,
-    StructureFeatureVector,
-    SymmetryUnavailable,
-    VdwAdvice,
-    VdwHints,
-    record_type_id,
 )
 from goldilocks_core.contracts.serial import to_jsonable
 from goldilocks_core.contracts.types import (
@@ -78,8 +82,8 @@ __all__ = [
     "CodeName",
     "ConvergenceAdvice",
     "ConvergenceHints",
-    "CoreRecords",
-    "CoreResult",
+    "Records",
+    "Result",
     "Dimensionality",
     "ElectronicCharacter",
     "GeneratedFile",

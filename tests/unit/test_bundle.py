@@ -8,16 +8,16 @@ from goldilocks_core.advice import advise_parameters
 from goldilocks_core.bundle import build_bundle_manifest, write_bundle_directory
 from goldilocks_core.contracts import (
     CalculationIntent,
-    CoreResult,
     GeneratedFile,
     KPointSelection,
     Provenance,
+    Result,
     SelectionRecord,
     StructureAnalysisRecord,
 )
 
 
-def make_result() -> CoreResult:
+def make_result() -> Result:
     """Build a minimal Core result with one generated file."""
     analysis = StructureAnalysisRecord(
         formula="Si1",
@@ -39,7 +39,7 @@ def make_result() -> CoreResult:
         provenance=Provenance(source="default", reason="test"),
     )
     selection = SelectionRecord(pseudopotentials=())
-    return CoreResult(
+    return Result(
         intent=CalculationIntent(),
         analysis=analysis,
         advice=advice,

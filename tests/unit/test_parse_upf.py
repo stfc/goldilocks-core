@@ -49,10 +49,10 @@ Generated using a non-relativistic calculation.
     return path
 
 
-def test_parse_upf_metadata_parses_attribute_style_pslibrary_file(
+def test_parse_upf_metadata_parses_attribute_style_header(
     tmp_path: Path,
 ) -> None:
-    """Parse metadata from a synthetic PSLibrary-style UPF file."""
+    """Parse scientific metadata without inferring provider facts from paths."""
     pseudo_root = tmp_path / "pseudopotentials" / "pslibrary"
     pseudo_root.mkdir(parents=True)
     pseudo_path = write_attr_upf(
@@ -68,15 +68,15 @@ def test_parse_upf_metadata_parses_attribute_style_pslibrary_file(
 
     assert metadata.element == "Hg"
     assert metadata.filename == "Hg.pbe-n-rrkjus_psl.1.0.0.UPF"
-    assert metadata.library == "pslibrary"
+    assert metadata.provider is None
     assert metadata.pseudo_type == "USPP"
     assert metadata.functional == "PBE"
     assert metadata.relativistic == "scalar"
     assert metadata.z_valence == 12.0
 
 
-def test_parse_upf_metadata_parses_gbrv_text_header(tmp_path: Path) -> None:
-    """Parse metadata from a synthetic GBRV text-style PP_HEADER."""
+def test_parse_upf_metadata_parses_text_header(tmp_path: Path) -> None:
+    """Parse a text PP_HEADER without inferring provider facts from paths."""
     pseudo_root = tmp_path / "pseudopotentials" / "GBRV" / "all_pbe_UPF_v1.5"
     pseudo_root.mkdir(parents=True)
     pseudo_path = write_text_upf(pseudo_root / "li_pbe_v1.4.uspp.F.UPF")
@@ -85,8 +85,8 @@ def test_parse_upf_metadata_parses_gbrv_text_header(tmp_path: Path) -> None:
 
     assert metadata.element == "Li"
     assert metadata.filename == "li_pbe_v1.4.uspp.F.UPF"
-    assert metadata.library == "GBRV"
-    assert metadata.source_set == "all_pbe_UPF_v1.5"
+    assert metadata.provider is None
+    assert metadata.source_identifier is None
     assert metadata.pseudo_type == "USPP"
     assert metadata.functional == "PBE"
     assert metadata.relativistic == "non-relativistic"

@@ -5,7 +5,8 @@ recommendations and Quantum ESPRESSO SCF input files.
 
 ## Run an installed example
 
-Use an explicit k-point hint for a deterministic, model-free first run:
+Install the default runtime assets, then use an explicit k-point hint for a
+deterministic first run that bypasses the k-point model:
 
 ```python
 from goldilocks_core import CalculationHints, CoreService, PresetRequest
@@ -25,9 +26,10 @@ print(result.k_points.provenance)
 print(result.warnings)
 ```
 
-`recommend` runs Load, Analyze, Advise, Kmesh, and Select. The result contains
-analysis, advice, a concrete k-point selection, pseudopotential selection, and
-aggregated warnings.
+`recommend` runs Load, Analyze, Advise, Kmesh, and Select. The
+result contains analysis, advice, a concrete k-point selection,
+pseudopotential selection, and aggregated warnings. This request resolves the
+installed default pseudopotential table.
 
 ## Supply operator hints
 
@@ -58,20 +60,18 @@ print(result.k_points.grid)                       # (4, 4, 4)
 Every recommendation retains its source and reason. Unspecified values remain
 eligible for structure-derived advice or the configured model.
 
-## Load pseudopotential metadata
+## Supply an operator-managed pseudopotential source
 
-Selection uses metadata records, not raw UPF contents. Load a directory once and
-put the records on the request:
+Selection consumes validated metadata records, not raw UPF contents. To use a
+directory outside the asset store, point the request at it:
 
 ```python
 from goldilocks_core import CalculationHints, CoreService, PresetRequest
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
-metadata = tuple(load_pseudo_metadata("pseudos"))
 request = PresetRequest(
     structure="structure.cif",
     hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
-    pseudo_metadata=metadata,
+    pseudo_root="pseudos",
 )
 
 with CoreService() as core:
@@ -82,20 +82,19 @@ for pseudo in result.selection.pseudopotentials:
 print(result.selection.ecutwfc_ry, result.selection.ecutrho_ry)
 ```
 
-Missing metadata is allowed for recommendation: selection returns explicit
-fallback records and warnings. Generation rejects an incomplete selection
-because it cannot render valid Quantum ESPRESSO syntax.
+Recommendation requires one scientifically compatible pseudopotential with
+complete cutoffs for every structure element. Missing or inconsistent metadata
+raises an explicit selection error; Core does not create fallback selections.
 
 ## Generate input files
 
 ```python
 from goldilocks_core import CalculationHints, CoreService, PresetRequest
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 request = PresetRequest(
     structure="structure.cif",
     hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
-    pseudo_metadata=tuple(load_pseudo_metadata("pseudos")),
+    pseudo_table="pseudodojo-pbesol-efficiency-sr",
 )
 
 with CoreService() as core:
@@ -223,19 +222,17 @@ requires a non-empty `outputs` list. Request errors use a stable
 ## CLI and optional transports
 
 ```bash
-uv run goldilocks-core recommend structure.cif --k-grid 4 4 4 --json
-uv run goldilocks-core generate structure.cif \
-    --pseudo-root pseudos --k-grid 4 4 4 --out run --json
-uv run goldilocks-core compute structure.cif \
-    --outputs analysis,k_points --k-grid 4 4 4
+uv run goldilocks recommend structure.cif --k-grid 4 4 4 --json
+uv run goldilocks generate structure.cif --pseudo-root pseudos --k-grid 4 4 4 --out run --json
+uv run goldilocks compute structure.cif --outputs analysis,k_points --k-grid 4 4 4
 ```
 
 Install and run the optional servers with:
 
 ```bash
 uv sync --all-extras
-uv run goldilocks-core serve http --host 127.0.0.1 --port 8000
-uv run goldilocks-core serve mcp
+uv run goldilocks serve http --host 127.0.0.1 --port 8000
+uv run goldilocks serve mcp
 ```
 
 The HTTP server exposes operation and discovery endpoints. The MCP stdio server

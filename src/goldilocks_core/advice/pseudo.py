@@ -1,4 +1,4 @@
-"""Pseudopotential advice policy for the Advise stage."""
+"""Pseudopotential requirement policy for the Advise stage."""
 
 from __future__ import annotations
 
@@ -7,18 +7,19 @@ from goldilocks_core.contracts import (
     CalculationIntent,
     Provenance,
     PseudoHints,
-    PseudopotentialAdvice,
+    PseudopotentialRequirements,
     SpinOrbitAdvice,
 )
 
 
-def advise_pseudopotentials(
+def advise_pseudopotential_requirements(
     intent: CalculationIntent,
     hints: PseudoHints,
     spin_orbit: SpinOrbitAdvice,
-) -> PseudopotentialAdvice:
-    pseudo_mode = hints.pseudo_mode or intent.pseudo_mode
-    relativistic_mode = hints.relativistic_mode or (
+) -> PseudopotentialRequirements:
+    """Derive scientific selection constraints without choosing a resource."""
+    accuracy = hints.accuracy or intent.pseudo_accuracy
+    relativistic = hints.relativistic_mode or (
         "full" if spin_orbit.enabled else "scalar"
     )
     source = "user_hint" if has_hint(hints) else "default"
@@ -32,14 +33,17 @@ def advise_pseudopotentials(
             "if SOC is enabled.",
         )
 
-    return PseudopotentialAdvice(
+    return PseudopotentialRequirements(
         functional=intent.functional,
-        pseudo_mode=pseudo_mode,
+        accuracy=accuracy,
         pseudo_type=hints.pseudo_type,
-        relativistic_mode=relativistic_mode,
+        relativistic=relativistic,
         provenance=Provenance(
             source=source,
-            reason="Resolve pseudopotential intent from calculation intent and hints.",
+            reason=(
+                "Derive pseudopotential requirements from calculation intent, "
+                "operator hints, and spin-orbit policy."
+            ),
             warnings=warnings,
         ),
     )

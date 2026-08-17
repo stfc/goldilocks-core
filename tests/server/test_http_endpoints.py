@@ -130,10 +130,10 @@ def test_unknown_task_maps_to_422_with_message(test_service, request_body) -> No
     assert "No Core task registered" in response.json()["error"]["message"]
 
 
-def test_generate_without_pseudopotentials_maps_to_422(
+def test_generate_without_installed_pseudopotentials_maps_to_424(
     test_service, request_body
 ) -> None:
-    """Reject generation when selection cannot supply renderable pseudos."""
+    """Expose a structured missing-asset dependency before generation."""
     body = {
         name: value for name, value in request_body.items() if name != "pseudo_metadata"
     }
@@ -141,9 +141,45 @@ def test_generate_without_pseudopotentials_maps_to_422(
     with TestClient(create_app(test_service)) as client:
         response = client.post("/generate", json=body)
 
+    assert response.status_code == 424
+    assert response.json()["error"]["kind"] == "asset_not_installed"
+    assert response.json()["error"]["asset_id"] == "pseudodojo-pbesol-efficiency-sr"
+    assert response.json()["error"]["root"] == str(
+        test_service.runtime.asset_store.root
+    )
+
+
+def test_pseudo_table_mismatch_maps_to_422(test_service, request_body) -> None:
+    """Report an incompatible or unknown table as an operator error."""
+    body = {
+        name: value for name, value in request_body.items() if name != "pseudo_metadata"
+    }
+    body["pseudo_table"] = "sssp-pbe-precision-sr"
+
+    with TestClient(create_app(test_service)) as client:
+        response = client.post("/recommend", json=body)
+
     assert response.status_code == 422
-    assert response.json()["error"]["kind"] == "generation_error"
-    assert "pseudopotential" in response.json()["error"]["message"].lower()
+    assert response.json()["error"]["kind"] == "pseudo_table_mismatch"
+    assert "functional" in response.json()["error"]["message"]
+
+
+def test_asset_corrupt_maps_to_424(test_service, request_body, monkeypatch) -> None:
+    """Expose a corrupt installed asset as a deployment integrity error."""
+    from goldilocks_core.assets import AssetCorrupt
+
+    def raise_corrupt(service, request):
+        del service, request
+        raise AssetCorrupt("installed pseudopotential manifest is invalid")
+
+    monkeypatch.setattr(type(test_service), "run_preset", raise_corrupt)
+
+    with TestClient(create_app(test_service)) as client:
+        response = client.post("/recommend", json=request_body)
+
+    assert response.status_code == 424
+    assert response.json()["error"]["kind"] == "asset_corrupt"
+    assert "manifest is invalid" in response.json()["error"]["message"]
 
 
 def test_existing_bundle_destination_maps_to_409(

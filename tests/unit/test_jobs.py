@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -14,14 +15,17 @@ from goldilocks_core import (
     query_records,
     run_core_job,
 )
+from goldilocks_core.advisors.kdistance_advisor import QrfKDistanceBackend
 from goldilocks_core.contracts import (
     CoreRecords,
     CoreResult,
     ParameterAdvice,
+    PseudoCutoffs,
     PseudoMetadata,
     StructureAnalysisRecord,
     StructureFeatureVector,
 )
+from goldilocks_core.ml.model_registry import load_default_qrf_config
 
 
 def make_structure() -> Structure:
@@ -39,12 +43,17 @@ def make_metadata() -> PseudoMetadata:
         filepath="/pseudo/Si.UPF",
         filename="Si.UPF",
         header_format="attr",
-        library="SSSP",
+        provider="sssp",
+        accuracy="efficiency",
         element="Si",
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        sssp_recommended_cutoff={"ecutwfc_ry": 35, "ecutrho_ry": 140},
+        cutoffs=PseudoCutoffs(
+            ecutwfc_ry=35,
+            ecutrho_ry=140,
+        ),
+        source_identifier="synthetic/Si.UPF",
     )
 
 
@@ -148,6 +157,14 @@ def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> 
     atom_table = tmp_path / "atom-init.json"
     checkpoint.write_bytes(b"checkpoint")
     atom_table.write_bytes(b"atom table")
+    model_file = tmp_path / "model.joblib"
+    model_file.write_bytes(b"model")
+    config = load_default_qrf_config()
+    config = replace(
+        config,
+        model=replace(config.model, source="local", location=str(model_file)),
+        model_asset=None,
+    )
     monkeypatch.setattr("goldilocks_core.ml.models.load_model", lambda spec: FakeQRF())
     monkeypatch.setattr(
         "goldilocks_core.ml.qrf.metallicity.load_metallicity_model",
@@ -165,13 +182,23 @@ def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> 
         ),
     )
 
-    result = run_core_job(
-        PresetRequest(
-            structure=make_structure(),
-            hints=CalculationHints(pseudo_type="NC"),
-            pseudo_metadata=(make_metadata(),),
+    with CoreRuntime(
+        metallicity_checkpoint=checkpoint,
+        metallicity_atom_init=atom_table,
+        kmesh_service=QrfKDistanceBackend(
+            config=config,
+            metallicity_checkpoint=str(checkpoint),
+            metallicity_atom_init=str(atom_table),
+        ),
+    ) as runtime:
+        result = run_core_job(
+            PresetRequest(
+                structure=make_structure(),
+                hints=CalculationHints(pseudo_type="NC"),
+                pseudo_metadata=(make_metadata(),),
+            ),
+            runtime=runtime,
         )
-    )
 
     assert result.k_points.provenance.source == "model"
     assert result.k_points.provenance.confidence == 0.9

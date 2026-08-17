@@ -48,13 +48,14 @@ def test_heavy_element_prompts_for_soc_without_silently_enabling_it() -> None:
         PresetRequest(
             structure=iodine,
             hints=CalculationHints(k_grid=(2, 2, 2)),
+            pseudo_metadata=(),
         )
     )
 
     assert result.analysis.heavy_elements == ("I",)
     assert result.advice.spin_orbit.consider is True
     assert result.advice.spin_orbit.enabled is False
-    assert result.advice.pseudopotentials.relativistic_mode == "scalar"
+    assert result.advice.pseudopotential_requirements.relativistic == "scalar"
     assert "SOC is not enabled automatically" in " ".join(result.warnings)
 
 
@@ -75,7 +76,7 @@ def test_explicit_soc_couples_fully_relativistic_pseudos_to_qe_noncollinear_flag
 
     assert result.advice.spin_orbit.enabled is True
     assert result.advice.spin_orbit.consider is False
-    assert result.advice.pseudopotentials.relativistic_mode == "full"
+    assert result.advice.pseudopotential_requirements.relativistic == "full"
     assert result.selection.pseudopotentials[0].filename == "I.UPF"
     qe_input = result.generated_files[0].content
     assert "  noncolin = .true." in qe_input
@@ -100,6 +101,6 @@ def test_pseudopotential_functional_must_match_calculation_functional(
         )
     )
 
-    assert result.advice.pseudopotentials.functional == "PBEsol"
+    assert result.advice.pseudopotential_requirements.functional == "PBEsol"
     assert result.selection.pseudopotentials[0].filepath == pbesol.filepath
     assert result.selection.pseudopotentials[0].filepath != pbe.filepath

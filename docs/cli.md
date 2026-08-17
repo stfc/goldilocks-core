@@ -1,41 +1,64 @@
 # CLI reference
 
-The `goldilocks-core` command is a thin wrapper over `CoreService`. Preset
-commands build `PresetRequest`; `compute` builds `QueryRequest`.
+The `goldilocks` command is a thin wrapper over `CoreService`. Preset commands
+build `PresetRequest`; `compute` builds `QueryRequest`.
 
 ## Commands
 
 ### recommend
 
 ```bash
-goldilocks-core recommend structure.cif [options]
+uv run goldilocks recommend structure.cif [options]
 ```
 
-Runs Load → Analyze → Advise → Kmesh → Select. Outputs a recommendation without generated files.
+Runs the SCF graph through Select: Load, Analyze, Advise, Kmesh, and Select.
+Outputs a recommendation without generated files.
 
 ### generate
 
 ```bash
-goldilocks-core generate structure.cif [options]
+uv run goldilocks generate structure.cif [options]
 ```
 
-Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a recommendation with generated input files. Pass `--out run/` to publish the files and manifest as a portable bundle; the destination must not already exist.
+Runs the same graph through Generate. Outputs a recommendation with generated
+input files. Pass `--out run/` to publish the files and manifest as a portable
+bundle; the destination must not already exist.
 
 ### compute
 
 ```bash
-goldilocks-core compute structure.cif \
-    --outputs analysis,k_points [options]
+uv run goldilocks compute structure.cif --outputs analysis,k_points [options]
 ```
 
 Runs the minimal task subgraph needed for the comma-separated stable record IDs
 and always prints the selected records as JSON. Available IDs are `analysis`,
 `advice`, `k_points`, `selection`, and `generated_files`.
 
+### assets
+
+```bash
+uv run goldilocks assets install [default|ASSET_ID]
+uv run goldilocks assets status [default|ASSET_ID]
+uv run goldilocks assets verify [default|ASSET_ID]
+```
+
+Install `default` before a bare normal run. It contains the QRF k-point model,
+the metallicity model, and the default PBEsol pseudopotential table. Use an
+asset ID to install one different model or pseudopotential table.
+
+`status` reports the configured asset-store root, then `installed`, `missing`,
+or `corrupt` for each selected asset. `verify` checks every installed file. The
+default store is `$XDG_DATA_HOME/goldilocks/assets`, or
+`~/.local/share/goldilocks/assets` when `XDG_DATA_HOME` is not set. Set
+`GOLDILOCKS_ASSET_ROOT` to use a different store.
+
+See [Pseudopotential tables](pseudopotentials.md) to choose a table for PBE,
+PBEsol, SOC, lanthanides, or actinides.
+
 ### examples
 
 ```bash
-goldilocks-core examples path
+uv run goldilocks examples path
 ```
 
 Prints the directory holding the example structures installed with the package. It takes none of the common options below.
@@ -43,7 +66,7 @@ Prints the directory holding the example structures installed with the package. 
 Use it to run the pipeline without supplying a structure of your own:
 
 ```bash
-goldilocks-core recommend "$(goldilocks-core examples path)/Si.cif" --json
+uv run goldilocks recommend "$(uv run goldilocks examples path)/Si.cif" --json
 ```
 
 The directory's `README.md` explains what each example exercises. From Python, use `goldilocks_core.examples.structure("Si.cif")` rather than building the path by hand.
@@ -51,8 +74,8 @@ The directory's `README.md` explains what each example exercises. From Python, u
 ### serve
 
 ```bash
-goldilocks-core serve http [--host 127.0.0.1] [--port 8000]
-goldilocks-core serve mcp
+uv run goldilocks serve http [--host 127.0.0.1] [--port 8000]
+uv run goldilocks serve mcp
 ```
 
 The HTTP and MCP transports require their optional dependencies:
@@ -75,10 +98,12 @@ one `CoreService` for its lifetime.
 | `--code` | choice | `quantum_espresso` | `CalculationIntent.code` |
 | `--task` | choice | `scf_single_point` | `CalculationIntent.task` |
 | `--functional` | str | `PBEsol` | `CalculationIntent.functional` (canonicalized; e.g. `PBESOL` → `PBEsol`) |
-| `--pseudo-mode` | str | `efficiency` | `CalculationIntent.pseudo_mode` |
+| `--pseudo-accuracy` | `efficiency` or `precision` | `efficiency` | `CalculationIntent.pseudo_accuracy` |
 | `--pseudo-type` | str | None | `CalculationHints.pseudo_type` |
 | `--relativistic-mode` | str | None | `CalculationHints.relativistic_mode` |
-| `--pseudo-root` | path | None | Loads UPF files recursively into `pseudo_metadata` |
+| `--pseudo-root` | path | None | `PresetRequest.pseudo_root` or `QueryRequest.pseudo_root` |
+| `--pseudo-table` | table ID | None | Exact installed `PresetRequest.pseudo_table` or `QueryRequest.pseudo_table` |
+| `--fetch-missing` | flag | False | Install each exact missing dependency reported by Core, then retry |
 | `--model` | path | None | request `kmesh_model` (local k-index model) |
 | `--model-name` | str | `cli-kmesh-model` with `--model` | Model name recorded in Kmesh provenance; requires `--model` |
 | `--model-version` | str | `unknown` with `--model` | Model version recorded in `ModelSpec`; requires `--model` |
@@ -98,12 +123,10 @@ one `CoreService` for its lifetime.
 ## Python/CLI control parity
 
 Every `CalculationIntent` field maps directly to a CLI option. Every
-`CalculationHints` field also maps directly except `CalculationHints.pseudo_mode`:
-the CLI sets `CalculationIntent.pseudo_mode` with `--pseudo-mode` instead of
-exposing a second override for the same effective pseudopotential-family choice.
+`CalculationHints` field also maps directly except
+`CalculationHints.pseudo_accuracy`: `--pseudo-accuracy` sets the intent default
+instead of exposing a second control for the same effective accuracy choice.
 
-`accuracy_level` and `--accuracy-level` were intentionally removed because no
-stage implemented different scientific behavior for the advertised levels.
 
 ## Boolean options
 
@@ -145,9 +168,22 @@ warnings:
   - Electronic character is unknown from structure facts alone...
 ```
 
-## Pseudo loading
+## Pseudopotential source resolution
 
-`--pseudo-root` recursively searches the given directory for `.upf` and `.UPF` files, parses each one with `parse_upf_metadata()`, and passes the resulting `PseudoMetadata` list to the selection stage. CLI functional intent and parsed UPF functional metadata use the same canonical labels. Supported PBEsol spellings match; unrecognized labels remain distinct rather than falling back to PBE or another functional.
+The request accepts exactly one explicit source: `--pseudo-table` selects an
+exact registered table ID, while `--pseudo-root` reads an operator-managed
+directory recursively. Without either flag, Core selects the registered default
+table. Resolution happens only when the requested records depend on
+pseudopotentials, so `compute --outputs analysis` performs no asset lookup.
+
+Installed tables are verified before their normalized manifest is loaded.
+Missing or corrupt assets fail with the exact asset ID, version, and configured
+store root. `--fetch-missing` installs only a missing dependency and retries;
+it does not replace a corrupt asset. An explicit root is never downloaded or
+copied. Core parses `.upf` and `.UPF` files and only recognized provider
+sidecars; declared functionals, accuracy tiers, relativistic treatments, table
+coverage, and source checksums are validated rather than inferred from
+filenames.
 
 ## Kmesh backend selection
 
@@ -159,7 +195,7 @@ model and reports model loading or inference errors directly. Explicit
 `--model` selects a local CSLR k-index model instead of the default:
 
 ```bash
-goldilocks-core recommend structure.cif --model model.joblib --json
+uv run goldilocks recommend structure.cif --model model.joblib --json
 ```
 
 The CLI builds a `ModelSpec` from `--model`, `--model-name`, and
@@ -171,25 +207,13 @@ are rejected unless `--model` is set.
 Hint precedence still applies:
 
 ```bash
-goldilocks-core recommend structure.cif --model model.joblib --k-grid 4 4 4
+uv run goldilocks recommend structure.cif --model model.joblib --k-grid 4 4 4
 ```
 
 This uses the explicit grid and records `provenance.source="user_hint"`; the model is not consulted for k-points.
 
 When no k-point hint is set, the model supplies the grid and the resulting `KPointSelection` records `provenance.source="model"`.
 
-Default remote locations and full 40-character commit revisions come from the
-model registry. Set `GOLDILOCKS_MODEL_REGISTRY` to an alternate TOML registry to
-replace them. Hub artifacts use the `huggingface_hub` cache; because joblib
-artifacts can execute code while loading, only select registries and revisions
-you trust.
-
-## Standalone kmesh CLI
-
-The `goldilocks-kmesh` command continues to expose the ML advisor directly:
-
-```bash
-goldilocks-kmesh structure.cif --model model.joblib
-```
-
-It returns only a k-point recommendation. Use `goldilocks-core ... --model` when the prediction should be part of the staged Core pipeline.
+Default model files are resolved from the verified asset store. Set
+`GOLDILOCKS_MODEL_REGISTRY` only to use an explicit complete model registry;
+model loading itself never performs network access.

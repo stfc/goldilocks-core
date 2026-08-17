@@ -1,4 +1,4 @@
-"""Load the configurable default QRF model and feature settings."""
+"""Load complete QRF runtime configuration and asset declarations."""
 
 from __future__ import annotations
 
@@ -7,21 +7,13 @@ import tomllib
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
+from goldilocks_core.assets import AssetFile, AssetSpec
 from goldilocks_core.contracts import ModelSource, ModelSpec, ModelType, PathLike
 
 MODEL_REGISTRY_ENV = "GOLDILOCKS_MODEL_REGISTRY"
-_REGISTRY_RESOURCE = "model_registry.toml"
-
-
-@dataclass(frozen=True, slots=True)
-class ArtifactSpec:
-    """Location of supporting model artifacts."""
-
-    source: ModelSource
-    location: str
-    revision: str | None = None
+_REGISTRY_RESOURCE = "registry.toml"
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,14 +41,16 @@ class QrfFeatureSettings:
 
 @dataclass(frozen=True, slots=True)
 class QrfKpointsConfig:
-    """Resources and settings required for QRF k-point inference."""
+    """Model behavior and exact runtime assets required for QRF inference."""
 
     model: ModelSpec
+    model_asset: AssetSpec | None
+    model_file: str
     feature_settings: QrfFeatureSettings
     confidence: float
     correction: float
-    metallicity: ArtifactSpec
     metallicity_model: ModelSpec
+    metallicity_asset: AssetSpec | None
     metallicity_checkpoint_file: str
     metallicity_atom_init_file: str
 
@@ -65,7 +59,7 @@ def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
     """Load QRF configuration from an explicit, environment, or packaged TOML."""
     registry_path = path or os.environ.get(MODEL_REGISTRY_ENV)
     if registry_path is None:
-        registry = resources.files("goldilocks_core").joinpath(_REGISTRY_RESOURCE)
+        registry = resources.files("goldilocks_core.ml").joinpath(_REGISTRY_RESOURCE)
         with registry.open("rb") as registry_file:
             data = tomllib.load(registry_file)
     else:
@@ -76,18 +70,18 @@ def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
     features = kpoints["features"]
     metallicity = kpoints["metallicity"]
     calibration = kpoints["calibration"]
+    model_asset = _asset_spec(kpoints.get("asset"))
+    metallicity_asset = _asset_spec(metallicity.get("asset"))
+    model_file = (
+        _role_path(model_asset, "model") if model_asset else kpoints["location"]
+    )
+    checkpoint_file = metallicity["checkpoint_file"]
+    atom_init_file = metallicity["atom_init_file"]
 
     return QrfKpointsConfig(
-        model=ModelSpec(
-            name=kpoints["name"],
-            version=kpoints["version"],
-            model_type=cast(ModelType, kpoints["model_type"]),
-            target=kpoints["target"],
-            feature_set=kpoints["feature_set"],
-            source=cast(ModelSource, kpoints["source"]),
-            location=kpoints["location"],
-            revision=kpoints.get("revision"),
-        ),
+        model=_model_spec(kpoints, model_file),
+        model_asset=model_asset,
+        model_file=model_file,
         feature_settings=QrfFeatureSettings(
             composition_featurizers=tuple(features["composition_featurizers"]),
             element_property_preset=features["element_property_preset"],
@@ -109,21 +103,60 @@ def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
         ),
         confidence=kpoints["interval_confidence"],
         correction=calibration["correction"],
-        metallicity=ArtifactSpec(
-            source=cast(ModelSource, metallicity["source"]),
-            location=metallicity["location"],
-            revision=metallicity.get("revision"),
-        ),
-        metallicity_model=ModelSpec(
-            name=metallicity["name"],
-            version=metallicity["version"],
-            model_type=cast(ModelType, metallicity["model_type"]),
-            target=metallicity["target"],
-            feature_set=metallicity["feature_set"],
-            source=cast(ModelSource, metallicity["source"]),
-            location=metallicity["location"],
-            revision=metallicity.get("revision"),
-        ),
-        metallicity_checkpoint_file=metallicity["checkpoint_file"],
-        metallicity_atom_init_file=metallicity["atom_init_file"],
+        metallicity_model=_model_spec(metallicity, checkpoint_file),
+        metallicity_asset=metallicity_asset,
+        metallicity_checkpoint_file=checkpoint_file,
+        metallicity_atom_init_file=atom_init_file,
     )
+
+
+def model_asset_specs(path: PathLike | None = None) -> tuple[AssetSpec, ...]:
+    """Return every shipped model asset in the selected registry."""
+    config = load_default_qrf_config(path)
+    return tuple(
+        spec
+        for spec in (config.model_asset, config.metallicity_asset)
+        if spec is not None
+    )
+
+
+def _asset_spec(data: dict[str, Any] | None) -> AssetSpec | None:
+    if data is None:
+        return None
+    return AssetSpec(
+        id=data["id"],
+        version=str(data["version"]),
+        files=tuple(
+            AssetFile(
+                role=file["role"],
+                path=file["path"],
+                url=file["url"],
+                checksum=file.get("checksum"),
+                size=file.get("size"),
+            )
+            for file in data["files"]
+        ),
+    )
+
+
+def _model_spec(data: dict[str, Any], location: str) -> ModelSpec:
+    source = cast(ModelSource, data.get("source", "local"))
+    return ModelSpec(
+        name=data["name"],
+        version=str(data["version"]),
+        model_type=cast(ModelType, data["model_type"]),
+        target=data["target"],
+        feature_set=data["feature_set"],
+        source=source,
+        location=data.get("location", location),
+        revision=data.get("revision"),
+    )
+
+
+def _role_path(spec: AssetSpec, role: str) -> str:
+    try:
+        return next(file.path for file in spec.files if file.role == role)
+    except StopIteration as error:
+        raise ValueError(
+            f"asset {spec.id}@{spec.version} lacks required role {role!r}"
+        ) from error

@@ -28,18 +28,18 @@ def pseudo_metadata() -> dict[str, object]:
         "filepath": "/pseudo/Si.UPF",
         "filename": "Si.UPF",
         "header_format": "attr",
-        "library": "SSSP",
-        "source_set": "efficiency",
+        "provider": "sssp",
+        "accuracy": "efficiency",
         "element": "Si",
         "pseudo_type": "NC",
         "functional": "PBEsol",
         "relativistic": "scalar",
         "z_valence": 4.0,
-        "is_sssp": True,
-        "sssp_recommended_cutoff": {
+        "cutoffs": {
             "ecutwfc_ry": 30.0,
             "ecutrho_ry": 120.0,
         },
+        "source_identifier": "synthetic/Si.UPF",
     }
 
 

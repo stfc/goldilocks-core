@@ -58,6 +58,15 @@ ModelSource = Literal["huggingface", "local"]
 ModelType = Literal["random_forest", "cgcnn", "xgboost"]
 """ML model architecture. Only ``random_forest`` is currently supported."""
 
+PseudoAccuracy = Literal["efficiency", "precision"]
+"""Supported registered pseudopotential accuracy tiers."""
+
+PseudoType = Literal["NC", "USPP", "PAW"]
+"""Normalized pseudopotential construction types."""
+
+RelativisticTreatment = Literal["scalar", "full", "non-relativistic"]
+"""Normalized pseudopotential relativistic treatments."""
+
 KPointGrid = tuple[int, int, int]
 """Uniform immutable k-point mesh as (nk1, nk2, nk3)."""
 

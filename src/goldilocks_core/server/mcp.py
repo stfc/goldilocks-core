@@ -13,13 +13,19 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import Any, Literal
 
+from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled
 from goldilocks_core.contracts import (
     ModelSource,
     ModelType,
+    PseudoAccuracy,
+    PseudoType,
     QueryRequest,
+    RelativisticTreatment,
     SmearingType,
     VdwMethod,
 )
+from goldilocks_core.pseudo.source import PseudoTableMismatch
+from goldilocks_core.pseudo.validation import PseudoImportError
 from goldilocks_core.runtime.service import CoreService
 from goldilocks_core.server.request import from_dict
 
@@ -86,7 +92,7 @@ class _Intent(BaseModel):
     code: str = "quantum_espresso"
     task: str = "scf_single_point"
     functional: str = "PBEsol"
-    pseudo_mode: str = "efficiency"
+    pseudo_accuracy: PseudoAccuracy = "efficiency"
 
 
 class _Hints(BaseModel):
@@ -100,7 +106,7 @@ class _Hints(BaseModel):
     smearing_width_ry: float | None = None
     spin_polarized: bool | None = None
     spin_orbit_coupling: bool | None = None
-    pseudo_mode: str | None = None
+    pseudo_accuracy: PseudoAccuracy | None = None
     pseudo_type: str | None = None
     relativistic_mode: str | None = None
     conv_thr: float | None = None
@@ -108,6 +114,15 @@ class _Hints(BaseModel):
     electron_maxstep: int | None = None
     use_vdw: bool | None = None
     vdw_method: VdwMethod | None = None
+
+
+class _PseudoCutoffs(BaseModel):
+    """Provider-neutral cutoff metadata in Rydberg."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ecutwfc_ry: float | None = None
+    ecutrho_ry: float | None = None
 
 
 class _PseudoMetadata(BaseModel):
@@ -118,17 +133,19 @@ class _PseudoMetadata(BaseModel):
     filepath: str
     filename: str
     header_format: str
-    library: str | None = None
-    source_set: str | None = None
+    provider: str | None = None
+    accuracy: PseudoAccuracy | None = None
     element: str | None = None
-    pseudo_type: str | None = None
+    pseudo_type: PseudoType | None = None
     functional: str | None = None
-    relativistic: str | None = None
+    relativistic: RelativisticTreatment | None = None
     z_valence: float | None = None
+    table_id: str | None = None
+    cutoffs: _PseudoCutoffs | None = None
+    source_identifier: str | None = None
+    frozen_4f_core: bool = False
     pseudo_info: dict[str, Any] = Field(default_factory=dict)
-    is_sssp: bool = False
-    source_pseudopotential: str | None = None
-    sssp_recommended_cutoff: dict[str, Any] | None = None
+    warnings: tuple[str, ...] = ()
 
 
 class _KmeshModel(BaseModel):
@@ -152,6 +169,7 @@ def _body(
     hints: _Hints | None,
     pseudo_metadata: list[_PseudoMetadata] | None,
     pseudo_root: str | None,
+    pseudo_table: str | None,
     kmesh_model: _KmeshModel | None,
 ) -> dict[str, Any]:
     """Build the shared parser's mapping from typed MCP arguments."""
@@ -168,6 +186,7 @@ def _body(
         ("pseudo_metadata", pseudo_metadata),
         ("pseudo_root", pseudo_root),
         ("kmesh_model", kmesh_model),
+        ("pseudo_table", pseudo_table),
     ):
         if value is None:
             continue
@@ -181,11 +200,24 @@ def _body(
 
 
 def _run(body: dict[str, Any], service: CoreService) -> dict[str, Any]:
-    """Parse, dispatch, and serialize one MCP call."""
+    """Parse, dispatch, and serialize one MCP call.
+
+    Stage ValueError subclasses that carry operator-facing diagnostics are
+    mapped to ToolError so the MCP client sees a structured tool failure, not
+    an unhandled exception. Internal defects remain unhandled.
+    """
     request = from_dict(body)
-    if isinstance(request, QueryRequest):
-        return service.compute(request).to_dict()
-    return service.run_preset(request).to_dict()
+    try:
+        if isinstance(request, QueryRequest):
+            return service.compute(request).to_dict()
+        return service.run_preset(request).to_dict()
+    except (
+        PseudoTableMismatch,
+        PseudoImportError,
+        AssetCorrupt,
+        AssetNotInstalled,
+    ) as error:
+        raise ToolError(str(error)) from error
 
 
 def create_server(
@@ -232,10 +264,17 @@ def create_server(
         hints: _Hints | None = None,
         pseudo_metadata: list[_PseudoMetadata] | None = None,
         pseudo_root: str | None = None,
+        pseudo_table: str | None = None,
         kmesh_model: _KmeshModel | None = None,
     ) -> dict[str, Any]:
         body = _body(
-            structure, intent, hints, pseudo_metadata, pseudo_root, kmesh_model
+            structure,
+            intent,
+            hints,
+            pseudo_metadata,
+            pseudo_root,
+            pseudo_table,
+            kmesh_model,
         )
         body["mode"] = "recommend"
         return _run(body, state)
@@ -247,11 +286,18 @@ def create_server(
         hints: _Hints | None = None,
         pseudo_metadata: list[_PseudoMetadata] | None = None,
         pseudo_root: str | None = None,
+        pseudo_table: str | None = None,
         output_dir: str | None = None,
         kmesh_model: _KmeshModel | None = None,
     ) -> dict[str, Any]:
         body = _body(
-            structure, intent, hints, pseudo_metadata, pseudo_root, kmesh_model
+            structure,
+            intent,
+            hints,
+            pseudo_metadata,
+            pseudo_root,
+            pseudo_table,
+            kmesh_model,
         )
         body["mode"] = "generate"
         if output_dir is not None:
@@ -266,10 +312,17 @@ def create_server(
         hints: _Hints | None = None,
         pseudo_metadata: list[_PseudoMetadata] | None = None,
         pseudo_root: str | None = None,
+        pseudo_table: str | None = None,
         kmesh_model: _KmeshModel | None = None,
     ) -> dict[str, Any]:
         body = _body(
-            structure, intent, hints, pseudo_metadata, pseudo_root, kmesh_model
+            structure,
+            intent,
+            hints,
+            pseudo_metadata,
+            pseudo_root,
+            pseudo_table,
+            kmesh_model,
         )
         body["outputs"] = outputs
         return _run(body, state)

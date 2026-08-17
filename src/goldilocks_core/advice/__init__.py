@@ -1,5 +1,3 @@
-"""Advice-stage parameter recommendation policies."""
-
 from __future__ import annotations
 
 from .kindex import advise_kpoints, ml_kmesh_advisor

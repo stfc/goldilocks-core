@@ -1,5 +1,3 @@
-"""Parameter recommendation policy combining all individual advice stages."""
-
 from __future__ import annotations
 
 from goldilocks_core.advice.convergence import advise_convergence
@@ -21,18 +19,6 @@ def advise_parameters(
     intent: CalculationIntent | None = None,
     hints: CalculationHints | None = None,
 ) -> ParameterAdvice:
-    """Return complete parameter advice with provenance for each choice.
-
-    Args:
-        analysis: Structure facts produced by the Analyze stage.
-        intent: Calculation intent such as target code, task, functional, and
-            pseudopotential accuracy. Defaults to ``CalculationIntent()``.
-        hints: Optional operator overrides for smearing, magnetism, SOC,
-            pseudopotential requirements, convergence, and van der Waals.
-
-    Returns:
-        Parameter advice plus pseudopotential selection requirements.
-    """
     intent = intent or CalculationIntent()
     hints = hints or CalculationHints()
 

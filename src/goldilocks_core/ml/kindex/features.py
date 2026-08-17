@@ -1,5 +1,3 @@
-"""Feature extraction utilities for machine-learning models."""
-
 from __future__ import annotations
 
 import numpy as np
@@ -9,7 +7,6 @@ from goldilocks_core.contracts import StructureFeatureVector
 
 
 def extract_c_features(structure: Structure) -> StructureFeatureVector:
-    """Extract composition-based features from a structure."""
     from matminer.featurizers.base import MultipleFeaturizer
     from matminer.featurizers.composition import (
         ElementProperty,
@@ -37,14 +34,6 @@ def extract_c_features(structure: Structure) -> StructureFeatureVector:
 
 
 def extract_s_features(structure: Structure) -> StructureFeatureVector:
-    """Extract structure-based features from a structure.
-
-    Notes
-    -----
-    This implementation excludes the non-numeric `crystal_system` output from
-    `GlobalSymmetryFeatures` while retaining the numeric
-    `crystal_system_int` encoding.
-    """
     from matminer.featurizers.base import MultipleFeaturizer
     from matminer.featurizers.structure import (
         DensityFeatures,
@@ -79,7 +68,6 @@ def extract_s_features(structure: Structure) -> StructureFeatureVector:
 
 
 def extract_l_features(structure: Structure) -> StructureFeatureVector:
-    """Extract lattice-based features from a structure."""
     lattice = structure.lattice
 
     feature_names = [
@@ -112,26 +100,6 @@ def extract_l_features(structure: Structure) -> StructureFeatureVector:
 
 
 def extract_r_features(structure: Structure) -> StructureFeatureVector:
-    """Extract reciprocal-lattice-based features from a structure.
-
-    Notes
-    -----
-    This feature block includes both basic reciprocal-lattice quantities and
-    additional derived descriptors based on the reciprocal metric tensor and
-    lattice anisotropy.
-
-    The derived descriptors include:
-    - `G_tr`: trace of the reciprocal metric tensor.
-    - `G_tr2`: trace of the squared reciprocal metric tensor.
-    - `G_det`: determinant of the reciprocal metric tensor.
-    - `G_cond`: condition number of the reciprocal metric tensor.
-    - `bmax_over_bmin`: ratio between the largest and smallest reciprocal
-      lattice lengths.
-    - `bmid_over_bmin`: ratio between the middle and smallest reciprocal
-      lattice lengths.
-    - `recip_orthogonality`: sum of the absolute cosines of the reciprocal
-      lattice angles, used as an orthogonality proxy.
-    """
     rec = structure.lattice.reciprocal_lattice
 
     feature_names = [
@@ -208,7 +176,6 @@ def extract_r_features(structure: Structure) -> StructureFeatureVector:
 
 
 def extract_cslr_features(structure: Structure) -> StructureFeatureVector:
-    """Extract CSLR-style features from a structure."""
     c_features = extract_c_features(structure)
     s_features = extract_s_features(structure)
     l_features = extract_l_features(structure)

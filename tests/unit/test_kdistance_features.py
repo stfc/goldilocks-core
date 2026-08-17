@@ -20,7 +20,6 @@ def make_diamond_silicon() -> Structure:
 
 
 def test_extract_structure_features_dimension_and_finiteness() -> None:
-    """The configured non-metallicity block has the trained 419 dimensions."""
     config = load_default_qrf_config()
     features = extract_structure_features(
         make_diamond_silicon(),
@@ -55,7 +54,6 @@ def test_extract_qrf_features_assembles_483_values_and_names(monkeypatch) -> Non
 
 @pytest.mark.parametrize("value", [np.nan, np.inf, -np.inf])
 def test_feature_cleaning_rejects_every_non_finite_value(value) -> None:
-    """Extraction never replaces non-finite values with finite sentinels."""
     with pytest.raises(ValueError, match="non-finite"):
         _require_finite(np.array([0.0, value]), "test block")
 

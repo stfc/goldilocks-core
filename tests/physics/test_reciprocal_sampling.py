@@ -20,7 +20,6 @@ def test_mesh_is_minimal_grid_that_bounds_solid_state_reciprocal_spacing(
     lengths: tuple[float, float, float],
     spacing: float,
 ) -> None:
-    """Verify the 2π reciprocal convention against an analytical orthogonal cell."""
     structure = Structure(
         Lattice.orthorhombic(*lengths),
         ["Si"],
@@ -39,7 +38,6 @@ def test_mesh_is_minimal_grid_that_bounds_solid_state_reciprocal_spacing(
 
 
 def test_vacuum_axis_never_requests_zero_k_points() -> None:
-    """A nonperiodic-like long axis remains Gamma-only rather than becoming empty."""
     slab = Structure(
         Lattice.orthorhombic(2.46, 2.46, 40.0),
         ["C", "C"],

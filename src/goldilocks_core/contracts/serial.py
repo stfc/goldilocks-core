@@ -1,5 +1,3 @@
-"""JSON serialization of pipeline records and scientific values."""
-
 from __future__ import annotations
 
 from dataclasses import fields, is_dataclass
@@ -13,7 +11,6 @@ from pymatgen.core import Structure
 
 @singledispatch
 def to_jsonable(value: Any) -> Any:
-    """Convert pipeline records and common scientific values to JSON data."""
     if is_dataclass(value):
         return {
             field.name: to_jsonable(getattr(value, field.name))

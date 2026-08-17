@@ -1,5 +1,3 @@
-"""Boundary-validation helpers for contract records."""
-
 from __future__ import annotations
 
 import math
@@ -13,7 +11,6 @@ from goldilocks_core.contracts.types import (
 
 
 def _validate_finite_positive(value: Real, field_name: str) -> None:
-    """Require a finite number greater than zero."""
     if (
         isinstance(value, bool)
         or not isinstance(value, Real)
@@ -26,13 +23,11 @@ def _validate_finite_positive(value: Real, field_name: str) -> None:
 
 
 def _validate_positive_integer(value: int, field_name: str) -> None:
-    """Require a positive integer without accepting booleans."""
     if isinstance(value, bool) or not isinstance(value, Integral) or value < 1:
         raise ValueError(f"{field_name} must be a positive integer; got {value!r}")
 
 
 def _validate_kpoint_grid(grid: object, field_name: str) -> KPointGrid:
-    """Return an immutable grid of exactly three positive integer dimensions."""
     if not isinstance(grid, tuple | list) or len(grid) != 3:
         raise ValueError(
             f"{field_name} must contain exactly three positive integers; got {grid!r}"
@@ -45,13 +40,11 @@ def _validate_kpoint_grid(grid: object, field_name: str) -> KPointGrid:
 
 
 def _validate_boolean(value: object, field_name: str) -> None:
-    """Require a built-in boolean rather than a truthy value."""
     if not isinstance(value, bool):
         raise ValueError(f"{field_name} must be a boolean; got {value!r}")
 
 
 def _validate_optional_boolean(value: object, field_name: str) -> None:
-    """Require None or a built-in boolean."""
     if value is not None:
         _validate_boolean(value, field_name)
 
@@ -63,7 +56,6 @@ def _validate_smearing(
     type_field: str,
     width_field: str,
 ) -> None:
-    """Require fixed occupations without width or smearing with positive width."""
     if smearing_type is not None and (
         not isinstance(smearing_type, str) or smearing_type not in _VALID_SMEARING_TYPES
     ):
@@ -86,7 +78,6 @@ def _validate_smearing(
 
 
 def _validate_vdw_method(method: object, field_name: str) -> None:
-    """Require a supported code-agnostic vdW method label."""
     if not isinstance(method, str) or method not in _VALID_VDW_METHODS:
         valid = ", ".join(sorted(_VALID_VDW_METHODS))
         raise ValueError(f"{field_name} must be one of {valid}; got {method!r}")
@@ -98,7 +89,6 @@ _VALID_RELATIVISTIC_MODES: frozenset[str] = frozenset(
 
 
 def _validate_optional_nonempty_str(value: object, field_name: str) -> None:
-    """Require None or a non-empty (after strip) string."""
     if value is not None and (not isinstance(value, str) or not value.strip()):
         raise ValueError(
             f"{field_name} must be a non-empty string, or None; got {value!r}"
@@ -106,7 +96,6 @@ def _validate_optional_nonempty_str(value: object, field_name: str) -> None:
 
 
 def _validate_relativistic_mode(value: object, field_name: str) -> None:
-    """Require None or a supported relativistic mode label."""
     if value is not None and (
         not isinstance(value, str) or value not in _VALID_RELATIVISTIC_MODES
     ):

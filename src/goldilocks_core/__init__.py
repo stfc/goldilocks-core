@@ -1,5 +1,3 @@
-"""Public API for goldilocks_core."""
-
 from __future__ import annotations
 
 from goldilocks_core.contracts import (

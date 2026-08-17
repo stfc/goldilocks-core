@@ -10,7 +10,6 @@ from goldilocks_core.selection import select_pseudopotentials
 
 
 def make_structure(*species: str) -> Structure:
-    """Build a simple structure containing the requested species."""
     return Structure(
         lattice=Lattice.cubic(4.0),
         species=list(species or ("Si",)),
@@ -28,7 +27,6 @@ def make_requirements(
     pseudo_type: str | None = "NC",
     relativistic: str = "scalar",
 ) -> PseudopotentialRequirements:
-    """Build scientific constraints for selection tests."""
     return PseudopotentialRequirements(
         functional=functional,
         accuracy=accuracy,
@@ -51,7 +49,6 @@ def make_metadata(
     ecutrho_ry: float | None = 120.0,
     frozen_4f_core: bool = False,
 ) -> PseudoMetadata:
-    """Build normalized pseudopotential metadata."""
     cutoffs = (
         None
         if ecutwfc_ry is None and ecutrho_ry is None
@@ -77,7 +74,6 @@ def make_metadata(
 
 
 def test_selects_complete_candidate_matching_every_requirement() -> None:
-    """Return the exact metadata and provider-backed provenance."""
     selection = select_pseudopotentials(
         make_structure("Si"),
         make_requirements(),
@@ -98,7 +94,6 @@ def test_selects_complete_candidate_matching_every_requirement() -> None:
 
 
 def test_selects_by_registered_accuracy_not_filename() -> None:
-    """Use normalized accuracy data even when filenames suggest the opposite."""
     efficiency = make_metadata(
         filename="looks-like-precision.UPF",
         accuracy="efficiency",
@@ -123,7 +118,6 @@ def test_selects_by_registered_accuracy_not_filename() -> None:
 
 
 def test_unknown_custom_accuracy_is_eligible_with_warning() -> None:
-    """Accept unknown custom-root accuracy without pretending it is a match."""
     selection = select_pseudopotentials(
         make_structure("Si"),
         make_requirements(accuracy="precision"),
@@ -140,7 +134,6 @@ def test_unknown_custom_accuracy_is_eligible_with_warning() -> None:
 
 
 def test_known_wrong_accuracy_is_not_used_as_fallback() -> None:
-    """Reject a declared efficiency pseudo for a precision request."""
     selection = select_pseudopotentials(
         make_structure("Si"),
         make_requirements(accuracy="precision"),
@@ -154,7 +147,6 @@ def test_known_wrong_accuracy_is_not_used_as_fallback() -> None:
 
 
 def test_prefers_complete_cutoffs_within_matching_candidates() -> None:
-    """Rank complete provider-neutral cutoff data ahead of lexical order."""
     incomplete = make_metadata(
         filename="A-incomplete.UPF",
         ecutwfc_ry=30,
@@ -177,7 +169,6 @@ def test_prefers_complete_cutoffs_within_matching_candidates() -> None:
 
 
 def test_reports_missing_cutoff_fields_without_sanitizing_values() -> None:
-    """Preserve valid partial metadata and name the missing field."""
     selection = select_pseudopotentials(
         make_structure("Si"),
         make_requirements(),
@@ -194,7 +185,6 @@ def test_reports_missing_cutoff_fields_without_sanitizing_values() -> None:
 
 
 def test_normalized_functional_aliases_match() -> None:
-    """Match equivalent functional spellings after contract normalization."""
     selection = select_pseudopotentials(
         make_structure("Si"),
         make_requirements(functional="PBE_SOL"),
@@ -205,7 +195,6 @@ def test_normalized_functional_aliases_match() -> None:
 
 
 def test_functional_disagreement_returns_actionable_warning() -> None:
-    """Report actual available functionals without provider-specific advice."""
     selection = select_pseudopotentials(
         make_structure("Si"),
         make_requirements(functional="PBEsol"),
@@ -221,7 +210,6 @@ def test_functional_disagreement_returns_actionable_warning() -> None:
 
 
 def test_pseudo_type_and_relativistic_treatment_are_required() -> None:
-    """Exclude candidates that violate either explicit scientific constraint."""
     wrong_type = select_pseudopotentials(
         make_structure("Si"),
         make_requirements(pseudo_type="NC"),
@@ -240,7 +228,6 @@ def test_pseudo_type_and_relativistic_treatment_are_required() -> None:
 
 
 def test_frozen_4f_core_warning_survives_selection() -> None:
-    """Keep the provisional PseudoDojo 3+ caveat attached to the choice."""
     selection = select_pseudopotentials(
         make_structure("Ce"),
         make_requirements(),
@@ -366,7 +353,6 @@ def test_complete_cutoffs_outrank_sssp_preference() -> None:
 
 
 def test_selection_is_complete_and_deterministic_for_multiple_elements() -> None:
-    """Emit one element-sorted choice regardless of metadata order."""
     selection = select_pseudopotentials(
         make_structure("Na", "Cl"),
         make_requirements(),

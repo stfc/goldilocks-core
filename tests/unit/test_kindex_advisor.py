@@ -5,14 +5,11 @@ from goldilocks_core.contracts import ModelSpec
 
 
 class DummyModel:
-    """Minimal model that predicts a fixed k-index."""
-
     def predict(self, X):
         return [2.2]
 
 
 def make_structure() -> Structure:
-    """Build a simple silicon structure."""
     return Structure(
         lattice=Lattice.cubic(3.5),
         species=["Si"],
@@ -21,7 +18,6 @@ def make_structure() -> Structure:
 
 
 def make_spec() -> ModelSpec:
-    """Build a local k-mesh model spec for tests."""
     return ModelSpec(
         name="dummy-kmesh-model",
         version="v0",
@@ -35,7 +31,6 @@ def make_spec() -> ModelSpec:
 
 
 def test_advise_kpoints_returns_selected_mesh(monkeypatch) -> None:
-    """Advise a k-point mesh from a predicted k-index."""
     structure = make_structure()
     spec = make_spec()
 
@@ -54,7 +49,6 @@ def test_advise_kpoints_returns_selected_mesh(monkeypatch) -> None:
 
 
 def test_ml_kmesh_advisor_uses_model_when_invoked(monkeypatch) -> None:
-    """Expose ML k-points as a first-class Kmesh-stage backend."""
     structure = make_structure()
     spec = make_spec()
     monkeypatch.setattr(

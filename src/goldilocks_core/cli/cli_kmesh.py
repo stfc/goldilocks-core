@@ -1,5 +1,3 @@
-"""CLI entry point for k-mesh recommendation."""
-
 from __future__ import annotations
 
 import argparse
@@ -10,7 +8,6 @@ from goldilocks_core.io.structures import load_structure
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the CLI parser for k-mesh recommendation."""
     parser = argparse.ArgumentParser(
         prog="goldilocks",
         description="Recommend a k-mesh for a structure.",
@@ -28,7 +25,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    """Run the k-mesh recommendation CLI."""
     parser = build_parser()
     args = parser.parse_args()
 

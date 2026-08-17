@@ -1,5 +1,3 @@
-"""Provider-owned normalization dispatch for pseudopotential assets."""
-
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
@@ -21,7 +19,6 @@ _PREPARERS: Mapping[str, Callable[[PseudoTable], AssetPreparer]] = {
 
 
 def installation_for(table: PseudoTable) -> AssetInstallation:
-    """Return one table's validated asset installation."""
     try:
         prepare = _PREPARERS[table.provider]
     except KeyError as error:
@@ -34,5 +31,4 @@ def installation_for(table: PseudoTable) -> AssetInstallation:
 def table_installations(
     path: PathLike | None = None,
 ) -> tuple[AssetInstallation, ...]:
-    """Return every registered pseudopotential installation."""
     return tuple(installation_for(table) for table in load_tables(path).values())

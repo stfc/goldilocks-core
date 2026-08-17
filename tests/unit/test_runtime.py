@@ -41,12 +41,10 @@ from goldilocks_core.runtime import (
 
 
 def make_structure() -> Structure:
-    """Build a simple silicon structure."""
     return Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
 
 
 def make_metadata() -> PseudoMetadata:
-    """Build synthetic pseudopotential metadata with complete cutoffs."""
     return PseudoMetadata(
         filepath="/pseudo/Si.UPF",
         filename="Si.UPF",
@@ -66,7 +64,6 @@ def make_metadata() -> PseudoMetadata:
 
 
 def installed_pseudo_table(tmp_path) -> tuple[AssetStore, PseudoTable]:
-    """Install one normalized table for runtime source-resolution tests."""
     source = tmp_path / "source.bin"
     source.write_bytes(b"source")
     spec = AssetSpec(
@@ -125,7 +122,6 @@ def installed_pseudo_table(tmp_path) -> tuple[AssetStore, PseudoTable]:
 
 
 def make_request(*, mode: str = "recommend") -> PresetRequest:
-    """Build a request that avoids loading external model artifacts."""
     return PresetRequest(
         structure=make_structure(),
         hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
@@ -135,7 +131,6 @@ def make_request(*, mode: str = "recommend") -> PresetRequest:
 
 
 def make_query_request(outputs, **kw) -> QueryRequest:
-    """Build a query request with explicit outputs and the same defaults."""
     request = QueryRequest(
         structure=kw.pop("structure", make_structure()),
         outputs=outputs,
@@ -152,8 +147,6 @@ def make_query_request(outputs, **kw) -> QueryRequest:
 
 
 class TrackingBackend:
-    """Record lifecycle and inference calls for runtime tests."""
-
     def __init__(self, *, raise_on_call: bool = False) -> None:
         self.calls = 0
         self.resets = 0
@@ -194,7 +187,6 @@ def test_recommend_returns_complete_result_without_generated_files() -> None:
 def test_analyze_uses_heuristic_without_configured_metallicity_model(
     monkeypatch,
 ) -> None:
-    """Use the runtime heuristic service when no model artifacts are configured."""
 
     with Runtime() as runtime:
         dispatcher = Dispatcher(runtime)
@@ -207,7 +199,6 @@ def test_analyze_uses_heuristic_without_configured_metallicity_model(
 
 
 def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
-    """Lazy-load and invoke the model-backed classifier through the run context."""
     from goldilocks_core.ml.qrf import metallicity
 
     model = object()
@@ -270,7 +261,6 @@ def test_generate_with_output_dir_writes_bundle(tmp_path) -> None:
     ),
 )
 def test_compute_returns_each_requested_record_type(record_type: type) -> None:
-    """Query every public SCF intermediate as an isolated output."""
     with Runtime() as runtime:
         dispatcher = Dispatcher(runtime)
         records = dispatcher.compute(make_query_request((record_type,)))
@@ -291,7 +281,6 @@ def test_select_only_compute_does_not_invoke_kmesh(monkeypatch) -> None:
 
 
 def test_analysis_query_does_not_resolve_pseudopotential_source(tmp_path) -> None:
-    """An analysis-only query never reads the pseudo registry or asset store."""
     request = make_query_request(
         (StructureAnalysisRecord,),
         pseudo_metadata=None,
@@ -307,7 +296,6 @@ def test_analysis_query_does_not_resolve_pseudopotential_source(tmp_path) -> Non
 def test_explicit_metadata_selection_does_not_read_registry(
     monkeypatch,
 ) -> None:
-    """The explicit source adapter keeps Select independent of registries."""
     from goldilocks_core.pseudo import source
 
     monkeypatch.setattr(
@@ -326,7 +314,6 @@ def test_runtime_resolves_one_explicit_installed_table(
     tmp_path,
     monkeypatch,
 ) -> None:
-    """Resolve the requested table ID and its normalized installed manifest."""
     from goldilocks_core.pseudo import source
 
     store, table = installed_pseudo_table(tmp_path)
@@ -349,7 +336,6 @@ def test_explicit_table_must_satisfy_scientific_requirements(
     tmp_path,
     monkeypatch,
 ) -> None:
-    """Reject an exact installed table rather than weakening the request."""
     from goldilocks_core.pseudo import source
 
     store, table = installed_pseudo_table(tmp_path)
@@ -384,7 +370,6 @@ def test_reset_close_and_context_manager_delegate_to_backend(monkeypatch) -> Non
 
 
 def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
-    """Exercise model lifecycle across jobs through one runtime."""
     from goldilocks_core.ml.qrf import metallicity
 
     backend = TrackingBackend()
@@ -453,7 +438,6 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
 
 
 def test_runtime_dispatches_a_registered_task_via_compute(monkeypatch) -> None:
-    """A registered task dispatches by intent.task through compute."""
     monkeypatch.setattr(Runtime, "_build_backend", lambda self: TrackingBackend())
 
     @dataclass
@@ -489,7 +473,6 @@ def test_runtime_dispatches_a_registered_task_via_compute(monkeypatch) -> None:
 
 
 def test_runtime_recommend_dispatches_a_registered_task_preset(monkeypatch) -> None:
-    """recommend runs the task's recommend preset and the task's own assembler."""
     monkeypatch.setattr(Runtime, "_build_backend", lambda self: TrackingBackend())
 
     @dataclass

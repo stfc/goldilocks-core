@@ -1,5 +1,3 @@
-"""Thin CLI wrapper for the staged Core job runner."""
-
 from __future__ import annotations
 
 import argparse
@@ -26,7 +24,6 @@ from goldilocks_core.runtime import Runtime, query_records, run_core_job
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the staged Core CLI parser."""
     parser = argparse.ArgumentParser(
         prog="goldilocks",
         description="Run the staged Goldilocks Core pipeline.",
@@ -88,7 +85,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    """Run the staged Core CLI."""
     parser = build_parser()
     args = parser.parse_args()
 
@@ -141,7 +137,6 @@ def main() -> None:
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
-    """Add arguments shared by staged Core commands."""
     parser.add_argument("structure", help="Path to the input structure file.")
     parser.add_argument(
         "--code",
@@ -231,11 +226,6 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def _request_from_args(args: argparse.Namespace) -> PresetRequest | QueryRequest:
-    """Build a Core request from parsed CLI arguments.
-
-    Returns a :class:`QueryRequest` for the ``compute`` command and a
-    :class:`PresetRequest` (``recommend``/``generate``) otherwise.
-    """
     intent = CalculationIntent(
         code=args.code,
         task=args.task,
@@ -283,7 +273,6 @@ def _request_from_args(args: argparse.Namespace) -> PresetRequest | QueryRequest
 
 
 def _parse_outputs(value: str) -> tuple[type, ...]:
-    """Resolve comma-separated record type ids to output types."""
     names = [name.strip() for name in value.split(",")]
     if any(not name for name in names):
         raise ValueError("--outputs must contain comma-separated record type ids")
@@ -291,7 +280,6 @@ def _parse_outputs(value: str) -> tuple[type, ...]:
 
 
 def _assets(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    """Run one explicit runtime-asset lifecycle operation."""
     store = AssetStore()
     print(f"asset root: {store.root}")
     try:
@@ -314,7 +302,6 @@ def _assets(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
 
 
 def _serve(args: argparse.Namespace) -> None:
-    """Run the selected optional transport."""
     if args.transport == "http":
         from goldilocks_core.server.http import serve
 
@@ -327,12 +314,6 @@ def _serve(args: argparse.Namespace) -> None:
 
 
 def _model_spec_from_args(args: argparse.Namespace) -> ModelSpec | None:
-    """Build a local k-index model spec when ``--model`` is given.
-
-    Returns ``None`` when no local model is requested, so ``run_core_job``
-    uses the shared QRF k-distance default. Explicit k-point hints bypass
-    model loading inside ``resolve_kpoints``.
-    """
     if args.model is None:
         return None
     return ModelSpec(
@@ -347,7 +328,6 @@ def _model_spec_from_args(args: argparse.Namespace) -> ModelSpec | None:
 
 
 def _validate_backend_options(args: argparse.Namespace) -> None:
-    """Reject local-model metadata when no local model backend is selected."""
     backend_only_options = [
         option
         for option, value in (
@@ -363,14 +343,12 @@ def _validate_backend_options(args: argparse.Namespace) -> None:
 
 
 def _parse_optional_bool(value: str | None) -> bool | None:
-    """Parse optional true/false CLI values."""
     if value is None:
         return None
     return value == "true"
 
 
 def _print_human_summary(result: Result) -> None:
-    """Print a small human-readable summary from the Core result."""
     grid = result.k_points.grid
     print(f"formula: {result.analysis.reduced_formula}")
     print(f"code: {result.intent.code}")

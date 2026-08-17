@@ -7,27 +7,20 @@ from goldilocks_core.ml.kindex.inference import predict
 
 
 class DummyModel:
-    """Minimal sklearn-like model for testing inference flow."""
-
     def predict(self, X):
         return [float(X.shape[1])]
 
 
 class EmptyPredictionModel:
-    """Model returning an empty prediction vector."""
-
     def predict(self, X):
         return []
 
 
 class MissingPredictModel:
-    """Object without a predict method."""
-
     pass
 
 
 def make_si_structure() -> Structure:
-    """Build a minimal silicon structure for tests."""
     return Structure(
         lattice=Lattice.cubic(3.5),
         species=["Si"],
@@ -36,7 +29,6 @@ def make_si_structure() -> Structure:
 
 
 def test_predict_runs_on_cslr_features() -> None:
-    """Run end-to-end prediction from structure features."""
     structure = make_si_structure()
 
     features = extract_cslr_features(structure)
@@ -50,7 +42,6 @@ def test_predict_runs_on_cslr_features() -> None:
 def test_predict_rejects_mutated_non_finite_features_before_calling_model(
     value,
 ) -> None:
-    """Mutation after construction cannot send non-finite values to a model."""
 
     class PredictSpy:
         called = False
@@ -70,7 +61,6 @@ def test_predict_rejects_mutated_non_finite_features_before_calling_model(
 
 
 def test_predict_raises_when_model_has_no_predict_method() -> None:
-    """Reject model objects that do not expose a predict method."""
     features = extract_l_features(make_si_structure())
 
     with pytest.raises(AttributeError, match="predict"):
@@ -78,7 +68,6 @@ def test_predict_raises_when_model_has_no_predict_method() -> None:
 
 
 def test_predict_raises_when_model_returns_no_values() -> None:
-    """Reject models that return an empty prediction vector."""
     features = extract_l_features(make_si_structure())
 
     with pytest.raises(ValueError, match="no values"):

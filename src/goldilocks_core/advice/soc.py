@@ -1,5 +1,3 @@
-"""Spin-orbit coupling advice policy for the Advise stage."""
-
 from __future__ import annotations
 
 from goldilocks_core.contracts import (

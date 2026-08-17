@@ -1,5 +1,3 @@
-"""Bundle-stage portable directory output."""
-
 from __future__ import annotations
 
 import json
@@ -12,17 +10,6 @@ MANIFEST_VERSION = 2
 
 
 def build_bundle_manifest(result: Result) -> JsonDict:
-    """Return a JSON-safe manifest for a Core output bundle.
-
-    Args:
-        result: Completed Core result, usually including generated files from
-            Generate mode.
-
-    Returns:
-        Manifest dictionary with schema version, serialized intent, analysis,
-        advice, k-points, selection, generated-file metadata, and warnings.
-        Generated file content is not embedded.
-    """
     files = [
         {
             "path": generated_file.path,
@@ -47,21 +34,6 @@ def write_bundle_directory(
     result: Result,
     output_dir: str | Path,
 ) -> BundleRecord:
-    """Write generated files and a manifest to a new bundle directory.
-
-    Args:
-        result: Completed Core result with generated files to write.
-        output_dir: New bundle root directory. Its parent directories are
-            created if needed, but the bundle directory must not already exist.
-
-    Returns:
-        ``BundleRecord`` with the output directory path and manifest.
-
-    Raises:
-        FileExistsError: If ``output_dir`` already exists.
-        ValueError: If a generated file path would escape ``output_dir`` or is
-            reserved for the manifest.
-    """
     target_dir = Path(output_dir)
     target_dir.parent.mkdir(parents=True, exist_ok=True)
 
@@ -98,7 +70,6 @@ def write_bundle_directory(
 
 
 def _resolve_bundle_path(output_dir: Path, relative_path: str) -> Path:
-    """Resolve a generated file path without allowing path traversal."""
     target_path = (output_dir / relative_path).resolve()
     root = output_dir.resolve()
 

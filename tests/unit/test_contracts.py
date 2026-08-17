@@ -84,7 +84,6 @@ def _make_selection() -> SelectionRecord:
 
 
 def test_contracts_serialize_to_json_safe_dicts() -> None:
-    """Serialize nested pipeline records without tuples or dataclasses."""
     result = Result(
         intent=CalculationIntent(),
         analysis=_make_analysis(),
@@ -102,7 +101,6 @@ def test_contracts_serialize_to_json_safe_dicts() -> None:
 
 
 def test_core_records_maps_requested_types_and_serializes_record_names() -> None:
-    """Expose only requested DAG records and serialize their stable ids."""
     analysis = _make_analysis()
     records = Records({StructureAnalysisRecord: analysis})
 
@@ -114,21 +112,18 @@ def test_core_records_maps_requested_types_and_serializes_record_names() -> None
 
 
 def test_calculation_intent_validates_pseudo_accuracy() -> None:
-    """Expose one typed registered accuracy tier in intent."""
     assert CalculationIntent(pseudo_accuracy="precision").pseudo_accuracy == "precision"
     with pytest.raises(ValueError, match="pseudo_accuracy"):
         CalculationIntent(pseudo_accuracy="fast")
 
 
 def test_hints_serialize_explicit_grid_as_list() -> None:
-    """Serialize optional hints for API and CLI JSON callers."""
     data = CalculationHints(k_grid=(2, 2, 1)).to_dict()
 
     assert data["k_grid"] == [2, 2, 1]
 
 
 def test_calculation_hints_expose_per_stage_views() -> None:
-    """CalculationHints decomposes into one narrow hint view per stage."""
     hints = CalculationHints(
         k_grid=(2, 2, 1),
         k_spacing=0.25,
@@ -163,7 +158,6 @@ def test_calculation_hints_expose_per_stage_views() -> None:
 
 
 def test_feature_vectors_serialize_numpy_values_as_json_lists() -> None:
-    """Convert NumPy arrays and scalars to JSON-safe values."""
     data = StructureFeatureVector(
         values=np.array([1.0, 2.0]),
         feature_names=["a", "b"],
@@ -173,7 +167,6 @@ def test_feature_vectors_serialize_numpy_values_as_json_lists() -> None:
 
 
 def test_job_records_serialize_to_json_safe_dicts() -> None:
-    """Serialize job result records for CLI and future HTTP callers."""
     result = Result(
         intent=CalculationIntent(),
         analysis=_make_analysis(),
@@ -190,7 +183,6 @@ def test_job_records_serialize_to_json_safe_dicts() -> None:
 
 
 def test_preset_request_validates_mode() -> None:
-    """PresetRequest raises at construction for invalid modes."""
     PresetRequest(structure="Si.cif", mode="recommend")
     PresetRequest(structure="Si.cif", mode="generate")
 
@@ -203,5 +195,4 @@ def test_preset_request_validates_mode() -> None:
 
 
 def test_calculation_intent_defaults_to_pbesol() -> None:
-    """Pin the default functional: changing it changes every generated input."""
     assert CalculationIntent().functional == "PBEsol"

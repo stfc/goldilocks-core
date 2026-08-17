@@ -1,13 +1,3 @@
-"""MCP tools over one process-owned Core service.
-
-A thin transport: each tool builds the shared parser's mapping from typed
-pydantic arguments, dispatches through one
-:class:`~goldilocks_core.runtime.service.CoreService` held for the process
-lifetime, and returns the result's JSON form. Tool input schemas are derived
-from the contract types so agents get constrained choices. Behind the optional
-``[mcp]`` extra; importing :mod:`goldilocks_core` never imports the MCP SDK.
-"""
-
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -51,8 +41,6 @@ _OutputName = Literal[
 
 
 class _StrictMCPServer(MCPServer):
-    """MCP server that enforces each published root input schema."""
-
     async def list_tools(self) -> list[Any]:
         tools = await super().list_tools()
         for tool in tools:
@@ -76,8 +64,6 @@ class _StrictMCPServer(MCPServer):
 
 
 class _InlineStructure(BaseModel):
-    """Inline CIF or POSCAR content."""
-
     model_config = ConfigDict(extra="forbid")
 
     content: str
@@ -85,8 +71,6 @@ class _InlineStructure(BaseModel):
 
 
 class _Intent(BaseModel):
-    """Calculation intent fields."""
-
     model_config = ConfigDict(extra="forbid")
 
     code: str = "quantum_espresso"
@@ -96,8 +80,6 @@ class _Intent(BaseModel):
 
 
 class _Hints(BaseModel):
-    """Operator hint fields."""
-
     model_config = ConfigDict(extra="forbid")
 
     k_spacing: float | None = None
@@ -117,8 +99,6 @@ class _Hints(BaseModel):
 
 
 class _PseudoCutoffs(BaseModel):
-    """Provider-neutral cutoff metadata in Rydberg."""
-
     model_config = ConfigDict(extra="forbid")
 
     ecutwfc_ry: float | None = None
@@ -126,8 +106,6 @@ class _PseudoCutoffs(BaseModel):
 
 
 class _PseudoMetadata(BaseModel):
-    """Pseudopotential metadata accepted by the Core contract."""
-
     model_config = ConfigDict(extra="forbid")
 
     filepath: str
@@ -149,8 +127,6 @@ class _PseudoMetadata(BaseModel):
 
 
 class _KmeshModel(BaseModel):
-    """Optional local k-mesh model specification."""
-
     model_config = ConfigDict(extra="forbid")
 
     name: str
@@ -172,7 +148,6 @@ def _body(
     pseudo_table: str | None,
     kmesh_model: _KmeshModel | None,
 ) -> dict[str, Any]:
-    """Build the shared parser's mapping from typed MCP arguments."""
     body: dict[str, Any] = {
         "structure": (
             structure.model_dump(exclude_none=True)
@@ -200,12 +175,6 @@ def _body(
 
 
 def _run(body: dict[str, Any], service: Service) -> dict[str, Any]:
-    """Parse, dispatch, and serialize one MCP call.
-
-    Stage ValueError subclasses that carry operator-facing diagnostics are
-    mapped to ToolError so the MCP client sees a structured tool failure, not
-    an unhandled exception. Internal defects remain unhandled.
-    """
     request = from_dict(body)
     try:
         if isinstance(request, QueryRequest):
@@ -223,7 +192,6 @@ def _run(body: dict[str, Any], service: Service) -> dict[str, Any]:
 def create_server(
     service: Service | None = None, *, name: str = "goldilocks-core"
 ) -> MCPServer:
-    """Create an MCP server, optionally using a caller-owned service."""
     owns_service = service is None
     state = service if service is not None else Service()
 
@@ -331,5 +299,4 @@ def create_server(
 
 
 def serve() -> None:
-    """Run the MCP server over stdio."""
     create_server().run("stdio")

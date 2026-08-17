@@ -7,13 +7,11 @@ from goldilocks_core.examples import available_structures, structure, structures
 
 
 def test_bundled_structures_are_installed_with_the_package() -> None:
-    """The examples ship with the package, not just the repository."""
     assert structures_path().is_dir()
     assert available_structures() == ("Fe_bcc.cif", "Pt_fcc.cif", "Si.cif")
 
 
 def test_structure_rejects_an_unknown_name() -> None:
-    """Name the available structures rather than failing with a bare path."""
     with pytest.raises(FileNotFoundError) as error:
         structure("Unobtainium.cif")
 
@@ -22,7 +20,6 @@ def test_structure_rejects_an_unknown_name() -> None:
 
 @pytest.mark.parametrize("name", ["Si.cif", "Fe_bcc.cif", "Pt_fcc.cif"])
 def test_every_bundled_structure_runs_through_the_pipeline(name: str) -> None:
-    """Load each example from disk and carry it to a complete recommendation."""
     result = run_core_job(
         PresetRequest(
             structure=structure(name),
@@ -36,11 +33,6 @@ def test_every_bundled_structure_runs_through_the_pipeline(name: str) -> None:
 
 
 def test_bundled_structures_exercise_distinct_advice_branches() -> None:
-    """Each example earns its place by reaching advice the others do not.
-
-    These assertions mirror the table in the structures README. If the advice
-    changes, either the example set or that documentation is stale.
-    """
     hints = CalculationHints(k_grid=(4, 4, 4))
     silicon = run_core_job(
         PresetRequest(structure=structure("Si.cif"), hints=hints, pseudo_metadata=())

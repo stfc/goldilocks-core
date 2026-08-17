@@ -1,14 +1,3 @@
-"""Shared request deserialization for HTTP and MCP transports.
-
-One :func:`from_dict` parser is used by both transports: it turns a JSON-like
-mapping into a validated :class:`~goldilocks_core.contracts.PresetRequest`
-(when no ``outputs`` are named) or
-:class:`~goldilocks_core.contracts.QueryRequest` (when ``outputs`` names a
-record subset). Unknown keys and bad types are rejected with named-field
-:class:`RequestError` messages; stage ``ValueError``\\ s are not caught here and
-surface to the transport's error handler.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -68,17 +57,10 @@ _BOOL_HINTS = {"spin_polarized", "spin_orbit_coupling", "use_vdw"}
 
 
 class RequestError(ValueError):
-    """A malformed transport request."""
-
     pass
 
 
 def from_dict(data: Mapping[str, Any]) -> PresetRequest | QueryRequest:
-    """Parse a JSON-like mapping into a validated Core job request.
-
-    Returns a :class:`QueryRequest` when ``outputs`` names record types, and a
-    :class:`PresetRequest` (selected by ``mode``) otherwise.
-    """
     if not isinstance(data, Mapping):
         raise RequestError("Request body must be a JSON object.")
     _reject_unknown(data, _ALLOWED_TOP_LEVEL, "request")
@@ -158,7 +140,6 @@ def _parse_structure(value: Any) -> str | Structure:
 
 
 def _parse_structure_text(content: str, fmt: str | None) -> Structure:
-    """Parse inline CIF or POSCAR content, trying the declared format first."""
     formats = (fmt,) if fmt is not None else ("cif", "poscar")
     last_error: Exception | None = None
     for structure_format in formats:

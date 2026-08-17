@@ -15,7 +15,6 @@ from goldilocks_core.server.request import RequestError, from_dict
 def test_from_dict_parses_complete_generate_request(
     sample_structure_text: str, pseudo_metadata: dict[str, object], tmp_path
 ) -> None:
-    """Parse structure, intent, hints, metadata, mode, and output directory."""
     request = from_dict(
         {
             "structure": sample_structure_text,
@@ -40,7 +39,6 @@ def test_from_dict_parses_complete_generate_request(
 def test_from_dict_defers_default_pseudo_source_resolution(
     sample_structure_path: str,
 ) -> None:
-    """Request parsing performs no asset-store or local-root I/O."""
     request = from_dict({"structure": sample_structure_path})
 
     assert request.pseudo_metadata is None
@@ -51,7 +49,6 @@ def test_from_dict_defers_default_pseudo_source_resolution(
 def test_from_dict_preserves_exact_pseudopotential_table(
     sample_structure_path: str,
 ) -> None:
-    """Carry the operator-selected table ID without resolving it during parse."""
     request = from_dict(
         {
             "structure": sample_structure_path,
@@ -68,7 +65,6 @@ def test_from_dict_rejects_multiple_pseudopotential_sources(
     sample_structure_path: str,
     pseudo_metadata: dict[str, object],
 ) -> None:
-    """Require one unambiguous metadata source at the request seam."""
     with pytest.raises(RequestError, match="accepts only one"):
         from_dict(
             {
@@ -80,7 +76,6 @@ def test_from_dict_rejects_multiple_pseudopotential_sources(
 
 
 def test_from_dict_resolves_output_record_names(sample_structure_path: str) -> None:
-    """Resolve query output names through the shared contract catalogue."""
     request = from_dict(
         {
             "structure": sample_structure_path,
@@ -93,7 +88,6 @@ def test_from_dict_resolves_output_record_names(sample_structure_path: str) -> N
 
 
 def test_from_dict_rejects_unknown_keys(sample_structure_path: str) -> None:
-    """Do not silently discard unknown transport fields."""
     with pytest.raises(RequestError, match="Unknown request fields: surprise"):
         from_dict({"structure": sample_structure_path, "surprise": True})
 
@@ -110,13 +104,11 @@ def test_from_dict_rejects_unknown_keys(sample_structure_path: str) -> None:
     ],
 )
 def test_from_dict_maps_bad_types_to_request_error(body: dict[str, object]) -> None:
-    """Report malformed field types as RequestError."""
     with pytest.raises(RequestError):
         from_dict(body)
 
 
 def test_from_dict_rejects_unknown_output_id(sample_structure_path: str) -> None:
-    """Reject query record ids outside the public output catalogue."""
     with pytest.raises(RequestError, match="Unknown output record type"):
         from_dict({"structure": sample_structure_path, "outputs": ["Unknown"]})
 
@@ -124,7 +116,6 @@ def test_from_dict_rejects_unknown_output_id(sample_structure_path: str) -> None
 def test_from_dict_rejects_output_dir_outside_generate(
     sample_structure_path: str,
 ) -> None:
-    """Keep bundle publication specific to generate requests."""
     with pytest.raises(RequestError, match="only valid for generate"):
         from_dict({"structure": sample_structure_path, "output_dir": "bundle"})
 
@@ -132,7 +123,6 @@ def test_from_dict_rejects_output_dir_outside_generate(
 def test_from_dict_parses_inline_structure_content_object(
     sample_structure_text: str,
 ) -> None:
-    """Parse an inline structure content object with an explicit format."""
     request = from_dict(
         {
             "structure": {"content": sample_structure_text, "format": "cif"},
@@ -148,7 +138,6 @@ def test_from_dict_parses_inline_structure_content_object(
 def test_request_to_dict_round_trips_pymatgen_structure(
     sample_structure_path: str,
 ) -> None:
-    """Deserialize the canonical structure emitted by both request types."""
     structure = Structure.from_file(sample_structure_path)
     requests = (
         PresetRequest(structure=structure),
@@ -164,7 +153,6 @@ def test_request_to_dict_round_trips_pymatgen_structure(
 
 
 def test_from_dict_rejects_empty_outputs(sample_structure_path: str) -> None:
-    """Reject an empty outputs list."""
     with pytest.raises(RequestError, match="at least one record type id"):
         from_dict({"structure": sample_structure_path, "outputs": []})
 
@@ -172,7 +160,6 @@ def test_from_dict_rejects_empty_outputs(sample_structure_path: str) -> None:
 def test_from_dict_rejects_empty_output_directory(
     sample_structure_path: str,
 ) -> None:
-    """Reject an empty bundle destination before filesystem access."""
     with pytest.raises(RequestError, match="non-empty"):
         from_dict(
             {

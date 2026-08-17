@@ -1,5 +1,3 @@
-"""Quantum ESPRESSO SCF input writer and section renderers."""
-
 from __future__ import annotations
 
 import re
@@ -36,23 +34,6 @@ def write_qe_scf(
     selection: SelectionRecord,
     k_points: KPointSelection,
 ) -> tuple[GeneratedFile, ...]:
-    """Write the Quantum ESPRESSO SCF input for one calculation intent.
-
-    Args:
-        structure: Ordered structure to write in QE cell/position cards.
-        intent: Calculation intent. The dispatcher is responsible for
-            selecting this writer only for compatible intents.
-        advice: Smearing, magnetism, SOC, and convergence advice.
-        selection: Pseudopotential and cutoff selections from the Select stage.
-        k_points: Concrete grid and shift from the Kmesh stage.
-
-    Returns:
-        A one-element tuple holding the rendered QE SCF input file.
-
-        GenerationError: If the structure is disordered or the advice carries
-            incomplete pseudopotential selections, unsupported smearing, or an
-            unsupported vdW method for the QE target.
-    """
     return (
         GeneratedFile(
             path="inputs/qe.in",
@@ -68,21 +49,6 @@ def _render_qe_scf(
     selection: SelectionRecord,
     k_points: KPointSelection,
 ) -> str:
-    """Render a Quantum ESPRESSO SCF input from staged Core records.
-
-    Selection records are trusted as produced by the Select stage; this
-    renderer does not re-validate pseudopotential coverage or cutoffs.
-
-    Args:
-        structure: Ordered structure to write in QE cell/position cards.
-        intent: Calculation intent (unused by the QE SCF renderer).
-        advice: Smearing, magnetism, SOC, and convergence advice.
-        selection: Pseudopotential and cutoff selections.
-        k_points: Concrete k-point grid and shift.
-
-    Returns:
-        Complete QE input text ending with a trailing newline.
-    """
     if not structure.is_ordered:
         raise GenerationError(
             "Cannot generate Quantum ESPRESSO input for disordered structures"
@@ -162,7 +128,6 @@ def _render_qe_scf(
 
 
 def _control_section() -> list[str]:
-    """Return the QE CONTROL namelist."""
     return [
         "&CONTROL",
         "  calculation = 'scf'",
@@ -182,7 +147,6 @@ def _system_section(
     ecutwfc: float,
     ecutrho: float,
 ) -> list[str]:
-    """Return the QE SYSTEM namelist from advice and cutoffs."""
     ntyp = len(structure.composition.elements)
     return [
         "&SYSTEM",
@@ -200,7 +164,6 @@ def _system_section(
 
 
 def _smearing_lines(advice: ParameterAdvice) -> list[str]:
-    """Return SYSTEM occupation/smearing lines from smearing advice."""
     smearing_type = advice.smearing.smearing_type
     if smearing_type in (None, "fixed"):
         return ["  occupations = 'fixed'"]
@@ -220,7 +183,6 @@ def _smearing_lines(advice: ParameterAdvice) -> list[str]:
 
 
 def _spin_lines(advice: ParameterAdvice) -> list[str]:
-    """Return SYSTEM spin lines from magnetism and SOC advice."""
     if advice.spin_orbit.enabled:
         return ["  noncolin = .true.", "  lspinorb = .true."]
     if advice.magnetism.spin_polarized:
@@ -229,7 +191,6 @@ def _spin_lines(advice: ParameterAdvice) -> list[str]:
 
 
 def _vdw_lines(advice: ParameterAdvice) -> list[str]:
-    """Return SYSTEM vdW-corr lines from vdW advice."""
     method = advice.vdw.method
     if advice.vdw.use_vdw:
         if method not in _QE_VDW_CORR:
@@ -251,7 +212,6 @@ def _vdw_lines(advice: ParameterAdvice) -> list[str]:
 
 
 def _electrons_section(advice: ParameterAdvice) -> list[str]:
-    """Return the QE ELECTRONS namelist from convergence advice."""
     return [
         "&ELECTRONS",
         f"  conv_thr = {_format_scientific(advice.convergence.conv_thr)}",
@@ -263,7 +223,6 @@ def _electrons_section(advice: ParameterAdvice) -> list[str]:
 
 
 def _cell_parameters(structure: Structure) -> list[str]:
-    """Return QE CELL_PARAMETERS card in angstrom."""
     lines = ["CELL_PARAMETERS angstrom"]
     for vector in structure.lattice.matrix:
         lines.append("  " + "  ".join(_format_float(value) for value in vector))
@@ -272,7 +231,6 @@ def _cell_parameters(structure: Structure) -> list[str]:
 
 
 def _atomic_species(elements: tuple[str, ...], pseudo_by_element: dict) -> list[str]:
-    """Return QE ATOMIC_SPECIES card."""
     lines = ["ATOMIC_SPECIES"]
     for element in elements:
         pseudo = pseudo_by_element[element]
@@ -285,7 +243,6 @@ def _atomic_species(elements: tuple[str, ...], pseudo_by_element: dict) -> list[
 
 
 def _atomic_positions(structure: Structure) -> list[str]:
-    """Return QE ATOMIC_POSITIONS card in fractional coordinates."""
     lines = ["ATOMIC_POSITIONS crystal"]
     for site in structure:
         coords = "  ".join(_format_float(value) for value in site.frac_coords)
@@ -295,7 +252,6 @@ def _atomic_positions(structure: Structure) -> list[str]:
 
 
 def _k_points(k_points: KPointSelection) -> list[str]:
-    """Return QE K_POINTS automatic card from selected grid and shift."""
     grid = k_points.grid
     shift = k_points.shift
     return [
@@ -305,10 +261,8 @@ def _k_points(k_points: KPointSelection) -> list[str]:
 
 
 def _format_float(value: float) -> str:
-    """Format finite numeric values deterministically for QE text."""
     return f"{value:.10g}"
 
 
 def _format_scientific(value: float) -> str:
-    """Format scientific notation for QE namelists."""
     return f"{value:.10e}"

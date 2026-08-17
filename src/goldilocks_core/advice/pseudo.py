@@ -1,5 +1,3 @@
-"""Pseudopotential requirement policy for the Advise stage."""
-
 from __future__ import annotations
 
 from goldilocks_core.advice._hints import has_hint
@@ -17,7 +15,6 @@ def advise_pseudopotential_requirements(
     hints: PseudoHints,
     spin_orbit: SpinOrbitAdvice,
 ) -> PseudopotentialRequirements:
-    """Derive scientific selection constraints without choosing a resource."""
     accuracy = hints.accuracy or intent.pseudo_accuracy
     relativistic = hints.relativistic_mode or (
         "full" if spin_orbit.enabled else "scalar"

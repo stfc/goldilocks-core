@@ -9,12 +9,10 @@ from goldilocks_core.functionals import normalize_functional_label
 
 
 def _read_text(path: Path) -> str:
-    """Read a UPF file as text."""
     return path.read_text(errors="ignore")
 
 
 def _clean_string(value: object) -> str | None:
-    """Return a stripped string, or None for missing or empty values."""
     if value is None:
         return None
     text = str(value).strip()
@@ -22,7 +20,6 @@ def _clean_string(value: object) -> str | None:
 
 
 def _to_float(value: object) -> float | None:
-    """Convert a value to float when possible."""
     text = _clean_string(value)
     if text is None:
         return None
@@ -30,7 +27,6 @@ def _to_float(value: object) -> float | None:
 
 
 def _normalize_element(value: object) -> str | None:
-    """Normalize element strings such as 'B ' -> 'B'."""
     text = _clean_string(value)
     if text is None:
         return None
@@ -38,7 +34,6 @@ def _normalize_element(value: object) -> str | None:
 
 
 def _extract_element_from_filename(filename: str) -> str | None:
-    """Extract the leading element symbol from a pseudo filename."""
     stem = Path(filename).stem
 
     match = re.match(r"^([A-Z][a-z]?)", stem)
@@ -53,7 +48,6 @@ def _extract_element_from_filename(filename: str) -> str | None:
 
 
 def _normalize_relativistic(value: object) -> str | None:
-    """Normalize relativistic mode labels."""
     text = _clean_string(value)
     if text is None:
         return None
@@ -75,7 +69,6 @@ def _normalize_relativistic(value: object) -> str | None:
 
 
 def _normalize_pseudo_type(value: object) -> str | None:
-    """Normalize pseudo type labels."""
     text = _clean_string(value)
     if text is None:
         return None
@@ -93,7 +86,6 @@ def _normalize_pseudo_type(value: object) -> str | None:
 
 
 def _detect_header_format(text: str) -> str:
-    """Detect whether PP_HEADER is attribute-style or text-style."""
     if re.search(r"<PP_HEADER\b[^>]*?/>", text, re.IGNORECASE | re.DOTALL):
         return "attr"
 
@@ -104,7 +96,6 @@ def _detect_header_format(text: str) -> str:
 
 
 def _parse_attr_header(text: str) -> dict[str, Any]:
-    """Parse an attribute-style PP_HEADER block."""
     match = re.search(
         r"<PP_HEADER\b([^>]*)/>",
         text,
@@ -119,7 +110,6 @@ def _parse_attr_header(text: str) -> dict[str, Any]:
 
 
 def _normalize_text_header_keys(header_data: dict[str, Any]) -> dict[str, Any]:
-    """Map text-style header keys onto the standard internal field names."""
     normalized = dict(header_data)
 
     key_map = {
@@ -156,7 +146,6 @@ def _normalize_text_header_keys(header_data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _parse_text_header(text: str) -> dict[str, Any]:
-    """Parse a text-style PP_HEADER block."""
     match = re.search(
         r"<PP_HEADER>\s*(.*?)\s*</PP_HEADER>",
         text,
@@ -227,7 +216,6 @@ def _parse_text_header(text: str) -> dict[str, Any]:
 
 
 def _parse_pp_info(text: str) -> dict[str, Any]:
-    """Parse supplemental PP_INFO data."""
     match = re.search(
         r"<PP_INFO>\s*(.*?)\s*</PP_INFO>",
         text,
@@ -257,7 +245,6 @@ def _parse_pp_info(text: str) -> dict[str, Any]:
 def _get_element(
     header_data: dict[str, Any], filename: str | None = None
 ) -> str | None:
-    """Get an element from parsed header data, with filename fallback."""
     element = _normalize_element(header_data.get("element"))
     if element is not None:
         return element
@@ -273,7 +260,6 @@ def _get_element(
 
 
 def parse_upf_metadata(path: str | Path) -> PseudoMetadata:
-    """Parse one UPF file into a PseudoMetadata object."""
     path = Path(path)
     text = _read_text(path)
 

@@ -1,5 +1,3 @@
-"""Pure Select-stage pseudopotential choices."""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -33,7 +31,6 @@ def select_pseudopotentials(
     requirements: PseudopotentialRequirements,
     metadata: Sequence[PseudoMetadata],
 ) -> SelectionRecord:
-    """Select one concrete pseudopotential per element from available metadata."""
     available = tuple(metadata)
     selections = tuple(
         _select_for_element(element.symbol, requirements, available)
@@ -52,7 +49,6 @@ def _select_for_element(
     requirements: PseudopotentialRequirements,
     metadata: tuple[PseudoMetadata, ...],
 ) -> PseudopotentialSelection:
-    """Select the deterministic highest-ranked candidate for one element."""
     candidates = [
         item
         for item in metadata
@@ -116,7 +112,6 @@ def _select_for_element(
 
 
 def _candidate_rank(metadata: PseudoMetadata) -> tuple[int, int, str, str, str]:
-    """Rank complete metadata first, then SSSP, then provenance-only fields."""
     complete_cutoffs = (
         metadata.cutoffs is not None
         and metadata.cutoffs.ecutwfc_ry is not None
@@ -136,7 +131,6 @@ def _selection_warnings(
     selected: PseudoMetadata,
     requirements: PseudopotentialRequirements,
 ) -> tuple[str, ...]:
-    """Return actionable warnings for accepted incomplete metadata."""
     warnings = list(selected.warnings)
     if selected.accuracy is None:
         warnings.append(
@@ -169,7 +163,6 @@ def _missing_pseudo_warning(
     requirements: PseudopotentialRequirements,
     metadata: tuple[PseudoMetadata, ...],
 ) -> str:
-    """Explain the first unsatisfied scientific requirement."""
     message = _missing_pseudo_reason(element, requirements, metadata)
     if element in LANTHANIDES or element in ACTINIDES:
         return f"{element} {_LANTHANIDE_ACTINIDE_REASON}{message}"
@@ -181,7 +174,6 @@ def _missing_pseudo_reason(
     requirements: PseudopotentialRequirements,
     metadata: tuple[PseudoMetadata, ...],
 ) -> str:
-    """Return the first unsatisfied scientific requirement, without routing."""
     candidates = [item for item in metadata if item.element == element]
     if not candidates:
         return f"No available pseudopotential contains element {element}."

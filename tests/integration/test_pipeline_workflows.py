@@ -13,7 +13,6 @@ def test_generate_crosses_every_in_memory_stage_with_real_backends(
     sodium_chloride_structure: Structure,
     pseudo_metadata_factory: Callable[..., PseudoMetadata],
 ) -> None:
-    """Exercise Load through Generate with real, network-free stage backends."""
     pseudos = [
         pseudo_metadata_factory("Na", ecutwfc_ry=35.0, ecutrho_ry=140.0),
         pseudo_metadata_factory("Cl", ecutwfc_ry=45.0, ecutrho_ry=180.0),
@@ -50,7 +49,6 @@ def test_structure_file_to_bundle_preserves_generated_files_and_provenance(
     sodium_chloride_structure: Structure,
     pseudo_metadata_factory: Callable[..., PseudoMetadata],
 ) -> None:
-    """Exercise file loading and complete bundle writing end to end."""
     structure_path = tmp_path / "NaCl.cif"
     sodium_chloride_structure.to(filename=structure_path)
     output_dir = tmp_path / "bundle"

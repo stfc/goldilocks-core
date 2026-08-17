@@ -13,7 +13,6 @@ from goldilocks_core.ml.qrf import cgcnn, metallicity
 def test_load_metallicity_model_reconstructs_checkpoint_and_enters_eval_mode(
     monkeypatch,
 ) -> None:
-    """Verify checkpoint parameters and Lightning weight prefixes at the boundary."""
     checkpoint = {
         "hyper_parameters": {"model": {"atom_fea_len": 8}},
         "state_dict": {"model.layer.weight": "weights", "model.bias": "bias"},
@@ -49,7 +48,6 @@ def test_load_metallicity_model_reconstructs_checkpoint_and_enters_eval_mode(
 
 
 def test_probability_mapping_uses_published_class_order() -> None:
-    """Map class 0 to insulator and class 1 to metal with winning confidence."""
     assert metallicity._electronic_character_from_probabilities([0.8, 0.2]) == (
         "insulator",
         0.8,
@@ -61,7 +59,6 @@ def test_probability_mapping_uses_published_class_order() -> None:
 
 
 def test_metal_features_builds_configured_graph_without_gradients(monkeypatch) -> None:
-    """Verify feature extraction passes graph controls and returns a flat array."""
     structure = Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
     graph = object()
     calls = {}
@@ -111,7 +108,6 @@ def test_metal_features_builds_configured_graph_without_gradients(monkeypatch) -
 
 
 def test_classify_metallicity_runs_full_model_forward(monkeypatch) -> None:
-    """Build the graph and map the full model's probabilities."""
     structure = Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
     graph = object()
     calls = {}

@@ -10,7 +10,6 @@ create_server = pytest.importorskip("goldilocks_core.server.mcp").create_server
 
 
 def _call(server, name: str, arguments: dict) -> dict:
-    """Call an MCP tool through the in-process harness."""
 
     async def call() -> dict:
         result = await server.call_tool(name, arguments)
@@ -22,7 +21,6 @@ def _call(server, name: str, arguments: dict) -> dict:
 
 
 def test_mcp_lists_six_tools_with_constrained_outputs(test_service) -> None:
-    """Publish the three transport tools plus three discovery tools."""
     server = create_server(test_service)
     tools = asyncio.run(server.list_tools())
 
@@ -43,7 +41,6 @@ def test_mcp_lists_six_tools_with_constrained_outputs(test_service) -> None:
 
 
 def test_mcp_recommend_returns_core_result(test_service, request_body) -> None:
-    """Return CoreResult JSON from the recommend tool."""
     server = create_server(test_service)
 
     data = _call(server, "recommend", request_body)
@@ -54,7 +51,6 @@ def test_mcp_recommend_returns_core_result(test_service, request_body) -> None:
 
 
 def test_mcp_rejects_unknown_root_arguments(test_service, request_body) -> None:
-    """Reject fields outside the published root tool schema."""
     server = create_server(test_service)
 
     with pytest.raises(ToolError, match="Unknown recommend arguments: surprise"):
@@ -69,7 +65,6 @@ def test_mcp_rejects_unknown_root_arguments(test_service, request_body) -> None:
 def test_mcp_pseudo_table_mismatch_maps_to_tool_error(
     test_service, request_body
 ) -> None:
-    """Surface an incompatible table as a structured MCP tool error."""
     server = create_server(test_service)
     body = {
         name: value for name, value in request_body.items() if name != "pseudo_metadata"
@@ -81,7 +76,6 @@ def test_mcp_pseudo_table_mismatch_maps_to_tool_error(
 
 
 def test_mcp_missing_asset_maps_to_tool_error(test_service, request_body) -> None:
-    """Surface a missing installed asset as a structured MCP tool error."""
     server = create_server(test_service)
     body = {
         name: value for name, value in request_body.items() if name != "pseudo_metadata"
@@ -94,7 +88,6 @@ def test_mcp_missing_asset_maps_to_tool_error(test_service, request_body) -> Non
 def test_mcp_generate_returns_core_result_and_bundle(
     test_service, request_body, tmp_path
 ) -> None:
-    """Return generated files and publish a requested bundle."""
     server = create_server(test_service)
     output_dir = tmp_path / "bundle"
 
@@ -110,7 +103,6 @@ def test_mcp_generate_returns_core_result_and_bundle(
 
 
 def test_mcp_compute_returns_requested_records(test_service, request_body) -> None:
-    """Return only records named by the compute outputs argument."""
     server = create_server(test_service)
 
     data = _call(

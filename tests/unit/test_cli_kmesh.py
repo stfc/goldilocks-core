@@ -8,7 +8,6 @@ from goldilocks_core.contracts import KPointSelection, Provenance
 
 
 def test_build_parser_parses_required_arguments() -> None:
-    """Parse the required CLI arguments for k-mesh recommendation."""
     parser = build_parser()
     args = parser.parse_args(["example.cif", "--model", "model.joblib"])
 
@@ -20,7 +19,6 @@ def test_main_loads_structure_and_prints_recommended_mesh(
     monkeypatch,
     capsys,
 ) -> None:
-    """Run the CLI main path without shelling out or loading a real model."""
     structure = Structure(
         lattice=Lattice.cubic(3.5),
         species=["Si"],

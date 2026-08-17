@@ -11,8 +11,6 @@ create_server = pytest.importorskip("goldilocks_core.server.mcp").create_server
 
 
 class _CountingService(Service):
-    """Record preset calls made through one service instance."""
-
     def __init__(self) -> None:
         super().__init__()
         self.preset_calls = 0
@@ -23,7 +21,6 @@ class _CountingService(Service):
 
 
 def test_mcp_reuses_one_service_across_tool_calls(request_body) -> None:
-    """Serve multiple tool calls through the same process service."""
     service = _CountingService()
     server = create_server(service)
 

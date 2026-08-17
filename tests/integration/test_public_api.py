@@ -36,7 +36,6 @@ def _make_si_metadata() -> PseudoMetadata:
 
 
 def test_recommend_runs_staged_core_pipeline() -> None:
-    """Run Load → Analyze → Advise → Kmesh → Select through the public API."""
     result = run_core_job(
         PresetRequest(
             structure=_make_si_structure(),
@@ -51,7 +50,6 @@ def test_recommend_runs_staged_core_pipeline() -> None:
 
 
 def test_generate_runs_pipeline_through_generated_files() -> None:
-    """Generate input files through the public Python API."""
     result = run_core_job(
         PresetRequest(
             structure=_make_si_structure(),
@@ -66,7 +64,6 @@ def test_generate_runs_pipeline_through_generated_files() -> None:
 
 
 def test_run_core_job_generate_with_output_dir_writes_bundle(tmp_path) -> None:
-    """Write a portable bundle through the shared Core job request."""
     output_dir = tmp_path / "bundle"
     result = run_core_job(
         PresetRequest(
@@ -85,7 +82,6 @@ def test_run_core_job_generate_with_output_dir_writes_bundle(tmp_path) -> None:
 
 
 def test_core_result_serializes_to_manifest_style_dict() -> None:
-    """CoreResult serializes into a JSON-safe manifest-style dictionary."""
     structure = Structure(
         lattice=Lattice.cubic(4.0),
         species=["I"],

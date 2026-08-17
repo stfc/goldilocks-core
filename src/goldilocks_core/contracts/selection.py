@@ -21,16 +21,10 @@ from goldilocks_core.functionals import normalize_functional_label
 
 @dataclass(frozen=True, slots=True)
 class PseudoCutoffs:
-    """Provider-neutral plane-wave cutoffs in Rydberg.
-
-    Every present value is finite and positive.
-    """
-
     ecutwfc_ry: float | None = None
     ecutrho_ry: float | None = None
 
     def __post_init__(self) -> None:
-        """Validate every supplied cutoff and normalize values to floats."""
         for field_name in ("ecutwfc_ry", "ecutrho_ry"):
             value = getattr(self, field_name)
             if value is not None:
@@ -40,13 +34,6 @@ class PseudoCutoffs:
 
 @dataclass(frozen=True, slots=True)
 class PseudoMetadata:
-    """Provider-neutral metadata for one selectable pseudopotential.
-
-    Provider identity and raw header facts are provenance only. Scientific
-    selection uses the normalized functional, accuracy, pseudo type,
-    relativistic treatment, and cutoffs.
-    """
-
     filepath: str
     filename: str
     header_format: str
@@ -65,7 +52,6 @@ class PseudoMetadata:
     warnings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        """Normalize and validate metadata at its domain boundary."""
         for field_name in ("filepath", "filename", "header_format"):
             value = getattr(self, field_name)
             if not isinstance(value, str) or not value.strip():
@@ -123,30 +109,11 @@ class PseudoMetadata:
             raise ValueError("PseudoMetadata.warnings must contain non-empty strings")
 
     def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
 
 
 @dataclass(frozen=True, slots=True)
 class PseudopotentialSelection:
-    """Concrete pseudopotential selected for one element.
-
-    ``filename`` is None when no matching pseudopotential was found.
-    Cutoff values are provider-neutral and expressed in Rydberg.
-
-    Attributes:
-        element: element symbol this selection is for.
-        filename: pseudopotential filename, or None if no match
-            was found.
-        filepath: full path to the pseudopotential file, or None.
-        ecutwfc_ry: wavefunction cutoff in Rydberg, or None if
-            unavailable.
-        ecutrho_ry: charge-density cutoff in Rydberg, or None if
-            unavailable.
-        provenance: how this selection was resolved.
-        warnings: warnings about missing or incomplete data.
-    """
-
     element: str
     filename: str | None
     filepath: str | None
@@ -157,7 +124,6 @@ class PseudopotentialSelection:
     warnings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        """Validate selected resource identity, functional, and cutoffs."""
         if not isinstance(self.element, str) or not self.element.strip():
             raise ValueError(
                 "PseudopotentialSelection.element must be a non-empty string"
@@ -190,23 +156,13 @@ class PseudopotentialSelection:
             )
 
     def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
 
 
 @dataclass(frozen=True, slots=True)
 class SelectionRecord:
-    """Complete Select-stage pseudopotential output.
-
-    Attributes:
-        pseudopotentials: one selection per element.
-        warnings: warnings from pseudo selection (e.g. missing
-            pseudos, incomplete cutoffs).
-    """
-
     pseudopotentials: tuple[PseudopotentialSelection, ...]
     warnings: tuple[str, ...] = ()
 
     def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary."""
         return to_jsonable(self)

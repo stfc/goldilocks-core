@@ -1,5 +1,3 @@
-"""K-index inference boundary: low-level predict + the public entry point."""
-
 from __future__ import annotations
 
 import numpy as np
@@ -9,28 +7,6 @@ from goldilocks_core.contracts import ModelSpec, StructureFeatureVector
 
 
 def predict(model: object, features: StructureFeatureVector) -> float:
-    """Run model inference on a structure feature vector.
-
-    Parameters
-    ----------
-    model
-        Loaded model object.
-    features
-        Structure-derived feature vector used for prediction.
-
-    Returns
-    -------
-    float
-        Predicted scalar output from the model.
-
-    Raises
-    ------
-    AttributeError
-        If the model does not provide a ``predict`` method.
-    ValueError
-        If current feature values are non-finite or the model prediction does
-        not return at least one value.
-    """
     if not hasattr(model, "predict"):
         raise AttributeError("Loaded model does not provide a 'predict' method.")
 
@@ -48,7 +24,6 @@ def predict(model: object, features: StructureFeatureVector) -> float:
 
 
 def predict_kindex(structure: Structure, spec: ModelSpec) -> float:
-    """Predict a scalar k-index for ``structure`` using the model at ``spec``."""
     from goldilocks_core.ml.kindex.features import extract_cslr_features
     from goldilocks_core.ml.models import load_model
 

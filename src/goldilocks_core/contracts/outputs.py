@@ -1,5 +1,3 @@
-"""Record types available to Core queries, keyed by stable transport ids."""
-
 from __future__ import annotations
 
 from goldilocks_core.contracts.advice import ParameterAdvice
@@ -16,16 +14,13 @@ OUTPUT_RECORD_TYPES: tuple[type, ...] = (
     SelectionRecord,
     GeneratedFiles,
 )
-"""Record types callers may request from the SCF task graph."""
 
 OUTPUT_TYPES_BY_ID: dict[str, type] = {
     record_type_id(record_type): record_type for record_type in OUTPUT_RECORD_TYPES
 }
-"""Query record types keyed by their stable transport identifiers."""
 
 
 def resolve_output_types(ids: list[str] | tuple[str, ...]) -> tuple[type, ...]:
-    """Resolve stable transport record ids to Core query output types."""
     if not ids or any(
         not isinstance(record_id, str) or not record_id.strip() for record_id in ids
     ):

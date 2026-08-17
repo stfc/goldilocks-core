@@ -19,7 +19,6 @@ def make_upf(
     relativistic: str = "scalar",
     z_valence: str = "4.0",
 ) -> str:
-    """Build a minimal UPF document."""
     return (
         "<UPF>"
         f'<PP_HEADER element="{element}" '
@@ -34,7 +33,6 @@ def make_upf(
 def test_load_pseudo_metadata_parses_only_upfs_under_explicit_root(
     tmp_path: Path,
 ) -> None:
-    """Load a local UPF without inventing provider or accuracy metadata."""
     nested = tmp_path / "operator" / "pseudos"
     nested.mkdir(parents=True)
     path = nested / "Si.custom.UPF"
@@ -55,7 +53,6 @@ def test_load_pseudo_metadata_parses_only_upfs_under_explicit_root(
 
 
 def test_sibling_dojo_report_supplies_exact_filename_cutoffs(tmp_path: Path) -> None:
-    """Use a sibling djrepo only when its digest and functional match the UPF."""
     upf = tmp_path / "Si.upf"
     upf.write_text(make_upf())
     digest = hashlib.md5(upf.read_bytes()).hexdigest()
@@ -83,7 +80,6 @@ def test_sibling_dojo_report_supplies_exact_filename_cutoffs(tmp_path: Path) -> 
 
 
 def test_mismatched_dojo_report_is_rejected(tmp_path: Path) -> None:
-    """Do not publish cutoff data from a report for another UPF."""
     (tmp_path / "Si.upf").write_text(make_upf())
     (tmp_path / "Si.djrepo").write_text(
         json.dumps(
@@ -104,7 +100,6 @@ def test_mismatched_dojo_report_is_rejected(tmp_path: Path) -> None:
 
 
 def test_multiple_exact_cutoff_sidecars_are_ambiguous(tmp_path: Path) -> None:
-    """Reject conflicting provider records instead of choosing by filename order."""
     upf = tmp_path / "Si.upf"
     upf.write_text(make_upf())
     digest = hashlib.md5(upf.read_bytes()).hexdigest()
@@ -140,7 +135,6 @@ def test_multiple_exact_cutoff_sidecars_are_ambiguous(tmp_path: Path) -> None:
 
 
 def test_unrelated_json_does_not_supply_cutoffs(tmp_path: Path) -> None:
-    """Ignore arbitrary JSON whose schema does not identify the exact UPF."""
     (tmp_path / "Si.upf").write_text(make_upf())
     (tmp_path / "wrong.json").write_text(
         json.dumps({"Si": {"filename": "Other.upf", "cutoff_wfc": 1}})

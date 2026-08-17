@@ -31,7 +31,6 @@ def make_structure() -> Structure:
 
 
 def local_config():
-    """Return packaged behavior with explicit local resource paths."""
     config = load_default_qrf_config()
     return replace(
         config,

@@ -15,7 +15,6 @@ from goldilocks_core.ml.kindex.features import (
 
 
 def test_extract_l_features_returns_lattice_features() -> None:
-    """Extract the expected lattice-based feature vector."""
     structure = Structure(
         lattice=Lattice.cubic(3.5),
         species=["Si"],
@@ -40,7 +39,6 @@ def test_extract_l_features_returns_lattice_features() -> None:
 
 
 def test_extract_cslr_features_combines_feature_blocks() -> None:
-    """Combine C, S, L, and R feature blocks in a fixed order."""
     structure = Structure(
         lattice=Lattice.cubic(3.5),
         species=["Si"],
@@ -76,7 +74,6 @@ def test_extract_cslr_features_combines_feature_blocks() -> None:
 def test_composition_featurizer_rejecting_impute_nan_propagates_type_error(
     monkeypatch,
 ) -> None:
-    """A featurizer that rejects impute_nan is not silently retried without it."""
     from goldilocks_core.ml.model_registry import load_default_qrf_config
     from goldilocks_core.ml.qrf.features import _composition_features
 

@@ -1,5 +1,3 @@
-"""Resolve one explicit pseudopotential metadata source on demand."""
-
 from __future__ import annotations
 
 from typing import Callable
@@ -24,8 +22,6 @@ PseudoSource = Callable[
 
 
 class PseudoTableMismatch(ValueError):
-    """A selected table cannot satisfy the requested scientific constraints."""
-
     pass
 
 
@@ -35,7 +31,6 @@ def source_for_request(
     store: AssetStore,
     registry_path: PathLike | None = None,
 ) -> PseudoSource:
-    """Choose one source resolver using explicit request precedence."""
     if request.pseudo_metadata is not None:
         metadata = request.pseudo_metadata
         return lambda structure, requirements: tuple(metadata)

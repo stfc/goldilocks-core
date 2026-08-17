@@ -1,11 +1,3 @@
-"""Pretrained CGCNN metallicity model: loading and crystal-representation features.
-
-The QRF k-distance feature vector includes a "metal" block: the pooled crystal
-representation from a CGCNN metallicity classifier. The same model provides
-Analyze-stage metallicity predictions. The heavy torch dependency is imported
-lazily.
-"""
-
 from __future__ import annotations
 
 import numpy as np
@@ -15,12 +7,6 @@ from goldilocks_core.contracts import ElectronicCharacter
 
 
 def load_metallicity_model(checkpoint_path: str) -> object:
-    """Load the pretrained CGCNN metallicity model from a Lightning checkpoint.
-
-    Reconstructs ``CGCNN_PyG`` from the checkpoint's hyper-parameters and loads
-    the weights (stripping the Lightning ``model.`` prefix). Returns the model
-    in eval mode.
-    """
     import torch
 
     from .cgcnn import CGCNN_PyG
@@ -43,7 +29,6 @@ def _build_graph(
     graph_radius: float,
     max_neighbors: int,
 ) -> object:
-    """Build the configured CGCNN graph for one structure."""
     from .atom_features import atom_features_from_structure
     from .cgcnn_graph import build_radius_cgcnn_graph_from_structure
 
@@ -64,7 +49,6 @@ def metal_features(
     graph_radius: float,
     max_neighbors: int,
 ) -> np.ndarray:
-    """Return the configured CGCNN crystal representation (1-D)."""
     import torch
 
     graph = _build_graph(
@@ -81,7 +65,6 @@ def metal_features(
 def _electronic_character_from_probabilities(
     probabilities: object,
 ) -> tuple[ElectronicCharacter, float]:
-    """Map ``[insulator, metal]`` class probabilities to a prediction."""
     values = np.asarray(probabilities, dtype=float).reshape(-1)
     if values.size != 2:
         raise ValueError(
@@ -100,11 +83,6 @@ def classify_metallicity(
     graph_radius: float,
     max_neighbors: int,
 ) -> tuple[ElectronicCharacter, float]:
-    """Return the CGCNN metallicity prediction and winning class probability.
-
-    The published checkpoint labels class 0 as ``insulator`` and class 1 as
-    ``metal``.
-    """
     import torch
 
     graph = _build_graph(

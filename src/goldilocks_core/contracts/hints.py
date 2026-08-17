@@ -26,37 +26,24 @@ from goldilocks_core.functionals import normalize_functional_label
 
 @dataclass(frozen=True, slots=True)
 class KmeshHints:
-    """Kmesh-stage operator overrides for k-point selection.
-
-    A narrow view over a ``CalculationHints`` slice, owned by the Kmesh stage.
-    Constructed from a validated ``CalculationHints``; not validated itself
-    (trusted internal record).
-    """
-
     k_grid: KPointGrid | None = None
     k_spacing: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class SmearingHints:
-    """Smearing-stage operator overrides."""
-
     smearing_type: str | None = None
     smearing_width_ry: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class SpinHints:
-    """Spin-stage operator overrides shared by magnetism and SOC advice."""
-
     spin_polarized: bool | None = None
     spin_orbit_coupling: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class PseudoHints:
-    """Pseudopotential-stage operator overrides."""
-
     accuracy: PseudoAccuracy | None = None
     pseudo_type: str | None = None
     relativistic_mode: str | None = None
@@ -64,8 +51,6 @@ class PseudoHints:
 
 @dataclass(frozen=True, slots=True)
 class ConvergenceHints:
-    """Convergence-stage operator overrides."""
-
     conv_thr: float | None = None
     mixing_beta: float | None = None
     electron_maxstep: int | None = None
@@ -73,35 +58,18 @@ class ConvergenceHints:
 
 @dataclass(frozen=True, slots=True)
 class VdwHints:
-    """Van der Waals-stage operator overrides."""
-
     use_vdw: bool | None = None
     vdw_method: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class CalculationIntent:
-    """Operator intent for a Core recommendation.
-
-    Expresses what the operator wants to calculate, not how to
-    calculate it. Core uses intent to steer advice and generation.
-
-    Attributes:
-        code: target DFT code for input generation.
-        task: type of calculation to prepare.
-        functional: exchange-correlation functional label
-            (e.g. ``PBE``, ``PBEsol``, ``LDA``).
-        pseudo_accuracy: registered pseudopotential accuracy tier
-            (``efficiency`` or ``precision``).
-    """
-
     code: CodeName = "quantum_espresso"
     task: CalcTask = "scf_single_point"
     functional: str = "PBEsol"
     pseudo_accuracy: PseudoAccuracy = "efficiency"
 
     def __post_init__(self) -> None:
-        """Require named targets and normalize the functional."""
         for field_name in ("code", "task"):
             value = getattr(self, field_name)
             if not isinstance(value, str) or not value.strip():
@@ -124,51 +92,11 @@ class CalculationIntent:
         object.__setattr__(self, "functional", functional)
 
     def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary."""
         return to_jsonable(self)
 
 
 @dataclass(frozen=True, slots=True)
 class CalculationHints:
-    """Optional operator overrides for values Core can otherwise decide.
-
-    All fields default to ``None``. A ``None`` value means "let Core
-    decide." A non-None value overrides the Core default and records
-    ``user_hint`` provenance. Partial overrides are supported: e.g.
-    setting ``conv_thr`` without setting ``mixing_beta``.
-
-    Attributes:
-        k_spacing: VASP-style k-point spacing in Å⁻¹. Ignored
-            when ``k_grid`` is also set.
-        k_grid: explicit uniform k-point grid. Takes precedence
-            over ``k_spacing``.
-        smearing_type: smearing method (e.g. ``cold``,
-            ``gaussian``, ``mp``, ``fixed``).
-        smearing_width_ry: smearing width in Rydberg. Must be
-            finite and positive when smearing is enabled.
-        spin_polarized: force spin-polarized (``True``) or
-            non-magnetic (``False``) calculation.
-        spin_orbit_coupling: force SOC on (``True``) or off
-            (``False``).
-        pseudo_accuracy: override registered pseudo accuracy
-            (``efficiency`` or ``precision``).
-        pseudo_type: override pseudo type (e.g. ``NC``,
-            ``USPP``, ``PAW``).
-        relativistic_mode: override relativistic treatment
-            (``scalar``, ``full``, ``non-relativistic``).
-        conv_thr: SCF convergence threshold in Rydberg. Must be
-            positive.
-        mixing_beta: charge-density mixing beta. Must be
-            positive.
-        electron_maxstep: maximum number of SCF iterations. Must
-            be ≥ 1.
-        use_vdw: force dispersion correction on (``True``), force it off
-            (``False``), or let Core decide (``None``).
-        vdw_method: preferred dispersion method. Valid without ``use_vdw``
-            so analysis can decide whether to apply it, but incompatible with
-            ``use_vdw=False``.
-    """
-
     k_spacing: float | None = None
     k_grid: KPointGrid | None = None
     smearing_type: str | None = None
@@ -185,7 +113,6 @@ class CalculationHints:
     vdw_method: VdwMethod | None = None
 
     def __post_init__(self) -> None:
-        """Validate numerical and coupled hint fields at the request boundary."""
         if self.k_spacing is not None:
             _validate_finite_positive(self.k_spacing, "CalculationHints.k_spacing")
         if self.k_grid is not None:
@@ -277,5 +204,4 @@ class CalculationHints:
         return VdwHints(use_vdw=self.use_vdw, vdw_method=self.vdw_method)
 
     def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary."""
         return to_jsonable(self)

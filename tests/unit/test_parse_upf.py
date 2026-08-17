@@ -14,7 +14,6 @@ def write_attr_upf(
     relativistic: str,
     z_valence: str,
 ) -> Path:
-    """Write a minimal attribute-style UPF fixture."""
     path.write_text(
         "<UPF>"
         f'<PP_HEADER element="{element}" '
@@ -29,7 +28,6 @@ def write_attr_upf(
 
 
 def write_text_upf(path: Path) -> Path:
-    """Write a minimal text-style UPF fixture."""
     path.write_text(
         """
 <UPF>
@@ -52,7 +50,6 @@ Generated using a non-relativistic calculation.
 def test_parse_upf_metadata_parses_attribute_style_header(
     tmp_path: Path,
 ) -> None:
-    """Parse scientific metadata without inferring provider facts from paths."""
     pseudo_root = tmp_path / "pseudopotentials" / "pslibrary"
     pseudo_root.mkdir(parents=True)
     pseudo_path = write_attr_upf(
@@ -76,7 +73,6 @@ def test_parse_upf_metadata_parses_attribute_style_header(
 
 
 def test_parse_upf_metadata_parses_text_header(tmp_path: Path) -> None:
-    """Parse a text PP_HEADER without inferring provider facts from paths."""
     pseudo_root = tmp_path / "pseudopotentials" / "GBRV" / "all_pbe_UPF_v1.5"
     pseudo_root.mkdir(parents=True)
     pseudo_path = write_text_upf(pseudo_root / "li_pbe_v1.4.uspp.F.UPF")
@@ -94,7 +90,6 @@ def test_parse_upf_metadata_parses_text_header(tmp_path: Path) -> None:
 
 
 def test_parse_upf_metadata_raises_for_missing_file(tmp_path: Path) -> None:
-    """Raise an error when the UPF file does not exist."""
     pseudo_path = tmp_path / "missing.UPF"
 
     with pytest.raises(FileNotFoundError):
@@ -120,7 +115,6 @@ def test_parse_upf_metadata_canonicalizes_recognized_functional_labels(
     functional: str,
     expected: str,
 ) -> None:
-    """Canonicalize only recognized PBE, PBEsol, and LDA UPF labels."""
     pseudo_root = tmp_path / "pseudopotentials" / "pslibrary"
     pseudo_root.mkdir(parents=True)
     pseudo_path = write_attr_upf(
@@ -157,7 +151,6 @@ def test_parse_upf_metadata_preserves_unknown_functional_labels(
     tmp_path: Path,
     functional: str,
 ) -> None:
-    """Do not reinterpret conflicting or extra UPF functional labels."""
     pseudo_root = tmp_path / "pseudopotentials" / "pslibrary"
     pseudo_root.mkdir(parents=True)
     pseudo_path = write_attr_upf(
@@ -177,7 +170,6 @@ def test_parse_upf_metadata_preserves_unknown_functional_labels(
 def test_parse_upf_metadata_prefers_header_pseudo_type_over_filename_hint(
     tmp_path: Path,
 ) -> None:
-    """Prefer PP_HEADER pseudo_type over filename naming conventions."""
     pseudo_root = tmp_path / "pseudopotentials" / "pslibrary"
     pseudo_root.mkdir(parents=True)
     pseudo_path = write_attr_upf(

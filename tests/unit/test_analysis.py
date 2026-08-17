@@ -10,7 +10,6 @@ from goldilocks_core.contracts import SymmetryUnavailable
 
 
 def test_analyze_structure_reports_composition_and_element_facts() -> None:
-    """Report structure facts without recommending parameters."""
     structure = Structure(
         lattice=Lattice.cubic(4.0),
         species=["Fe", "I"],
@@ -33,7 +32,6 @@ def test_analyze_structure_reports_composition_and_element_facts() -> None:
 
 
 def test_analyze_structure_reports_partial_occupancy_warnings() -> None:
-    """Report disorder and skip unsupported CrystalNN dimensionality analysis."""
     structure = Structure(
         lattice=Lattice.cubic(4.0),
         species=[{"Fe": 0.5, "Mn": 0.5}],
@@ -50,7 +48,6 @@ def test_analyze_structure_reports_partial_occupancy_warnings() -> None:
 
 
 def test_analyze_structure_marks_all_metal_compositions_as_likely_metal() -> None:
-    """Classify all-metal compositions conservatively as likely metallic."""
     structure = Structure(
         lattice=Lattice.cubic(2.9),
         species=["Fe"],
@@ -64,7 +61,6 @@ def test_analyze_structure_marks_all_metal_compositions_as_likely_metal() -> Non
 
 
 def test_analyze_structure_raises_when_crystal_nn_fails(monkeypatch) -> None:
-    """Raise DimensionalityClassificationError when CrystalNN cannot bond."""
 
     def fail_crystal_nn():
         raise ValueError("No Voronoi neighbors found for site")
@@ -81,7 +77,6 @@ def test_analyze_structure_raises_when_crystal_nn_fails(monkeypatch) -> None:
 
 
 def test_analyze_structure_raises_when_larsen_fails(monkeypatch) -> None:
-    """Raise DimensionalityClassificationError on Larsen runtime failures."""
 
     def fail_larsen(*_args):
         raise RuntimeError("pathological graph")
@@ -100,7 +95,6 @@ def test_analyze_structure_raises_when_larsen_fails(monkeypatch) -> None:
 def test_analyze_structure_records_symmetry_unavailable_when_spglib_fails(
     monkeypatch,
 ) -> None:
-    """Record typed SymmetryUnavailable when spglib cannot analyze symmetry."""
 
     def fail_spglib(_structure: Structure) -> None:
         raise TypeError("spglib cannot handle this structure")
@@ -128,7 +122,6 @@ def test_analyze_structure_records_symmetry_unavailable_when_spglib_fails(
 def test_analyze_structure_propagates_unexpected_dimensionality_assertion(
     monkeypatch,
 ) -> None:
-    """Do not hide unexpected programming failures in dimensionality analysis."""
 
     def fail_larsen(*_args):
         raise AssertionError("invariant violation")
@@ -145,7 +138,6 @@ def test_analyze_structure_propagates_unexpected_dimensionality_assertion(
 
 
 def test_analyze_structure_reports_3d_bulk_without_vacuum() -> None:
-    """Classify a fully bonded bulk crystal as 3D without the heuristic flag."""
     structure = Structure(
         lattice=Lattice.cubic(3.61),
         species=["Cu", "Cu", "Cu", "Cu"],
@@ -159,7 +151,6 @@ def test_analyze_structure_reports_3d_bulk_without_vacuum() -> None:
 
 
 def test_analyze_structure_reports_2d_slab_with_vacuum() -> None:
-    """Set the low-dimensional/vacuum heuristic for a graphene sheet."""
     structure = Structure(
         lattice=Lattice.from_parameters(2.46, 2.46, 15.0, 90, 90, 120),
         species=["C", "C"],
@@ -173,7 +164,6 @@ def test_analyze_structure_reports_2d_slab_with_vacuum() -> None:
 
 
 def test_analyze_structure_reports_molecule_with_vacuum() -> None:
-    """Set the low-dimensional/vacuum heuristic for an isolated molecule."""
     structure = Structure(
         lattice=Lattice.cubic(15.0),
         species=["H", "H"],

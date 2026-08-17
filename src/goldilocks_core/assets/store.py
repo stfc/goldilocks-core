@@ -1,5 +1,3 @@
-"""Transactional external store for immutable runtime assets."""
-
 from __future__ import annotations
 
 import fcntl
@@ -27,8 +25,6 @@ _MANIFEST_SCHEMA_VERSION = 1
 
 
 class AssetNotInstalled(FileNotFoundError):
-    """One exact runtime asset is absent from a configured store."""
-
     def __init__(
         self,
         reference: AssetReference,
@@ -45,14 +41,10 @@ class AssetNotInstalled(FileNotFoundError):
 
 
 class AssetCorrupt(ValueError):
-    """An installed asset does not match its strict manifest."""
-
     pass
 
 
 class AssetStore:
-    """Install, resolve, and verify complete immutable runtime assets."""
-
     def __init__(self, root: str | Path | None = None) -> None:
         self.root = asset_root(root)
 
@@ -61,7 +53,6 @@ class AssetStore:
         spec: AssetSpec,
         prepare: AssetPreparer | None = None,
     ) -> InstalledAsset:
-        """Acquire, prepare, and atomically publish one asset version."""
         self.root.mkdir(parents=True, exist_ok=True)
         with self._lock(spec.id, spec.version):
             try:
@@ -101,11 +92,9 @@ class AssetStore:
             return self.verify(spec.id, spec.version)
 
     def resolve(self, asset_id: str, version: str) -> InstalledAsset:
-        """Return one installed asset after verifying its manifest."""
         return self.verify(asset_id, version)
 
     def verify(self, asset_id: str, version: str) -> InstalledAsset:
-        """Strictly parse the manifest and verify every installed path."""
         reference = AssetReference(asset_id, version)
         root = self._asset_path(asset_id, version)
         if root.is_symlink() or (root.exists() and not root.is_dir()):
@@ -156,7 +145,6 @@ class AssetStore:
         return InstalledAsset(asset_id, version, root, files)
 
     def status(self, asset_id: str, version: str) -> str:
-        """Return installed, missing, or corrupt without hiding error details."""
         try:
             self.verify(asset_id, version)
         except AssetNotInstalled:
@@ -191,7 +179,6 @@ class AssetStore:
 
 
 def asset_root(root: str | Path | None = None) -> Path:
-    """Resolve the explicit, environment, or XDG runtime-asset root."""
     if root is not None:
         return Path(root).expanduser().resolve()
     override = os.environ.get(ASSET_ROOT_ENV)
@@ -298,7 +285,6 @@ def _read_manifest(
 
 
 def _remove_corrupt_destination(path: Path) -> None:
-    """Remove one confined old destination after replacement staging succeeds."""
     if path.is_symlink() or (path.exists() and not path.is_dir()):
         path.unlink()
     elif path.exists():

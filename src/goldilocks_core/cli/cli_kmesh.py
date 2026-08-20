@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from goldilocks_core.advisors import advise_kpoints
+from goldilocks_core.advice import advise_kpoints
 from goldilocks_core.contracts import ModelSpec
 from goldilocks_core.io.structures import load_structure
 

@@ -70,6 +70,8 @@ _BOOL_HINTS = {"spin_polarized", "spin_orbit_coupling", "use_vdw"}
 class RequestError(ValueError):
     """A malformed transport request."""
 
+    pass
+
 
 def from_dict(data: Mapping[str, Any]) -> PresetRequest | QueryRequest:
     """Parse a JSON-like mapping into a validated Core job request.

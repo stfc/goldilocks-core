@@ -9,40 +9,40 @@ created and closed per call.
 from __future__ import annotations
 
 from goldilocks_core.contracts import (
-    CoreRecords,
-    CoreResult,
     PresetRequest,
     QueryRequest,
+    Records,
+    Result,
 )
-from goldilocks_core.runtime.core import CoreRuntime
-from goldilocks_core.runtime.service import CoreService
+from goldilocks_core.runtime.models import Runtime
+from goldilocks_core.runtime.service import Service
 
 
 def run_core_job(
     request: PresetRequest,
     *,
-    runtime: CoreRuntime | None = None,
-) -> CoreResult:
+    runtime: Runtime | None = None,
+) -> Result:
     """Run the preset named by ``request.mode`` and return a full result.
 
     Use :func:`query_records` for an explicit record subset.
     """
     if runtime is None:
-        with CoreService() as service:
+        with Service() as service:
             return service.run_preset(request)
-    return CoreService(runtime).run_preset(request)
+    return Service(runtime).run_preset(request)
 
 
 def query_records(
     request: QueryRequest,
     *,
-    runtime: CoreRuntime | None = None,
-) -> CoreRecords:
+    runtime: Runtime | None = None,
+) -> Records:
     """Compute the explicit record types in ``request.outputs``.
 
     Use :func:`run_core_job` to run a named preset instead.
     """
     if runtime is None:
-        with CoreService() as service:
+        with Service() as service:
             return service.compute(request)
-    return CoreService(runtime).compute(request)
+    return Service(runtime).compute(request)

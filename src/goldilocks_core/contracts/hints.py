@@ -1,0 +1,281 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from goldilocks_core.contracts.serial import to_jsonable
+from goldilocks_core.contracts.types import (
+    CalcTask,
+    CodeName,
+    JsonDict,
+    KPointGrid,
+    PseudoAccuracy,
+    VdwMethod,
+)
+from goldilocks_core.contracts.validate import (
+    _validate_finite_positive,
+    _validate_kpoint_grid,
+    _validate_optional_boolean,
+    _validate_optional_nonempty_str,
+    _validate_positive_integer,
+    _validate_relativistic_mode,
+    _validate_smearing,
+    _validate_vdw_method,
+)
+from goldilocks_core.functionals import normalize_functional_label
+
+
+@dataclass(frozen=True, slots=True)
+class KmeshHints:
+    """Kmesh-stage operator overrides for k-point selection.
+
+    A narrow view over a ``CalculationHints`` slice, owned by the Kmesh stage.
+    Constructed from a validated ``CalculationHints``; not validated itself
+    (trusted internal record).
+    """
+
+    k_grid: KPointGrid | None = None
+    k_spacing: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SmearingHints:
+    """Smearing-stage operator overrides."""
+
+    smearing_type: str | None = None
+    smearing_width_ry: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SpinHints:
+    """Spin-stage operator overrides shared by magnetism and SOC advice."""
+
+    spin_polarized: bool | None = None
+    spin_orbit_coupling: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PseudoHints:
+    """Pseudopotential-stage operator overrides."""
+
+    accuracy: PseudoAccuracy | None = None
+    pseudo_type: str | None = None
+    relativistic_mode: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ConvergenceHints:
+    """Convergence-stage operator overrides."""
+
+    conv_thr: float | None = None
+    mixing_beta: float | None = None
+    electron_maxstep: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VdwHints:
+    """Van der Waals-stage operator overrides."""
+
+    use_vdw: bool | None = None
+    vdw_method: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CalculationIntent:
+    """Operator intent for a Core recommendation.
+
+    Expresses what the operator wants to calculate, not how to
+    calculate it. Core uses intent to steer advice and generation.
+
+    Attributes:
+        code: target DFT code for input generation.
+        task: type of calculation to prepare.
+        functional: exchange-correlation functional label
+            (e.g. ``PBE``, ``PBEsol``, ``LDA``).
+        pseudo_accuracy: registered pseudopotential accuracy tier
+            (``efficiency`` or ``precision``).
+    """
+
+    code: CodeName = "quantum_espresso"
+    task: CalcTask = "scf_single_point"
+    functional: str = "PBEsol"
+    pseudo_accuracy: PseudoAccuracy = "efficiency"
+
+    def __post_init__(self) -> None:
+        """Require named targets and normalize the functional."""
+        for field_name in ("code", "task"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"CalculationIntent.{field_name} must be a non-empty string; "
+                    f"got {value!r}"
+                )
+        if self.pseudo_accuracy not in {"efficiency", "precision"}:
+            raise ValueError(
+                "CalculationIntent.pseudo_accuracy must be 'efficiency' or "
+                f"'precision'; got {self.pseudo_accuracy!r}"
+            )
+
+        functional = normalize_functional_label(self.functional)
+        if functional is None:
+            raise ValueError(
+                "CalculationIntent.functional must be a non-empty string; "
+                f"got {self.functional!r}"
+            )
+        object.__setattr__(self, "functional", functional)
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class CalculationHints:
+    """Optional operator overrides for values Core can otherwise decide.
+
+    All fields default to ``None``. A ``None`` value means "let Core
+    decide." A non-None value overrides the Core default and records
+    ``user_hint`` provenance. Partial overrides are supported: e.g.
+    setting ``conv_thr`` without setting ``mixing_beta``.
+
+    Attributes:
+        k_spacing: VASP-style k-point spacing in Å⁻¹. Ignored
+            when ``k_grid`` is also set.
+        k_grid: explicit uniform k-point grid. Takes precedence
+            over ``k_spacing``.
+        smearing_type: smearing method (e.g. ``cold``,
+            ``gaussian``, ``mp``, ``fixed``).
+        smearing_width_ry: smearing width in Rydberg. Must be
+            finite and positive when smearing is enabled.
+        spin_polarized: force spin-polarized (``True``) or
+            non-magnetic (``False``) calculation.
+        spin_orbit_coupling: force SOC on (``True``) or off
+            (``False``).
+        pseudo_accuracy: override registered pseudo accuracy
+            (``efficiency`` or ``precision``).
+        pseudo_type: override pseudo type (e.g. ``NC``,
+            ``USPP``, ``PAW``).
+        relativistic_mode: override relativistic treatment
+            (``scalar``, ``full``, ``non-relativistic``).
+        conv_thr: SCF convergence threshold in Rydberg. Must be
+            positive.
+        mixing_beta: charge-density mixing beta. Must be
+            positive.
+        electron_maxstep: maximum number of SCF iterations. Must
+            be ≥ 1.
+        use_vdw: force dispersion correction on (``True``), force it off
+            (``False``), or let Core decide (``None``).
+        vdw_method: preferred dispersion method. Valid without ``use_vdw``
+            so analysis can decide whether to apply it, but incompatible with
+            ``use_vdw=False``.
+    """
+
+    k_spacing: float | None = None
+    k_grid: KPointGrid | None = None
+    smearing_type: str | None = None
+    smearing_width_ry: float | None = None
+    spin_polarized: bool | None = None
+    spin_orbit_coupling: bool | None = None
+    pseudo_accuracy: PseudoAccuracy | None = None
+    pseudo_type: str | None = None
+    relativistic_mode: str | None = None
+    conv_thr: float | None = None
+    mixing_beta: float | None = None
+    electron_maxstep: int | None = None
+    use_vdw: bool | None = None
+    vdw_method: VdwMethod | None = None
+
+    def __post_init__(self) -> None:
+        """Validate numerical and coupled hint fields at the request boundary."""
+        if self.k_spacing is not None:
+            _validate_finite_positive(self.k_spacing, "CalculationHints.k_spacing")
+        if self.k_grid is not None:
+            object.__setattr__(
+                self,
+                "k_grid",
+                _validate_kpoint_grid(self.k_grid, "CalculationHints.k_grid"),
+            )
+        _validate_optional_boolean(
+            self.spin_polarized, "CalculationHints.spin_polarized"
+        )
+        _validate_optional_boolean(
+            self.spin_orbit_coupling, "CalculationHints.spin_orbit_coupling"
+        )
+        _validate_optional_boolean(self.use_vdw, "CalculationHints.use_vdw")
+
+        _validate_smearing(
+            self.smearing_type,
+            self.smearing_width_ry,
+            type_field="CalculationHints.smearing_type",
+            width_field="CalculationHints.smearing_width_ry",
+        )
+
+        if self.conv_thr is not None:
+            _validate_finite_positive(self.conv_thr, "CalculationHints.conv_thr")
+        if self.mixing_beta is not None:
+            _validate_finite_positive(self.mixing_beta, "CalculationHints.mixing_beta")
+        if self.electron_maxstep is not None:
+            _validate_positive_integer(
+                self.electron_maxstep, "CalculationHints.electron_maxstep"
+            )
+        if self.vdw_method is not None:
+            _validate_vdw_method(self.vdw_method, "CalculationHints.vdw_method")
+        if self.use_vdw is False and self.vdw_method is not None:
+            raise ValueError(
+                "CalculationHints.vdw_method must be None when use_vdw is False"
+            )
+        if self.pseudo_accuracy is not None and self.pseudo_accuracy not in {
+            "efficiency",
+            "precision",
+        }:
+            raise ValueError(
+                "CalculationHints.pseudo_accuracy must be 'efficiency', "
+                f"'precision', or None; got {self.pseudo_accuracy!r}"
+            )
+        _validate_optional_nonempty_str(
+            self.pseudo_type, "CalculationHints.pseudo_type"
+        )
+        _validate_relativistic_mode(
+            self.relativistic_mode, "CalculationHints.relativistic_mode"
+        )
+
+    @property
+    def kmesh(self) -> KmeshHints:
+        return KmeshHints(k_grid=self.k_grid, k_spacing=self.k_spacing)
+
+    @property
+    def smearing(self) -> SmearingHints:
+        return SmearingHints(
+            smearing_type=self.smearing_type,
+            smearing_width_ry=self.smearing_width_ry,
+        )
+
+    @property
+    def spin(self) -> SpinHints:
+        return SpinHints(
+            spin_polarized=self.spin_polarized,
+            spin_orbit_coupling=self.spin_orbit_coupling,
+        )
+
+    @property
+    def pseudo(self) -> PseudoHints:
+        return PseudoHints(
+            accuracy=self.pseudo_accuracy,
+            pseudo_type=self.pseudo_type,
+            relativistic_mode=self.relativistic_mode,
+        )
+
+    @property
+    def convergence(self) -> ConvergenceHints:
+        return ConvergenceHints(
+            conv_thr=self.conv_thr,
+            mixing_beta=self.mixing_beta,
+            electron_maxstep=self.electron_maxstep,
+        )
+
+    @property
+    def vdw(self) -> VdwHints:
+        return VdwHints(use_vdw=self.use_vdw, vdw_method=self.vdw_method)
+
+    def to_dict(self) -> JsonDict:
+        """Return a JSON-serializable dictionary."""
+        return to_jsonable(self)

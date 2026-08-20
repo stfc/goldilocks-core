@@ -18,6 +18,8 @@ _TIMEOUT_SECONDS = 300
 class ChecksumMismatch(ValueError):
     """A downloaded source file did not match its declared digest."""
 
+    pass
+
 
 def download(file: AssetFile, destination: Path) -> None:
     """Stream one source file to a new destination and verify it."""

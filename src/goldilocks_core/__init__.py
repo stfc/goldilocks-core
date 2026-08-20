@@ -3,31 +3,31 @@
 from __future__ import annotations
 
 from goldilocks_core.contracts import (
-    BundleRecord,
     CalculationHints,
     CalculationIntent,
-    CoreResult,
     PresetRequest,
     QueryRequest,
+    Records,
+    Result,
 )
 from goldilocks_core.runtime import (
-    CoreRuntime,
-    CoreService,
-    TaskDispatcher,
+    Dispatcher,
+    Runtime,
+    Service,
     query_records,
     run_core_job,
 )
 
 __all__ = [
-    "BundleRecord",
     "CalculationHints",
     "CalculationIntent",
-    "CoreResult",
-    "CoreRuntime",
-    "CoreService",
+    "Dispatcher",
     "PresetRequest",
     "QueryRequest",
-    "TaskDispatcher",
+    "Records",
+    "Result",
+    "Runtime",
+    "Service",
     "query_records",
     "run_core_job",
 ]

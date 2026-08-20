@@ -18,7 +18,7 @@ from goldilocks_core.pseudo.installed import load_installed_table
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 from goldilocks_core.pseudo.registry import PseudoTable, default_table, load_tables
 
-PseudoSourceResolver = Callable[
+PseudoSource = Callable[
     [Structure, PseudopotentialRequirements], tuple[PseudoMetadata, ...]
 ]
 
@@ -26,13 +26,15 @@ PseudoSourceResolver = Callable[
 class PseudoTableMismatch(ValueError):
     """A selected table cannot satisfy the requested scientific constraints."""
 
+    pass
+
 
 def source_for_request(
     request: PresetRequest | QueryRequest,
     *,
     store: AssetStore,
     registry_path: PathLike | None = None,
-) -> PseudoSourceResolver:
+) -> PseudoSource:
     """Choose one source resolver using explicit request precedence."""
     if request.pseudo_metadata is not None:
         metadata = request.pseudo_metadata

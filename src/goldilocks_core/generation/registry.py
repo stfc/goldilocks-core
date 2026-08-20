@@ -28,7 +28,6 @@ Each writer renders the input text for one ``(code, task)`` pair and owns the
 ``GeneratedFile`` records it returns, including their relative paths.
 """
 
-# Static dispatch table: one (code, task, writer) triple per supported pair.
 _WRITERS: tuple[tuple[CodeName, CalcTask, Writer], ...] = (
     ("quantum_espresso", "scf_single_point", write_qe_scf),
 )

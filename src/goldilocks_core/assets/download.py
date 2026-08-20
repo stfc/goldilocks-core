@@ -17,6 +17,7 @@ _TIMEOUT_SECONDS = 300
 
 class ChecksumMismatch(ValueError):
     """A downloaded source file did not match its declared digest."""
+
     pass
 
 

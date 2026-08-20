@@ -11,19 +11,16 @@ from goldilocks_core.runtime import Service
 
 @pytest.fixture
 def sample_structure_path() -> str:
-    """Return the bundled silicon structure path."""
     return str(structure("Si.cif"))
 
 
 @pytest.fixture
 def sample_structure_text(sample_structure_path: str) -> str:
-    """Return the bundled silicon structure as inline CIF text."""
     return Structure.from_file(sample_structure_path).to(fmt="cif")
 
 
 @pytest.fixture
 def pseudo_metadata() -> dict[str, object]:
-    """Return metadata sufficient to render a silicon QE input."""
     return {
         "filepath": "/pseudo/Si.UPF",
         "filename": "Si.UPF",
@@ -47,7 +44,6 @@ def pseudo_metadata() -> dict[str, object]:
 def request_body(
     sample_structure_path: str, pseudo_metadata: dict[str, object]
 ) -> dict[str, object]:
-    """Return a model-free transport request body."""
     return {
         "structure": sample_structure_path,
         "hints": {"k_grid": [3, 3, 3]},
@@ -57,7 +53,6 @@ def request_body(
 
 @pytest.fixture
 def test_service() -> Iterator[Service]:
-    """Yield a Core service and close it after the test."""
     service = Service()
     yield service
     service.close()

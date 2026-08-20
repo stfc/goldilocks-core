@@ -1,5 +1,3 @@
-"""Console operations over domain-owned runtime asset catalogues."""
-
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -11,7 +9,6 @@ from goldilocks_core.pseudo.install import table_installations
 
 
 def catalogue() -> dict[str, AssetInstallation]:
-    """Merge domain installations and reject duplicate asset identifiers."""
     installations = (
         *(AssetInstallation(spec) for spec in model_asset_specs()),
         *table_installations(),
@@ -28,7 +25,6 @@ def catalogue() -> dict[str, AssetInstallation]:
 def references(
     name: str, entries: Mapping[str, AssetInstallation] | None = None
 ) -> tuple[AssetInstallation, ...]:
-    """Resolve one asset id or an exact shipped profile to registrations."""
     entries = dict(entries or catalogue())
     if name in entries:
         return (entries[name],)
@@ -48,7 +44,6 @@ def references(
 def install(
     name: str, *, store: AssetStore | None = None
 ) -> tuple[InstalledAsset, ...]:
-    """Install one asset or every exact asset in a shipped profile."""
     target = store or AssetStore()
     return tuple(
         target.install(registration.spec, registration.prepare)
@@ -59,7 +54,6 @@ def install(
 def statuses(
     name: str, *, store: AssetStore | None = None
 ) -> tuple[tuple[str, str, str], ...]:
-    """Return id, version, and integrity status for an asset or profile."""
     target = store or AssetStore()
     return tuple(
         (
@@ -72,7 +66,6 @@ def statuses(
 
 
 def verify(name: str, *, store: AssetStore | None = None) -> tuple[InstalledAsset, ...]:
-    """Verify one asset or every exact asset in a shipped profile."""
     target = store or AssetStore()
     return tuple(
         target.verify(registration.spec.id, registration.spec.version)

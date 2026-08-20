@@ -1,5 +1,3 @@
-"""Pseudopotential metadata from verified assets or explicit local roots."""
-
 from __future__ import annotations
 
 import hashlib
@@ -27,7 +25,6 @@ class _DiscoveredCutoffs:
 
 
 def load_pseudo_metadata(root: str | Path) -> list[PseudoMetadata]:
-    """Load local UPFs and only cutoff records tied to each exact filename."""
     root = Path(root).resolve()
     if not root.is_dir():
         raise ValueError(f"pseudopotential root is not a directory: {root}")
@@ -65,7 +62,6 @@ def _discover_cutoffs(
     root: Path,
     metadata: PseudoMetadata,
 ) -> _DiscoveredCutoffs | None:
-    """Return one exact recognized sidecar or reject multiple matches."""
     matches: list[_DiscoveredCutoffs] = []
     dojo = upf.with_suffix(".djrepo")
     if dojo.is_file():
@@ -90,7 +86,6 @@ def _load_dojo_sidecar(
     upf: Path,
     metadata: PseudoMetadata,
 ) -> _DiscoveredCutoffs:
-    """Validate one exact sibling PseudoDojo report."""
     try:
         report = json.loads(sidecar.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
@@ -140,7 +135,6 @@ def _load_sssp_sidecar(
     upf: Path,
     metadata: PseudoMetadata,
 ) -> _DiscoveredCutoffs | None:
-    """Return an SSSP entry only when its filename names this exact UPF."""
     try:
         document = json.loads(sidecar.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):

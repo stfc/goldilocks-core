@@ -8,7 +8,6 @@ TestClient = pytest.importorskip("fastapi.testclient").TestClient
 
 
 def test_health_reports_liveness(test_service) -> None:
-    """Return a minimal health response."""
     with TestClient(create_app(test_service)) as client:
         response = client.get("/health")
 
@@ -17,7 +16,6 @@ def test_health_reports_liveness(test_service) -> None:
 
 
 def test_tasks_lists_registered_tasks(test_service) -> None:
-    """Expose registered task descriptions with stable ids."""
     with TestClient(create_app(test_service)) as client:
         response = client.get("/tasks")
 
@@ -30,7 +28,6 @@ def test_tasks_lists_registered_tasks(test_service) -> None:
 
 
 def test_codes_lists_available_codes(test_service) -> None:
-    """Expose target DFT codes with registered writers."""
     with TestClient(create_app(test_service)) as client:
         response = client.get("/codes")
 
@@ -39,7 +36,6 @@ def test_codes_lists_available_codes(test_service) -> None:
 
 
 def test_models_lists_registered_models(test_service) -> None:
-    """Expose the QRF k-distance and CGCNN metallicity model specs."""
     with TestClient(create_app(test_service)) as client:
         response = client.get("/models")
 
@@ -54,7 +50,6 @@ def test_models_lists_registered_models(test_service) -> None:
 
 
 def test_recommend_returns_core_result_json(test_service, request_body) -> None:
-    """Expose the recommend preset as CoreResult JSON."""
     with TestClient(create_app(test_service)) as client:
         response = client.post("/recommend", json=request_body)
 
@@ -78,7 +73,6 @@ def test_recommend_returns_core_result_json(test_service, request_body) -> None:
 def test_generate_publishes_bundle_and_returns_core_result_json(
     test_service, request_body, tmp_path
 ) -> None:
-    """Pass body output_dir to the generate preset."""
     output_dir = tmp_path / "bundle"
     body = {**request_body, "output_dir": str(output_dir)}
 
@@ -93,7 +87,6 @@ def test_generate_publishes_bundle_and_returns_core_result_json(
 
 
 def test_compute_returns_only_requested_records(test_service, request_body) -> None:
-    """Expose arbitrary record queries through the compute endpoint."""
     body = {
         **request_body,
         "outputs": ["analysis", "advice"],
@@ -108,7 +101,6 @@ def test_compute_returns_only_requested_records(test_service, request_body) -> N
 
 
 def test_request_error_maps_to_422_with_message(test_service, request_body) -> None:
-    """Preserve parser error text in a client response."""
     body = {**request_body, "unknown": True}
 
     with TestClient(create_app(test_service)) as client:
@@ -119,7 +111,6 @@ def test_request_error_maps_to_422_with_message(test_service, request_body) -> N
 
 
 def test_unknown_task_maps_to_422_with_message(test_service, request_body) -> None:
-    """Report an unknown task as invalid operator input."""
     body = {**request_body, "intent": {"task": "unsupported"}}
 
     with TestClient(create_app(test_service)) as client:
@@ -133,7 +124,6 @@ def test_unknown_task_maps_to_422_with_message(test_service, request_body) -> No
 def test_generate_without_installed_pseudopotentials_maps_to_424(
     test_service, request_body
 ) -> None:
-    """Expose a structured missing-asset dependency before generation."""
     body = {
         name: value for name, value in request_body.items() if name != "pseudo_metadata"
     }
@@ -150,7 +140,6 @@ def test_generate_without_installed_pseudopotentials_maps_to_424(
 
 
 def test_pseudo_table_mismatch_maps_to_422(test_service, request_body) -> None:
-    """Report an incompatible or unknown table as an operator error."""
     body = {
         name: value for name, value in request_body.items() if name != "pseudo_metadata"
     }
@@ -165,7 +154,6 @@ def test_pseudo_table_mismatch_maps_to_422(test_service, request_body) -> None:
 
 
 def test_asset_corrupt_maps_to_424(test_service, request_body, monkeypatch) -> None:
-    """Expose a corrupt installed asset as a deployment integrity error."""
     from goldilocks_core.assets import AssetCorrupt
 
     def raise_corrupt(service, request):
@@ -185,7 +173,6 @@ def test_asset_corrupt_maps_to_424(test_service, request_body, monkeypatch) -> N
 def test_existing_bundle_destination_maps_to_409(
     test_service, request_body, tmp_path
 ) -> None:
-    """Report a bundle destination collision without a server error."""
     output_dir = tmp_path / "bundle"
     output_dir.mkdir()
 
@@ -200,7 +187,6 @@ def test_existing_bundle_destination_maps_to_409(
 
 
 def test_empty_bundle_destination_maps_to_422(test_service, request_body) -> None:
-    """Reject an empty output directory before bundle publication."""
     with TestClient(create_app(test_service)) as client:
         response = client.post(
             "/generate",
@@ -212,7 +198,6 @@ def test_empty_bundle_destination_maps_to_422(test_service, request_body) -> Non
 
 
 def test_directory_structure_path_maps_to_422(test_service, tmp_path) -> None:
-    """Reject a directory where a structure file is required."""
     with TestClient(create_app(test_service)) as client:
         response = client.post(
             "/compute",
@@ -226,7 +211,6 @@ def test_directory_structure_path_maps_to_422(test_service, tmp_path) -> None:
 def test_unexpected_value_error_remains_a_500(
     test_service, request_body, monkeypatch
 ) -> None:
-    """Do not mislabel an internal ValueError as an operator error."""
 
     def raise_unexpected(service, request):
         del service, request
@@ -241,7 +225,6 @@ def test_unexpected_value_error_remains_a_500(
 
 
 def test_compute_requires_outputs(test_service, request_body) -> None:
-    """Reject compute calls that do not select records."""
     with TestClient(create_app(test_service)) as client:
         response = client.post("/compute", json=request_body)
 
@@ -252,7 +235,6 @@ def test_compute_requires_outputs(test_service, request_body) -> None:
 def test_dimensionality_error_maps_to_422(
     test_service, request_body, monkeypatch
 ) -> None:
-    """Map a stage DimensionalityClassificationError to a 422 response."""
     from goldilocks_core.analysis import DimensionalityClassificationError
 
     def raise_dimensionality(structure, *, metallicity_classifier):

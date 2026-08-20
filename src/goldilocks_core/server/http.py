@@ -1,15 +1,3 @@
-"""FastAPI transport over one process-owned Core service.
-
-A thin stateless transport: each endpoint parses the body with the shared
-deserializer, dispatches through one ``CoreService``
-held for the process lifetime, and returns the result's JSON form. Stage
-``ValueError``\\ s map to 4xx responses with the message preserved; parser
-:class:`~goldilocks_core.server.request.RequestError`\\ s map to 422. Behind the
-optional ``[http]`` extra; importing :mod:`goldilocks_core` never imports FastAPI.
-``DimensionalityClassificationError`` (an ``Exception`` subclass, not
-``ValueError``) is mapped explicitly to 422.
-"""
-
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -34,7 +22,6 @@ _MISSING_HTTP_EXTRA = (
 
 
 def create_app(service: Service | None = None) -> Any:
-    """Create the HTTP app, optionally using a caller-owned service."""
     try:
         from fastapi import FastAPI, Request
         from fastapi.responses import JSONResponse
@@ -176,44 +163,36 @@ def create_app(service: Service | None = None) -> Any:
 
     @app.get("/health")
     def health() -> dict[str, str]:
-        """Report process liveness."""
         return {"status": "ok"}
 
     @app.get("/tasks")
     def tasks() -> dict[str, Any]:
-        """List every registered Core task with stable stage and record ids."""
         return {"tasks": [task.to_dict() for task in state.describe_tasks()]}
 
     @app.get("/codes")
     def codes() -> dict[str, Any]:
-        """List target DFT codes with registered input writers."""
         return {"codes": list(state.describe_codes())}
 
     @app.get("/models")
     def models() -> dict[str, Any]:
-        """List available k-mesh models known to the runtime."""
         return {"models": state.describe_models()}
 
     @app.post("/recommend")
     def recommend(body: dict[str, Any]) -> dict[str, Any]:
-        """Run the recommend preset."""
         return _execute("recommend", body, state)
 
     @app.post("/generate")
     def generate(body: dict[str, Any]) -> dict[str, Any]:
-        """Run the generate preset and optionally publish a bundle."""
         return _execute("generate", body, state)
 
     @app.post("/compute")
     def compute(body: dict[str, Any]) -> dict[str, Any]:
-        """Compute only the requested record types."""
         return _execute("compute", body, state)
 
     return app
 
 
 def _execute(endpoint: str, body: dict[str, Any], service: Service) -> dict[str, Any]:
-    """Parse, dispatch, and serialize one transport request."""
     raw = dict(body)
     if endpoint == "compute":
         if raw.get("outputs") is None:
@@ -235,7 +214,6 @@ def _execute(endpoint: str, body: dict[str, Any], service: Service) -> dict[str,
 
 
 def serve(*, host: str = "127.0.0.1", port: int = 8000) -> None:
-    """Serve the HTTP transport with uvicorn."""
     try:
         import uvicorn
     except ImportError as error:

@@ -1,5 +1,3 @@
-"""K-point recommendation utilities."""
-
 from __future__ import annotations
 
 import math
@@ -24,7 +22,6 @@ def _select_kmesh_entry(
     entries: list[KMeshEntry],
     predicted_k_index: float,
 ) -> KMeshEntry:
-    """Select the nearest indexed k-mesh entry for a model prediction."""
     target_index = max(1, math.ceil(predicted_k_index))
     max_index = entries[-1].k_index
     target_index = min(target_index, max_index)
@@ -33,8 +30,6 @@ def _select_kmesh_entry(
 
 
 def ml_kmesh_advisor(spec: ModelSpec) -> KMeshAdvisor:
-    """Return a Kmesh-stage backend that uses an ML model when no hint is set."""
-
     def advisor(structure: Structure) -> KPointSelection:
         return advise_kpoints(structure, spec)
 
@@ -45,7 +40,6 @@ def advise_kpoints(
     structure: Structure,
     spec: ModelSpec,
 ) -> KPointSelection:
-    """Select a k-point grid from an ML-predicted k-index."""
     predicted_k_index = predict_kindex(structure, spec)
 
     candidate_distances = generate_candidate_k_distances(structure)

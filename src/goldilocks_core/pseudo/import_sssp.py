@@ -1,5 +1,3 @@
-"""Normalize verified SSSP sources into one installed table."""
-
 from __future__ import annotations
 
 import hashlib
@@ -23,7 +21,6 @@ _MD5 = re.compile(r"[0-9a-fA-F]{32}")
 
 
 def preparer(table: PseudoTable):
-    """Return an asset preparer bound to one SSSP table declaration."""
     if table.provider != "sssp":
         raise ValueError(f"not an SSSP table: {table.id}")
 
@@ -58,7 +55,6 @@ def _extract_pseudos(
     metadata: dict[str, dict[str, Any]],
     table: PseudoTable,
 ) -> list[dict[str, Any]]:
-    """Extract UPFs after validating sidecar, header, and table agreement."""
     by_filename: dict[str, tuple[str, dict[str, Any]]] = {}
     for element, facts in metadata.items():
         if not isinstance(element, str) or not isinstance(facts, dict):

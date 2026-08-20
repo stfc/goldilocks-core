@@ -1,5 +1,3 @@
-"""Strict provider-neutral manifest for installed pseudopotential tables."""
-
 from __future__ import annotations
 
 import hashlib
@@ -50,7 +48,6 @@ def write_table_manifest(
     table: PseudoTable,
     entries: list[dict[str, Any]],
 ) -> None:
-    """Validate and write one complete provider-neutral table manifest."""
     elements = [entry.get("element") for entry in entries]
     expected = set(table.elements)
     if len(elements) != len(set(elements)):
@@ -87,7 +84,6 @@ def load_installed_table(
     *,
     table: PseudoTable | None = None,
 ) -> tuple[PseudoMetadata, ...]:
-    """Strictly parse selection metadata from one verified installed table."""
     try:
         manifest_path = installed.path(TABLE_MANIFEST)
         data = json.loads(manifest_path.read_text(encoding="utf-8"))

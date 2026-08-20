@@ -24,7 +24,7 @@ All notable changes to goldilocks-core are documented here.
   an operator root, an exact installed table ID, or the registered default.
   `--fetch-missing` installs only the exact missing dependencies reported by
   Core.
-- `recommend`, `generate`, and `compute` use one `CoreService` interface across
+- `recommend`, `generate`, and `compute` use one `Service` interface across
   Python, CLI, HTTP, and MCP.
 - CLI record queries use the stable output names `analysis`, `advice`,
   `k_points`, `selection`, and `generated_files`.
@@ -39,7 +39,7 @@ All notable changes to goldilocks-core are documented here.
 - The `goldilocks-core` and `goldilocks-kmesh` console commands. Use
   `goldilocks`.
 - Top-level Python `recommend` and `generate` functions. Use
-  `CoreService.recommend`, `CoreService.generate`, or `run_core_job`.
+  `Service.recommend`, `Service.generate`, or `run_core_job`.
 - Automatic heuristic k-point spacing. Install the default model or supply
   `--k-grid` or `--k-spacing`.
 - `CalculationIntent.accuracy_level` and `--accuracy-level`, which did not

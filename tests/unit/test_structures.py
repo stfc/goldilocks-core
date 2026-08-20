@@ -7,7 +7,6 @@ from goldilocks_core.io.structures import load_structure
 
 
 def make_si_structure() -> Structure:
-    """Build a minimal silicon structure for tests."""
     return Structure(
         lattice=Lattice.cubic(3.5),
         species=["Si"],
@@ -16,7 +15,6 @@ def make_si_structure() -> Structure:
 
 
 def test_load_structure_returns_structure_input() -> None:
-    """Return the input unchanged when it is already a Structure."""
     structure = make_si_structure()
 
     loaded = load_structure(structure)
@@ -25,7 +23,6 @@ def test_load_structure_returns_structure_input() -> None:
 
 
 def test_load_structure_loads_structure_file(tmp_path: Path) -> None:
-    """Load a structure from a portable temporary CIF file."""
     structure = make_si_structure()
     structure_path = tmp_path / "Si.cif"
     structure.to(filename=structure_path)
@@ -37,13 +34,11 @@ def test_load_structure_loads_structure_file(tmp_path: Path) -> None:
 
 
 def test_load_structure_raises_for_missing_file() -> None:
-    """Raise FileNotFoundError when the structure file does not exist."""
     with pytest.raises(FileNotFoundError):
         load_structure("missing_structure.cif")
 
 
 def test_load_structure_raises_for_unsupported_xyz(tmp_path: Path) -> None:
-    """Raise ValueError for unsupported XYZ structure files."""
     xyz_file = tmp_path / "test.xyz"
     xyz_file.write_text("1\ncomment\nH 0.0 0.0 0.0\n", encoding="utf-8")
 

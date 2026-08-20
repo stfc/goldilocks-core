@@ -1,5 +1,3 @@
-"""Shared lifecycle for immutable runtime assets."""
-
 from goldilocks_core.assets.records import (
     AssetFile,
     AssetInstallation,

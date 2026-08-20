@@ -1,5 +1,3 @@
-"""Immutable records shared by runtime-asset domains."""
-
 from __future__ import annotations
 
 import hashlib
@@ -12,8 +10,6 @@ from typing import Protocol
 
 @dataclass(frozen=True, slots=True)
 class AssetFile:
-    """One source file required to install an asset."""
-
     role: str
     path: str
     url: str
@@ -37,8 +33,6 @@ class AssetFile:
 
 @dataclass(frozen=True, slots=True)
 class AssetSpec:
-    """Complete acquisition description for one immutable asset version."""
-
     id: str
     version: str
     files: tuple[AssetFile, ...]
@@ -59,23 +53,17 @@ class AssetSpec:
 
 
 class AssetPreparer(Protocol):
-    """Convert verified source files into a normalized installed asset."""
-
     def __call__(self, sources: Mapping[str, Path], destination: Path) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
 class AssetInstallation:
-    """One asset declaration and its optional normalization adapter."""
-
     spec: AssetSpec
     prepare: AssetPreparer | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class InstalledFile:
-    """One verified file in an installed asset."""
-
     path: str
     sha256: str
     size: int
@@ -95,15 +83,12 @@ class InstalledFile:
 
 @dataclass(frozen=True, slots=True)
 class InstalledAsset:
-    """A complete verified asset published in an asset store."""
-
     id: str
     version: str
     root: Path
     files: tuple[InstalledFile, ...]
 
     def path(self, relative_path: str) -> Path:
-        """Resolve a manifested file beneath the installed asset root."""
         matches = [file for file in self.files if file.path == relative_path]
         if not matches:
             raise KeyError(
@@ -114,8 +99,6 @@ class InstalledAsset:
 
 @dataclass(frozen=True, slots=True)
 class AssetReference:
-    """Exact asset identity included in a runtime profile."""
-
     id: str
     version: str
 
@@ -126,8 +109,6 @@ class AssetReference:
 
 @dataclass(frozen=True, slots=True)
 class RuntimeProfile:
-    """Exact asset versions required by a supported deployment."""
-
     name: str
     assets: tuple[AssetReference, ...]
 

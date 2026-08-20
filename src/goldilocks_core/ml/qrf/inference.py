@@ -1,14 +1,3 @@
-"""QRF k-distance inference.
-
-Encapsulates the QRF model, the metallicity model, feature extraction, and
-quantile calibration behind :func:`predict_kdistance`.
-
-Model resources are loaded by :func:`load_qrf_resources` and held as a
-:data:`QrfResources` triple by the caller (typically a
-:class:`~goldilocks_core.advisors.kdistance_advisor.QrfKDistanceBackend`).
-No module-level cache is used — lifecycle ownership lives in the backend.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
@@ -32,8 +21,6 @@ __all__ = [
 
 @dataclass(frozen=True, slots=True)
 class KDistancePrediction:
-    """A predicted k-distance interval and its provenance."""
-
     median: float
     lower: float
     upper: float
@@ -43,17 +30,6 @@ class KDistancePrediction:
 
 @dataclass(frozen=True, slots=True)
 class QrfResources:
-    """Loaded QRF model, metallicity model, and atom-init path.
-
-    Owned by the caller (e.g. a backend instance) so model lifecycle is
-    explicit rather than hidden in a module global.
-
-    Attributes:
-        model: loaded QRF quantile model.
-        metal_model: loaded CGCNN metallicity model.
-        atom_init: resolved path to the atom-init feature table.
-    """
-
     model: object
     metal_model: object
     atom_init: str
@@ -65,7 +41,6 @@ def _resolve_metallicity_artifacts(
     checkpoint: str | None,
     atom_init: str | None,
 ) -> tuple[str, str]:
-    """Resolve explicit or installed metallicity resources to local paths."""
     if checkpoint is not None and atom_init is not None:
         return checkpoint, atom_init
     if config.metallicity_asset is None:
@@ -90,7 +65,6 @@ def load_qrf_resources(
     metallicity_atom_init: str | None = None,
     asset_store: AssetStore | None = None,
 ) -> QrfResources:
-    """Load installed QRF resources without performing network access."""
     from goldilocks_core.ml.models import load_model
     from goldilocks_core.ml.qrf.metallicity import load_metallicity_model
 
@@ -116,7 +90,6 @@ def _predict_kdistance_quantiles(
     features: StructureFeatureVector,
     correction: float = 0.0,
 ) -> tuple[float, float, float]:
-    """Return median, lower, and upper k-distance in Å⁻¹."""
     raw = np.asarray(
         model.predict(np.asarray(features.values, dtype=float).reshape(1, -1)),
         dtype=float,
@@ -138,7 +111,6 @@ def predict_kdistance_with_resources(
     config: QrfKpointsConfig,
     resources: QrfResources,
 ) -> KDistancePrediction:
-    """Predict a k-distance interval using pre-loaded ``resources``."""
     from goldilocks_core.ml.qrf.features import extract_qrf_features
 
     features = extract_qrf_features(
@@ -167,15 +139,6 @@ def predict_kdistance(
     metallicity_checkpoint: str | None = None,
     metallicity_atom_init: str | None = None,
 ) -> KDistancePrediction:
-    """Predict a k-distance interval for ``structure`` with the QRF model.
-
-    Loads model resources fresh on each call. Callers that reuse the same
-    config across multiple structures should hold a
-    :class:`~goldilocks_core.advisors.kdistance_advisor.QrfKDistanceBackend`
-    (or call :func:`load_qrf_resources` once and
-    :func:`predict_kdistance_with_resources` per structure) to avoid
-    repeated loading.
-    """
     resources = load_qrf_resources(
         config,
         metallicity_checkpoint=metallicity_checkpoint,

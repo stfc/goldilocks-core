@@ -1,5 +1,3 @@
-"""Typed contracts for the staged Core recommendation pipeline."""
-
 from __future__ import annotations
 
 from goldilocks_core.contracts.advice import (

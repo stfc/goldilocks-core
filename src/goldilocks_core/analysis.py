@@ -1,5 +1,3 @@
-"""Analyze-stage structure facts for the Core pipeline."""
-
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -20,16 +18,9 @@ from goldilocks_core.contracts import (
 
 
 class DimensionalityClassificationError(Exception):
-    """Dimensionality could not be classified for an ordered structure.
-
-    Raised when CrystalNN bonding or the Larsen dimensionality algorithm fails
-    on a structure it is expected to handle. Disordered structures take a
-    conservative ``"unknown"`` default instead (see ``_analyze_dimensionality``):
-    CrystalNN cannot analyze them, so a hard error would make goldilocks
-    unusable for legitimate disordered inputs. An ordered-structure failure is
-    unexpected, so it surfaces hard rather than silently degrading the
-    recommendation. The real fix is a goldilocks-side classifier (see #133).
-    """
+    """Raised when CrystalNN/Larsen fails on an ordered structure.
+    Disordered structures get a conservative "unknown" default instead.
+    The real fix is a goldilocks-side classifier (see #133)."""
 
     def __init__(self, structure: Structure, /) -> None:
         self.structure = structure
@@ -40,12 +31,8 @@ class DimensionalityClassificationError(Exception):
 
 
 class SymmetryAnalysisError(Exception):
-    """Symmetry facts could not be determined for a structure.
-
-    Raised when spglib cannot analyze a structure. ``analyze_structure`` catches
-    this and records a typed ``SymmetryUnavailable`` in the analysis record so
-    the recommendation stays complete (symmetry is reporting-only).
-    """
+    """Raised when spglib cannot analyze a structure.
+    ``analyze_structure`` catches this and records a ``SymmetryUnavailable``."""
 
     def __init__(self, structure: Structure, /, *, reason: str = "") -> None:
         self.structure = structure
@@ -62,11 +49,9 @@ _DIMENSIONALITY_BY_VALUE: dict[int, Dimensionality] = {
 
 
 def heuristic_metallicity(structure: Structure) -> ElectronicCharacter:
-    """Return a conservative structure-only electronic character heuristic.
-
-    Classifies a composition as ``likely_metal`` when every element is metallic
-    and ``unknown`` otherwise. Carries no electronic-structure evidence.
-    """
+    """Returns ``likely_metal`` when all elements are metallic,
+    ``unknown`` otherwise. Never returns ``metal`` or ``insulator``
+    — those require electronic-structure data."""
     periodic_elements = tuple(
         Element(symbol)
         for symbol in sorted(e.symbol for e in structure.composition.elements)
@@ -84,23 +69,6 @@ def analyze_structure(
     ]
     | None = None,
 ) -> StructureAnalysisRecord:
-    """Return deterministic structure facts used by later pipeline stages.
-
-    Args:
-        structure: Ordered or disordered pymatgen structure to inspect.
-        metallicity_classifier: Optional runtime service returning electronic
-            character, source, and confidence. Uses the structure-only heuristic
-            when omitted.
-
-    Returns:
-        A ``StructureAnalysisRecord`` with composition, element classes,
-        disorder warnings, symmetry facts when available, and conservative
-        electronic-character hints.
-
-    Assumes:
-        The input structure has already been loaded and normalized by the Load
-        stage. This function reports facts only; it does not choose parameters.
-    """
     elements = tuple(
         sorted(element.symbol for element in structure.composition.elements)
     )
@@ -172,7 +140,6 @@ def analyze_structure(
 
 
 def _find_disorder_warnings(structure: Structure) -> tuple[str, ...]:
-    """Return warnings for disordered or partially occupied sites."""
     warnings: list[str] = []
 
     for index, site in enumerate(structure, start=1):
@@ -191,18 +158,6 @@ def _find_disorder_warnings(structure: Structure) -> tuple[str, ...]:
 def _analyze_dimensionality(
     structure: Structure,
 ) -> tuple[Dimensionality, bool, tuple[str, ...]]:
-    """Return dimensionality, a low-dimensional heuristic, and warnings.
-
-    Uses pymatgen's CrystalNN graph and Larsen dimensionality algorithm. The
-    heuristic is connectivity-derived, not a measurement of cell vacuum.
-    Disordered structures are not passed to CrystalNN because its graph path
-    does not support them; they get a conservative ``"unknown"`` default with a
-    warning (disordered is a known limitation, not an unexpected failure). When
-    CrystalNN or Larsen fails on an ordered structure,
-    :class:`DimensionalityClassificationError` propagates -- an ordered-structure
-    failure is unexpected, so it surfaces hard rather than silently degrading
-    the recommendation (see #133).
-    """
     if not structure.is_ordered:
         return (
             "unknown",
@@ -227,12 +182,6 @@ def _analyze_dimensionality(
 
 
 def _analyze_symmetry(structure: Structure) -> dict[str, str | int]:
-    """Return stable pymatgen-backed symmetry facts.
-
-    Raises :class:`SymmetryAnalysisError` when the structure is disordered or
-    spglib cannot analyze it; ``analyze_structure`` records the failure as a
-    typed ``SymmetryUnavailable`` so the recommendation stays complete.
-    """
     if not structure.is_ordered:
         raise SymmetryAnalysisError(structure, reason="disordered structure")
 
@@ -252,7 +201,6 @@ def _electronic_character_warnings(
     *,
     source: str,
 ) -> tuple[str, ...]:
-    """Return uncertainty warnings for heuristic electronic character only."""
     if source != "heuristic":
         return ()
     if character == "likely_metal":

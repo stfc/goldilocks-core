@@ -1,11 +1,3 @@
-"""CGCNN (Crystal Graph Convolutional Neural Network) in PyTorch Geometric.
-
-Ported from the goldilocks k-points models. Used here to load the pretrained
-metallicity model and extract a per-crystal representation (the "metal
-features" block of the QRF k-distance feature vector). The heavy torch and
-torch_geometric dependencies are imported at module load.
-"""
-
 from __future__ import annotations
 
 import torch
@@ -16,8 +8,6 @@ from torch_geometric.nn import MessagePassing, global_mean_pool
 
 
 class RBFExpansion(nn.Module):
-    """Expand scalar edge distances into Gaussian radial basis features."""
-
     def __init__(self, vmin: float = 0.0, vmax: float = 8.0, bins: int = 40):
         super().__init__()
         centers = torch.linspace(vmin, vmax, bins)
@@ -29,8 +19,6 @@ class RBFExpansion(nn.Module):
 
 
 class CGCNNConv(MessagePassing):
-    """CGCNN gated graph convolution layer."""
-
     def __init__(self, node_dim: int, edge_dim: int, out_dim: int):
         super().__init__(aggr="add")
         self.lin_f = Linear(2 * node_dim + edge_dim, out_dim)
@@ -51,8 +39,6 @@ class CGCNNConv(MessagePassing):
 
 
 class CGCNN_PyG(nn.Module):
-    """CGCNN model for crystal representations and property prediction."""
-
     def __init__(
         self,
         orig_atom_fea_len: int,
@@ -121,7 +107,6 @@ class CGCNN_PyG(nn.Module):
             self.fc_out = nn.Linear(h_fea_len, 1)
 
     def extract_crystal_repr(self, data) -> torch.Tensor:
-        """Return the pooled per-crystal representation [n_graphs, atom_fea_len]."""
         x, edge_index, edge_attr, batch = (
             data.x,
             data.edge_index,
@@ -141,7 +126,6 @@ class CGCNN_PyG(nn.Module):
         data,
         additional_features: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Return class probabilities for the input crystal graph."""
         crystal_features = self.extract_crystal_repr(data)
         if self.additional_compound_features:
             if additional_features is None:

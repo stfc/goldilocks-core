@@ -16,12 +16,10 @@ from goldilocks_core.kmesh.math import (
 
 
 def _fail_backend(structure: Structure) -> KPointSelection:
-    """A backend that fails if the resolver consults the model for hints."""
     raise AssertionError("k-point backend should not be called when hints are set")
 
 
 def test_resolve_kpoints_prefers_explicit_grid_hint() -> None:
-    """Use explicit operator grids before the model backend."""
     structure = Structure(
         lattice=Lattice.cubic(4.0),
         species=["Si"],
@@ -45,7 +43,6 @@ def test_resolve_kpoints_prefers_explicit_grid_hint() -> None:
 
 
 def test_resolve_kpoints_converts_spacing_hint() -> None:
-    """Convert operator k-spacing through the Kmesh stage."""
     structure = Structure(
         lattice=Lattice.cubic(4.0),
         species=["Si"],
@@ -68,7 +65,6 @@ def test_resolve_kpoints_converts_spacing_hint() -> None:
 
 
 def test_resolve_kpoints_consults_backend_without_hints() -> None:
-    """Delegate to the model backend when no operator hint is set."""
     structure = Structure(
         lattice=Lattice.cubic(4.0),
         species=["Si"],
@@ -90,7 +86,6 @@ def test_resolve_kpoints_consults_backend_without_hints() -> None:
 
 
 def test_k_distance_to_mesh_matches_vasp_kspacing_for_cubic_cell() -> None:
-    """Use solid-state reciprocal lengths for VASP-style k-spacing."""
     structure = Structure(
         lattice=Lattice.cubic(3.5),
         species=["Si"],
@@ -103,7 +98,6 @@ def test_k_distance_to_mesh_matches_vasp_kspacing_for_cubic_cell() -> None:
 
 
 def test_k_distance_to_mesh_tracks_anisotropic_reciprocal_lengths() -> None:
-    """Convert k-distance to a non-uniform mesh for anisotropic cells."""
     structure = Structure(
         lattice=Lattice.orthorhombic(3.0, 4.0, 6.0),
         species=["Si"],
@@ -120,7 +114,6 @@ def test_k_distance_to_mesh_tracks_anisotropic_reciprocal_lengths() -> None:
 
 
 def test_generate_candidate_k_distances_returns_sorted_values() -> None:
-    """Generate reciprocal-length-based candidate k-distances."""
     structure = Structure(
         lattice=Lattice.cubic(3.5),
         species=["Si"],
@@ -138,7 +131,6 @@ def test_generate_candidate_k_distances_returns_sorted_values() -> None:
 
 
 def test_build_kmesh_entries_returns_indexed_mesh_entries() -> None:
-    """Build indexed (k_index, mesh) entries from candidate k-distances."""
     structure = Structure(
         lattice=Lattice.cubic(3.5),
         species=["Si"],

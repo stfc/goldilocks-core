@@ -24,7 +24,6 @@ from goldilocks_core.selection import select_pseudopotentials
 
 
 def make_structure() -> Structure:
-    """Build a simple silicon structure."""
     return Structure(
         lattice=Lattice.cubic(4.0),
         species=["Si"],
@@ -33,7 +32,6 @@ def make_structure() -> Structure:
 
 
 def make_bulk_structure() -> Structure:
-    """Build a fully bonded 3D diamond-silicon cell (no vacuum)."""
     a = 5.43
     return Structure(
         lattice=Lattice([[0, a / 2, a / 2], [a / 2, 0, a / 2], [a / 2, a / 2, 0]]),
@@ -43,7 +41,6 @@ def make_bulk_structure() -> Structure:
 
 
 def make_metadata() -> PseudoMetadata:
-    """Build synthetic pseudopotential metadata with cutoffs."""
     return PseudoMetadata(
         filepath="/pseudo/Si.UPF",
         filename="Si.UPF",
@@ -63,7 +60,6 @@ def make_metadata() -> PseudoMetadata:
 
 
 def _stub_backend(structure: Structure) -> KPointSelection:
-    """Deterministic k-point backend for selection/generation unit tests."""
     return KPointSelection(
         grid=(4, 4, 4),
         shift=(0, 0, 0),
@@ -79,7 +75,6 @@ def select_from_advice(
     hints: CalculationHints,
     metadata_list: list[PseudoMetadata],
 ):
-    """Resolve k-points through Kmesh and run Select; return (selection, k_points)."""
     k_points = resolve_kpoints(structure, hints.kmesh, _stub_backend)
     selection = select_pseudopotentials(
         structure, advice.pseudopotential_requirements, metadata_list
@@ -88,7 +83,6 @@ def select_from_advice(
 
 
 def test_generate_inputs_writes_qe_values_from_advice_and_selection() -> None:
-    """Generate QE input text from completed advice and selection records."""
     structure = make_structure()
     hints = CalculationHints(
         k_grid=(3, 3, 2),
@@ -130,7 +124,6 @@ def test_generate_inputs_writes_qe_values_from_advice_and_selection() -> None:
 
 
 def test_generate_inputs_rejects_selected_functional_disagreement() -> None:
-    """Generation cannot render a selection from another XC functional."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -154,7 +147,6 @@ def test_generate_inputs_rejects_selected_functional_disagreement() -> None:
 
 
 def test_generate_inputs_writes_each_k_points_component_in_order() -> None:
-    """Non-uniform K_POINTS grids and shifts render each component in position."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -183,7 +175,6 @@ def test_generate_inputs_writes_each_k_points_component_in_order() -> None:
 
 
 def test_generate_inputs_uses_noncollinear_soc_without_nspin() -> None:
-    """Write QE SOC flags without collinear nspin syntax."""
     structure = make_structure()
     metadata = replace(make_metadata(), relativistic="full")
     hints = CalculationHints(
@@ -209,17 +200,14 @@ def test_generate_inputs_uses_noncollinear_soc_without_nspin() -> None:
 
 
 def test_qe_smearing_translation_map_exactly_covers_enabled_methods() -> None:
-    """Keep every non-fixed occupation scheme mapped explicitly."""
     assert set(_QE_SMEARING) == set(get_args(SmearingType)) - {"fixed"}
 
 
 def test_qe_vdw_translation_map_exactly_covers_supported_methods() -> None:
-    """Keep every domain method translated by the supported QE target."""
     assert set(_QE_VDW_CORR) == set(get_args(VdwMethod))
 
 
 def test_generate_inputs_writes_vdw_corr_when_enabled() -> None:
-    """Emit the QE vdw_corr keyword when vdW is enabled via hints."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC", use_vdw=True)
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -240,7 +228,6 @@ def test_generate_inputs_writes_vdw_corr_when_enabled() -> None:
 
 
 def test_generate_inputs_writes_d3_zero_damping_version() -> None:
-    """Select D3 zero damping (version 3) for the plain d3 method."""
     structure = make_structure()
     hints = CalculationHints(
         k_grid=(2, 2, 2), pseudo_type="NC", use_vdw=True, vdw_method="d3"
@@ -269,7 +256,6 @@ def test_generate_inputs_writes_non_d3_vdw_methods(
     vdw_method: str,
     qe_vdw_corr: str,
 ) -> None:
-    """Map TS and MBD advice without emitting a D3 damping version."""
     structure = make_structure()
     hints = CalculationHints(
         k_grid=(2, 2, 2),
@@ -294,7 +280,6 @@ def test_generate_inputs_writes_non_d3_vdw_methods(
 
 
 def test_generate_inputs_omits_vdw_corr_by_default() -> None:
-    """Do not write vdw_corr for 3D bulk without an explicit vdW hint."""
     structure = make_bulk_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -313,7 +298,6 @@ def test_generate_inputs_omits_vdw_corr_by_default() -> None:
 
 
 def test_generate_inputs_produces_full_expected_qe_input() -> None:
-    """The complete QE SCF input matches the expected deterministic layout."""
     structure = make_bulk_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -370,7 +354,6 @@ K_POINTS automatic
 
 
 def test_generate_inputs_rejects_unsupported_target_code() -> None:
-    """Unregistered target codes are rejected at the dispatch table."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -387,7 +370,6 @@ def test_generate_inputs_rejects_unsupported_target_code() -> None:
 
 
 def test_generate_inputs_rejects_unsupported_task() -> None:
-    """Unregistered tasks are rejected at the dispatch table."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -406,7 +388,6 @@ def test_generate_inputs_rejects_unsupported_task() -> None:
 
 
 def test_generate_inputs_rejects_unsafe_pseudopotential_filename() -> None:
-    """Reject pseudopotential filenames that are unsafe to render verbatim."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -429,7 +410,6 @@ def test_generate_inputs_rejects_unsafe_pseudopotential_filename() -> None:
 
 
 def advice_context() -> CalculationIntent:
-    """Return the default intent without obscuring test expectations."""
     return CalculationIntent()
 
 
@@ -441,7 +421,6 @@ def test_generate_inputs_writes_smearing_lines(
     smearing_type: str,
     qe_smearing: str,
 ) -> None:
-    """Emit the exact QE smearing keyword for every enabled method."""
     structure = make_structure()
     hints = CalculationHints(
         k_grid=(2, 2, 2),
@@ -467,7 +446,6 @@ def test_generate_inputs_writes_smearing_lines(
 
 
 def test_generate_inputs_writes_nspin_2_when_spin_polarized() -> None:
-    """Emit collinear nspin=2 without SOC flags for a spin-polarized run."""
     structure = make_structure()
     hints = CalculationHints(
         k_grid=(2, 2, 2),
@@ -492,7 +470,6 @@ def test_generate_inputs_writes_nspin_2_when_spin_polarized() -> None:
 
 
 def test_generate_inputs_system_block_orders_smearing_spin_vdw() -> None:
-    """The SYSTEM namelist orders smearing, spin, then vdW lines exactly."""
     structure = make_structure()
     hints = CalculationHints(
         k_grid=(2, 2, 2),
@@ -526,7 +503,6 @@ def test_generate_inputs_system_block_orders_smearing_spin_vdw() -> None:
 
 
 def test_generate_inputs_rejects_unsupported_smearing_method() -> None:
-    """Reject a smearing method the QE target cannot translate."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -550,7 +526,6 @@ def test_generate_inputs_rejects_unsupported_smearing_method() -> None:
 
 
 def test_generate_inputs_rejects_missing_smearing_width() -> None:
-    """Require a smearing width whenever smearing is enabled."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -576,7 +551,6 @@ def test_generate_inputs_rejects_missing_smearing_width() -> None:
 
 
 def test_generate_inputs_rejects_unsupported_vdw_method() -> None:
-    """Reject an enabled vdW method the QE target cannot translate."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -598,7 +572,6 @@ def test_generate_inputs_rejects_unsupported_vdw_method() -> None:
 
 
 def test_generate_inputs_rejects_disabled_vdw_with_method() -> None:
-    """Reject a method label when vdW is disabled."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -618,7 +591,6 @@ def test_generate_inputs_rejects_disabled_vdw_with_method() -> None:
 
 
 def test_generate_inputs_rejects_disordered_structure() -> None:
-    """Reject disordered structures before rendering any QE text."""
     structure = Structure(
         lattice=Lattice.cubic(4.0),
         species=[{"Si": 0.5, "Ge": 0.5}],
@@ -641,7 +613,6 @@ def test_generate_inputs_rejects_disordered_structure() -> None:
 
 
 def test_generate_inputs_rejects_incomplete_pseudopotential_selection() -> None:
-    """Reject a valid fallback selection that cannot produce QE syntax."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -663,7 +634,6 @@ def test_generate_inputs_rejects_incomplete_pseudopotential_selection() -> None:
 
 
 def test_write_qe_scf_returns_single_input_file_record() -> None:
-    """The QE writer returns exactly one input file with the canonical path."""
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)

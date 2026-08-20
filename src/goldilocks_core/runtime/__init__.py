@@ -1,13 +1,3 @@
-"""Runtime package: model lifecycle, the stage graph, and job entrypoints.
-
-The generic runtime surface — executor, dispatcher, task handler, model
-runtime, and job entrypoints — is re-exported here. The SCF task's own types
-(``SCF_TASK``, ``ScfContext``, ``assemble_core_result``) live in
-:mod:`goldilocks_core.runtime.scf` and are imported from there, not from this
-facade, so the facade stays task-agnostic and importing it does not pull in
-the stage implementations.
-"""
-
 from goldilocks_core.contracts import PresetRequest, QueryRequest
 from goldilocks_core.runtime.dispatch import Dispatcher, UnknownTask
 from goldilocks_core.runtime.graph import (

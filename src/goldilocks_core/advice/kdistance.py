@@ -1,5 +1,3 @@
-"""Quantile Random Forest k-distance advisor."""
-
 from __future__ import annotations
 
 from pymatgen.core import Structure
@@ -26,7 +24,6 @@ def kdistance_to_selection(
     confidence: float,
     mesh_type: str = "monkhorst-pack",
 ) -> KPointSelection:
-    """Build a concrete k-point selection from a predicted interval."""
     return KPointSelection(
         grid=k_distance_to_mesh(structure, median),
         shift=(0, 0, 0),
@@ -44,14 +41,6 @@ def kdistance_to_selection(
 
 
 class QrfBackend:
-    """Stateful QRF k-distance advisor owning its loaded model resources.
-
-    Lazily loads the QRF model + metallicity model on first use; ``reset``
-    discards them so the next call reloads; ``close`` releases them.
-    A fresh instance has no loaded state. Captured config paths are
-    retained across ``reset``.
-    """
-
     def __init__(
         self,
         *,
@@ -70,7 +59,6 @@ class QrfBackend:
         self._closed = False
 
     def __call__(self, structure: Structure) -> KPointSelection:
-        """Predict a k-point selection for ``structure`` using the QRF model."""
         if self._closed:
             raise RuntimeError("QrfBackend is closed.")
         if self._resources is None:
@@ -88,16 +76,13 @@ class QrfBackend:
         )
 
     def reset(self) -> None:
-        """Discard loaded model resources; the next call reloads."""
         self._resources = None
 
     def close(self) -> None:
-        """Release loaded model resources; the backend is unusable after this."""
         self._resources = None
         self._closed = True
 
     def _load_resources(self) -> QrfResources:
-        """Load the config (if deferred) and the model resources."""
         if self._config is None:
             self._config = load_default_qrf_config(self._registry_path)
         return load_qrf_resources(

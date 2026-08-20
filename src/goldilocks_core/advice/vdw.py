@@ -1,5 +1,3 @@
-"""Van der Waals dispersion advice policy for the Advise stage."""
-
 from __future__ import annotations
 
 from typing import cast
@@ -17,15 +15,8 @@ def advise_vdw(
     analysis: StructureAnalysisRecord,
     hints: VdwHints,
 ) -> VdwAdvice:
-    """Return vdW dispersion advice.
-
-    User hints win. Otherwise, a connectivity-derived low-dimensional
-    heuristic makes D3BJ a conservative package default because dispersion may
-    be important for slabs, wires, and molecules. It does not establish that
-    dispersion dominates; the operator can override the setting or method with
-    ``CalculationHints``. Fully connected 3D or unknown structures get no
-    correction by default.
-    """
+    """Low-dimensional structures default to D3BJ;
+    3D/unknown defaults to no correction. Operator hints always win."""
     if hints.use_vdw is not None:
         method = _resolve_vdw_method(hints) if hints.use_vdw else None
         return VdwAdvice(
@@ -79,9 +70,4 @@ def advise_vdw(
 
 
 def _resolve_vdw_method(hints: VdwHints) -> VdwMethod:
-    """Return the validated vdW method, defaulting to D3BJ.
-
-    ``CalculationHints`` validates ``vdw_method`` at construction, so the cast
-    is safe.
-    """
     return cast(VdwMethod, hints.vdw_method or "d3bj")

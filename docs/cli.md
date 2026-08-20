@@ -1,6 +1,6 @@
 # CLI reference
 
-The `goldilocks` command is a thin wrapper over `CoreService`. Preset commands
+The `goldilocks` command is a thin wrapper over `Service`. Preset commands
 build `PresetRequest`; `compute` builds `QueryRequest`.
 
 ## Commands
@@ -88,7 +88,7 @@ uv sync --extra mcp
 HTTP exposes `/recommend`, `/generate`, `/compute`, `/tasks`, `/codes`,
 `/models`, and `/health`. MCP exposes `recommend`, `generate`, `compute`,
 `list_tasks`, `list_codes`, and `list_models` as stdio tools. Each server owns
-one `CoreService` for its lifetime.
+one `Service` for its lifetime.
 
 ## Common options
 
@@ -149,7 +149,7 @@ and is rejected by the shared `CalculationHints` contract before job execution.
 
 `recommend` and `generate` print
 `{"request": request.to_dict(), **result.to_dict()}` with stable keys.
-`compute` always prints the selected `CoreRecords` JSON and does not use a
+`compute` always prints the selected `Records` JSON and does not use a
 request envelope.
 
 ### Human-readable (default)

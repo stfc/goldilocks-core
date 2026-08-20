@@ -20,11 +20,11 @@ uv run goldilocks recommend "$(uv run goldilocks examples path)/Si.cif"
 From Python:
 
 ```python
-from goldilocks_core import CoreService, PresetRequest
+from goldilocks_core import Service, PresetRequest
 from goldilocks_core.examples import structure
 
 request = PresetRequest(structure=structure("Si.cif"))
-with CoreService() as core:
+with Service() as core:
     result = core.recommend(request)
 
 print(result.analysis.reduced_formula)

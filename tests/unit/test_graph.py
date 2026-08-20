@@ -1,11 +1,3 @@
-"""Tests for type-keyed graph resolution and execution.
-
-The executor is stage-agnostic: it resolves a task's graph from each stage's
-declared input and output record types and hands one opaque context object to
-every stage as ``ctx``. These tests pin that contract without coupling to any
-real task's context shape.
-"""
-
 from dataclasses import dataclass
 from types import SimpleNamespace
 
@@ -179,7 +171,6 @@ def test_cycle_raises_value_error() -> None:
 
 
 def test_execute_passes_context_opaquely_to_stages() -> None:
-    """The executor hands the same context object to each stage as ``ctx``."""
     ctx = SimpleNamespace(marker="ctx")
     received: list[object] = []
 

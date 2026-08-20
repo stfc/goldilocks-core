@@ -18,7 +18,6 @@ from goldilocks_core.contracts import (
 
 
 def make_result() -> Result:
-    """Build a minimal Core result with one generated file."""
     analysis = StructureAnalysisRecord(
         formula="Si1",
         reduced_formula="Si",
@@ -51,7 +50,6 @@ def make_result() -> Result:
 
 
 def test_build_bundle_manifest_records_file_metadata_without_content() -> None:
-    """Build a manifest containing stage outputs and generated file metadata."""
     manifest = build_bundle_manifest(make_result())
 
     assert manifest["manifest_version"] == 2
@@ -69,7 +67,6 @@ def test_build_bundle_manifest_records_file_metadata_without_content() -> None:
 
 
 def test_write_bundle_directory_writes_manifest_and_files(tmp_path: Path) -> None:
-    """Write a deterministic bundle layout to disk."""
     result = make_result()
     output_dir = tmp_path / "bundle"
 
@@ -98,7 +95,6 @@ def test_write_bundle_refuses_existing_destination(
     tmp_path: Path,
     destination_kind: str,
 ) -> None:
-    """Refuse both file and directory destinations without overwriting data."""
     output_dir = tmp_path / "bundle"
     if destination_kind == "file":
         output_dir.write_text("keep me", encoding="utf-8")
@@ -118,7 +114,6 @@ def test_write_bundle_refuses_existing_destination(
 
 @pytest.mark.parametrize("path", ["manifest.json", "manifest.json/nested"])
 def test_write_bundle_rejects_manifest_collision(tmp_path: Path, path: str) -> None:
-    """Reject a generated file path that would conflict with the manifest."""
     result = replace(
         make_result(),
         generated_files=(GeneratedFile(path=path, content="collision"),),
@@ -132,7 +127,6 @@ def test_write_bundle_rejects_manifest_collision(tmp_path: Path, path: str) -> N
 
 
 def test_bundle_rejects_duplicate_paths(tmp_path: Path) -> None:
-    """Refuse ambiguous output rather than overwrite an earlier file."""
     generated = make_result().generated_files[0]
     result = replace(make_result(), generated_files=(generated, generated))
 
@@ -141,7 +135,6 @@ def test_bundle_rejects_duplicate_paths(tmp_path: Path) -> None:
 
 
 def test_bundle_rejects_path_traversal(tmp_path: Path) -> None:
-    """Keep generated files inside the bundle directory."""
     result = replace(
         make_result(),
         generated_files=(GeneratedFile(path="../qe.in", content="bad"),),

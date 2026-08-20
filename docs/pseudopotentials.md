@@ -72,7 +72,7 @@ Python requests carry the ID; Core verifies and loads its installed manifest
 only when Select is required:
 
 ```python
-from goldilocks_core import CalculationHints, CoreService, PresetRequest
+from goldilocks_core import CalculationHints, Service, PresetRequest
 
 request = PresetRequest(
     structure="structure.cif",
@@ -80,7 +80,7 @@ request = PresetRequest(
     pseudo_table="pseudodojo-pbesol-efficiency-fr",
 )
 
-with CoreService() as core:
+with Service() as core:
     result = core.generate(request, output_dir="run")
 ```
 

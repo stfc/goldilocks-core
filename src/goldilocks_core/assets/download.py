@@ -1,5 +1,3 @@
-"""Streaming acquisition and integrity checks for runtime assets."""
-
 from __future__ import annotations
 
 import hashlib
@@ -16,13 +14,10 @@ _TIMEOUT_SECONDS = 300
 
 
 class ChecksumMismatch(ValueError):
-    """A downloaded source file did not match its declared digest."""
-
     pass
 
 
 def download(file: AssetFile, destination: Path) -> None:
-    """Stream one source file to a new destination and verify it."""
     destination.parent.mkdir(parents=True, exist_ok=True)
     parsed = urlparse(file.url)
     if parsed.scheme == "file":
@@ -40,7 +35,6 @@ def download(file: AssetFile, destination: Path) -> None:
 
 
 def verify_source(file: AssetFile, path: Path) -> None:
-    """Verify the declared size and optional checksum of a source file."""
     size = path.stat().st_size
     if file.size is not None and size != file.size:
         raise ChecksumMismatch(

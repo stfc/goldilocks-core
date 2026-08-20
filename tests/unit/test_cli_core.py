@@ -27,7 +27,6 @@ _VDW_METHODS = ("d3", "d3bj", "ts", "mbd")
 
 
 def make_result(request: PresetRequest | QueryRequest, *, runtime=None) -> Result:
-    """Build a minimal Core result for CLI tests."""
     del runtime
     analysis = StructureAnalysisRecord(
         formula="Si1",
@@ -57,7 +56,6 @@ def make_result(request: PresetRequest | QueryRequest, *, runtime=None) -> Resul
 
 
 def make_records(request: QueryRequest, *, runtime=None) -> Records:
-    """Build the records selected by a CLI compute request."""
     del runtime
     result = make_result(request)
     available = {
@@ -70,7 +68,6 @@ def make_records(request: QueryRequest, *, runtime=None) -> Records:
 
 
 def test_build_parser_parses_recommend_arguments() -> None:
-    """Parse staged recommendation arguments into a namespace."""
     parser = cli_core.build_parser()
 
     args = parser.parse_args(
@@ -101,7 +98,6 @@ def test_build_parser_parses_recommend_arguments() -> None:
 
 
 def test_cli_public_control_parity_is_explicit_and_complete() -> None:
-    """Map every public intent/hint field or mark it deliberately unexposed."""
     intent_cli_mapping = {
         "code": "--code",
         "task": "--task",
@@ -212,7 +208,6 @@ def test_cli_public_control_parity_is_explicit_and_complete() -> None:
 
 
 def test_cli_request_canonicalizes_functional_intent() -> None:
-    """Normalize the CLI functional label through the shared intent boundary."""
     args = cli_core.build_parser().parse_args(
         ["recommend", "Si.cif", "--functional", "PBE_SOL"]
     )
@@ -230,7 +225,6 @@ def test_cli_preserves_use_vdw_tri_state(
     option: str | None,
     expected: bool | None,
 ) -> None:
-    """Distinguish omitted vdW policy from explicit on and explicit off."""
     argv = ["recommend", "Si.cif"]
     if option is not None:
         argv.extend(["--use-vdw", option])
@@ -251,7 +245,6 @@ def test_cli_preserves_vdw_method_with_omitted_or_enabled_vdw(
     use_vdw: str | None,
     expected: bool | None,
 ) -> None:
-    """Map every supported vdW method for omitted and enabled policy."""
     argv = ["recommend", "Si.cif", "--vdw-method", vdw_method]
     if use_vdw is not None:
         argv.extend(["--use-vdw", use_vdw])
@@ -264,7 +257,6 @@ def test_cli_preserves_vdw_method_with_omitted_or_enabled_vdw(
 
 @pytest.mark.parametrize("vdw_method", _VDW_METHODS)
 def test_cli_rejects_every_vdw_method_when_vdw_is_disabled(vdw_method: str) -> None:
-    """Reject every explicit method paired with a disabled vdW hint."""
     args = cli_core.build_parser().parse_args(
         ["recommend", "Si.cif", "--use-vdw", "false", "--vdw-method", vdw_method]
     )
@@ -279,7 +271,6 @@ def test_main_rejects_disabled_vdw_method_before_job_execution(
     monkeypatch,
     capsys,
 ) -> None:
-    """Reject contradictory vdW options before invoking the Core job runner."""
 
     def fail_if_run(*args, **kwargs) -> Result:
         pytest.fail("run_core_job must not be called for invalid CLI options")
@@ -307,7 +298,6 @@ def test_main_rejects_disabled_vdw_method_before_job_execution(
 
 
 def test_cli_uses_default_kmesh_backend_without_an_override() -> None:
-    """A bare CLI request leaves the k-index model spec unset."""
     args = cli_core.build_parser().parse_args(["recommend", "Si.cif"])
 
     assert cli_core._model_spec_from_args(args) is None
@@ -319,7 +309,6 @@ def test_main_rejects_model_metadata_without_model_before_job_execution(
     monkeypatch,
     capsys,
 ) -> None:
-    """Fail on backend-only metadata before invoking the Core job runner."""
 
     def fail_if_run(*args, **kwargs) -> Result:
         pytest.fail("run_core_job must not be called for invalid CLI options")
@@ -339,7 +328,6 @@ def test_main_rejects_model_metadata_without_model_before_job_execution(
 
 
 def test_cli_rejects_retired_pseudo_mode_control(capsys) -> None:
-    """Expose the typed accuracy tier rather than an ambiguous mode string."""
     parser = cli_core.build_parser()
 
     with pytest.raises(SystemExit):
@@ -349,7 +337,6 @@ def test_cli_rejects_retired_pseudo_mode_control(capsys) -> None:
 
 
 def test_main_compute_prints_requested_analysis_and_advice(monkeypatch, capsys) -> None:
-    """Resolve multiple output names and print their CoreRecords as JSON."""
     captured: dict[str, QueryRequest] = {}
 
     def fake_query_records(request: QueryRequest, *, runtime=None) -> Records:
@@ -383,7 +370,6 @@ def test_main_compute_prints_requested_analysis_and_advice(monkeypatch, capsys) 
 
 
 def test_main_compute_prints_only_requested_analysis(monkeypatch, capsys) -> None:
-    """Return only the single record named by a compute query."""
     monkeypatch.setattr(cli_core, "query_records", make_records)
     monkeypatch.setattr(
         sys,
@@ -405,7 +391,6 @@ def test_main_compute_prints_only_requested_analysis(monkeypatch, capsys) -> Non
 
 
 def test_main_compute_rejects_unknown_output_type(monkeypatch, capsys) -> None:
-    """Report the invalid contract name before running a compute query."""
 
     def fail_if_run(*args, **kwargs) -> Records:
         pytest.fail("query_records must not be called for invalid output types")
@@ -433,7 +418,6 @@ def test_main_compute_rejects_unknown_output_type(monkeypatch, capsys) -> None:
 
 
 def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
-    """Keep CLI main as parse -> request -> run_core_job -> print."""
     captured: dict[str, PresetRequest] = {}
 
     def fake_run_core_job(request: PresetRequest, *, runtime=None) -> Result:
@@ -476,7 +460,6 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
 
 
 def test_main_builds_request_with_model_backend(monkeypatch, capsys) -> None:
-    """Resolve CLI --model into a k-index model spec on the request."""
     captured: dict[str, PresetRequest] = {}
 
     def fake_run_core_job(request: PresetRequest, *, runtime=None) -> Result:
@@ -511,7 +494,6 @@ def test_main_builds_request_with_model_backend(monkeypatch, capsys) -> None:
 
 
 def test_main_builds_generate_request_with_output_dir(monkeypatch, capsys) -> None:
-    """Pass generate output path through the shared Core job request."""
     captured: dict[str, PresetRequest] = {}
 
     def fake_run_core_job(request: PresetRequest, *, runtime=None) -> Result:
@@ -545,7 +527,6 @@ def test_main_fetches_only_the_missing_asset_then_retries(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Install the exact structured dependency, never the default profile."""
     installed: list[str] = []
     calls = 0
 
@@ -584,7 +565,6 @@ def test_main_prints_asset_status_without_installing(
     capsys: pytest.CaptureFixture[str],
     tmp_path,
 ) -> None:
-    """Inspect the default profile without invoking acquisition."""
     root = tmp_path / "configured-assets"
     monkeypatch.setenv("GOLDILOCKS_ASSET_ROOT", str(root))
     monkeypatch.setattr(
@@ -614,7 +594,6 @@ def test_main_installs_named_asset(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Install exactly the asset selected by the operator."""
     names: list[str] = []
 
     def fake_install(name: str, *, store) -> tuple[SimpleNamespace, ...]:

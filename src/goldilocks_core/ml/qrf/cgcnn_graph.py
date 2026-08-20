@@ -1,9 +1,3 @@
-"""Build a PyTorch Geometric graph from a structure for the CGCNN model.
-
-Radius-based neighbor search: nodes are atoms, edges connect atoms within a
-cutoff (closest ``max_neighbors``), edge attributes are interatomic distances.
-"""
-
 from __future__ import annotations
 
 import warnings
@@ -20,7 +14,6 @@ def build_radius_cgcnn_graph_from_structure(
     radius: float = 10.0,
     max_neighbors: int = 12,
 ) -> Data:
-    """Return a PyG ``Data`` graph (x, edge_index, edge_attr) for the structure."""
     x = torch.tensor(atom_features, dtype=torch.float32)
 
     edge_index: list[list[int]] = []

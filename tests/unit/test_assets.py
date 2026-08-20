@@ -35,7 +35,6 @@ def source_spec(source: Path, *, checksum: str | None = None) -> AssetSpec:
 
 
 def _install_in_process(root: str, source: str) -> str:
-    """Install one fixture from an independent process."""
     store = AssetStore(root)
     return str(store.install(source_spec(Path(source))).root)
 
@@ -83,7 +82,6 @@ def test_verify_detects_changed_and_extra_files(tmp_path: Path) -> None:
 
 
 def test_verify_rejects_unknown_manifest_fields(tmp_path: Path) -> None:
-    """Treat schema drift as corruption rather than ignoring unknown data."""
     source = tmp_path / "source.bin"
     source.write_bytes(b"payload")
     store = AssetStore(tmp_path / "store")
@@ -112,7 +110,6 @@ def test_install_repairs_a_corrupt_asset(tmp_path: Path) -> None:
 
 
 def test_install_repairs_non_directory_asset_paths(tmp_path: Path) -> None:
-    """Replace confined corrupt id and version path shapes transactionally."""
     source = tmp_path / "source.bin"
     source.write_bytes(b"payload")
     store = AssetStore(tmp_path / "store")
@@ -163,7 +160,6 @@ def test_concurrent_installers_publish_one_valid_asset(tmp_path: Path) -> None:
 def test_process_concurrent_installers_publish_one_valid_asset(
     tmp_path: Path,
 ) -> None:
-    """Serialize independent installers with the process-wide file lock."""
     source = tmp_path / "source.bin"
     source.write_bytes(b"payload")
     root = tmp_path / "store"
@@ -185,7 +181,6 @@ def test_process_concurrent_installers_publish_one_valid_asset(
 
 
 def test_verify_rejects_non_regular_installed_paths(tmp_path: Path) -> None:
-    """A FIFO cannot hide outside the immutable file inventory."""
     source = tmp_path / "source.bin"
     source.write_bytes(b"payload")
     store = AssetStore(tmp_path / "store")

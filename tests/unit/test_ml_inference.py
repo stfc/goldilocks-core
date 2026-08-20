@@ -22,6 +22,7 @@ class EmptyPredictionModel:
 
 class MissingPredictModel:
     """Object without a predict method."""
+
     pass
 
 

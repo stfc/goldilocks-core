@@ -56,6 +56,7 @@ _OPTIONAL_TABLE_FIELDS = frozenset(
 
 class InvalidPseudoRegistry(ValueError):
     """A pseudopotential registry violates its domain schema."""
+
     pass
 
 

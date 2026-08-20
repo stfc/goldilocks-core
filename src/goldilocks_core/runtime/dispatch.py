@@ -26,19 +26,21 @@ from goldilocks_core.runtime.graph import GraphInfo, describe_task, execute
 from goldilocks_core.runtime.models import Runtime
 from goldilocks_core.runtime.task import GraphHandler
 
+
 class UnknownTask(ValueError):
     """A request names no registered Core task."""
+
     pass
 
 
-    """Dispatch Core task graphs through registered :class:`TaskHandler`s.
+class Dispatcher:
+    """Dispatch Core task graphs through registered :class:`GraphHandler`s.
 
-    Borrows a :class:`CoreRuntime` for owned services and an open-state guard;
+    Borrows a :class:`Runtime` for owned services and an open-state guard;
     owns the task registry. Register a custom task and dispatch by
     ``intent.task`` without the runtime or the executor changing.
     """
 
-class Dispatcher:
     def __init__(self, runtime: Runtime) -> None:
         self._runtime = runtime
         self._tasks: dict[str, GraphHandler] = {}

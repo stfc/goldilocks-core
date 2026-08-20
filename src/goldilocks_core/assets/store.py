@@ -46,6 +46,7 @@ class AssetNotInstalled(FileNotFoundError):
 
 class AssetCorrupt(ValueError):
     """An installed asset does not match its strict manifest."""
+
     pass
 
 

@@ -64,6 +64,7 @@ _BOOL_HINTS = {"spin_polarized", "spin_orbit_coupling", "use_vdw"}
 
 class RequestError(ValueError):
     """A malformed transport request."""
+
     pass
 
 

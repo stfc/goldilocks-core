@@ -47,6 +47,7 @@ class Service:
     shared model lazy initialization and inference never overlap across
     concurrent requests.
     """
+
     __slots__ = ("_runtime", "_dispatcher", "_lock", "_owns_runtime", "_closed")
 
     def __init__(self, runtime: Runtime | None = None) -> None:

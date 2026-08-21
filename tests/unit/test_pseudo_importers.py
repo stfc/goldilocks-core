@@ -26,6 +26,21 @@ UPF = (
     b"</UPF>\n"
 )
 
+SERIALIZED_LDA_FUNCTIONAL = {
+    "@class": "XcFunc",
+    "@module": "pymatgen.core.xcfunc",
+    "c": {
+        "@class": "LibxcFunc",
+        "@module": "pymatgen.core.libxcfunc",
+        "name": "LDA_C_PW",
+    },
+    "x": {
+        "@class": "LibxcFunc",
+        "@module": "pymatgen.core.libxcfunc",
+        "name": "LDA_X",
+    },
+}
+
 
 def archive(path: Path, members: dict[str, bytes]) -> None:
     with tarfile.open(path, "w:gz") as tar:
@@ -35,13 +50,13 @@ def archive(path: Path, members: dict[str, bytes]) -> None:
             tar.addfile(info, io.BytesIO(payload))
 
 
-def table(provider: str, spec: AssetSpec) -> PseudoTable:
+def table(provider: str, spec: AssetSpec, *, functional: str = "PBEsol") -> PseudoTable:
     return PseudoTable(
         id=f"{provider}-fixture",
         provider=provider,
         upstream_table="fixture",
         version="1",
-        functional="PBEsol",
+        functional=functional,
         relativistic="scalar",
         accuracy="efficiency",
         licence="fixture licence",
@@ -57,7 +72,8 @@ def install_dojo_fixture(
     tmp_path: Path,
     *,
     upf: bytes = UPF,
-    report_functional: str = "PBEsol",
+    report_functional: object = "PBEsol",
+    table_functional: str = "PBEsol",
 ) -> InstalledAsset:
     upfs = tmp_path / "upfs.tgz"
     reports = tmp_path / "reports.tgz"
@@ -81,7 +97,8 @@ def install_dojo_fixture(
         ),
     )
     return AssetStore(tmp_path / "store").install(
-        spec, dojo_preparer(table("pseudodojo", spec))
+        spec,
+        dojo_preparer(table("pseudodojo", spec, functional=table_functional)),
     )
 
 
@@ -130,6 +147,19 @@ def test_pseudodojo_normalizes_reports_and_verified_upfs(tmp_path: Path) -> None
     assert metadata[0].cutoffs.ecutrho_ry == 160.0
     assert metadata[0].table_id == "pseudodojo-fixture"
     assert not list(installed.root.rglob("*.tgz"))
+
+
+def test_pseudodojo_decodes_serialized_lda_functional(tmp_path: Path) -> None:
+    installed = install_dojo_fixture(
+        tmp_path,
+        upf=UPF.replace(b'functional="PBEsol"', b'functional="SLA PW NOGX NOGC"'),
+        report_functional=SERIALIZED_LDA_FUNCTIONAL,
+        table_functional="LDA",
+    )
+
+    metadata = load_installed_table(installed)
+
+    assert metadata[0].functional == "LDA"
 
 
 def test_sssp_normalizes_sidecar_and_verified_upfs(tmp_path: Path) -> None:

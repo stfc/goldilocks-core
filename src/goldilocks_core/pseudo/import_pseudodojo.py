@@ -8,6 +8,9 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from pymatgen.core.libxcfunc import LibxcFunc
+from pymatgen.core.xcfunc import XcFunc
+
 from goldilocks_core.pseudo.installed import write_table_manifest
 from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
 from goldilocks_core.pseudo.registry import PseudoTable
@@ -68,7 +71,7 @@ def _reports(archive: Path) -> dict[str, dict[str, Any]]:
                 raise PseudoImportError(
                     f"dojo report for {element} has invalid md5_upf"
                 )
-            functional = required_functional(
+            functional = _report_functional(
                 report.get("xc"), f"dojo report XC for {element}"
             )
             hints = report.get("hints")
@@ -97,6 +100,44 @@ def _reports(archive: Path) -> dict[str, dict[str, Any]]:
     if not reports:
         raise PseudoImportError("no dojo reports found")
     return reports
+
+
+def _report_functional(value: object, label: str) -> str:
+    if isinstance(value, str):
+        return required_functional(value, label)
+    if (
+        not isinstance(value, Mapping)
+        or value.get("@class") != "XcFunc"
+        or value.get("@module") != "pymatgen.core.xcfunc"
+    ):
+        raise PseudoImportError(f"{label} must be a name or serialized Pymatgen XcFunc")
+
+    xc = _libxc_component(value.get("xc"), label)
+    x = _libxc_component(value.get("x"), label)
+    c = _libxc_component(value.get("c"), label)
+    try:
+        decoded = XcFunc(xc=xc, x=x, c=c)
+    except ValueError as error:
+        raise PseudoImportError(f"{label} is not a complete XcFunc") from error
+    return required_functional(decoded.name, label)
+
+
+def _libxc_component(value: object, label: str) -> LibxcFunc | None:
+    if value is None:
+        return None
+    if (
+        not isinstance(value, Mapping)
+        or value.get("@class") != "LibxcFunc"
+        or value.get("@module") != "pymatgen.core.libxcfunc"
+        or not isinstance(value.get("name"), str)
+    ):
+        raise PseudoImportError(f"{label} has an invalid LibXC component")
+    try:
+        return LibxcFunc[value["name"]]
+    except KeyError as error:
+        raise PseudoImportError(
+            f"{label} names unknown LibXC component {value['name']!r}"
+        ) from error
 
 
 def _extract_pseudos(

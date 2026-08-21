@@ -6,14 +6,17 @@ _RECOGNIZED_LABELS = {
     "lda": "LDA",
     "pz": "LDA",
     "sla": "LDA",
+    "pw": "LDA",
     "slapz": "LDA",
     "slapznogxnogc": "LDA",
+    "slapwnogxnogc": "LDA",
     "pbe": "PBE",
     "pbesol": "PBEsol",
     "perdewburkeernzerhof": "PBE",
     "perdewburkeernzerhofforsolids": "PBEsol",
     "perdewzunger": "LDA",
     "slapwpbxpbc": "PBE",
+    "slapwpbepbepbe": "PBE",
     "slapwpsxpsc": "PBEsol",
 }
 

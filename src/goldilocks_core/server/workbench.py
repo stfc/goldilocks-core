@@ -10,6 +10,7 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, JsonValue, field_validator
 
+from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
@@ -384,7 +385,24 @@ def _compute_review(service: Service, request: GuidedRequest) -> _ReviewComputat
     preset, document, canonical_cif = _guided_preset(request, "recommendation")
     try:
         result = service.generate(preset)
-    except (FileNotFoundError, ValueError) as error:
+    except AssetNotInstalled as error:
+        reference = error.reference
+        raise WorkbenchRequestError(
+            "recommendation",
+            f"Required runtime asset {reference.id}@{reference.version} "
+            "is unavailable.",
+            kind="assets_unavailable",
+            status_code=503,
+            details={"asset_id": reference.id, "version": reference.version},
+        ) from error
+    except (AssetCorrupt, FileNotFoundError) as error:
+        raise WorkbenchRequestError(
+            "recommendation",
+            "A required runtime asset failed availability or integrity checks.",
+            kind="assets_unavailable",
+            status_code=503,
+        ) from error
+    except ValueError as error:
         raise WorkbenchRequestError("recommendation", str(error)) from error
     tables = load_tables(service.runtime.pseudo_registry_path)
     table = _selected_table(request, result, tables)

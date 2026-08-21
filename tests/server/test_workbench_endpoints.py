@@ -160,6 +160,39 @@ def test_workbench_recommendation_is_typed_stable_and_browser_safe(
     assert payload["warnings"] == ["test warning"]
 
 
+def test_workbench_recommendation_reports_missing_assets(
+    sample_structure_text: str, tmp_path: Path
+) -> None:
+    missing = AssetNotInstalled(AssetReference("metallicity-cgcnn", "1"), tmp_path)
+    service = _FailingService(missing)
+
+    with TestClient(create_app(service)) as client:
+        response = client.post(
+            "/api/workbench/recommendation",
+            json={
+                "source": {
+                    "name": "Si.cif",
+                    "format": "cif",
+                    "content": sample_structure_text,
+                }
+            },
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "error": {
+            "kind": "assets_unavailable",
+            "message": "Required runtime asset metallicity-cgcnn@1 is unavailable.",
+            "retryable": False,
+            "details": {
+                "operation": "recommendation",
+                "asset_id": "metallicity-cgcnn",
+                "version": "1",
+            },
+        }
+    }
+
+
 def test_workbench_archive_reruns_core_and_contains_every_trusted_input(
     sample_structure_text: str, tmp_path: Path
 ) -> None:
@@ -415,6 +448,16 @@ class _RecommendingService:
         self.calls += 1
         self.request = request
         return self.result
+
+
+class _FailingService:
+    def __init__(self, error: Exception) -> None:
+        self.runtime = SimpleNamespace(pseudo_registry_path=None, asset_store=None)
+        self.error = error
+
+    def generate(self, request: PresetRequest) -> Result:
+        del request
+        raise self.error
 
 
 class _BlockingService(_RecommendingService):

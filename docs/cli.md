@@ -172,9 +172,12 @@ warnings:
 
 The request accepts exactly one explicit source: `--pseudo-table` selects an
 exact registered table ID, while `--pseudo-root` reads an operator-managed
-directory recursively. Without either flag, Core selects the registered default
-table. Resolution happens only when the requested records depend on
-pseudopotentials, so `compute --outputs analysis` performs no asset lookup.
+directory recursively. Without either flag, Core chooses a compatible
+registered table from the requested functional, accuracy, relativistic
+treatment, and structure elements. PseudoDojo is preferred for ordinary
+elements; SSSP is required for lanthanides and actinides. Resolution happens
+only when the requested records depend on pseudopotentials, so
+`compute --outputs analysis` performs no asset lookup.
 
 Installed tables are verified before their normalized manifest is loaded.
 Missing or corrupt assets fail with the exact asset ID, version, and configured

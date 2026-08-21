@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { StructureInspection } from "../api/workbenchClient";
 import {
@@ -17,6 +17,7 @@ export function StructureViewport({
   const host = useRef<HTMLDivElement>(null);
   const viewer = useRef<StructureViewer | null>(null);
   const fallback = useRef<HTMLDivElement>(null);
+  const [viewerRevision, setViewerRevision] = useState(0);
 
   useEffect(() => {
     if (host.current === null) return;
@@ -24,13 +25,14 @@ export function StructureViewport({
       viewer.current = createViewer(host.current);
       if (fallback.current !== null) fallback.current.hidden = true;
     } catch {
+      viewer.current = null;
       if (fallback.current !== null) fallback.current.hidden = false;
     }
     return () => {
       viewer.current?.dispose();
       viewer.current = null;
     };
-  }, [createViewer]);
+  }, [createViewer, viewerRevision]);
 
   useEffect(() => {
     if (viewer.current === null) return;
@@ -40,7 +42,7 @@ export function StructureViewport({
     } catch {
       if (fallback.current !== null) fallback.current.hidden = false;
     }
-  }, [inspection.canonical_cif]);
+  }, [inspection.canonical_cif, viewerRevision]);
 
   const lattice = inspection.structure.lattice;
   return (
@@ -49,6 +51,14 @@ export function StructureViewport({
       <div ref={fallback} className="viewport__fallback" role="status" hidden>
         <span>3D preview unavailable</span>
         <small>The parsed structure and recommendation remain available.</small>
+        <button
+          type="button"
+          onClick={() => {
+            setViewerRevision((revision) => revision + 1);
+          }}
+        >
+          Retry 3D preview
+        </button>
       </div>
       <div className="viewport__eyebrow">
         <span className="status-light" aria-hidden="true" />

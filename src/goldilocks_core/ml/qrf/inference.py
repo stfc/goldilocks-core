@@ -49,9 +49,7 @@ def _resolve_metallicity_artifacts(
             checkpoint or str(Path(base) / config.metallicity_checkpoint_file),
             atom_init or str(Path(base) / config.metallicity_atom_init_file),
         )
-    installed = store.resolve(
-        config.metallicity_asset.id, config.metallicity_asset.version
-    )
+    installed = store.resolve_spec(config.metallicity_asset)
     return (
         checkpoint or str(installed.path(config.metallicity_checkpoint_file)),
         atom_init or str(installed.path(config.metallicity_atom_init_file)),
@@ -74,7 +72,7 @@ def load_qrf_resources(
     )
     model = config.model
     if config.model_asset is not None:
-        installed = store.resolve(config.model_asset.id, config.model_asset.version)
+        installed = store.resolve_spec(config.model_asset)
         model = replace(
             model, source="local", location=str(installed.path(config.model_file))
         )

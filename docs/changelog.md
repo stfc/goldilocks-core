@@ -14,6 +14,12 @@ All notable changes to goldilocks-core are documented here.
 - CLI controls for van der Waals advice.
 - Exact pseudopotential-table selection on Python, CLI, HTTP, and MCP requests.
 - Provider-normalized PseudoDojo and SSSP installation into verified manifests.
+- Browser Workbench for guided CIF/POSCAR inspection, scientific overrides,
+  recommendation review, and reproducible Quantum ESPRESSO archive download.
+- A stateless production image containing matching Core and Workbench builds
+  plus the complete verified runtime asset profile.
+- Typed Workbench OpenAPI responses, generated TypeScript contracts, and
+  real-server Chromium coverage.
 
 ### Changed
 
@@ -21,7 +27,8 @@ All notable changes to goldilocks-core are documented here.
 - The default functional is now PBEsol. Use `--functional PBE` for PBE.
 - Runtime models and pseudopotential tables must be installed before the paths
   that use them. Pseudopotential sources resolve lazily from explicit metadata,
-  an operator root, an exact installed table ID, or the registered default.
+  an operator root, an exact installed table ID, or Core's compatible-table
+  selection policy.
   `--fetch-missing` installs only the exact missing dependencies reported by
   Core.
 - `recommend`, `generate`, and `compute` use one `Service` interface across
@@ -33,6 +40,11 @@ All notable changes to goldilocks-core are documented here.
 - Pseudopotential selection now consumes one normalized metadata interface;
   registry access, provider parsing, and filesystem discovery live behind the
   source-resolution stage.
+- Installed runtime assets record a source-and-preparer fingerprint so changes
+  to normalized contents invalidate stale installations. PseudoDojo and SSSP
+  tables retain provider licence material, and model assets retain their pinned
+  CC BY 4.0 model cards. Workbench archives include selected UPFs, every
+  applicable licence notice, provenance, and checksums.
 
 ### Removed
 

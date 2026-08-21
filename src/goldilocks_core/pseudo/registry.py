@@ -17,6 +17,7 @@ from goldilocks_core.functionals import normalize_functional_label
 PSEUDO_REGISTRY_ENV = "GOLDILOCKS_PSEUDO_REGISTRY"
 _REGISTRY_RESOURCE = "registry.toml"
 _PROVIDERS = frozenset({"pseudodojo", "sssp"})
+_PREPARATION_REVISIONS = {"pseudodojo": "2", "sssp": "1"}
 _RELATIVISTIC = {
     "SR": "scalar",
     "FR": "full",
@@ -180,8 +181,11 @@ def _parse_table(table_id: str, entry: Any) -> PseudoTable:
         files = tuple(AssetFile(**raw_file) for raw_file in raw_files)
         roles = {file.role for file in files}
         required_roles = {"pseudopotentials", "metadata"}
+        if provider == "sssp":
+            required_roles.add("licence")
         if not required_roles.issubset(roles):
-            raise ValueError("files must declare pseudopotentials and metadata roles")
+            names = ", ".join(sorted(required_roles))
+            raise ValueError(f"files must declare roles: {names}")
 
         default = entry.get("default", False)
         if not isinstance(default, bool):
@@ -197,7 +201,12 @@ def _parse_table(table_id: str, entry: Any) -> PseudoTable:
         if provider == "pseudodojo" and dual is None:
             raise ValueError("PseudoDojo tables require charge_density_dual")
 
-        asset = AssetSpec(table_id, version, files)
+        asset = AssetSpec(
+            table_id,
+            version,
+            files,
+            preparation_revision=_PREPARATION_REVISIONS[provider],
+        )
         return PseudoTable(
             id=table_id,
             provider=provider,

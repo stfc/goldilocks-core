@@ -22,6 +22,13 @@ from goldilocks_core.pseudo.validation import (
 
 HARTREE_TO_RYDBERG = 2.0
 _MD5 = re.compile(r"[0-9a-fA-F]{32}")
+_LICENCE_NOTICE = """\
+PseudoDojo pseudopotentials are distributed under the Creative Commons
+Attribution 4.0 International licence (CC BY 4.0).
+
+Licence: https://creativecommons.org/licenses/by/4.0/
+Source: https://www.pseudo-dojo.org/
+"""
 
 
 def preparer(table: PseudoTable):
@@ -35,6 +42,7 @@ def preparer(table: PseudoTable):
                 sources["pseudopotentials"], destination, table, reports
             )
             write_table_manifest(destination, table, entries)
+            (destination / "LICENSE.txt").write_text(_LICENCE_NOTICE, encoding="utf-8")
         except PseudoImportError:
             raise
         except (

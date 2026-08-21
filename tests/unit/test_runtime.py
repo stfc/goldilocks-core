@@ -25,13 +25,17 @@ from goldilocks_core.contracts import (
     Provenance,
     PseudoCutoffs,
     PseudoMetadata,
+    PseudopotentialRequirements,
     Result,
     SelectionRecord,
     StructureAnalysisRecord,
 )
 from goldilocks_core.pseudo.installed import write_table_manifest
 from goldilocks_core.pseudo.registry import PseudoTable
-from goldilocks_core.pseudo.source import PseudoTableMismatch
+from goldilocks_core.pseudo.source import (
+    PseudoTableMismatch,
+    select_compatible_table,
+)
 from goldilocks_core.runtime import (
     GraphHandler,
     Preset,
@@ -118,6 +122,40 @@ def installed_pseudo_table(tmp_path) -> tuple[AssetStore, PseudoTable]:
     store = AssetStore(tmp_path / "store")
     store.install(spec, prepare)
     return store, table
+
+
+def table_fixture(
+    table_id: str,
+    *,
+    provider: str,
+    functional: str,
+    accuracy: str,
+    elements: tuple[str, ...],
+) -> PseudoTable:
+    spec = AssetSpec(
+        table_id,
+        "1",
+        (
+            AssetFile(
+                "pseudopotentials",
+                "source/table.tar.gz",
+                f"https://example.invalid/{table_id}.tar.gz",
+            ),
+        ),
+    )
+    return PseudoTable(
+        id=table_id,
+        provider=provider,
+        upstream_table=f"{table_id}-upstream",
+        version=spec.version,
+        functional=functional,
+        relativistic="scalar",
+        accuracy=accuracy,
+        licence="fixture licence",
+        citation="fixture citation",
+        elements=elements,
+        asset=spec,
+    )
 
 
 def make_request(*, mode: str = "recommend") -> PresetRequest:
@@ -351,6 +389,72 @@ def test_explicit_table_must_satisfy_scientific_requirements(
         pytest.raises(PseudoTableMismatch, match="functional is PBEsol"),
     ):
         Dispatcher(runtime).recommend(request)
+
+
+def test_automatic_table_selection_prefers_pseudodojo_for_ordinary_elements() -> None:
+    dojo = table_fixture(
+        "pseudodojo-pbe-precision-sr",
+        provider="pseudodojo",
+        functional="PBE",
+        accuracy="precision",
+        elements=("Si",),
+    )
+    sssp = table_fixture(
+        "sssp-pbe-precision-sr",
+        provider="sssp",
+        functional="PBE",
+        accuracy="precision",
+        elements=("Si",),
+    )
+    requirements = PseudopotentialRequirements(
+        functional="PBE",
+        accuracy="precision",
+        pseudo_type=None,
+        relativistic="scalar",
+        provenance=Provenance(source="test", reason="test"),
+    )
+
+    selected = select_compatible_table(
+        {dojo.id: dojo, sssp.id: sssp},
+        table_id=None,
+        elements={"Si"},
+        requirements=requirements,
+    )
+
+    assert selected is dojo
+
+
+def test_automatic_table_selection_routes_f_block_elements_to_sssp() -> None:
+    dojo = table_fixture(
+        "pseudodojo-pbesol-efficiency-sr",
+        provider="pseudodojo",
+        functional="PBEsol",
+        accuracy="efficiency",
+        elements=("La",),
+    )
+    sssp = table_fixture(
+        "sssp-pbesol-efficiency-sr",
+        provider="sssp",
+        functional="PBEsol",
+        accuracy="efficiency",
+        elements=("La",),
+    )
+    requirements = PseudopotentialRequirements(
+        functional="PBEsol",
+        accuracy="efficiency",
+        pseudo_type=None,
+        relativistic="scalar",
+        provenance=Provenance(source="test", reason="test"),
+    )
+
+    selected = select_compatible_table(
+        {dojo.id: dojo, sssp.id: sssp},
+        table_id=None,
+        elements={"La"},
+        requirements=requirements,
+    )
+
+    assert selected is sssp
 
 
 def test_reset_close_and_context_manager_delegate_to_backend(monkeypatch) -> None:

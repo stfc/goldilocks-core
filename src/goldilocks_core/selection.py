@@ -58,7 +58,7 @@ def _select_for_element(
             requirements.pseudo_type is None
             or item.pseudo_type == requirements.pseudo_type
         )
-        and item.relativistic == requirements.relativistic
+        and _relativistic_compatible(item, requirements)
     ]
     if element in LANTHANIDES or element in ACTINIDES:
         candidates = [item for item in candidates if item.provider == "sssp"]
@@ -76,6 +76,7 @@ def _select_for_element(
             filename=None,
             filepath=None,
             functional=None,
+            relativistic=None,
             ecutwfc_ry=None,
             ecutrho_ry=None,
             provenance=Provenance(
@@ -96,6 +97,7 @@ def _select_for_element(
         filename=selected.filename,
         filepath=selected.filepath,
         functional=selected.functional,
+        relativistic=selected.relativistic,
         ecutwfc_ry=ecutwfc,
         ecutrho_ry=ecutrho,
         provenance=Provenance(
@@ -108,6 +110,17 @@ def _select_for_element(
             warnings=warnings,
         ),
         warnings=warnings,
+    )
+
+
+def _relativistic_compatible(
+    metadata: PseudoMetadata,
+    requirements: PseudopotentialRequirements,
+) -> bool:
+    return metadata.relativistic == requirements.relativistic or (
+        metadata.provider == "sssp"
+        and metadata.relativistic == "non-relativistic"
+        and requirements.relativistic == "scalar"
     )
 
 
@@ -132,6 +145,12 @@ def _selection_warnings(
     requirements: PseudopotentialRequirements,
 ) -> tuple[str, ...]:
     warnings = list(selected.warnings)
+    if selected.relativistic != requirements.relativistic:
+        warnings.append(
+            f"Selected SSSP pseudopotential for {element} declares "
+            f"{selected.relativistic} treatment within a "
+            f"{requirements.relativistic} table; verify this compatibility."
+        )
     if selected.accuracy is None:
         warnings.append(
             f"Selected custom pseudopotential for {element} has no registered "

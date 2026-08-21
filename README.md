@@ -8,7 +8,8 @@ It provides:
 - advice for k-points, smearing, magnetism, SOC, convergence, vdW, and pseudopotentials;
 - a default Quantile Random Forest k-point model;
 - deterministic pseudopotential selection and QE input generation;
-- Python, CLI, HTTP, and MCP entry points over one process-owned service.
+- Python, CLI, HTTP, MCP, and browser Workbench entry points over one
+  process-owned service.
 
 ## Install
 
@@ -69,10 +70,11 @@ Install the default runtime assets once:
 uv run goldilocks assets install default
 uv run goldilocks assets verify default
 ```
-
-Run a recommendation or create input files. Requests use the installed default
-pseudopotential table unless `--pseudo-table` or `--pseudo-root` selects another
-source:
+Run a recommendation or create input files. Without an explicit source, Core
+chooses a registered table matching the functional, accuracy, relativistic
+treatment, and structure elements. It prefers PseudoDojo for ordinary elements
+and SSSP for lanthanides or actinides. Use `--pseudo-table` or `--pseudo-root`
+to override that choice:
 
 ```bash
 uv run goldilocks recommend structure.cif --json
@@ -102,6 +104,41 @@ uv run goldilocks serve mcp
 HTTP publishes `/recommend`, `/generate`, `/compute`, `/tasks`, `/codes`,
 `/models`, and `/health`. MCP publishes the same three operations and three
 discovery calls as tools over stdio.
+
+## Browser Workbench
+
+The Workbench guides one CIF or POSCAR structure through inspection,
+scientific overrides, recommendation review, and download of a reproducible
+Quantum ESPRESSO archive. Core remains authoritative for structure data,
+defaults, resolved decisions, pseudopotential selection, provenance, and
+generated files.
+
+Build and run the production image:
+
+```bash
+docker build -t goldilocks-workbench .
+docker run --rm -p 8000:8000 goldilocks-workbench
+```
+
+Open `http://127.0.0.1:8000/`. The image contains matching Core and Workbench
+builds plus the complete, verified `workbench` runtime asset profile. Base
+images and the Debian runtime package source are content-pinned. Bundled model
+cards and pseudopotential licence notices remain under the asset root; the
+image licence label lists every bundled licence family. `/health` reports
+process health; `/ready` verifies the registered preparation identity and
+content of every required runtime asset.
+
+Extract calculation archives before running Quantum ESPRESSO, then invoke it
+from the archive root (for example, `pw.x -in inputs/qe.in`). This keeps the
+generated `pseudo_dir = './pseudo'` aligned with the bundled UPF directory.
+
+The deployment is anonymous and keeps no projects, sessions, or run history.
+Run it only on a trusted network unless a deployment layer adds authentication,
+rate limiting, and public-internet controls.
+
+For frontend development, start the Core server on port 8000, then run
+`npm ci && npm run dev` in `web/`. Vite serves port 5173 and proxies Core API
+requests.
 
 ## Documentation
 

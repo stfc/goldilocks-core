@@ -41,6 +41,7 @@ _ENTRY_FIELDS = {
     "source_identifier",
     "frozen_4f_core",
 }
+_OPTIONAL_ENTRY_FIELDS = {"cutoff_hints", "upf_relativistic"}
 
 
 def write_table_manifest(
@@ -151,6 +152,7 @@ def load_installed_table(
             path = installed.path(relative_path)
             if _md5(path) != entry["md5"].lower():
                 raise ValueError(f"entry md5 does not match {relative_path}")
+            entry_relativistic = entry.get("upf_relativistic", relativistic)
             metadata.append(
                 PseudoMetadata(
                     filepath=str(path),
@@ -163,7 +165,7 @@ def load_installed_table(
                     element=element,
                     pseudo_type=entry["pseudo_type"],
                     functional=functional,
-                    relativistic=relativistic,
+                    relativistic=entry_relativistic,
                     z_valence=entry["z_valence"],
                     table_id=data["id"],
                     cutoffs=PseudoCutoffs(
@@ -180,6 +182,7 @@ def load_installed_table(
                         "table_version": data["version"],
                         "licence": licence,
                         "citation": citation,
+                        "upf_relativistic": entry.get("upf_relativistic", relativistic),
                     },
                 )
             )
@@ -214,7 +217,7 @@ def _validate_entry_shape(entry: Any) -> None:
         raise ValueError("pseudopotential entries must be objects")
     fields = set(entry)
     missing = sorted(_ENTRY_FIELDS - fields)
-    extra = sorted(fields - (_ENTRY_FIELDS | {"cutoff_hints"}))
+    extra = sorted(fields - (_ENTRY_FIELDS | _OPTIONAL_ENTRY_FIELDS))
     if missing or extra:
         missing_names = ", ".join(missing) or "none"
         extra_names = ", ".join(extra) or "none"
@@ -229,6 +232,9 @@ def _validate_entry_shape(entry: Any) -> None:
         raise ValueError("frozen_4f_core must be a boolean")
     if entry["source_identifier"] is not None:
         _nonempty_string(entry["source_identifier"], "source_identifier")
+    upf_relativistic = entry.get("upf_relativistic")
+    if upf_relativistic is not None and upf_relativistic not in _RELATIVISTIC:
+        raise ValueError(f"unsupported UPF relativistic treatment {upf_relativistic!r}")
 
 
 def _nonempty_string(value: Any, label: str) -> str:

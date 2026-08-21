@@ -63,7 +63,11 @@ def create_app(
     capacity = ComputationCapacity(
         configured_compute_wait_seconds(compute_wait_seconds)
     )
-    readiness = AssetReadiness(state.runtime.asset_store)
+    readiness = AssetReadiness(
+        state.runtime.asset_store,
+        model_registry_path=getattr(state.runtime, "model_registry_path", None),
+        pseudo_registry_path=getattr(state.runtime, "pseudo_registry_path", None),
+    )
     workbench_static_root = _workbench_static_root(static_root)
 
     @asynccontextmanager
@@ -228,7 +232,10 @@ def create_app(
             content={
                 "error": {
                     "kind": "assets_unavailable",
-                    "message": report.message,
+                    "message": (
+                        f"Required runtime asset {report.asset_id}@{report.version} "
+                        f"is {report.state}."
+                    ),
                     "retryable": False,
                     "details": {
                         "asset_id": report.asset_id,

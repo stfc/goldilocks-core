@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 import tarfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -33,6 +34,7 @@ def preparer(table: PseudoTable):
                 sources["pseudopotentials"], destination, metadata, table
             )
             write_table_manifest(destination, table, entries)
+            shutil.copyfile(sources["licence"], destination / "LICENSE.txt")
         except PseudoImportError:
             raise
         except (
@@ -126,7 +128,10 @@ def _extract_pseudos(
                         f"{element}: SSSP functional {sidecar_functional} does not "
                         f"match table functional {table.functional}"
                     )
-            if parsed.relativistic != table.relativistic:
+            if parsed.relativistic != table.relativistic and not (
+                table.relativistic == "scalar"
+                and parsed.relativistic == "non-relativistic"
+            ):
                 raise PseudoImportError(
                     f"{element}: UPF relativistic treatment "
                     f"{parsed.relativistic or 'unknown'} does not match table "
@@ -139,6 +144,7 @@ def _extract_pseudos(
                     "path": target.relative_to(destination).as_posix(),
                     "md5": digest.hexdigest(),
                     "header_format": parsed.header_format,
+                    "upf_relativistic": parsed.relativistic,
                     "pseudo_type": parsed.pseudo_type,
                     "z_valence": parsed.z_valence,
                     "ecutwfc_ry": finite_positive_cutoff(

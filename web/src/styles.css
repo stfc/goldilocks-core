@@ -1,6 +1,7 @@
 :root {
   color-scheme: dark;
-  font-family: Inter, "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-family:
+    Inter, "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   color: #e8ece8;
   background: #0d1418;
   font-synthesis: none;
@@ -186,7 +187,11 @@ pre {
 
 .workbench-grid {
   display: grid;
-  grid-template-columns: clamp(280px, 20vw, 320px) minmax(390px, 1fr) clamp(350px, 27vw, 430px);
+  grid-template-columns: clamp(280px, 20vw, 320px) minmax(390px, 1fr) clamp(
+      350px,
+      27vw,
+      430px
+    );
   height: calc(100vh - 64px);
 }
 
@@ -248,7 +253,9 @@ pre {
   border: 1px dashed var(--line-strong);
   background: #0e1619;
   text-align: center;
-  transition: border-color 160ms ease, background-color 160ms ease;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
 }
 
 .file-drop--active {
@@ -429,6 +436,18 @@ pre {
 .advanced-controls[open] summary::after {
   content: "−";
 }
+.advanced-controls__summary {
+  margin: 0;
+  padding: 0 12px 11px;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.advanced-controls__summary span {
+  color: var(--muted);
+}
 
 .advanced-controls__body {
   display: grid;
@@ -439,19 +458,23 @@ pre {
 
 .k-grid-field {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 7px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   border: 0;
 }
 
 .k-grid-field legend {
-  grid-column: 1 / -1;
   margin-bottom: 6px;
 }
 
-.k-grid-field input {
+.k-grid-inputs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+}
+
+.k-grid-inputs input {
   padding: 0 5px;
   text-align: center;
 }
@@ -621,7 +644,7 @@ pre {
   border-top: 1px solid var(--line-strong);
   background: #10181c;
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.04em;
 }
 
@@ -676,6 +699,16 @@ pre {
 .viewport__fallback small {
   margin-top: 7px;
   color: var(--faint);
+}
+.viewport__fallback button {
+  margin: 14px auto 0;
+  padding: 7px 10px;
+  color: var(--accent-bright);
+  border: 1px solid #725e31;
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 9px;
 }
 
 .viewport__eyebrow,
@@ -834,6 +867,10 @@ pre {
   color: var(--faint);
   font-size: 12px;
   line-height: 1.65;
+}
+.review-empty--loading svg {
+  margin-bottom: 18px;
+  color: var(--accent);
 }
 
 .stale-banner {
@@ -1100,7 +1137,7 @@ pre {
   white-space: nowrap;
 }
 
-.file-tabs button[aria-selected="true"] {
+.file-tabs button[aria-pressed="true"] {
   color: var(--accent-bright);
   border-color: var(--line-strong);
   background: #152024;
@@ -1254,17 +1291,6 @@ pre {
   font-size: 9px;
 }
 
-.visually-hidden {
-  position: absolute !important;
-  width: 1px !important;
-  height: 1px !important;
-  padding: 0 !important;
-  overflow: hidden !important;
-  clip: rect(0, 0, 0, 0) !important;
-  white-space: nowrap !important;
-  border: 0 !important;
-}
-
 .spinning-icon {
   animation: orbit 1.1s linear infinite;
 }
@@ -1404,10 +1430,6 @@ pre {
   .empty-stage__orbital span {
     width: 104px;
     height: 36px;
-  }
-
-  .stage-footer {
-    font-size: 7px;
   }
 
   .viewport__title strong {

@@ -4,16 +4,21 @@ from collections.abc import Mapping
 
 from goldilocks_core.assets import AssetInstallation, AssetStore, InstalledAsset
 from goldilocks_core.assets.profiles import profile
+from goldilocks_core.contracts import PathLike
 from goldilocks_core.ml.model_registry import model_asset_specs
 from goldilocks_core.pseudo.install import table_installations
 
 WORKBENCH_PROFILE = "workbench"
 
 
-def catalogue() -> dict[str, AssetInstallation]:
+def catalogue(
+    *,
+    model_registry_path: PathLike | None = None,
+    pseudo_registry_path: PathLike | None = None,
+) -> dict[str, AssetInstallation]:
     installations = (
-        *(AssetInstallation(spec) for spec in model_asset_specs()),
-        *table_installations(),
+        *(AssetInstallation(spec) for spec in model_asset_specs(model_registry_path)),
+        *table_installations(pseudo_registry_path),
     )
     registrations: dict[str, AssetInstallation] = {}
     for installation in installations:
@@ -63,7 +68,7 @@ def statuses(
         (
             registration.spec.id,
             registration.spec.version,
-            target.status(registration.spec.id, registration.spec.version),
+            target.status_spec(registration.spec),
         )
         for registration in references(name)
     )
@@ -72,6 +77,5 @@ def statuses(
 def verify(name: str, *, store: AssetStore | None = None) -> tuple[InstalledAsset, ...]:
     target = store or AssetStore()
     return tuple(
-        target.verify(registration.spec.id, registration.spec.version)
-        for registration in references(name)
+        target.verify_spec(registration.spec) for registration in references(name)
     )

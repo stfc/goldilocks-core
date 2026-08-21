@@ -48,6 +48,13 @@ from goldilocks_core.contracts.selection import (
     SelectionRecord,
 )
 from goldilocks_core.contracts.serial import to_jsonable
+from goldilocks_core.contracts.structure import (
+    LatticeDocument,
+    SpeciesOccupancy,
+    StructureDocument,
+    StructureSiteDocument,
+    StructureSourceDocument,
+)
 from goldilocks_core.contracts.types import (
     CalcTask,
     CodeName,
@@ -93,6 +100,7 @@ __all__ = [
     "KmeshHints",
     "KMeshService",
     "KPointGrid",
+    "LatticeDocument",
     "KPointSelection",
     "KPointShift",
     "MagnetismAdvice",
@@ -124,9 +132,13 @@ __all__ = [
     "SpinHints",
     "SpinOrbitAdvice",
     "StageId",
+    "SpeciesOccupancy",
     "StructureAnalysisRecord",
     "StructureFeatureVector",
     "StructureInput",
+    "StructureDocument",
+    "StructureSiteDocument",
+    "StructureSourceDocument",
     "SymmetryUnavailable",
     "TaskId",
     "VdwAdvice",

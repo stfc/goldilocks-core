@@ -7,13 +7,8 @@ import type {
   WorkbenchClient,
 } from "../api/workbenchClient";
 import { WorkbenchFailure } from "../api/workbenchClient";
-import {
-  inspection,
-  recommendation,
-  source,
-} from "../test/workbenchFixtures";
+import { inspection, recommendation, source } from "../test/workbenchFixtures";
 import { createWorkspace } from "./workspace";
-
 
 describe("Workspace", () => {
   it("retains stale trustworthy outputs across overrides and retryable failures", async () => {
@@ -29,18 +24,19 @@ describe("Workspace", () => {
         ) => Promise<ArchiveDownload>
       >()
       .mockResolvedValue(download);
+    const reviewRequest = vi
+      .fn<(request: GuidedRequest) => Promise<Recommendation>>()
+      .mockResolvedValueOnce(recommendation)
+      .mockRejectedValueOnce(
+        new WorkbenchFailure("server_busy", "Server busy", true),
+      )
+      .mockResolvedValueOnce({
+        ...recommendation,
+        review_digest: "e".repeat(64),
+      });
     const client: WorkbenchClient = {
       inspect: vi.fn().mockResolvedValue(inspection),
-      review: vi
-        .fn<(request: GuidedRequest) => Promise<Recommendation>>()
-        .mockResolvedValueOnce(recommendation)
-        .mockRejectedValueOnce(
-          new WorkbenchFailure("server_busy", "Server busy", true),
-        )
-        .mockResolvedValueOnce({
-          ...recommendation,
-          review_digest: "e".repeat(64),
-        }),
+      review: reviewRequest,
       archive: archiveRequest,
     };
     const saveArchive = vi.fn<(archive: ArchiveDownload) => void>();
@@ -56,8 +52,12 @@ describe("Workspace", () => {
       review: null,
       failure: null,
     });
+    expect(workspace.getSnapshot().draft).not.toHaveProperty("pseudo_table_id");
 
     await workspace.dispatch({ type: "review.recompute" });
+    expect(reviewRequest.mock.calls[0]?.[0]).not.toHaveProperty(
+      "pseudo_table_id",
+    );
     expect(workspace.getSnapshot()).toMatchObject({
       review: recommendation,
       reviewStale: false,
@@ -109,5 +109,80 @@ describe("Workspace", () => {
     });
     expect(updates).toHaveBeenCalled();
     unsubscribe();
+  });
+
+  it("retains the valid workspace when replacement inspection fails", async () => {
+    const replacement = {
+      name: "broken.cif",
+      format: "cif" as const,
+      content: "not a structure",
+    };
+    const download: ArchiveDownload = {
+      blob: new Blob(["zip"]),
+      filename: "goldilocks.zip",
+    };
+    const failure = new WorkbenchFailure(
+      "invalid_request",
+      "Could not parse replacement.",
+      false,
+    );
+    const client: WorkbenchClient = {
+      inspect: vi
+        .fn()
+        .mockResolvedValueOnce(inspection)
+        .mockRejectedValueOnce(failure),
+      review: vi.fn().mockResolvedValue(recommendation),
+      archive: vi.fn().mockResolvedValue(download),
+    };
+    const workspace = createWorkspace(client, vi.fn());
+    await workspace.dispatch({ type: "source.open", source });
+    await workspace.dispatch({ type: "review.recompute" });
+    await workspace.dispatch({ type: "archive.download" });
+
+    await workspace.dispatch({ type: "source.open", source: replacement });
+
+    expect(workspace.getSnapshot()).toMatchObject({
+      source,
+      attemptedSource: replacement,
+      inspection,
+      review: recommendation,
+      archive: download,
+      operation: null,
+      failure,
+      failureOperation: "inspect",
+    });
+  });
+  it("discards an archive response when the draft changes in flight", async () => {
+    let resolveArchive: ((archive: ArchiveDownload) => void) | undefined;
+    const archivePending = new Promise<ArchiveDownload>((resolve) => {
+      resolveArchive = resolve;
+    });
+    const client: WorkbenchClient = {
+      inspect: vi.fn().mockResolvedValue(inspection),
+      review: vi.fn().mockResolvedValue(recommendation),
+      archive: vi.fn().mockReturnValue(archivePending),
+    };
+    const saveArchive = vi.fn<(archive: ArchiveDownload) => void>();
+    const workspace = createWorkspace(client, saveArchive);
+    await workspace.dispatch({ type: "source.open", source });
+    await workspace.dispatch({ type: "review.recompute" });
+
+    const download = workspace.dispatch({ type: "archive.download" });
+    await workspace.dispatch({
+      type: "draft.patch",
+      hints: { k_grid: [5, 5, 5] },
+    });
+    resolveArchive?.({
+      blob: new Blob(["stale zip"]),
+      filename: "stale.zip",
+    });
+    await download;
+
+    expect(saveArchive).not.toHaveBeenCalled();
+    expect(workspace.getSnapshot()).toMatchObject({
+      operation: null,
+      archive: null,
+      reviewStale: true,
+    });
   });
 });

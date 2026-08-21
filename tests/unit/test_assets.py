@@ -22,7 +22,12 @@ from goldilocks_core.assets import (
 from goldilocks_core.assets.download import download
 
 
-def source_spec(source: Path, *, checksum: str | None = None) -> AssetSpec:
+def source_spec(
+    source: Path,
+    *,
+    checksum: str | None = None,
+    preparation_revision: str = "1",
+) -> AssetSpec:
     return AssetSpec(
         id="models/example",
         version="1",
@@ -35,6 +40,7 @@ def source_spec(source: Path, *, checksum: str | None = None) -> AssetSpec:
                 size=source.stat().st_size,
             ),
         ),
+        preparation_revision=preparation_revision,
     )
 
 
@@ -97,6 +103,27 @@ def test_verify_rejects_unknown_manifest_fields(tmp_path: Path) -> None:
 
     with pytest.raises(AssetCorrupt, match="manifest fields are invalid"):
         store.verify("models/example", "1")
+
+
+def test_install_replaces_a_stale_preparation_revision(tmp_path: Path) -> None:
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"first payload")
+    store = AssetStore(tmp_path / "store")
+    first = store.install(source_spec(source))
+    first_fingerprint = json.loads(
+        (first.root / "manifest.json").read_text(encoding="utf-8")
+    )["preparation_fingerprint"]
+
+    source.write_bytes(b"other payload")
+    revised = source_spec(source, preparation_revision="2")
+    second = store.install(revised)
+
+    assert second.path("data/payload.bin").read_bytes() == b"other payload"
+    second_fingerprint = json.loads(
+        (second.root / "manifest.json").read_text(encoding="utf-8")
+    )["preparation_fingerprint"]
+    assert second_fingerprint == revised.preparation_fingerprint
+    assert second_fingerprint != first_fingerprint
 
 
 def test_install_repairs_a_corrupt_asset(tmp_path: Path) -> None:

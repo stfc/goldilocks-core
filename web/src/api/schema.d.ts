@@ -383,10 +383,49 @@ export interface components {
             /** Version */
             readonly version: string;
         };
+        /** RecommendationDecisions */
+        readonly RecommendationDecisions: {
+            /** K Grid */
+            readonly k_grid: readonly [
+                number,
+                number,
+                number
+            ];
+            /** K Mesh Type */
+            readonly k_mesh_type: string;
+            /** K Shift */
+            readonly k_shift: readonly [
+                number,
+                number,
+                number
+            ];
+            /**
+             * Pseudo Accuracy
+             * @enum {string}
+             */
+            readonly pseudo_accuracy: "efficiency" | "precision";
+            /** Pseudo Functional */
+            readonly pseudo_functional: string;
+            /** Pseudo Relativistic */
+            readonly pseudo_relativistic: string;
+            /** Pseudo Table Id */
+            readonly pseudo_table_id: string;
+            /** Smearing Type */
+            readonly smearing_type: string | null;
+            /** Smearing Width Ry */
+            readonly smearing_width_ry: number | null;
+            /** Spin Orbit Coupling */
+            readonly spin_orbit_coupling: boolean;
+            /** Spin Polarized */
+            readonly spin_polarized: boolean;
+            /** Use Vdw */
+            readonly use_vdw: boolean;
+        };
         /** RecommendationResponse */
         readonly RecommendationResponse: {
             /** Canonical Cif */
             readonly canonical_cif: string;
+            readonly decisions: components["schemas"]["RecommendationDecisions"];
             /** Generated Files */
             readonly generated_files: readonly components["schemas"]["GeneratedFileResponse"][];
             readonly hints: components["schemas"]["HintsResponse"];
@@ -397,12 +436,59 @@ export interface components {
             };
             /** Review Digest */
             readonly review_digest: string;
+            readonly runtime: components["schemas"]["RuntimeProvenanceResponse"];
             /** Schema Version */
             readonly schema_version: number;
             readonly selection: components["schemas"]["PseudoSelectionResponse"];
             readonly structure: components["schemas"]["StructureResponse"];
             /** Warnings */
             readonly warnings: readonly string[];
+        };
+        /** RuntimeAssetFileResponse */
+        readonly RuntimeAssetFileResponse: {
+            /** Path */
+            readonly path: string;
+            /** Role */
+            readonly role: string;
+            /** Sha256 */
+            readonly sha256: string | null;
+            /** Size Bytes */
+            readonly size_bytes: number | null;
+        };
+        /** RuntimeAssetResponse */
+        readonly RuntimeAssetResponse: {
+            /** Files */
+            readonly files: readonly components["schemas"]["RuntimeAssetFileResponse"][];
+            /** Id */
+            readonly id: string;
+            /** Version */
+            readonly version: string;
+        };
+        /** RuntimeModelResponse */
+        readonly RuntimeModelResponse: {
+            /** Feature Set */
+            readonly feature_set: string | null;
+            /** Model Type */
+            readonly model_type: string | null;
+            /** Name */
+            readonly name: string | null;
+            /** Revision */
+            readonly revision: string | null;
+            /** Source */
+            readonly source: string | null;
+            /** Target */
+            readonly target: string | null;
+            /** Version */
+            readonly version: string | null;
+        };
+        /** RuntimeProvenanceResponse */
+        readonly RuntimeProvenanceResponse: {
+            /** Goldilocks Core Version */
+            readonly goldilocks_core_version: string;
+            /** Model Assets */
+            readonly model_assets: readonly components["schemas"]["RuntimeAssetResponse"][];
+            /** Models */
+            readonly models: readonly components["schemas"]["RuntimeModelResponse"][];
         };
         /** SelectedPseudoResponse */
         readonly SelectedPseudoResponse: {
@@ -420,6 +506,8 @@ export interface components {
             readonly provenance: {
                 readonly [key: string]: components["schemas"]["JsonValue"];
             };
+            /** Relativistic */
+            readonly relativistic: string | null;
             /** Sha256 */
             readonly sha256: string;
             /** Warnings */
@@ -520,6 +608,23 @@ export interface components {
             /** Error Type */
             readonly type: string;
         };
+        /** WorkbenchErrorDetail */
+        readonly WorkbenchErrorDetail: {
+            /** Details */
+            readonly details: {
+                readonly [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Kind */
+            readonly kind: string;
+            /** Message */
+            readonly message: string;
+            /** Retryable */
+            readonly retryable: boolean;
+        };
+        /** WorkbenchErrorResponse */
+        readonly WorkbenchErrorResponse: {
+            readonly error: components["schemas"]["WorkbenchErrorDetail"];
+        };
     };
     responses: never;
     parameters: never;
@@ -551,13 +656,31 @@ export interface operations {
                     readonly "application/zip": unknown;
                 };
             };
-            /** @description Validation Error */
+            /** @description Conflict */
+            readonly 409: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["WorkbenchErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
             readonly 422: {
                 headers: {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                    readonly "application/json": components["schemas"]["WorkbenchErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            readonly 503: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["WorkbenchErrorResponse"];
                 };
             };
         };
@@ -584,13 +707,22 @@ export interface operations {
                     readonly "application/json": components["schemas"]["RecommendationResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unprocessable Entity */
             readonly 422: {
                 headers: {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                    readonly "application/json": components["schemas"]["WorkbenchErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            readonly 503: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["WorkbenchErrorResponse"];
                 };
             };
         };
@@ -617,13 +749,13 @@ export interface operations {
                     readonly "application/json": components["schemas"]["StructureInspectionResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unprocessable Entity */
             readonly 422: {
                 headers: {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                    readonly "application/json": components["schemas"]["WorkbenchErrorResponse"];
                 };
             };
         };

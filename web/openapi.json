@@ -556,12 +556,128 @@
         "title": "PseudoTableResponse",
         "type": "object"
       },
+      "RecommendationDecisions": {
+        "additionalProperties": false,
+        "properties": {
+          "k_grid": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "K Grid",
+            "type": "array"
+          },
+          "k_mesh_type": {
+            "title": "K Mesh Type",
+            "type": "string"
+          },
+          "k_shift": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "K Shift",
+            "type": "array"
+          },
+          "pseudo_accuracy": {
+            "enum": [
+              "efficiency",
+              "precision"
+            ],
+            "title": "Pseudo Accuracy",
+            "type": "string"
+          },
+          "pseudo_functional": {
+            "title": "Pseudo Functional",
+            "type": "string"
+          },
+          "pseudo_relativistic": {
+            "title": "Pseudo Relativistic",
+            "type": "string"
+          },
+          "pseudo_table_id": {
+            "title": "Pseudo Table Id",
+            "type": "string"
+          },
+          "smearing_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smearing Type"
+          },
+          "smearing_width_ry": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smearing Width Ry"
+          },
+          "spin_orbit_coupling": {
+            "title": "Spin Orbit Coupling",
+            "type": "boolean"
+          },
+          "spin_polarized": {
+            "title": "Spin Polarized",
+            "type": "boolean"
+          },
+          "use_vdw": {
+            "title": "Use Vdw",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "k_grid",
+          "k_shift",
+          "k_mesh_type",
+          "spin_polarized",
+          "spin_orbit_coupling",
+          "smearing_type",
+          "smearing_width_ry",
+          "use_vdw",
+          "pseudo_table_id",
+          "pseudo_functional",
+          "pseudo_accuracy",
+          "pseudo_relativistic"
+        ],
+        "title": "RecommendationDecisions",
+        "type": "object"
+      },
       "RecommendationResponse": {
         "additionalProperties": false,
         "properties": {
           "canonical_cif": {
             "title": "Canonical Cif",
             "type": "string"
+          },
+          "decisions": {
+            "$ref": "#/components/schemas/RecommendationDecisions"
           },
           "generated_files": {
             "items": {
@@ -586,6 +702,9 @@
           "review_digest": {
             "title": "Review Digest",
             "type": "string"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/RuntimeProvenanceResponse"
           },
           "schema_version": {
             "title": "Schema Version",
@@ -612,12 +731,207 @@
           "canonical_cif",
           "intent",
           "hints",
+          "decisions",
+          "runtime",
           "records",
           "generated_files",
           "selection",
           "warnings"
         ],
         "title": "RecommendationResponse",
+        "type": "object"
+      },
+      "RuntimeAssetFileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          }
+        },
+        "required": [
+          "role",
+          "path",
+          "sha256",
+          "size_bytes"
+        ],
+        "title": "RuntimeAssetFileResponse",
+        "type": "object"
+      },
+      "RuntimeAssetResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/RuntimeAssetFileResponse"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "files"
+        ],
+        "title": "RuntimeAssetResponse",
+        "type": "object"
+      },
+      "RuntimeModelResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "feature_set": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feature Set"
+          },
+          "model_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Type"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "model_type",
+          "target",
+          "feature_set",
+          "source",
+          "revision"
+        ],
+        "title": "RuntimeModelResponse",
+        "type": "object"
+      },
+      "RuntimeProvenanceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "goldilocks_core_version": {
+            "title": "Goldilocks Core Version",
+            "type": "string"
+          },
+          "model_assets": {
+            "items": {
+              "$ref": "#/components/schemas/RuntimeAssetResponse"
+            },
+            "title": "Model Assets",
+            "type": "array"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/RuntimeModelResponse"
+            },
+            "title": "Models",
+            "type": "array"
+          }
+        },
+        "required": [
+          "goldilocks_core_version",
+          "models",
+          "model_assets"
+        ],
+        "title": "RuntimeProvenanceResponse",
         "type": "object"
       },
       "SelectedPseudoResponse": {
@@ -671,6 +985,17 @@
             "title": "Provenance",
             "type": "object"
           },
+          "relativistic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relativistic"
+          },
           "sha256": {
             "title": "Sha256",
             "type": "string"
@@ -688,6 +1013,7 @@
           "filename",
           "sha256",
           "functional",
+          "relativistic",
           "ecutwfc_ry",
           "ecutrho_ry",
           "provenance",
@@ -992,6 +1318,51 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "WorkbenchErrorDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "details": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Details",
+            "type": "object"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "message",
+          "retryable",
+          "details"
+        ],
+        "title": "WorkbenchErrorDetail",
+        "type": "object"
+      },
+      "WorkbenchErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/WorkbenchErrorDetail"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "WorkbenchErrorResponse",
+        "type": "object"
       }
     }
   },
@@ -1021,15 +1392,35 @@
             },
             "description": "Successful Response"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbenchErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
           "422": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/WorkbenchErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbenchErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Archive",
@@ -1066,11 +1457,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/WorkbenchErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbenchErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Recommend",
@@ -1107,11 +1508,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/WorkbenchErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Entity"
           }
         },
         "summary": "Inspect Structure",

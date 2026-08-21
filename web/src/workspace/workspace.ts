@@ -16,6 +16,7 @@ type Hints = GuidedRequest["hints"];
 
 export interface WorkspaceSnapshot {
   readonly source: StructureSource | null;
+  readonly attemptedSource: StructureSource | null;
   readonly inspection: StructureInspection | null;
   readonly draft: GuidedRequest | null;
   readonly review: Recommendation | null;
@@ -51,6 +52,7 @@ type ArchiveSink = (archive: ArchiveDownload) => void;
 
 const EMPTY_SNAPSHOT: WorkspaceSnapshot = {
   source: null,
+  attemptedSource: null,
   inspection: null,
   draft: null,
   review: null,
@@ -72,19 +74,21 @@ export function createWorkspace(
 
   async function openSource(source: StructureSource): Promise<void> {
     sourceEpoch += 1;
-    draftRevision = 0;
     const epoch = sourceEpoch;
     store.setState({
-      ...EMPTY_SNAPSHOT,
-      source,
+      attemptedSource: source,
       operation: "inspect",
+      failure: null,
+      failureOperation: null,
     });
     try {
       const inspection = await client.inspect(source);
       if (epoch !== sourceEpoch) return;
+      draftRevision = 0;
       const draft = initialDraft(source, inspection);
       store.setState({
         source,
+        attemptedSource: null,
         inspection,
         draft,
         review: null,
@@ -109,7 +113,9 @@ export function createWorkspace(
     }
   }
 
-  function patchDraft(action: Extract<WorkspaceAction, { type: "draft.patch" }>) {
+  function patchDraft(
+    action: Extract<WorkspaceAction, { type: "draft.patch" }>,
+  ) {
     const snapshot = store.getState();
     if (
       snapshot.draft === null ||
@@ -126,7 +132,7 @@ export function createWorkspace(
         ? compatible.find((table) => table.id === action.pseudoTableId)
         : compatible.find(
             (table) => table.id === snapshot.draft?.pseudo_table_id,
-          ) ?? preferredTable(compatible);
+          );
     const draft: GuidedRequest = {
       source: snapshot.draft.source,
       intent,
@@ -197,6 +203,7 @@ export function createWorkspace(
       return;
     }
     const epoch = sourceEpoch;
+    const revision = draftRevision;
     const digest = snapshot.review.review_digest;
     store.setState({
       operation: "archive",
@@ -206,6 +213,10 @@ export function createWorkspace(
     try {
       const archive = await client.archive(snapshot.draft, digest);
       if (epoch !== sourceEpoch) return;
+      if (revision !== draftRevision) {
+        store.setState({ operation: null });
+        return;
+      }
       store.setState({
         archive,
         archiveStale: false,
@@ -216,6 +227,10 @@ export function createWorkspace(
       saveArchive(archive);
     } catch (error) {
       if (epoch !== sourceEpoch) return;
+      if (revision !== draftRevision) {
+        store.setState({ operation: null });
+        return;
+      }
       if (!(error instanceof WorkbenchFailure)) {
         store.setState({ operation: null });
         throw error;
@@ -232,7 +247,9 @@ export function createWorkspace(
     const snapshot = store.getState();
     switch (snapshot.failureOperation) {
       case "inspect":
-        if (snapshot.source !== null) await openSource(snapshot.source);
+        if (snapshot.attemptedSource !== null) {
+          await openSource(snapshot.attemptedSource);
+        }
         return;
       case "review":
         await recompute();
@@ -263,7 +280,11 @@ export function createWorkspace(
         await retryFailure();
         return;
       case "failure.dismiss":
-        store.setState({ failure: null, failureOperation: null });
+        store.setState({
+          attemptedSource: null,
+          failure: null,
+          failureOperation: null,
+        });
         return;
       case "workspace.reset":
         sourceEpoch += 1;
@@ -286,14 +307,10 @@ function initialDraft(
   source: StructureSource,
   inspection: StructureInspection,
 ): GuidedRequest {
-  const selected = preferredTable(
-    compatibleTables(inspection, inspection.defaults.intent),
-  );
   return {
     source,
     intent: inspection.defaults.intent,
     hints: inspection.defaults.hints,
-    ...(selected === undefined ? {} : { pseudo_table_id: selected.id }),
   };
 }
 
@@ -314,10 +331,6 @@ function compatibleTables(
       table.accuracy === intent.pseudo_accuracy &&
       [...elements].every((element) => table.elements.includes(element)),
   );
-}
-
-function preferredTable(tables: readonly PseudoTable[]): PseudoTable | undefined {
-  return tables.find((table) => table.default) ?? tables[0];
 }
 
 export function saveArchiveToBrowser(archive: ArchiveDownload): void {

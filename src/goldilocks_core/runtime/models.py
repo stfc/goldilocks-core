@@ -134,6 +134,10 @@ class Runtime:
     def pseudo_registry_path(self) -> PathLike | None:
         return self._pseudo_registry_path
 
+    @property
+    def model_registry_path(self) -> PathLike | None:
+        return self._registry_path
+
     def describe_models(self) -> list[dict[str, str | None]]:
         from goldilocks_core.ml.model_registry import load_default_qrf_config
 

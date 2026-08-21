@@ -1,15 +1,11 @@
-import { lazy, Suspense } from "react";
+import { Component } from "react";
 import { RotateCw, X } from "lucide-react";
 
+import type { StructureInspection } from "./api/workbenchClient";
 import { GuidedControls } from "./controls/GuidedControls";
 import { ReviewPanel } from "./review/ReviewPanel";
+import { StructureViewport } from "./viewer/StructureViewport";
 import { useWorkspace, useWorkspaceSnapshot } from "./workspace/useWorkspace";
-
-const StructureViewport = lazy(() =>
-  import("./viewer/StructureViewport").then((module) => ({
-    default: module.StructureViewport,
-  })),
-);
 
 export function App() {
   const workspace = useWorkspace();
@@ -33,7 +29,11 @@ export function App() {
         </div>
         <div className="header-status">
           <span className="status-light" aria-hidden="true" />
-          <span>{snapshot.operation === null ? "Ready" : operationLabel(snapshot.operation)}</span>
+          <span>
+            {snapshot.operation === null
+              ? "Ready"
+              : operationLabel(snapshot.operation)}
+          </span>
           <span className="version-badge">β</span>
         </div>
       </header>
@@ -48,7 +48,9 @@ export function App() {
             {snapshot.failure.retryable ? (
               <button
                 type="button"
-                onClick={() => void workspace.dispatch({ type: "failure.retry" })}
+                onClick={() =>
+                  void workspace.dispatch({ type: "failure.retry" })
+                }
               >
                 <RotateCw aria-hidden="true" size={11} />
                 Retry
@@ -57,7 +59,9 @@ export function App() {
             <button
               type="button"
               aria-label="Dismiss error"
-              onClick={() => void workspace.dispatch({ type: "failure.dismiss" })}
+              onClick={() =>
+                void workspace.dispatch({ type: "failure.dismiss" })
+              }
             >
               <X aria-hidden="true" size={13} />
             </button>
@@ -71,25 +75,81 @@ export function App() {
           {snapshot.inspection === null ? (
             <EmptyStage loading={snapshot.operation === "inspect"} />
           ) : (
-            <Suspense
-              fallback={
-                <div className="viewer-loading" role="status">
-                  Loading crystal viewer
-                </div>
-              }
-            >
-              <StructureViewport inspection={snapshot.inspection} />
-            </Suspense>
+            <SafeStructureViewport inspection={snapshot.inspection} />
           )}
           <footer className="stage-footer">
             <span>Scientific decisions by Core</span>
-            <span>Records remain immutable · overrides trigger recomputation</span>
+            <span>
+              Records remain immutable · overrides trigger recomputation
+            </span>
           </footer>
         </section>
         <ReviewPanel />
       </main>
     </div>
   );
+}
+
+interface SafeStructureViewportState {
+  readonly failed: boolean;
+  readonly attempt: number;
+}
+
+class SafeStructureViewport extends Component<
+  { readonly inspection: StructureInspection },
+  SafeStructureViewportState
+> {
+  state: SafeStructureViewportState = { failed: false, attempt: 0 };
+
+  static getDerivedStateFromError(): Partial<SafeStructureViewportState> {
+    return { failed: true };
+  }
+
+  componentDidUpdate(previous: Readonly<{ inspection: StructureInspection }>) {
+    if (
+      previous.inspection.canonical_cif !==
+        this.props.inspection.canonical_cif &&
+      this.state.failed
+    ) {
+      this.setState((state) => ({
+        failed: false,
+        attempt: state.attempt + 1,
+      }));
+    }
+  }
+
+  private readonly retry = () => {
+    this.setState((state) => ({
+      failed: false,
+      attempt: state.attempt + 1,
+    }));
+  };
+
+  render() {
+    if (this.state.failed) {
+      const structure = this.props.inspection.structure;
+      return (
+        <section className="viewport" aria-label="Crystal structure viewer">
+          <div className="viewport__fallback" role="alert">
+            <span>3D preview unavailable</span>
+            <small>
+              {structure.reduced_formula} · {structure.site_count} atomic sites.
+              The parsed structure and recommendation remain available.
+            </small>
+            <button type="button" onClick={this.retry}>
+              Retry 3D preview
+            </button>
+          </div>
+        </section>
+      );
+    }
+    return (
+      <StructureViewport
+        key={this.state.attempt}
+        inspection={this.props.inspection}
+      />
+    );
+  }
 }
 
 function EmptyStage({ loading }: { readonly loading: boolean }) {

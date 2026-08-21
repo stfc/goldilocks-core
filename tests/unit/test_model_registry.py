@@ -73,10 +73,15 @@ def test_packaged_registry_loads_qrf_resources() -> None:
     assert config.metallicity_model.target == "metallicity"
     assert config.model_asset is not None
     assert config.model_asset.id == "models/qrf-kpoints"
+    assert {file.role for file in config.model_asset.files} == {
+        "model",
+        "licence",
+    }
     assert config.metallicity_asset is not None
     assert {file.role for file in config.metallicity_asset.files} == {
         "checkpoint",
         "atom_init",
+        "licence",
     }
     assert all(
         file.checksum is not None and file.size is not None
@@ -118,6 +123,37 @@ def test_environment_selects_registry(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv(MODEL_REGISTRY_ENV, str(registry))
 
     assert load_default_qrf_config().model.name == "environment"
+
+
+def test_model_assets_reject_non_sha256_checksums(tmp_path: Path) -> None:
+    registry = tmp_path / "models.toml"
+    write_registry(registry)
+    with registry.open("a", encoding="utf-8") as output:
+        output.write(
+            """
+
+[defaults.kpoints.asset]
+id = "fixture-model"
+version = "1"
+
+[[defaults.kpoints.asset.files]]
+role = "model"
+path = "model.pkl"
+url = "https://example.invalid/model.pkl"
+checksum = "md5:00000000000000000000000000000000"
+size = 1
+
+[[defaults.kpoints.asset.files]]
+role = "licence"
+path = "MODEL_CARD.md"
+url = "https://example.invalid/MODEL_CARD.md"
+checksum = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+size = 1
+"""
+        )
+
+    with pytest.raises(ValueError, match="checksums must use sha256: model"):
+        load_default_qrf_config(registry)
 
 
 def test_incomplete_registry_fails_at_missing_field(tmp_path: Path) -> None:

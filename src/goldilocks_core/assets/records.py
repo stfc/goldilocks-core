@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -36,10 +37,12 @@ class AssetSpec:
     id: str
     version: str
     files: tuple[AssetFile, ...]
+    preparation_revision: str = "1"
 
     def __post_init__(self) -> None:
         _validate_asset_id(self.id, "asset id")
         _validate_component(self.version, "asset version")
+        _validate_component(self.preparation_revision, "asset preparation revision")
         if not isinstance(self.files, tuple):
             object.__setattr__(self, "files", tuple(self.files))
         if not self.files:
@@ -50,6 +53,27 @@ class AssetSpec:
             raise ValueError("asset file roles must be unique")
         if len(paths) != len(set(paths)):
             raise ValueError("asset file paths must be unique")
+
+    @property
+    def preparation_fingerprint(self) -> str:
+        """Return the deterministic source and preparation identity."""
+        payload = {
+            "id": self.id,
+            "version": self.version,
+            "preparation_revision": self.preparation_revision,
+            "files": [
+                {
+                    "role": file.role,
+                    "path": file.path,
+                    "url": file.url,
+                    "checksum": file.checksum,
+                    "size": file.size,
+                }
+                for file in self.files
+            ],
+        }
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        return hashlib.sha256(encoded).hexdigest()
 
 
 class AssetPreparer(Protocol):

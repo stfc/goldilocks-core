@@ -85,6 +85,7 @@ def test_selects_complete_candidate_matching_every_requirement() -> None:
     assert pseudo.filename == "Si.UPF"
     assert pseudo.filepath == "/pseudo/Si.UPF"
     assert pseudo.functional == "PBEsol"
+    assert pseudo.relativistic == "scalar"
     assert pseudo.ecutwfc_ry == 30.0
     assert pseudo.ecutrho_ry == 120.0
     assert pseudo.provenance.source == "lookup"
@@ -225,6 +226,22 @@ def test_pseudo_type_and_relativistic_treatment_are_required() -> None:
     assert "matches type NC" in wrong_type.warnings[0]
     assert wrong_relativistic.pseudopotentials[0].filename is None
     assert "scalar PBEsol" in wrong_relativistic.warnings[0]
+
+
+def test_sssp_scalar_table_preserves_nonrelativistic_file_treatment() -> None:
+    selection = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(relativistic="scalar"),
+        [make_metadata(provider="sssp", relativistic="non-relativistic")],
+    )
+
+    pseudo = selection.pseudopotentials[0]
+    assert pseudo.filename == "Si.UPF"
+    assert pseudo.relativistic == "non-relativistic"
+    assert pseudo.warnings == (
+        "Selected SSSP pseudopotential for Si declares non-relativistic "
+        "treatment within a scalar table; verify this compatibility.",
+    )
 
 
 def test_frozen_4f_core_warning_survives_selection() -> None:

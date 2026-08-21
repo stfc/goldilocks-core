@@ -115,19 +115,33 @@ def model_asset_specs(path: PathLike | None = None) -> tuple[AssetSpec, ...]:
 def _asset_spec(data: dict[str, Any] | None) -> AssetSpec | None:
     if data is None:
         return None
+    files = tuple(
+        AssetFile(
+            role=file["role"],
+            path=file["path"],
+            url=file["url"],
+            checksum=file.get("checksum"),
+            size=file.get("size"),
+        )
+        for file in data["files"]
+    )
+    invalid_checksums = [
+        file.role
+        for file in files
+        if file.checksum is not None and not file.checksum.startswith("sha256:")
+    ]
+    if invalid_checksums:
+        raise ValueError(
+            f"model asset {data['id']!r} checksums must use sha256: "
+            + ", ".join(invalid_checksums)
+        )
+    if "licence" not in {file.role for file in files}:
+        raise ValueError(f"model asset {data['id']!r} must include licence material")
     return AssetSpec(
         id=data["id"],
         version=str(data["version"]),
-        files=tuple(
-            AssetFile(
-                role=file["role"],
-                path=file["path"],
-                url=file["url"],
-                checksum=file.get("checksum"),
-                size=file.get("size"),
-            )
-            for file in data["files"]
-        ),
+        files=files,
+        preparation_revision=str(data.get("preparation_revision", "1")),
     )
 
 

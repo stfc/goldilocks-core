@@ -3,14 +3,23 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from importlib.metadata import version as package_version
 from pathlib import Path, PurePath
 from typing import Literal
 
 from fastapi import APIRouter, FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, JsonValue, field_validator
 
-from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled
+from goldilocks_core.analysis import DimensionalityClassificationError
+from goldilocks_core.assets import (
+    AssetCorrupt,
+    AssetNotInstalled,
+    AssetSpec,
+    AssetStore,
+)
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
@@ -18,18 +27,24 @@ from goldilocks_core.contracts import (
     Result,
     record_type_id,
 )
+from goldilocks_core.generation import GenerationError
 from goldilocks_core.io.structures import (
     StructureInputError,
     parse_structure_content,
     structure_document,
 )
+from goldilocks_core.ml.model_registry import model_asset_specs
 from goldilocks_core.pseudo.registry import (
     PseudoTable,
-    default_table,
     load_tables,
 )
-from goldilocks_core.runtime import Service
+from goldilocks_core.pseudo.source import (
+    PseudoTableMismatch,
+    is_table_eligible_for_elements,
+)
+from goldilocks_core.runtime import Service, UnknownTask
 from goldilocks_core.server.archive import (
+    RuntimeAssetLicence,
     WorkbenchArchive,
     build_workbench_archive,
 )
@@ -57,6 +72,17 @@ class WorkbenchRequestError(ValueError):
 
 class _Document(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, from_attributes=True)
+
+
+class WorkbenchErrorDetail(_Document):
+    kind: str
+    message: str
+    retryable: bool
+    details: dict[str, JsonValue]
+
+
+class WorkbenchErrorResponse(_Document):
+    error: WorkbenchErrorDetail
 
 
 class StructureSourceRequest(_Document):
@@ -217,6 +243,7 @@ class SelectedPseudoResponse(_Document):
     filename: str
     sha256: str
     functional: str | None
+    relativistic: str | None
     ecutwfc_ry: float | None
     ecutrho_ry: float | None
     provenance: dict[str, JsonValue]
@@ -229,6 +256,50 @@ class PseudoSelectionResponse(_Document):
     warnings: tuple[str, ...]
 
 
+class RecommendationDecisions(_Document):
+    k_grid: tuple[int, int, int]
+    k_shift: tuple[int, int, int]
+    k_mesh_type: str
+    spin_polarized: bool
+    spin_orbit_coupling: bool
+    smearing_type: str | None
+    smearing_width_ry: float | None
+    use_vdw: bool
+    pseudo_table_id: str
+    pseudo_functional: str
+    pseudo_accuracy: Literal["efficiency", "precision"]
+    pseudo_relativistic: str
+
+
+class RuntimeModelResponse(_Document):
+    name: str | None
+    version: str | None
+    model_type: str | None
+    target: str | None
+    feature_set: str | None
+    source: str | None
+    revision: str | None
+
+
+class RuntimeAssetFileResponse(_Document):
+    role: str
+    path: str
+    sha256: str | None
+    size_bytes: int | None
+
+
+class RuntimeAssetResponse(_Document):
+    id: str
+    version: str
+    files: tuple[RuntimeAssetFileResponse, ...]
+
+
+class RuntimeProvenanceResponse(_Document):
+    goldilocks_core_version: str
+    models: tuple[RuntimeModelResponse, ...]
+    model_assets: tuple[RuntimeAssetResponse, ...]
+
+
 class RecommendationResponse(_Document):
     schema_version: int
     review_digest: str
@@ -236,6 +307,8 @@ class RecommendationResponse(_Document):
     canonical_cif: str
     intent: IntentResponse
     hints: HintsResponse
+    decisions: RecommendationDecisions
+    runtime: RuntimeProvenanceResponse
     records: dict[str, JsonValue]
     generated_files: tuple[GeneratedFileResponse, ...]
     selection: PseudoSelectionResponse
@@ -263,6 +336,82 @@ def _table_response(table: PseudoTable) -> PseudoTableResponse:
         elements=table.elements,
         default=table.default,
     )
+
+
+def _runtime_provenance(service: Service) -> RuntimeProvenanceResponse:
+    model_fields = (
+        "name",
+        "version",
+        "model_type",
+        "target",
+        "feature_set",
+        "source",
+        "revision",
+    )
+    models = tuple(
+        RuntimeModelResponse(**{field: model.get(field) for field in model_fields})
+        for model in service.runtime.describe_models()
+    )
+    assets = tuple(
+        RuntimeAssetResponse(
+            id=spec.id,
+            version=spec.version,
+            files=tuple(
+                RuntimeAssetFileResponse(
+                    role=file.role,
+                    path=file.path,
+                    sha256=(
+                        file.checksum.removeprefix("sha256:")
+                        if file.checksum is not None
+                        else None
+                    ),
+                    size_bytes=file.size,
+                )
+                for file in spec.files
+            ),
+        )
+        for spec in model_asset_specs(service.runtime.model_registry_path)
+    )
+    return RuntimeProvenanceResponse(
+        goldilocks_core_version=package_version("goldilocks-core"),
+        models=models,
+        model_assets=assets,
+    )
+
+
+def _archive_licences(
+    service: Service, table: PseudoTable
+) -> tuple[Path, tuple[RuntimeAssetLicence, ...]]:
+    store = service.runtime.asset_store
+    pseudo_licence = _required_asset_file(store, table.asset, "LICENSE.txt")
+    model_licences: list[RuntimeAssetLicence] = []
+    for spec in model_asset_specs(service.runtime.model_registry_path):
+        licence = next(file for file in spec.files if file.role == "licence")
+        model_licences.append(
+            RuntimeAssetLicence(
+                asset_id=spec.id,
+                version=spec.version,
+                source_url=licence.url,
+                path=_required_asset_file(store, spec, licence.path),
+            )
+        )
+    return pseudo_licence, tuple(model_licences)
+
+
+def _required_asset_file(
+    store: AssetStore, spec: AssetSpec, relative_path: str
+) -> Path:
+    try:
+        return store.resolve_spec(spec).path(relative_path)
+    except (AssetCorrupt, AssetNotInstalled, FileNotFoundError, KeyError) as error:
+        raise WorkbenchRequestError(
+            "archive",
+            f"Required licence material for runtime asset {spec.id!r} is unavailable.",
+            kind="assets_unavailable",
+            status_code=503,
+            retryable=True,
+            details={"asset_id": spec.id, "version": spec.version},
+        ) from error
 
 
 def _guided_preset(
@@ -307,9 +456,12 @@ def _selected_table(
         for item in result.selection.pseudopotentials
         if item.provenance.data_source in tables
     }
-    if len(table_ids) == 1:
-        return tables[table_ids.pop()]
-    return default_table(tables)
+    if len(table_ids) != 1:
+        raise WorkbenchRequestError(
+            "recommendation",
+            "Core did not report one pseudopotential table for this result.",
+        )
+    return tables[table_ids.pop()]
 
 
 def _selected_pseudo(item: object) -> SelectedPseudoResponse:
@@ -325,6 +477,7 @@ def _selected_pseudo(item: object) -> SelectedPseudoResponse:
         filename=filename,
         sha256=_sha256_file(Path(filepath)),
         functional=item.functional,
+        relativistic=item.relativistic,
         ecutwfc_ry=item.ecutwfc_ry,
         ecutrho_ry=item.ecutrho_ry,
         provenance=item.provenance.to_dict(),
@@ -402,7 +555,12 @@ def _compute_review(service: Service, request: GuidedRequest) -> _ReviewComputat
             kind="assets_unavailable",
             status_code=503,
         ) from error
-    except ValueError as error:
+    except (
+        DimensionalityClassificationError,
+        GenerationError,
+        PseudoTableMismatch,
+        UnknownTask,
+    ) as error:
         raise WorkbenchRequestError("recommendation", str(error)) from error
     tables = load_tables(service.runtime.pseudo_registry_path)
     table = _selected_table(request, result, tables)
@@ -420,6 +578,21 @@ def _compute_review(service: Service, request: GuidedRequest) -> _ReviewComputat
         canonical_cif=canonical_cif,
         intent=IntentResponse.model_validate(result.intent),
         hints=HintsResponse.model_validate(preset.hints),
+        decisions=RecommendationDecisions(
+            k_grid=result.k_points.grid,
+            k_shift=result.k_points.shift,
+            k_mesh_type=result.k_points.mesh_type,
+            spin_polarized=result.advice.magnetism.spin_polarized,
+            spin_orbit_coupling=result.advice.spin_orbit.enabled,
+            smearing_type=result.advice.smearing.smearing_type,
+            smearing_width_ry=result.advice.smearing.width_ry,
+            use_vdw=result.advice.vdw.use_vdw,
+            pseudo_table_id=table.id,
+            pseudo_functional=table.functional,
+            pseudo_accuracy=table.accuracy,
+            pseudo_relativistic=table.relativistic,
+        ),
+        runtime=_runtime_provenance(service),
         records=_browser_records(result, selection),
         generated_files=generated_files,
         selection=selection,
@@ -456,10 +629,41 @@ def install_workbench_routes(
             },
         )
 
+    @app.exception_handler(RequestValidationError)
+    async def workbench_validation_error_handler(
+        request: Request, error: RequestValidationError
+    ) -> JSONResponse:
+        if not request.url.path.startswith("/api/workbench/"):
+            return await request_validation_exception_handler(request, error)
+        operation = request.url.path.rsplit("/", 1)[-1]
+        details = {
+            "operation": operation,
+            "validation_errors": [
+                {
+                    "path": ".".join(str(part) for part in item["loc"]),
+                    "message": item["msg"],
+                    "type": item["type"],
+                }
+                for item in error.errors()
+            ],
+        }
+        content = WorkbenchErrorResponse(
+            error=WorkbenchErrorDetail(
+                kind="invalid_request",
+                message="The request does not match the Workbench contract.",
+                retryable=False,
+                details=details,
+            )
+        )
+        return JSONResponse(status_code=422, content=content.model_dump(mode="json"))
+
     @router.post(
         "/structure",
         operation_id="inspect_workbench_structure",
         response_model=StructureInspectionResponse,
+        responses={
+            422: {"model": WorkbenchErrorResponse},
+        },
     )
     def inspect_structure(
         request: StructureInspectionRequest,
@@ -478,6 +682,7 @@ def install_workbench_routes(
             source_content=source.content,
         )
         tables = load_tables(service.runtime.pseudo_registry_path)
+        elements = {element.symbol for element in structure.composition.elements}
         return StructureInspectionResponse(
             structure=StructureResponse.model_validate(document),
             canonical_cif=structure.to(fmt="cif"),
@@ -488,6 +693,7 @@ def install_workbench_routes(
             pseudo_tables=tuple(
                 _table_response(table)
                 for table in sorted(tables.values(), key=lambda item: item.id)
+                if is_table_eligible_for_elements(table, elements)
             ),
         )
 
@@ -495,6 +701,10 @@ def install_workbench_routes(
         "/recommendation",
         operation_id="review_workbench_recommendation",
         response_model=RecommendationResponse,
+        responses={
+            422: {"model": WorkbenchErrorResponse},
+            503: {"model": WorkbenchErrorResponse},
+        },
     )
     def recommend(request: GuidedRequest) -> RecommendationResponse:
         with capacity.acquire():
@@ -504,7 +714,12 @@ def install_workbench_routes(
         "/archive",
         operation_id="archive_workbench_recommendation",
         response_class=Response,
-        responses={200: {"content": {"application/zip": {}}}},
+        responses={
+            200: {"content": {"application/zip": {}}},
+            409: {"model": WorkbenchErrorResponse},
+            422: {"model": WorkbenchErrorResponse},
+            503: {"model": WorkbenchErrorResponse},
+        },
     )
     def archive(request: ArchiveRequest) -> Response:
         with capacity.acquire():
@@ -518,10 +733,8 @@ def install_workbench_routes(
                 status_code=409,
                 details={"current_review_digest": current_digest},
             )
+        licence_path, runtime_licences = _archive_licences(service, computation.table)
         try:
-            installed = service.runtime.asset_store.resolve(
-                computation.table.asset.id, computation.table.asset.version
-            )
             content = build_workbench_archive(
                 WorkbenchArchive(
                     source_name=request.source.name,
@@ -530,16 +743,18 @@ def install_workbench_routes(
                     review=computation.response.model_dump(mode="json"),
                     result=computation.result,
                     table=computation.table,
-                    licence_path=installed.root / "LICENSE.txt",
+                    licence_path=licence_path,
+                    runtime_licences=runtime_licences,
                 )
             )
-        except FileNotFoundError as error:
+        except (FileNotFoundError, KeyError) as error:
             raise WorkbenchRequestError(
                 "archive",
-                f"Required archive material is unavailable: {error}",
+                "Required runtime licence material became unavailable.",
                 kind="assets_unavailable",
                 status_code=503,
                 retryable=True,
+                details={"asset_role": "licence"},
             ) from error
         filename = f"goldilocks-{current_digest[:12]}.zip"
         return Response(

@@ -114,13 +114,68 @@ describe("HttpWorkbenchClient", () => {
     );
     const client = new HttpWorkbenchClient(fetcher);
 
-    const failure = await client.inspect(source).catch((error: unknown) => error);
+    const failure = await client
+      .inspect(source)
+      .catch((error: unknown) => error);
 
     expect(failure).toBeInstanceOf(WorkbenchFailure);
     expect(failure).toMatchObject({
       kind: "server_busy",
       retryable: true,
       details: { retry_after_seconds: 0.5 },
+      status: 503,
+      rawResponse: {
+        error: {
+          kind: "server_busy",
+          message: "The computation slot is busy; retry this request.",
+          retryable: true,
+          details: { retry_after_seconds: 0.5 },
+        },
+      },
+    });
+  });
+
+  it("preserves an unrecognized backend failure kind, status, and payload", async () => {
+    const payload = {
+      error: {
+        kind: "capacity_policy_changed",
+        message: "The capacity policy changed.",
+        retryable: false,
+        details: { policy: "single-slot" },
+      },
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify(payload), {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const client = new HttpWorkbenchClient(fetcher);
+
+    await expect(client.inspect(source)).rejects.toMatchObject({
+      kind: "capacity_policy_changed",
+      message: "The capacity policy changed.",
+      retryable: false,
+      details: { policy: "single-slot" },
+      status: 409,
+      rawResponse: payload,
+    });
+  });
+
+  it("preserves a non-JSON error response body", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response("upstream gateway failed", {
+        status: 502,
+        headers: { "Content-Type": "text/plain" },
+      }),
+    );
+    const client = new HttpWorkbenchClient(fetcher);
+
+    await expect(client.inspect(source)).rejects.toMatchObject({
+      kind: "http_error",
+      retryable: true,
+      status: 502,
+      rawResponse: "upstream gateway failed",
     });
   });
 

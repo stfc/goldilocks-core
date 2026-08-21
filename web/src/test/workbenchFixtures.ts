@@ -77,6 +77,48 @@ export const recommendation: Recommendation = {
   canonical_cif: inspection.canonical_cif,
   intent: inspection.defaults.intent,
   hints: { k_grid: [3, 3, 3] },
+  decisions: {
+    k_grid: [3, 3, 3],
+    k_shift: [0, 0, 0],
+    k_mesh_type: "monkhorst-pack",
+    spin_polarized: false,
+    spin_orbit_coupling: false,
+    smearing_type: "fixed",
+    smearing_width_ry: null,
+    use_vdw: false,
+    pseudo_table_id: pseudoTable.id,
+    pseudo_functional: pseudoTable.functional,
+    pseudo_accuracy: pseudoTable.accuracy,
+    pseudo_relativistic: pseudoTable.relativistic,
+  },
+  runtime: {
+    goldilocks_core_version: "0.0.0-test",
+    models: [
+      {
+        name: "fixture-model",
+        version: "1",
+        model_type: "fixture",
+        target: "fixture-target",
+        feature_set: "fixture-features",
+        source: "local",
+        revision: "fixture-revision",
+      },
+    ],
+    model_assets: [
+      {
+        id: "fixture-model",
+        version: "1",
+        files: [
+          {
+            role: "model",
+            path: "model/fixture.pkl",
+            sha256: "e".repeat(64),
+            size_bytes: 1024,
+          },
+        ],
+      },
+    ],
+  },
   records: {
     analysis: { formula: "Si1" },
     advice: { smearing: { smearing_type: "fixed" } },
@@ -97,6 +139,7 @@ export const recommendation: Recommendation = {
         filename: "Si.upf",
         sha256: "d".repeat(64),
         functional: "PBEsol",
+        relativistic: "scalar",
         ecutwfc_ry: 30,
         ecutrho_ry: 120,
         provenance: { source: "lookup" },

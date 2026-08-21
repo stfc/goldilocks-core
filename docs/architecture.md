@@ -40,6 +40,9 @@ resolution and bundle publication touch the filesystem.
 | `bundle.py` | Generated files and manifest output. |
 | `server/request.py` | Canonical JSON request deserialization shared by transports. |
 | `server/http.py`, `server/mcp.py` | Thin optional HTTP and MCP adapters over one `Service`. |
+| `server/workbench.py`, `server/archive.py`, `server/capacity.py` | Typed browser API, reproducible archive assembly, and bounded single-computation admission. |
+| `web/` | React structure workspace, generated OpenAPI types, and browser-owned transient UI state. |
+| `Dockerfile` | One production image containing matching Core, Workbench, and pinned runtime assets. |
 
 Stages communicate through dataclasses. They do not need to inherit from a Core
 class, and callers can invoke any stage function directly.
@@ -68,6 +71,31 @@ with Service() as core:
 
 `CalculationIntent.task` describes the calculation. The built-in runtime
 currently accepts only `scf_single_point`.
+
+## Browser Workbench
+
+`server/workbench.py` adapts browser requests to `PresetRequest` and returns
+path-free documents derived from Core records. Its OpenAPI schema generates the
+TypeScript transport types in `web/src/api/schema.d.ts`; the browser does not
+reimplement scientific defaults or selection rules.
+
+One browser workspace owns one source, draft, review, and archive in memory.
+Operator overrides change `Intent` or `Hints` and mark prior outputs stale.
+Core selects the pseudopotential table unless the operator explicitly selects
+one. Archive requests carry the reviewed digest; the server reruns Core and
+rejects a digest mismatch before packaging trusted generated inputs, selected
+UPFs, checksums, pseudopotential notices, model cards, citations, and runtime
+provenance.
+
+`ComputationCapacity` admits one Core computation per container. One request
+may wait for the configured bound; later requests receive a typed retryable
+`server_busy` response. `/health` stays responsive, while `/ready` verifies the
+complete Workbench asset profile from the runtime's configured model and
+pseudopotential registries once and caches the result.
+
+The production container is stateless and anonymous. Persistence,
+collaboration, authentication, public-internet controls, and completed-run
+execution remain outside this repository.
 
 ## Flexible Python use
 
@@ -149,9 +177,10 @@ Generate maps completed choices to calculation syntax. Optional bundle
 publication writes files but does not run calculations or copy
 pseudopotential libraries.
 
-Runner/AiiDA workflows, schedulers, auth, frontend state, and completed-output
-analysis are outside this package. HTTP and MCP are optional thin transports;
-they do not add queues, persistence, sessions, or pod management.
+Runner/AiiDA workflows, schedulers, authentication, and completed-output
+analysis are outside this repository. Browser state belongs in `web/` and does
+not enter Core records. HTTP and MCP do not add queues, persistence, sessions,
+or pod management.
 
 
 ## Engineering invariants

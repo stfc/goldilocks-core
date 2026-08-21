@@ -9,6 +9,7 @@ interval_confidence = 0.90
 [defaults.kpoints.asset]
 id = "models/qrf-kpoints"
 version = "QRF95"
+preparation_revision = "2"
 
 [[defaults.kpoints.asset.files]]
 role = "model"
@@ -16,6 +17,13 @@ path = "QRF95.pkl"
 url = "https://huggingface.co/STFC-SCD/kpoints-goldilocks-QRF/resolve/75588288f755522e47984b5a31b82824860d6943/QRF95.pkl"
 checksum = "sha256:2647b976a57637cc34e4874f3b0ff3436a7c032761b774fdd9e56e69fddaffcc"
 size = 185695399
+
+[[defaults.kpoints.asset.files]]
+role = "licence"
+path = "MODEL_CARD.md"
+url = "https://huggingface.co/STFC-SCD/kpoints-goldilocks-QRF/raw/75588288f755522e47984b5a31b82824860d6943/README.md"
+checksum = "sha256:8b44e0fb795e48a49b15ac3ece239053117635eec655c5b5f581b40303e97c10"
+size = 643
 
 [defaults.kpoints.calibration]
 correction = -0.0016
@@ -51,6 +59,7 @@ atom_init_file = "atom_init.json"
 [defaults.kpoints.metallicity.asset]
 id = "models/metallicity-cgcnn"
 version = "1"
+preparation_revision = "2"
 
 [[defaults.kpoints.metallicity.asset.files]]
 role = "checkpoint"
@@ -65,3 +74,10 @@ path = "atom_init.json"
 url = "https://huggingface.co/JunwenYin/metallicity-goldilocks-CGCNN/resolve/a95dc7d8902c8088f709e13c602864167838cc17/atom_init.json"
 checksum = "sha256:cb90bd2257dbf8cfc4e6b2b6d4348d4616e8e9680f1339b1461137032e0f1894"
 size = 28392
+
+[[defaults.kpoints.metallicity.asset.files]]
+role = "licence"
+path = "MODEL_CARD.md"
+url = "https://huggingface.co/JunwenYin/metallicity-goldilocks-CGCNN/raw/a95dc7d8902c8088f709e13c602864167838cc17/README.md"
+checksum = "sha256:835f3f7d88a86e05a882c6a6b6333da6ab874776385f85473798769d767c2fca"
+size = 27

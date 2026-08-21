@@ -18,7 +18,9 @@ def test_normalize_functional_rejects_empty_string() -> None:
     [
         ("SLA PW NOGX NOGC", "LDA"),
         ("SLA PW PBE PBE PBE", "PBE"),
+        ("SLA PW PBX PBC PBE", "PBE"),
         ("SLA PW PSX PSC", "PBEsol"),
+        ("SLA PW PSX PSC PBEsol", "PBEsol"),
     ],
 )
 def test_normalize_functional_recognizes_upstream_component_labels(

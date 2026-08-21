@@ -1,0 +1,44 @@
+import { createViewer, type GLViewer } from "3dmol";
+
+export interface StructureViewer {
+  show(canonicalCif: string): void;
+  dispose(): void;
+}
+
+export type StructureViewerFactory = (element: HTMLElement) => StructureViewer;
+
+export const attachStructureViewer: StructureViewerFactory = (element) => {
+  const viewer: GLViewer = createViewer(element, {
+    antialias: true,
+    backgroundColor: "#111a1f",
+  });
+  const observer = new ResizeObserver(() => {
+    viewer.resize();
+    viewer.render();
+  });
+  observer.observe(element);
+
+  return {
+    show(canonicalCif): void {
+      viewer.clear();
+      const model = viewer.addModel(canonicalCif, "cif");
+      viewer.setStyle(
+        {},
+        {
+          sphere: { scale: 0.3, colorscheme: "Jmol" },
+          stick: { radius: 0.12, colorscheme: "Jmol" },
+        },
+      );
+      viewer.addUnitCell(model, {
+        box: { color: "#d7aa4a", linewidth: 1.5 },
+      });
+      viewer.zoomTo();
+      viewer.render();
+    },
+    dispose(): void {
+      observer.disconnect();
+      viewer.clear();
+      element.replaceChildren();
+    },
+  };
+};

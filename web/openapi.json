@@ -1,0 +1,1350 @@
+{
+  "components": {
+    "schemas": {
+      "ArchiveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "hints": {
+            "$ref": "#/components/schemas/HintsResponse",
+            "default": {}
+          },
+          "intent": {
+            "$ref": "#/components/schemas/IntentResponse",
+            "default": {
+              "code": "quantum_espresso",
+              "functional": "PBEsol",
+              "pseudo_accuracy": "efficiency",
+              "task": "scf_single_point"
+            }
+          },
+          "pseudo_table_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pseudo Table Id"
+          },
+          "review_digest": {
+            "title": "Review Digest",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/StructureSourceRequest"
+          }
+        },
+        "required": [
+          "source",
+          "review_digest"
+        ],
+        "title": "ArchiveRequest",
+        "type": "object"
+      },
+      "CalculationDefaults": {
+        "additionalProperties": false,
+        "properties": {
+          "hints": {
+            "$ref": "#/components/schemas/HintsResponse"
+          },
+          "intent": {
+            "$ref": "#/components/schemas/IntentResponse"
+          }
+        },
+        "required": [
+          "intent",
+          "hints"
+        ],
+        "title": "CalculationDefaults",
+        "type": "object"
+      },
+      "GeneratedFileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "role",
+          "content",
+          "sha256"
+        ],
+        "title": "GeneratedFileResponse",
+        "type": "object"
+      },
+      "GuidedRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "hints": {
+            "$ref": "#/components/schemas/HintsResponse",
+            "default": {}
+          },
+          "intent": {
+            "$ref": "#/components/schemas/IntentResponse",
+            "default": {
+              "code": "quantum_espresso",
+              "functional": "PBEsol",
+              "pseudo_accuracy": "efficiency",
+              "task": "scf_single_point"
+            }
+          },
+          "pseudo_table_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pseudo Table Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/StructureSourceRequest"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "GuidedRequest",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HintsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "conv_thr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conv Thr"
+          },
+          "electron_maxstep": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Electron Maxstep"
+          },
+          "k_grid": {
+            "anyOf": [
+              {
+                "maxItems": 3,
+                "minItems": 3,
+                "prefixItems": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "K Grid"
+          },
+          "k_spacing": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "K Spacing"
+          },
+          "mixing_beta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mixing Beta"
+          },
+          "pseudo_accuracy": {
+            "anyOf": [
+              {
+                "enum": [
+                  "efficiency",
+                  "precision"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pseudo Accuracy"
+          },
+          "pseudo_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pseudo Type"
+          },
+          "relativistic_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relativistic Mode"
+          },
+          "smearing_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smearing Type"
+          },
+          "smearing_width_ry": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smearing Width Ry"
+          },
+          "spin_orbit_coupling": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spin Orbit Coupling"
+          },
+          "spin_polarized": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spin Polarized"
+          },
+          "use_vdw": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Vdw"
+          },
+          "vdw_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vdw Method"
+          }
+        },
+        "title": "HintsResponse",
+        "type": "object"
+      },
+      "IntentResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "default": "quantum_espresso",
+            "title": "Code",
+            "type": "string"
+          },
+          "functional": {
+            "default": "PBEsol",
+            "title": "Functional",
+            "type": "string"
+          },
+          "pseudo_accuracy": {
+            "default": "efficiency",
+            "enum": [
+              "efficiency",
+              "precision"
+            ],
+            "title": "Pseudo Accuracy",
+            "type": "string"
+          },
+          "task": {
+            "default": "scf_single_point",
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "title": "IntentResponse",
+        "type": "object"
+      },
+      "JsonValue": {},
+      "LatticeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "angles_degrees": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Angles Degrees",
+            "type": "array"
+          },
+          "lengths_angstrom": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Lengths Angstrom",
+            "type": "array"
+          },
+          "vectors_angstrom": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "maxItems": 3,
+                "minItems": 3,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "maxItems": 3,
+                "minItems": 3,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "maxItems": 3,
+                "minItems": 3,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              }
+            ],
+            "title": "Vectors Angstrom",
+            "type": "array"
+          },
+          "volume_angstrom3": {
+            "title": "Volume Angstrom3",
+            "type": "number"
+          }
+        },
+        "required": [
+          "vectors_angstrom",
+          "lengths_angstrom",
+          "angles_degrees",
+          "volume_angstrom3"
+        ],
+        "title": "LatticeResponse",
+        "type": "object"
+      },
+      "PseudoSelectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/SelectedPseudoResponse"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "table": {
+            "$ref": "#/components/schemas/PseudoTableResponse"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "table",
+          "files",
+          "warnings"
+        ],
+        "title": "PseudoSelectionResponse",
+        "type": "object"
+      },
+      "PseudoTableResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "accuracy": {
+            "enum": [
+              "efficiency",
+              "precision"
+            ],
+            "title": "Accuracy",
+            "type": "string"
+          },
+          "citation": {
+            "title": "Citation",
+            "type": "string"
+          },
+          "default": {
+            "title": "Default",
+            "type": "boolean"
+          },
+          "elements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Elements",
+            "type": "array"
+          },
+          "functional": {
+            "title": "Functional",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "licence": {
+            "title": "Licence",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "relativistic": {
+            "title": "Relativistic",
+            "type": "string"
+          },
+          "upstream_table": {
+            "title": "Upstream Table",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "provider",
+          "upstream_table",
+          "functional",
+          "accuracy",
+          "relativistic",
+          "licence",
+          "citation",
+          "elements",
+          "default"
+        ],
+        "title": "PseudoTableResponse",
+        "type": "object"
+      },
+      "RecommendationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "canonical_cif": {
+            "title": "Canonical Cif",
+            "type": "string"
+          },
+          "generated_files": {
+            "items": {
+              "$ref": "#/components/schemas/GeneratedFileResponse"
+            },
+            "title": "Generated Files",
+            "type": "array"
+          },
+          "hints": {
+            "$ref": "#/components/schemas/HintsResponse"
+          },
+          "intent": {
+            "$ref": "#/components/schemas/IntentResponse"
+          },
+          "records": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Records",
+            "type": "object"
+          },
+          "review_digest": {
+            "title": "Review Digest",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "selection": {
+            "$ref": "#/components/schemas/PseudoSelectionResponse"
+          },
+          "structure": {
+            "$ref": "#/components/schemas/StructureResponse"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schema_version",
+          "review_digest",
+          "structure",
+          "canonical_cif",
+          "intent",
+          "hints",
+          "records",
+          "generated_files",
+          "selection",
+          "warnings"
+        ],
+        "title": "RecommendationResponse",
+        "type": "object"
+      },
+      "SelectedPseudoResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ecutrho_ry": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ecutrho Ry"
+          },
+          "ecutwfc_ry": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ecutwfc Ry"
+          },
+          "element": {
+            "title": "Element",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "functional": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Functional"
+          },
+          "provenance": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Provenance",
+            "type": "object"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "element",
+          "filename",
+          "sha256",
+          "functional",
+          "ecutwfc_ry",
+          "ecutrho_ry",
+          "provenance",
+          "warnings"
+        ],
+        "title": "SelectedPseudoResponse",
+        "type": "object"
+      },
+      "SiteDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "cartesian_coordinates_angstrom": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Cartesian Coordinates Angstrom",
+            "type": "array"
+          },
+          "fractional_coordinates": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Fractional Coordinates",
+            "type": "array"
+          },
+          "species": {
+            "items": {
+              "$ref": "#/components/schemas/SpeciesDocument"
+            },
+            "title": "Species",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fractional_coordinates",
+          "cartesian_coordinates_angstrom",
+          "species"
+        ],
+        "title": "SiteDocument",
+        "type": "object"
+      },
+      "SourceDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "format",
+          "sha256",
+          "size_bytes"
+        ],
+        "title": "SourceDocument",
+        "type": "object"
+      },
+      "SpeciesDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "occupancy": {
+            "title": "Occupancy",
+            "type": "number"
+          },
+          "oxidation_state": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oxidation State"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "label",
+          "occupancy"
+        ],
+        "title": "SpeciesDocument",
+        "type": "object"
+      },
+      "StructureInspectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/StructureSourceRequest"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "StructureInspectionRequest",
+        "type": "object"
+      },
+      "StructureInspectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "canonical_cif": {
+            "title": "Canonical Cif",
+            "type": "string"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/CalculationDefaults"
+          },
+          "pseudo_tables": {
+            "items": {
+              "$ref": "#/components/schemas/PseudoTableResponse"
+            },
+            "title": "Pseudo Tables",
+            "type": "array"
+          },
+          "structure": {
+            "$ref": "#/components/schemas/StructureResponse"
+          }
+        },
+        "required": [
+          "structure",
+          "canonical_cif",
+          "defaults",
+          "pseudo_tables"
+        ],
+        "title": "StructureInspectionResponse",
+        "type": "object"
+      },
+      "StructureResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "formula": {
+            "title": "Formula",
+            "type": "string"
+          },
+          "lattice": {
+            "$ref": "#/components/schemas/LatticeResponse"
+          },
+          "periodicity": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "boolean"
+              }
+            ],
+            "title": "Periodicity",
+            "type": "array"
+          },
+          "reduced_formula": {
+            "title": "Reduced Formula",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "site_count": {
+            "title": "Site Count",
+            "type": "integer"
+          },
+          "sites": {
+            "items": {
+              "$ref": "#/components/schemas/SiteDocument"
+            },
+            "title": "Sites",
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceDocument"
+          }
+        },
+        "required": [
+          "schema_version",
+          "source",
+          "formula",
+          "reduced_formula",
+          "site_count",
+          "lattice",
+          "periodicity",
+          "sites"
+        ],
+        "title": "StructureResponse",
+        "type": "object"
+      },
+      "StructureSourceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cif",
+                  "poscar"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "content"
+        ],
+        "title": "StructureSourceRequest",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "goldilocks-core",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/workbench/archive": {
+      "post": {
+        "operationId": "archive_workbench_recommendation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive",
+        "tags": [
+          "workbench"
+        ]
+      }
+    },
+    "/api/workbench/recommendation": {
+      "post": {
+        "operationId": "review_workbench_recommendation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuidedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recommend",
+        "tags": [
+          "workbench"
+        ]
+      }
+    },
+    "/api/workbench/structure": {
+      "post": {
+        "operationId": "inspect_workbench_structure",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StructureInspectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructureInspectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Inspect Structure",
+        "tags": [
+          "workbench"
+        ]
+      }
+    },
+    "/codes": {
+      "get": {
+        "operationId": "codes_codes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Codes Codes Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Codes"
+      }
+    },
+    "/compute": {
+      "post": {
+        "operationId": "compute_compute_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Compute Compute Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compute"
+      }
+    },
+    "/generate": {
+      "post": {
+        "operationId": "generate_generate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Generate Generate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate"
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/models": {
+      "get": {
+        "operationId": "models_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Models Models Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Models"
+      }
+    },
+    "/ready": {
+      "get": {
+        "operationId": "ready_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Ready Ready Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ready"
+      }
+    },
+    "/recommend": {
+      "post": {
+        "operationId": "recommend_recommend_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Recommend Recommend Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recommend"
+      }
+    },
+    "/tasks": {
+      "get": {
+        "operationId": "tasks_tasks_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Tasks Tasks Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Tasks"
+      }
+    }
+  }
+}

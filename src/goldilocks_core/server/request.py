@@ -32,6 +32,7 @@ from goldilocks_core.contracts import (
     QueryRequest,
     resolve_output_types,
 )
+from goldilocks_core.io.structures import StructureInputError, parse_structure_content
 
 __all__ = ["RequestError", "from_dict"]
 
@@ -143,15 +144,11 @@ def _parse_structure(value: Any) -> Structure:
 
 
 def _parse_structure_text(content: str, fmt: str | None) -> Structure:
-    """Parse inline CIF or POSCAR content, trying the declared format first."""
-    formats = (fmt,) if fmt is not None else ("cif", "poscar")
-    last_error: Exception | None = None
-    for structure_format in formats:
-        try:
-            return Structure.from_str(content, fmt=structure_format)
-        except (IndexError, KeyError, TypeError, ValueError) as error:
-            last_error = error
-    raise RequestError(f"Could not parse inline structure content: {last_error}")
+    try:
+        structure, _ = parse_structure_content(content, fmt)
+    except StructureInputError as error:
+        raise RequestError(str(error)) from error
+    return structure
 
 
 def _parse_intent(value: Any) -> CalculationIntent:

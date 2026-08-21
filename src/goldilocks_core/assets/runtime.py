@@ -8,6 +8,8 @@ from goldilocks_core.ml.model_registry import model_asset_specs
 from goldilocks_core.pseudo.install import table_installations
 from goldilocks_core.pseudo.registry import load_tables
 
+WORKBENCH_PROFILE = "workbench"
+
 
 def catalogue() -> dict[str, AssetInstallation]:
     installations = (
@@ -29,16 +31,9 @@ def references(
     entries = dict(entries or catalogue())
     if name in entries:
         return (entries[name],)
-    table_reference = _table_reference(name, entries)
-    if table_reference is not None:
-        return (table_reference,)
-    try:
-        selected = profile(name)
-    except KeyError as error:
-        raise KeyError(
-            f"unknown asset {name!r}; use an asset id, a registry table id, "
-            "or a shipped profile name"
-        ) from error
+    if name == WORKBENCH_PROFILE:
+        return tuple(entries[asset_id] for asset_id in sorted(entries))
+    selected = profile(name)
     resolved: list[AssetInstallation] = []
     for reference in selected.assets:
         registration = entries.get(reference.id)

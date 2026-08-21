@@ -6,9 +6,9 @@ import sys
 from pathlib import Path
 
 from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled, AssetStore
-from goldilocks_core.cli.assets import install as install_assets
-from goldilocks_core.cli.assets import statuses as asset_statuses
-from goldilocks_core.cli.assets import verify as verify_assets
+from goldilocks_core.assets.runtime import install as install_assets
+from goldilocks_core.assets.runtime import statuses as asset_statuses
+from goldilocks_core.assets.runtime import verify as verify_assets
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
@@ -55,6 +55,22 @@ def build_parser() -> argparse.ArgumentParser:
     http = transports.add_parser("http", help="Run the HTTP transport.")
     http.add_argument("--host", default="127.0.0.1")
     http.add_argument("--port", type=int, default=8000)
+    http.add_argument(
+        "--static-root",
+        type=Path,
+        help=(
+            "Directory containing the built Workbench. "
+            "Defaults to GOLDILOCKS_WORKBENCH_STATIC_ROOT."
+        ),
+    )
+    http.add_argument(
+        "--compute-wait-seconds",
+        type=float,
+        help=(
+            "Maximum wait for the container computation slot. "
+            "Defaults to GOLDILOCKS_COMPUTE_WAIT_SECONDS or 1 second."
+        ),
+    )
     transports.add_parser("mcp", help="Run the MCP stdio transport.")
 
     examples = subparsers.add_parser(
@@ -305,7 +321,12 @@ def _serve(args: argparse.Namespace) -> None:
     if args.transport == "http":
         from goldilocks_core.server.http import serve
 
-        serve(host=args.host, port=args.port)
+        serve(
+            host=args.host,
+            port=args.port,
+            static_root=args.static_root,
+            compute_wait_seconds=args.compute_wait_seconds,
+        )
         return
 
     from goldilocks_core.server.mcp import serve

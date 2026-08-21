@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from goldilocks_core.analysis import DimensionalityClassificationError
@@ -11,6 +13,12 @@ from goldilocks_core.io.structures import StructureInputError
 from goldilocks_core.pseudo.source import PseudoTableMismatch
 from goldilocks_core.runtime import UnknownTask
 from goldilocks_core.runtime.service import Service
+from goldilocks_core.server.capacity import (
+    ComputationCapacity,
+    ServerBusy,
+    configured_compute_wait_seconds,
+)
+from goldilocks_core.server.readiness import AssetReadiness
 from goldilocks_core.server.request import RequestError, from_dict
 
 __all__ = ["create_app", "serve"]
@@ -19,17 +27,44 @@ _MISSING_HTTP_EXTRA = (
     "The HTTP transport requires goldilocks-core[http]. "
     "Install it with `uv sync --extra http`."
 )
+WORKBENCH_STATIC_ROOT_ENV = "GOLDILOCKS_WORKBENCH_STATIC_ROOT"
 
 
-def create_app(service: Service | None = None) -> Any:
+def _workbench_static_root(value: str | Path | None) -> Path | None:
+    configured = (
+        value if value is not None else os.environ.get(WORKBENCH_STATIC_ROOT_ENV)
+    )
+    if configured is None:
+        return None
+    root = Path(configured).expanduser().resolve()
+    if not root.is_dir():
+        raise FileNotFoundError(f"Workbench static root is not a directory: {root}")
+    if not (root / "index.html").is_file():
+        raise FileNotFoundError(f"Workbench static root has no index.html: {root}")
+    return root
+
+
+def create_app(
+    service: Service | None = None,
+    *,
+    compute_wait_seconds: float | None = None,
+    static_root: str | Path | None = None,
+) -> Any:
     try:
         from fastapi import FastAPI, Request
         from fastapi.responses import JSONResponse
+        from fastapi.staticfiles import StaticFiles
     except ImportError as error:
         raise ImportError(_MISSING_HTTP_EXTRA) from error
+    from goldilocks_core.server.workbench import install_workbench_routes
 
     owns_service = service is None
     state = service if service is not None else Service()
+    capacity = ComputationCapacity(
+        configured_compute_wait_seconds(compute_wait_seconds)
+    )
+    readiness = AssetReadiness(state.runtime.asset_store)
+    workbench_static_root = _workbench_static_root(static_root)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -42,6 +77,24 @@ def create_app(service: Service | None = None) -> Any:
 
     app = FastAPI(title="goldilocks-core", lifespan=lifespan)
     app.state.goldilocks = state
+    app.state.compute_capacity = capacity
+    app.state.asset_readiness = readiness
+    install_workbench_routes(app, state, capacity)
+
+    @app.exception_handler(ServerBusy)
+    async def server_busy_handler(request: Request, error: ServerBusy) -> JSONResponse:
+        del request
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": {
+                    "kind": "server_busy",
+                    "message": str(error),
+                    "retryable": True,
+                    "details": {"retry_after_seconds": error.retry_after_seconds},
+                }
+            },
+        )
 
     @app.exception_handler(RequestError)
     async def request_error_handler(
@@ -165,6 +218,28 @@ def create_app(service: Service | None = None) -> Any:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/ready")
+    def ready() -> Any:
+        report = readiness.check()
+        if report.ready:
+            return {"status": "ready", "asset_count": report.asset_count}
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": {
+                    "kind": "assets_unavailable",
+                    "message": report.message,
+                    "retryable": False,
+                    "details": {
+                        "asset_id": report.asset_id,
+                        "version": report.version,
+                        "state": report.state,
+                        "required_asset_count": report.asset_count,
+                    },
+                }
+            },
+        )
+
     @app.get("/tasks")
     def tasks() -> dict[str, Any]:
         return {"tasks": [task.to_dict() for task in state.describe_tasks()]}
@@ -179,15 +254,25 @@ def create_app(service: Service | None = None) -> Any:
 
     @app.post("/recommend")
     def recommend(body: dict[str, Any]) -> dict[str, Any]:
-        return _execute("recommend", body, state)
+        with capacity.acquire():
+            return _execute("recommend", body, state)
 
     @app.post("/generate")
     def generate(body: dict[str, Any]) -> dict[str, Any]:
-        return _execute("generate", body, state)
+        with capacity.acquire():
+            return _execute("generate", body, state)
 
     @app.post("/compute")
     def compute(body: dict[str, Any]) -> dict[str, Any]:
-        return _execute("compute", body, state)
+        with capacity.acquire():
+            return _execute("compute", body, state)
+
+    if workbench_static_root is not None:
+        app.mount(
+            "/",
+            StaticFiles(directory=workbench_static_root, html=True),
+            name="workbench-static",
+        )
 
     return app
 
@@ -213,9 +298,22 @@ def _execute(endpoint: str, body: dict[str, Any], service: Service) -> dict[str,
     return service.run_preset(request).to_dict()
 
 
-def serve(*, host: str = "127.0.0.1", port: int = 8000) -> None:
+def serve(
+    *,
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    compute_wait_seconds: float | None = None,
+    static_root: str | Path | None = None,
+) -> None:
     try:
         import uvicorn
     except ImportError as error:
         raise ImportError(_MISSING_HTTP_EXTRA) from error
-    uvicorn.run(create_app(), host=host, port=port)
+    uvicorn.run(
+        create_app(
+            compute_wait_seconds=compute_wait_seconds,
+            static_root=static_root,
+        ),
+        host=host,
+        port=port,
+    )

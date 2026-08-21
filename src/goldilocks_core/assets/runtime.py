@@ -7,6 +7,8 @@ from goldilocks_core.assets.profiles import profile
 from goldilocks_core.ml.model_registry import model_asset_specs
 from goldilocks_core.pseudo.install import table_installations
 
+WORKBENCH_PROFILE = "workbench"
+
 
 def catalogue() -> dict[str, AssetInstallation]:
     installations = (
@@ -28,6 +30,8 @@ def references(
     entries = dict(entries or catalogue())
     if name in entries:
         return (entries[name],)
+    if name == WORKBENCH_PROFILE:
+        return tuple(entries[asset_id] for asset_id in sorted(entries))
     selected = profile(name)
     resolved: list[AssetInstallation] = []
     for reference in selected.assets:

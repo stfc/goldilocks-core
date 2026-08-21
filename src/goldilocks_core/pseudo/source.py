@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from pymatgen.core import Structure
+from pymatgen.core import Element, Structure
 
 from goldilocks_core.assets import AssetStore
 from goldilocks_core.contracts import (
@@ -14,7 +14,7 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.pseudo.installed import load_installed_table
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
-from goldilocks_core.pseudo.registry import PseudoTable, default_table, load_tables
+from goldilocks_core.pseudo.registry import PseudoTable, load_tables
 
 PseudoSource = Callable[
     [Structure, PseudopotentialRequirements], tuple[PseudoMetadata, ...]
@@ -51,33 +51,89 @@ def _resolve_installed(
     requirements: PseudopotentialRequirements,
 ) -> tuple[PseudoMetadata, ...]:
     tables = load_tables(registry_path)
-    if table_id is None:
-        table = default_table(tables)
-    else:
-        try:
-            table = tables[table_id]
-        except KeyError as error:
-            choices = ", ".join(sorted(tables))
-            raise PseudoTableMismatch(
-                f"unknown pseudopotential table {table_id!r}; available: {choices}"
-            ) from error
-
     elements = {element.symbol for element in structure.composition.elements}
-    problems = _table_problems(table, elements, requirements)
-    if problems:
-        matches = [
-            candidate.id
-            for candidate in tables.values()
-            if not _table_problems(candidate, elements, requirements)
-        ]
-        alternatives = ", ".join(sorted(matches)) or "none"
-        raise PseudoTableMismatch(
-            f"pseudopotential table {table.id!r} does not satisfy the request: "
-            f"{'; '.join(problems)}; matching tables: {alternatives}"
-        )
+    table = select_compatible_table(
+        tables,
+        table_id=table_id,
+        elements=elements,
+        requirements=requirements,
+    )
 
-    installed = store.resolve(table.asset.id, table.asset.version)
+    installed = store.resolve_spec(table.asset)
     return load_installed_table(installed, table=table)
+
+
+def select_compatible_table(
+    tables: dict[str, PseudoTable],
+    *,
+    table_id: str | None,
+    elements: set[str],
+    requirements: PseudopotentialRequirements,
+) -> PseudoTable:
+    """Select an explicit or preferred compatible pseudopotential table."""
+    if table_id is None:
+        return _automatic_table(tables, elements, requirements)
+    try:
+        table = tables[table_id]
+    except KeyError as error:
+        choices = ", ".join(sorted(tables))
+        raise PseudoTableMismatch(
+            f"unknown pseudopotential table {table_id!r}; available: {choices}"
+        ) from error
+
+    problems = _table_problems(table, elements, requirements)
+    if not problems:
+        return table
+    matches = [
+        candidate.id
+        for candidate in tables.values()
+        if not _table_problems(candidate, elements, requirements)
+    ]
+    alternatives = ", ".join(sorted(matches)) or "none"
+    raise PseudoTableMismatch(
+        f"pseudopotential table {table.id!r} does not satisfy the request: "
+        f"{'; '.join(problems)}; matching tables: {alternatives}"
+    )
+
+
+def is_table_eligible_for_elements(table: PseudoTable, elements: set[str]) -> bool:
+    """Return whether a table may serve every element under Core policy."""
+    return all(element in table.elements for element in elements) and (
+        not _requires_sssp(elements) or table.provider == "sssp"
+    )
+
+
+def _automatic_table(
+    tables: dict[str, PseudoTable],
+    elements: set[str],
+    requirements: PseudopotentialRequirements,
+) -> PseudoTable:
+    matches = [
+        table
+        for table in tables.values()
+        if not _table_problems(table, elements, requirements)
+    ]
+    if not matches:
+        requested = (
+            f"{requirements.functional} {requirements.accuracy} "
+            f"{requirements.relativistic}"
+        )
+        raise PseudoTableMismatch(
+            f"no pseudopotential table satisfies {requested} for "
+            + ", ".join(sorted(elements))
+        )
+    provider = "sssp" if _requires_sssp(elements) else "pseudodojo"
+    return min(
+        matches,
+        key=lambda table: (table.provider != provider, table.id),
+    )
+
+
+def _requires_sssp(elements: set[str]) -> bool:
+    return any(
+        element.is_lanthanoid or element.is_actinoid
+        for element in map(Element, elements)
+    )
 
 
 def _table_problems(
@@ -99,6 +155,8 @@ def _table_problems(
             f"relativistic treatment is {table.relativistic}, "
             f"requested {requirements.relativistic}"
         )
+    if _requires_sssp(elements) and table.provider != "sssp":
+        problems.append("lanthanide and actinide elements require an SSSP table")
     missing = sorted(elements - set(table.elements))
     if missing:
         problems.append("missing elements " + ", ".join(missing))

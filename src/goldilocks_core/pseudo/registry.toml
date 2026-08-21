@@ -475,6 +475,13 @@ url = "https://archive.materialscloud.org/api/records/rcyfm-68h65/files/SSSP_1.3
 checksum = "sha256:2c8642a70308ecd072a209a30c160bf51423560bb202116cb31fd5275eff814a"
 size = 22376
 
+[[tables."sssp-pbe-efficiency-sr".files]]
+role = "licence"
+path = "source/LICENSE.txt"
+url = "https://archive.materialscloud.org/api/records/rcyfm-68h65/files/LICENSE.txt/content"
+checksum = "sha256:8028d9d7fcad7932bb5551dc0a60cff6c6b7f7aa2bd480f516a2faaa09d943a1"
+size = 3673
+
 [tables."sssp-pbe-precision-sr"]
 provider       = "sssp"
 upstream_table = "SSSP_1.3.0_PBE_precision"
@@ -519,6 +526,13 @@ path = "source/table.json"
 url = "https://archive.materialscloud.org/api/records/rcyfm-68h65/files/SSSP_1.3.0_PBE_precision.json/content"
 checksum = "sha256:7b7b648915e54c8397cd8143a7385c17eeed3104ad1236cecd905126d338a4e3"
 size = 22485
+
+[[tables."sssp-pbe-precision-sr".files]]
+role = "licence"
+path = "source/LICENSE.txt"
+url = "https://archive.materialscloud.org/api/records/rcyfm-68h65/files/LICENSE.txt/content"
+checksum = "sha256:8028d9d7fcad7932bb5551dc0a60cff6c6b7f7aa2bd480f516a2faaa09d943a1"
+size = 3673
 
 [tables."sssp-pbesol-efficiency-sr"]
 provider       = "sssp"
@@ -567,6 +581,13 @@ url = "https://archive.materialscloud.org/api/records/rcyfm-68h65/files/SSSP_1.3
 checksum = "sha256:15b240313418f90628b97047f4307aeb03e59131432f96e7234622b7878767d9"
 size = 22459
 
+[[tables."sssp-pbesol-efficiency-sr".files]]
+role = "licence"
+path = "source/LICENSE.txt"
+url = "https://archive.materialscloud.org/api/records/rcyfm-68h65/files/LICENSE.txt/content"
+checksum = "sha256:8028d9d7fcad7932bb5551dc0a60cff6c6b7f7aa2bd480f516a2faaa09d943a1"
+size = 3673
+
 [tables."sssp-pbesol-precision-sr"]
 provider       = "sssp"
 upstream_table = "SSSP_1.3.0_PBEsol_precision"
@@ -611,3 +632,10 @@ path = "source/table.json"
 url = "https://archive.materialscloud.org/api/records/rcyfm-68h65/files/SSSP_1.3.0_PBEsol_precision.json/content"
 checksum = "sha256:00afc6c3a277f70dab8c9b905ef29af7d3baab73163a0c5b2c3cc04ad8eed98f"
 size = 22556
+
+[[tables."sssp-pbesol-precision-sr".files]]
+role = "licence"
+path = "source/LICENSE.txt"
+url = "https://archive.materialscloud.org/api/records/rcyfm-68h65/files/LICENSE.txt/content"
+checksum = "sha256:8028d9d7fcad7932bb5551dc0a60cff6c6b7f7aa2bd480f516a2faaa09d943a1"
+size = 3673

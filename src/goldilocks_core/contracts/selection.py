@@ -118,6 +118,7 @@ class PseudopotentialSelection:
     filename: str | None
     filepath: str | None
     functional: str | None
+    relativistic: RelativisticTreatment | None
     ecutwfc_ry: float | None
     ecutrho_ry: float | None
     provenance: Provenance
@@ -139,6 +140,9 @@ class PseudopotentialSelection:
             )
         functional = normalize_functional_label(self.functional)
         object.__setattr__(self, "functional", functional)
+        _validate_relativistic_mode(
+            self.relativistic, "PseudopotentialSelection.relativistic"
+        )
         for field_name in ("ecutwfc_ry", "ecutrho_ry"):
             value = getattr(self, field_name)
             if value is not None:
@@ -148,7 +152,12 @@ class PseudopotentialSelection:
                 object.__setattr__(self, field_name, float(value))
         if self.filename is None and any(
             value is not None
-            for value in (self.functional, self.ecutwfc_ry, self.ecutrho_ry)
+            for value in (
+                self.functional,
+                self.relativistic,
+                self.ecutwfc_ry,
+                self.ecutrho_ry,
+            )
         ):
             raise ValueError(
                 "An unresolved PseudopotentialSelection cannot carry scientific "

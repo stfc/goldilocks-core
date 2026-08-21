@@ -4,6 +4,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import shutil
 import tempfile
 from collections.abc import Iterator, Mapping
@@ -20,8 +21,8 @@ from goldilocks_core.assets.records import (
 )
 
 ASSET_ROOT_ENV = "GOLDILOCKS_ASSET_ROOT"
+_MANIFEST_SCHEMA_VERSION = 2
 _MANIFEST = "manifest.json"
-_MANIFEST_SCHEMA_VERSION = 1
 
 
 class AssetNotInstalled(FileNotFoundError):
@@ -56,7 +57,7 @@ class AssetStore:
         self.root.mkdir(parents=True, exist_ok=True)
         with self._lock(spec.id, spec.version):
             try:
-                return self.verify(spec.id, spec.version)
+                return self.verify_spec(spec)
             except (AssetNotInstalled, AssetCorrupt):
                 pass
 
@@ -83,17 +84,35 @@ class AssetStore:
                 files = _inventory(installed_dir)
                 if not files:
                     raise ValueError("asset preparation produced no files")
-                _write_manifest(installed_dir, spec.id, spec.version, files)
+                _write_manifest(installed_dir, spec, files)
                 _remove_corrupt_destination(destination)
                 os.replace(installed_dir, destination)
             finally:
                 shutil.rmtree(staging_root, ignore_errors=True)
-            return self.verify(spec.id, spec.version)
+            return self.verify_spec(spec)
 
     def resolve(self, asset_id: str, version: str) -> InstalledAsset:
         return self.verify(asset_id, version)
 
-    def verify(self, asset_id: str, version: str) -> InstalledAsset:
+    def resolve_spec(self, spec: AssetSpec) -> InstalledAsset:
+        """Resolve an asset and require its registered preparation identity."""
+        return self.verify_spec(spec)
+
+    def verify_spec(self, spec: AssetSpec) -> InstalledAsset:
+        """Verify an asset against its registered sources and preparer revision."""
+        return self.verify(
+            spec.id,
+            spec.version,
+            preparation_fingerprint=spec.preparation_fingerprint,
+        )
+
+    def verify(
+        self,
+        asset_id: str,
+        version: str,
+        *,
+        preparation_fingerprint: str | None = None,
+    ) -> InstalledAsset:
         reference = AssetReference(asset_id, version)
         root = self._asset_path(asset_id, version)
         if root.is_symlink() or (root.exists() and not root.is_dir()):
@@ -115,7 +134,14 @@ class AssetStore:
                 f"installed manifest is not a regular file: {manifest_path}"
             )
 
-        files = _read_manifest(manifest_path, reference)
+        installed_fingerprint, files = _read_manifest(manifest_path, reference)
+        if (
+            preparation_fingerprint is not None
+            and installed_fingerprint != preparation_fingerprint
+        ):
+            raise AssetCorrupt(
+                f"installed preparation differs for {asset_id}@{version}"
+            )
         expected_paths = {file.path for file in files}
         actual_paths: set[str] = set()
         for path in root.rglob("*"):
@@ -146,6 +172,16 @@ class AssetStore:
     def status(self, asset_id: str, version: str) -> str:
         try:
             self.verify(asset_id, version)
+        except AssetNotInstalled:
+            return "missing"
+        except AssetCorrupt:
+            return "corrupt"
+        return "installed"
+
+    def status_spec(self, spec: AssetSpec) -> str:
+        """Return status against a registered asset preparation identity."""
+        try:
+            self.verify_spec(spec)
         except AssetNotInstalled:
             return "missing"
         except AssetCorrupt:
@@ -222,14 +258,14 @@ def _inventory(root: Path) -> tuple[InstalledFile, ...]:
 
 def _write_manifest(
     root: Path,
-    asset_id: str,
-    version: str,
+    spec: AssetSpec,
     files: tuple[InstalledFile, ...],
 ) -> None:
     data = {
         "schema_version": _MANIFEST_SCHEMA_VERSION,
-        "id": asset_id,
-        "version": version,
+        "id": spec.id,
+        "version": spec.version,
+        "preparation_fingerprint": spec.preparation_fingerprint,
         "files": [
             {"path": file.path, "sha256": file.sha256, "size": file.size}
             for file in files
@@ -243,7 +279,7 @@ def _write_manifest(
 def _read_manifest(
     path: Path,
     reference: AssetReference,
-) -> tuple[InstalledFile, ...]:
+) -> tuple[str, tuple[InstalledFile, ...]]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(data, dict) or set(data) != {
@@ -251,6 +287,7 @@ def _read_manifest(
             "id",
             "version",
             "files",
+            "preparation_fingerprint",
         }:
             raise ValueError("manifest fields are invalid")
         if (
@@ -262,6 +299,12 @@ def _read_manifest(
             )
         if data["id"] != reference.id or data["version"] != reference.version:
             raise ValueError("installed manifest identity does not match its path")
+        fingerprint = data["preparation_fingerprint"]
+        if (
+            not isinstance(fingerprint, str)
+            or re.fullmatch(r"[0-9a-f]{64}", fingerprint) is None
+        ):
+            raise ValueError("installed preparation fingerprint is invalid")
         raw_files = data["files"]
         if not isinstance(raw_files, list) or not raw_files:
             raise ValueError("installed manifest file inventory must be non-empty")
@@ -273,7 +316,7 @@ def _read_manifest(
         paths = [file.path for file in files]
         if len(paths) != len(set(paths)):
             raise ValueError("installed manifest paths must be unique")
-        return tuple(files)
+        return fingerprint, tuple(files)
     except (
         KeyError,
         TypeError,

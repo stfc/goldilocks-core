@@ -77,6 +77,28 @@ def test_workbench_inspects_disordered_structure_without_losing_occupancies(
     assert all("filepath" not in str(table) for table in payload["pseudo_tables"])
 
 
+def test_workbench_only_exposes_tables_eligible_for_structure(test_service) -> None:
+    structure = Structure(Lattice.cubic(5.0), ["Ce"], [[0.0, 0.0, 0.0]])
+
+    with TestClient(create_app(test_service)) as client:
+        response = client.post(
+            "/api/workbench/structure",
+            json={
+                "source": {
+                    "name": "ce.cif",
+                    "format": "cif",
+                    "content": structure.to(fmt="cif"),
+                }
+            },
+        )
+
+    assert response.status_code == 200
+    tables = response.json()["pseudo_tables"]
+    assert tables
+    assert {table["provider"] for table in tables} == {"sssp"}
+    assert all("Ce" in table["elements"] for table in tables)
+
+
 def test_workbench_structure_failure_uses_typed_browser_error(test_service) -> None:
     with TestClient(create_app(test_service)) as client:
         response = client.post(
@@ -100,6 +122,48 @@ def test_workbench_structure_failure_uses_typed_browser_error(test_service) -> N
         }
     }
     assert "Could not parse structure content" in response.json()["error"]["message"]
+
+
+def test_workbench_request_validation_uses_the_typed_error_envelope(
+    test_service,
+) -> None:
+    with TestClient(create_app(test_service)) as client:
+        response = client.post(
+            "/api/workbench/recommendation",
+            json={"source": {"name": "Si.cif", "format": "cif"}},
+        )
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["kind"] == "invalid_request"
+    assert error["message"] == "The request does not match the Workbench contract."
+    assert error["retryable"] is False
+    assert error["details"]["operation"] == "recommendation"
+    assert error["details"]["validation_errors"] == [
+        {
+            "path": "body.source.content",
+            "type": "missing",
+            "message": "Field required",
+        }
+    ]
+
+
+def test_workbench_openapi_declares_typed_error_responses(test_service) -> None:
+    with TestClient(create_app(test_service)) as client:
+        schema = client.get("/openapi.json").json()
+
+    expected = {
+        "/api/workbench/structure": {"422"},
+        "/api/workbench/recommendation": {"422", "503"},
+        "/api/workbench/archive": {"409", "422", "503"},
+    }
+    for path, statuses in expected.items():
+        responses = schema["paths"][path]["post"]["responses"]
+        for status in statuses:
+            assert (
+                responses[status]["content"]["application/json"]["schema"]["$ref"]
+                == "#/components/schemas/WorkbenchErrorResponse"
+            )
 
 
 def test_workbench_recommendation_is_typed_stable_and_browser_safe(
@@ -157,6 +221,40 @@ def test_workbench_recommendation_is_typed_stable_and_browser_safe(
     assert "filepath" not in serialized
     assert str(tmp_path) not in serialized
     assert payload["records"]["analysis"]["formula"] == "Si1"
+    assert payload["decisions"] == {
+        "k_grid": [3, 3, 3],
+        "k_shift": [0, 0, 0],
+        "k_mesh_type": "monkhorst-pack",
+        "spin_polarized": False,
+        "spin_orbit_coupling": False,
+        "smearing_type": "fixed",
+        "smearing_width_ry": None,
+        "use_vdw": False,
+        "pseudo_table_id": "pseudodojo-pbesol-efficiency-sr",
+        "pseudo_functional": "PBEsol",
+        "pseudo_accuracy": "efficiency",
+        "pseudo_relativistic": "scalar",
+    }
+    assert payload["runtime"]["models"] == [
+        {
+            "name": "fixture-model",
+            "version": "1",
+            "model_type": "fixture",
+            "target": "fixture-target",
+            "feature_set": "fixture-features",
+            "source": "local",
+            "revision": "fixture-revision",
+        }
+    ]
+    assert {asset["id"] for asset in payload["runtime"]["model_assets"]} == {
+        "qrf-kpoints",
+        "metallicity-cgcnn",
+    }
+    assert all(
+        file["sha256"] and file["size_bytes"]
+        for asset in payload["runtime"]["model_assets"]
+        for file in asset["files"]
+    )
     assert payload["warnings"] == ["test warning"]
 
 
@@ -203,6 +301,14 @@ def test_workbench_archive_reruns_core_and_contains_every_trusted_input(
     installed_root.mkdir()
     licence_text = "Creative Commons Attribution 4.0 International\\n"
     (installed_root / "LICENSE.txt").write_text(licence_text)
+    model_cards = {
+        "qrf-kpoints": b"---\nlicense: cc-by-4.0\n---\nQRF attribution\n",
+        "metallicity-cgcnn": b"---\nlicense: cc-by-4.0\n---\n",
+    }
+    for asset_id, content in model_cards.items():
+        model_root = installed_root / asset_id
+        model_root.mkdir()
+        (model_root / "MODEL_CARD.md").write_bytes(content)
     service = _RecommendingService(
         _result_with_pseudo(pseudo_path), installed_root=installed_root
     )
@@ -243,20 +349,38 @@ def test_workbench_archive_reruns_core_and_contains_every_trusted_input(
             "goldilocks.json",
             "inputs/qe.in",
             "licences/pseudodojo-pbesol-efficiency-sr.txt",
-            "pseudopotentials/Si.upf",
+            "licences/qrf-kpoints-QRF95.md",
+            "licences/metallicity-cgcnn-1.md",
+            "pseudo/Si.upf",
             "source/Si.cif",
             "structure/canonical.cif",
         }
         assert archive.read("source/Si.cif") == sample_structure_text.encode()
-        assert archive.read("pseudopotentials/Si.upf") == pseudo_bytes
+        assert archive.read("pseudo/Si.upf") == pseudo_bytes
         assert (
             archive.read("licences/pseudodojo-pbesol-efficiency-sr.txt").decode()
             == licence_text
+        )
+        assert (
+            archive.read("licences/qrf-kpoints-QRF95.md") == model_cards["qrf-kpoints"]
+        )
+        assert (
+            archive.read("licences/metallicity-cgcnn-1.md")
+            == model_cards["metallicity-cgcnn"]
         )
         manifest = json.loads(archive.read("goldilocks.json"))
         assert manifest["review_digest"] == review["review_digest"]
         assert manifest["archive_schema_version"] == 1
         assert "goldilocks_core_version" in manifest
+        assert manifest["structure"] == review["structure"]
+        assert manifest["runtime"] == review["runtime"]
+        assert manifest["archive_files"]["pseudo/Si.upf"] == {
+            "sha256": hashlib.sha256(pseudo_bytes).hexdigest(),
+            "size_bytes": len(pseudo_bytes),
+        }
+        assert b"Selected pseudopotentials: `pseudo/`" in archive.read("README.md")
+        assert b"`pw.x -in inputs/qe.in`" in archive.read("README.md")
+        assert b"Runtime models" in archive.read("CITATIONS.md")
         assert "filepath" not in str(manifest)
         assert str(tmp_path) not in str(manifest)
         checksums = archive.read("checksums.sha256").decode().splitlines()
@@ -266,6 +390,51 @@ def test_workbench_archive_reruns_core_and_contains_every_trusted_input(
         for line in checksums:
             digest, name = line.split("  ", 1)
             assert digest == hashlib.sha256(archive.read(name)).hexdigest()
+
+
+def test_workbench_archive_reports_missing_licence_without_a_server_path(
+    sample_structure_text: str, tmp_path: Path
+) -> None:
+    pseudo_path = tmp_path / "Si.upf"
+    pseudo_path.write_text("<UPF/>")
+    installed_root = tmp_path / "installed"
+    installed_root.mkdir()
+    service = _RecommendingService(
+        _result_with_pseudo(pseudo_path), installed_root=installed_root
+    )
+    request = {
+        "source": {
+            "name": "Si.cif",
+            "format": "cif",
+            "content": sample_structure_text,
+        },
+        "pseudo_table_id": "pseudodojo-pbesol-efficiency-sr",
+    }
+
+    with TestClient(create_app(service)) as client:
+        review = client.post("/api/workbench/recommendation", json=request).json()
+        response = client.post(
+            "/api/workbench/archive",
+            json={**request, "review_digest": review["review_digest"]},
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "error": {
+            "kind": "assets_unavailable",
+            "message": (
+                "Required licence material for runtime asset "
+                "'pseudodojo-pbesol-efficiency-sr' is unavailable."
+            ),
+            "retryable": True,
+            "details": {
+                "operation": "archive",
+                "asset_id": "pseudodojo-pbesol-efficiency-sr",
+                "version": "0.4",
+            },
+        }
+    }
+    assert str(tmp_path) not in response.text
 
 
 def test_workbench_archive_rejects_a_stale_review(
@@ -312,7 +481,10 @@ def test_workbench_capacity_times_out_without_blocking_health_and_releases(
     }
 
     with (
-        TestClient(create_app(service, compute_wait_seconds=0.05)) as client,
+        TestClient(
+            create_app(service, compute_wait_seconds=0.05),
+            raise_server_exceptions=False,
+        ) as client,
         ThreadPoolExecutor(max_workers=2) as executor,
     ):
         first = executor.submit(client.post, "/api/workbench/recommendation", json=body)
@@ -330,7 +502,7 @@ def test_workbench_capacity_times_out_without_blocking_health_and_releases(
         finally:
             service.release.set()
 
-        assert first.result(timeout=1).status_code == 422
+        assert first.result(timeout=1).status_code == 500
         assert (
             client.post("/api/workbench/recommendation", json=body).status_code == 200
         )
@@ -387,6 +559,60 @@ def test_ready_verifies_and_caches_the_complete_workbench_asset_profile() -> Non
     assert len({asset_id for asset_id, _ in store.verified}) == 17
 
 
+def test_ready_uses_the_runtime_pseudopotential_registry(tmp_path: Path) -> None:
+    registry = tmp_path / "pseudos.toml"
+    registry.write_text(
+        """
+[tables.fixture]
+provider = "sssp"
+upstream_table = "fixture"
+version = "1"
+functional = "PBEsol"
+relativistic = "scalar"
+accuracy = "efficiency"
+licence = "CC BY 4.0"
+citation = "fixture"
+elements = ["Si"]
+default = true
+
+[[tables.fixture.files]]
+role = "pseudopotentials"
+path = "source/pseudos.tgz"
+url = "file:///tmp/pseudos.tgz"
+
+[[tables.fixture.files]]
+role = "metadata"
+path = "source/metadata.json"
+url = "file:///tmp/metadata.json"
+
+[[tables.fixture.files]]
+role = "licence"
+path = "source/LICENSE.txt"
+url = "file:///tmp/LICENSE.txt"
+""".strip(),
+        encoding="utf-8",
+    )
+    store = _ReadinessStore()
+    service = SimpleNamespace(
+        runtime=SimpleNamespace(
+            asset_store=store,
+            model_registry_path=None,
+            pseudo_registry_path=registry,
+        )
+    )
+
+    with TestClient(create_app(service)) as client:
+        response = client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "asset_count": 3}
+    assert {asset_id for asset_id, _ in store.verified} == {
+        "fixture",
+        "metallicity-cgcnn",
+        "qrf-kpoints",
+    }
+
+
 @pytest.mark.parametrize("failure", ["missing", "corrupt"])
 def test_ready_reports_missing_and_corrupt_assets(failure: str, tmp_path: Path) -> None:
     store = _ReadinessStore(failure=failure, root=tmp_path)
@@ -436,6 +662,18 @@ class _RecommendingService:
     def __init__(self, result: Result, installed_root: Path | None = None) -> None:
         self.runtime = SimpleNamespace(
             pseudo_registry_path=None,
+            model_registry_path=None,
+            describe_models=lambda: [
+                {
+                    "name": "fixture-model",
+                    "version": "1",
+                    "target": "fixture-target",
+                    "feature_set": "fixture-features",
+                    "model_type": "fixture",
+                    "revision": "fixture-revision",
+                    "source": "local",
+                }
+            ],
             asset_store=(
                 _AssetStore(installed_root) if installed_root is not None else None
             ),
@@ -452,7 +690,12 @@ class _RecommendingService:
 
 class _FailingService:
     def __init__(self, error: Exception) -> None:
-        self.runtime = SimpleNamespace(pseudo_registry_path=None, asset_store=None)
+        self.runtime = SimpleNamespace(
+            pseudo_registry_path=None,
+            model_registry_path=None,
+            asset_store=None,
+            describe_models=lambda: [],
+        )
         self.error = error
 
     def generate(self, request: PresetRequest) -> Result:
@@ -488,23 +731,32 @@ class _ReadinessStore:
         self.failure = failure
         self.root = root or Path("/")
 
-    def verify(self, asset_id: str, version: str) -> SimpleNamespace:
-        self.verified.append((asset_id, version))
+    def verify_spec(self, spec) -> SimpleNamespace:
+        self.verified.append((spec.id, spec.version))
         if self.failure == "missing":
-            raise AssetNotInstalled(AssetReference(asset_id, version), self.root)
+            raise AssetNotInstalled(AssetReference(spec.id, spec.version), self.root)
         if self.failure == "corrupt":
-            raise AssetCorrupt(f"runtime asset {asset_id}@{version} is corrupt")
-        return SimpleNamespace(id=asset_id, version=version)
+            raise AssetCorrupt(f"runtime asset {spec.id}@{spec.version} is corrupt")
+        return SimpleNamespace(id=spec.id, version=spec.version)
 
 
 class _AssetStore:
     def __init__(self, root: Path) -> None:
         self.root = root
 
-    def resolve(self, asset_id: str, version: str) -> SimpleNamespace:
-        assert asset_id
-        assert version
-        return SimpleNamespace(root=self.root)
+    def resolve_spec(self, spec) -> SimpleNamespace:
+        assert spec.id
+        assert spec.version
+        asset_root = self.root / spec.id
+        root = asset_root if asset_root.is_dir() else self.root
+
+        def path(relative: str) -> Path:
+            resolved = root / relative
+            if not resolved.is_file():
+                raise FileNotFoundError(relative)
+            return resolved
+
+        return SimpleNamespace(root=root, path=path)
 
 
 def _result_with_pseudo(path: Path) -> Result:
@@ -537,6 +789,7 @@ def _result_with_pseudo(path: Path) -> Result:
                     filename=path.name,
                     filepath=str(path),
                     functional="PBEsol",
+                    relativistic="scalar",
                     ecutwfc_ry=30.0,
                     ecutrho_ry=120.0,
                     provenance=Provenance(

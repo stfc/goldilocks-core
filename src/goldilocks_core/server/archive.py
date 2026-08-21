@@ -15,6 +15,14 @@ ARCHIVE_SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True, slots=True)
+class RuntimeAssetLicence:
+    asset_id: str
+    version: str
+    source_url: str
+    path: Path
+
+
+@dataclass(frozen=True, slots=True)
 class WorkbenchArchive:
     source_name: str
     source_content: str
@@ -23,6 +31,7 @@ class WorkbenchArchive:
     result: Result
     table: PseudoTable
     licence_path: Path
+    runtime_licences: tuple[RuntimeAssetLicence, ...]
 
 
 def build_workbench_archive(material: WorkbenchArchive) -> bytes:
@@ -38,12 +47,15 @@ def build_workbench_archive(material: WorkbenchArchive) -> bytes:
             )
         _add(
             files,
-            f"pseudopotentials/{pseudo.filename}",
+            f"pseudo/{pseudo.filename}",
             Path(pseudo.filepath).read_bytes(),
         )
 
     licence_name = f"licences/{material.table.id}.txt"
     _add(files, licence_name, material.licence_path.read_bytes())
+    for licence in material.runtime_licences:
+        name = f"licences/{licence.asset_id}-{licence.version}.md"
+        _add(files, name, licence.path.read_bytes())
     _add(files, "CITATIONS.md", _citations(material).encode())
     _add(files, "README.md", _readme(material, licence_name).encode())
 
@@ -57,13 +69,18 @@ def build_workbench_archive(material: WorkbenchArchive) -> bytes:
             "path": "structure/canonical.cif",
             "sha256": _sha256(files["structure/canonical.cif"]),
         },
+        "structure": review["structure"],
         "intent": review["intent"],
         "hints": review["hints"],
         "records": review["records"],
         "selection": review["selection"],
         "generated_files": review["generated_files"],
         "warnings": review["warnings"],
-        "citations": [material.table.citation],
+        "runtime": review["runtime"],
+        "citations": [
+            material.table.citation,
+            *(licence.source_url for licence in material.runtime_licences),
+        ],
         "archive_files": {
             path: {"sha256": _sha256(payload), "size_bytes": len(payload)}
             for path, payload in sorted(files.items())
@@ -108,23 +125,35 @@ def _sha256(payload: bytes) -> str:
 
 
 def _citations(material: WorkbenchArchive) -> str:
+    model_sources = "".join(
+        f"- `{licence.asset_id}@{licence.version}`: {licence.source_url}\n"
+        for licence in material.runtime_licences
+    )
     return (
         "# Citations\n\n"
         "Goldilocks records scientific provenance in `goldilocks.json`. "
-        "Cite the selected pseudopotential source when publishing results.\n\n"
-        f"- {material.table.citation}\n"
+        "Cite the selected pseudopotential source and applicable model sources "
+        "when publishing results.\n\n"
+        "## Pseudopotentials\n\n"
+        f"- {material.table.citation}\n\n"
+        "## Runtime models\n\n"
+        f"{model_sources}"
     )
 
 
 def _readme(material: WorkbenchArchive, licence_name: str) -> str:
     return (
         "# Goldilocks calculation archive\n\n"
-        "This archive was assembled by the server from a fresh Core computation.\n\n"
+        "This archive was assembled by the server from a fresh Core computation. "
+        "Run Quantum ESPRESSO from this extracted archive root, for example "
+        "`pw.x -in inputs/qe.in`, so `pseudo_dir = './pseudo'` resolves to the "
+        "bundled UPFs.\n\n"
         f"- Original uploaded structure: `source/{material.source_name}`\n"
         "- Canonical structure: `structure/canonical.cif`\n"
         "- Calculation inputs: `inputs/`\n"
-        "- Selected pseudopotentials: `pseudopotentials/`\n"
+        "- Selected pseudopotentials: `pseudo/`\n"
         f"- Pseudopotential licence material: `{licence_name}`\n"
+        "- Runtime model licence material: `licences/`\n"
         "- Machine-readable provenance: `goldilocks.json`\n"
         "- Independent file hashes: `checksums.sha256`\n"
     )

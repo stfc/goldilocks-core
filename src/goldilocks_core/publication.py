@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import secrets
 import shutil
 import tempfile
 import unicodedata
@@ -116,15 +117,11 @@ class Publisher:
     ) -> Publication:
         target = destination.expanduser().absolute()
         target.parent.mkdir(parents=True, exist_ok=True)
-        claim_descriptor, claim_identity = _claim_directory(target)
-        staging: Path | None = None
+        staging = Path(tempfile.mkdtemp(prefix=f".{target.name}.", dir=target.parent))
+        staging_identity = _path_identity(staging)
         staging_descriptor: int | None = None
-        staging_identity: tuple[int, int] | None = None
+        installed = False
         try:
-            staging = Path(
-                tempfile.mkdtemp(prefix=f".{target.name}.", dir=target.parent)
-            )
-            staging_identity = _path_identity(staging)
             staging_descriptor = os.open(
                 staging,
                 os.O_RDONLY
@@ -137,35 +134,23 @@ class Publisher:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(file.content)
             _verify_directory(staging, files)
-            _release_directory_claim(target, claim_identity)
             try:
                 _rename_no_replace(staging, target)
             except FileExistsError as error:
                 raise FileExistsError(
                     f"Publication destination already exists: {target}"
                 ) from error
+            installed = True
             if not _has_identity(target, staging_identity):
                 raise OSError(
                     f"Publication destination changed during publication: {target}"
                 )
             _verify_directory(target, files)
         finally:
-            try:
-                if (
-                    staging is not None
-                    and staging_identity is not None
-                    and _has_identity(staging, staging_identity)
-                ):
-                    shutil.rmtree(staging)
-                if _has_identity(target, claim_identity):
-                    try:
-                        target.rmdir()
-                    except OSError:
-                        pass
-            finally:
-                if staging_descriptor is not None:
-                    os.close(staging_descriptor)
-                os.close(claim_descriptor)
+            if staging_descriptor is not None:
+                os.close(staging_descriptor)
+            if not installed:
+                _remove_owned_staging(staging, staging_identity, directory=True)
         return _publication("directory", target, files)
 
     def _publish_archive(
@@ -199,8 +184,7 @@ class Publisher:
                 raise OSError(f"Published archive checksum differs: {target}")
         finally:
             try:
-                if _has_identity(staging, staging_identity):
-                    staging.unlink()
+                _remove_owned_staging(staging, staging_identity, directory=False)
             finally:
                 os.close(descriptor)
         return _publication("archive", target, files, _sha256(payload))
@@ -244,47 +228,31 @@ def _has_identity(path: Path, identity: tuple[int, int]) -> bool:
         return False
 
 
-def _claim_directory(target: Path) -> tuple[int, tuple[int, int]]:
-    claim = Path(tempfile.mkdtemp(prefix=".goldilocks-claim-", dir=target.parent))
-    identity = _path_identity(claim)
+def _remove_owned_staging(
+    staging: Path,
+    identity: tuple[int, int],
+    *,
+    directory: bool,
+) -> None:
+    quarantine = staging.with_name(f".{staging.name}.cleanup-{secrets.token_hex(16)}")
     try:
-        descriptor = os.open(
-            claim,
-            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0),
-        )
-    except BaseException:
-        if _has_identity(claim, identity):
-            claim.rmdir()
-        raise
-    identity = _descriptor_identity(descriptor)
-    try:
-        _rename_no_replace(claim, target)
-    except BaseException as error:
-        try:
-            if _has_identity(claim, identity):
-                claim.rmdir()
-        finally:
-            os.close(descriptor)
-        if isinstance(error, FileExistsError):
-            raise FileExistsError(
-                f"Publication destination already exists: {target}"
-            ) from error
-        raise
-    return descriptor, identity
-
-
-def _release_directory_claim(target: Path, identity: tuple[int, int]) -> None:
-    if not _has_identity(target, identity):
-        raise FileExistsError(f"Publication destination already exists: {target}")
-    try:
-        target.rmdir()
-    except OSError as error:
-        raise FileExistsError(
-            f"Publication destination already exists: {target}"
-        ) from error
+        _native_rename_no_replace(staging, quarantine)
+    except FileNotFoundError:
+        return
+    if not _has_identity(quarantine, identity):
+        _native_rename_no_replace(quarantine, staging)
+        return
+    if directory:
+        shutil.rmtree(quarantine)
+    else:
+        quarantine.unlink()
 
 
 def _rename_no_replace(source: Path, destination: Path) -> None:
+    _native_rename_no_replace(source, destination)
+
+
+def _native_rename_no_replace(source: Path, destination: Path) -> None:
     if os.name == "nt":
         os.rename(source, destination)
         return

@@ -11,6 +11,7 @@ from goldilocks_core import (
 from goldilocks_core.contracts import (
     GeneratedFiles,
     KPointSelection,
+    ModelSpec,
     ParameterAdvice,
     PseudoCutoffs,
     PseudoMetadata,
@@ -84,6 +85,70 @@ def test_record_selection_rejects_an_empty_record_set() -> None:
 
     with pytest.raises(ValueError, match="RecordSelection.records"):
         RecordSelection(())
+
+
+@pytest.mark.parametrize("filename", ("/tmp/Si.UPF", "../Si.UPF", r"C:\\Si.UPF"))
+def test_pseudo_metadata_rejects_a_path_as_its_filename(filename: str) -> None:
+    with pytest.raises(ValueError, match="filename must be one filename"):
+        PseudoMetadata(
+            filepath="/pseudo/Si.UPF",
+            filename=filename,
+            header_format="attr",
+        )
+
+
+def test_pseudo_metadata_serialization_is_a_payload_free_review_snapshot() -> None:
+    metadata = make_metadata()
+    object.__setattr__(
+        metadata,
+        "pseudo_info",
+        {
+            "licence": "Secret-Licence",
+            "licence_text": "SECRET PSEUDO LEGAL PAYLOAD",
+            "raw": b"SECRET PSEUDO BYTES",
+        },
+    )
+
+    document = metadata.to_dict()
+
+    assert document["filename"] == "Si.UPF"
+    assert document["source_identifier"] == "synthetic/Si.UPF"
+    assert document["functional"] == "PBEsol"
+    assert "filepath" not in document
+    assert "pseudo_info" not in document
+    assert "SECRET" not in str(document)
+
+
+def test_model_spec_serialization_is_a_payload_free_review_snapshot() -> None:
+    model = ModelSpec(
+        name="operator-model",
+        version="2026.1",
+        model_type="random_forest",
+        target="k_index",
+        feature_set="operator-features",
+        source="local",
+        location="/secret/host/operator.joblib",
+        revision="model-revision",
+        licence="Operator-Licence",
+        licence_text="SECRET MODEL LEGAL PAYLOAD",
+        citation="Stable model citation.",
+    )
+
+    document = model.to_dict()
+
+    assert document == {
+        "name": "operator-model",
+        "version": "2026.1",
+        "model_type": "random_forest",
+        "target": "k_index",
+        "feature_set": "operator-features",
+        "source": "local",
+        "revision": "model-revision",
+        "licence": "Operator-Licence",
+        "citation": "Stable model citation.",
+    }
+    assert "/secret/host" not in str(document)
+    assert "SECRET" not in str(document)
 
 
 def test_compute_request_rejects_an_invalid_selection_type() -> None:

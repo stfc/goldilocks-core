@@ -105,9 +105,13 @@ class CalculationDraft:
                 if self.pseudo_metadata is not None
                 else None
             ),
-            "pseudo_root": self.pseudo_root,
+            "pseudo_root": (
+                {"kind": "local_root"} if self.pseudo_root is not None else None
+            ),
             "pseudo_table": self.pseudo_table,
-            "kmesh_model": to_jsonable(self.kmesh_model),
+            "kmesh_model": (
+                self.kmesh_model.to_dict() if self.kmesh_model is not None else None
+            ),
         }
 
 

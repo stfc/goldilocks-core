@@ -339,11 +339,13 @@ export function createWorkspace(
           failureOperation: null,
         });
         return;
-      case "workspace.reset":
+      case "workspace.reset": {
+        const capabilities = store.getState().capabilities;
         sourceEpoch += 1;
         draftRevision = 0;
         startup = null;
-        store.setState(EMPTY_SNAPSHOT, true);
+        store.setState({ ...EMPTY_SNAPSHOT, capabilities }, true);
+      }
     }
   }
 

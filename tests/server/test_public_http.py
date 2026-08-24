@@ -9,7 +9,9 @@ from threading import Event
 
 import pytest
 
-from goldilocks_core.runtime import Service
+from goldilocks_core.assets import AssetNotInstalled, AssetReference
+from goldilocks_core.contracts import KPointSelection, Provenance
+from goldilocks_core.runtime import Runtime, Service
 from goldilocks_core.server.http import create_app
 
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
@@ -119,7 +121,9 @@ def test_http_compute_archive_returns_an_unstored_zip(
 def test_http_capacity_guards_only_compute(
     sample_structure_text: str,
 ) -> None:
-    service = _BlockingService()
+    backend = _BlockingKmeshBackend()
+    runtime = Runtime(kmesh_service=backend)
+    service = Service(runtime)
     body = {
         "draft": {
             "structure": {
@@ -127,7 +131,6 @@ def test_http_capacity_guards_only_compute(
                 "content": sample_structure_text,
                 "format": "cif",
             },
-            "hints": {"k_grid": [3, 3, 3]},
         },
         "selection": {"records": ["k_points"]},
         "output": {"kind": "memory"},
@@ -135,27 +138,32 @@ def test_http_capacity_guards_only_compute(
     try:
         with (
             TestClient(create_app(service, compute_wait_seconds=0.01)) as client,
-            ThreadPoolExecutor(max_workers=2) as pool,
+            ThreadPoolExecutor(max_workers=3) as pool,
         ):
             first = pool.submit(client.post, "/compute", json=body)
-            assert service.entered.wait(timeout=1)
+            assert backend.entered.wait(timeout=1)
             busy = client.post("/compute", json=body)
-            capabilities = client.get("/capabilities")
-            inspection = client.post(
-                "/inspect", json={"source": body["draft"]["structure"]}
+            capabilities = pool.submit(client.get, "/capabilities")
+            inspection = pool.submit(
+                client.post,
+                "/inspect",
+                json={"source": body["draft"]["structure"]},
             )
             health = client.get("/health")
-            service.release.set()
+            try:
+                assert capabilities.result(timeout=0.5).status_code == 200
+                assert inspection.result(timeout=0.5).status_code == 200
+            finally:
+                backend.release.set()
 
             assert first.result(timeout=2).status_code == 200
         assert busy.status_code == 503
         assert busy.json()["error"]["kind"] == "server_busy"
-        assert capabilities.status_code == 200
-        assert inspection.status_code == 200
         assert health.json() == {"status": "ok"}
     finally:
-        service.release.set()
+        backend.release.set()
         service.close()
+        runtime.close()
 
 
 def test_http_lets_core_report_unknown_domain_values(
@@ -269,6 +277,41 @@ def test_http_rejects_non_inline_sources_and_unknown_fields(test_service) -> Non
     assert "/server/output" not in directory.text
 
 
+def test_http_asset_not_installed_error_omits_server_paths(
+    sample_structure_text: str,
+) -> None:
+    service = _MissingAssetService()
+    try:
+        with TestClient(create_app(service)) as client:
+            response = client.post(
+                "/compute",
+                json={
+                    "draft": {
+                        "structure": {
+                            "name": "Si.cif",
+                            "content": sample_structure_text,
+                        }
+                    },
+                    "selection": {"records": ["analysis"]},
+                    "output": {"kind": "memory"},
+                },
+            )
+    finally:
+        service.close()
+
+    assert response.status_code == 424
+    assert response.json() == {
+        "error": {
+            "kind": "asset_not_installed",
+            "message": "Runtime asset model-fixture@7 is not installed.",
+            "asset_id": "model-fixture",
+            "version": "7",
+            "reason": "is not installed",
+        }
+    }
+    assert "/srv/goldilocks/secret-assets" not in response.text
+
+
 def test_openapi_describes_canonical_json_and_archive_contracts(test_service) -> None:
     with TestClient(create_app(test_service)) as client:
         schema = client.get("/openapi.json").json()
@@ -310,6 +353,32 @@ def test_openapi_describes_canonical_json_and_archive_contracts(test_service) ->
         "$ref"
     ].endswith("/ErrorResponse")
 
+    schemas = schema["components"]["schemas"]
+    result = schemas["ComputationResult"]["properties"]
+    assert result["draft"]["$ref"].endswith("/SerializedCalculationDraft")
+    selection_document = schemas[result["selection"]["$ref"].rsplit("/", 1)[-1]]
+    assert {
+        item["$ref"].rsplit("/", 1)[-1] for item in selection_document["anyOf"]
+    } == {"PresetSelection", "RecordSelection"}
+    assert result["records"]["$ref"].endswith("/Records")
+    records = schemas["Records"]
+    assert records["additionalProperties"] is False
+    assert set(records["properties"]) == {
+        "analysis",
+        "advice",
+        "k_points",
+        "selection",
+        "generated_files",
+        "dft_input_data",
+    }
+    analysis_ref = records["properties"]["analysis"]["$ref"].rsplit("/", 1)[-1]
+    assert "reduced_formula" in schemas[analysis_ref]["properties"]
+    selection_ref = records["properties"]["selection"]["$ref"].rsplit("/", 1)[-1]
+    assert "pseudopotentials" in schemas[selection_ref]["properties"]
+    assert "location" not in schemas["SerializedModel"]["properties"]
+    assert "filepath" not in schemas["SerializedPseudoMetadata"]["properties"]
+    assert "filepath" not in schemas["SerializedPseudopotentialSelection"]["properties"]
+
 
 def test_generated_openapi_and_typescript_match_the_public_contract(
     test_service,
@@ -325,6 +394,9 @@ def test_generated_openapi_and_typescript_match_the_public_contract(
     assert "readonly ComputeRequest:" in typescript
     assert "readonly ComputationResult:" in typescript
     assert "readonly StructureInspection:" in typescript
+    assert 'readonly records: components["schemas"]["Records"];' in typescript
+    assert "readonly Records:" in typescript
+    assert "readonly analysis?:" in typescript
     assert "GuidedRequest" not in typescript
     assert "RecommendationResponse" not in typescript
 
@@ -358,14 +430,31 @@ class _DefectiveService(Service):
         raise ValueError("unexpected internal defect")
 
 
-class _BlockingService(Service):
+class _BlockingKmeshBackend:
     def __init__(self) -> None:
-        super().__init__()
         self.entered = Event()
         self.release = Event()
 
-    def compute(self, request, *, output=None):
+    def __call__(self, structure) -> KPointSelection:
+        del structure
         self.entered.set()
         if not self.release.wait(timeout=2):
             raise RuntimeError("test did not release computation")
-        return super().compute(request, output=output)
+        return KPointSelection(
+            grid=(3, 3, 3),
+            shift=(0, 0, 0),
+            mesh_type="monkhorst-pack",
+            provenance=Provenance(source="model", reason="test"),
+        )
+
+    def close(self) -> None:
+        pass
+
+
+class _MissingAssetService(Service):
+    def compute(self, request, *, output=None):
+        del request, output
+        raise AssetNotInstalled(
+            AssetReference("model-fixture", "7"),
+            Path("/srv/goldilocks/secret-assets"),
+        )

@@ -223,10 +223,13 @@ def create_app(
             content={
                 "error": {
                     "kind": "asset_not_installed",
-                    "message": str(error),
+                    "message": (
+                        f"Runtime asset {error.reference.id}@{error.reference.version} "
+                        f"{error.reason}."
+                    ),
                     "asset_id": error.reference.id,
                     "version": error.reference.version,
-                    "root": str(error.root),
+                    "reason": error.reason,
                 }
             },
         )

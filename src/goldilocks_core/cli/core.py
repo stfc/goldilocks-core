@@ -16,15 +16,17 @@ from goldilocks_core.contracts import (
     CalculationIntent,
     ComputationResult,
     ComputeRequest,
+    DftInputData,
     DirectoryOutput,
     GeneratedFiles,
     KPointSelection,
     ModelSpec,
     OutputTarget,
+    ParameterAdvice,
     PathStructureSource,
     PresetSelection,
     RecordSelection,
-    StructureAnalysisRecord,
+    SelectionRecord,
     resolve_output_types,
 )
 from goldilocks_core.examples import structures_path
@@ -419,15 +421,54 @@ def _parse_optional_bool(value: str | None) -> bool | None:
 def _print_human_summary(result: ComputationResult) -> None:
     structure = result.draft.structure
     print(f"structure: {structure.source.name}")
-    analysis = result.records.get(StructureAnalysisRecord)
-    if analysis is not None:
-        print(f"formula: {analysis.reduced_formula}")
+    print(f"formula: {structure.structure.reduced_formula}")
     print(f"code: {result.draft.intent.code}")
     print(f"task: {result.draft.intent.task}")
+    advice = result.records.get(ParameterAdvice)
+    if advice is not None:
+        smearing = advice.smearing.smearing_type or "none"
+        if advice.smearing.width_ry is not None:
+            smearing = f"{smearing}@{advice.smearing.width_ry:g} Ry"
+        pseudo_type = advice.pseudopotential_requirements.pseudo_type or "any"
+        soc = (
+            "on"
+            if advice.spin_orbit.enabled
+            else "consider"
+            if advice.spin_orbit.consider
+            else "off"
+        )
+        print(
+            "advice: "
+            f"smearing={smearing}; "
+            f"spin={'on' if advice.magnetism.spin_polarized else 'off'}; "
+            f"SOC={soc}; "
+            "pseudo="
+            f"{advice.pseudopotential_requirements.functional}/"
+            f"{advice.pseudopotential_requirements.accuracy}/"
+            f"{pseudo_type}/"
+            f"{advice.pseudopotential_requirements.relativistic}; "
+            f"vdW={'on' if advice.vdw.use_vdw else 'off'}"
+        )
     k_points = result.records.get(KPointSelection)
     if k_points is not None:
         grid = k_points.grid
         print(f"k-grid: {grid[0]} {grid[1]} {grid[2]}")
+    selection = result.records.get(SelectionRecord)
+    if selection is not None:
+        selected = ", ".join(
+            f"{pseudo.element}={pseudo.filename or 'unresolved'}"
+            for pseudo in selection.pseudopotentials
+        )
+        print(f"selection: {selected or 'no pseudopotentials'}")
+    input_data = result.records.get(DftInputData)
+    if input_data is not None:
+        print(
+            f"dft input data: {len(input_data.artifacts)} artifacts, "
+            f"{len(input_data.citations)} citations"
+        )
+        pseudo_set = input_data.pseudopotential_set
+        version = f"@{pseudo_set.version}" if pseudo_set.version is not None else ""
+        print(f"pseudopotential set: {pseudo_set.id}{version}")
     generated_files = result.records.get(GeneratedFiles, ())
     if generated_files:
         print("generated files:")

@@ -198,6 +198,9 @@ def test_cli_human_compute_summary_reports_science_and_publication(
     assert "code: quantum_espresso" in completed.stdout
     assert "task: scf_single_point" in completed.stdout
     assert "k-grid: 3 3 3" in completed.stdout
+    assert "selection: Si=Si.UPF" in completed.stdout
+    assert "dft input data:" in completed.stdout
+    assert "pseudopotential set:" in completed.stdout
     assert f"published directory: {destination}" in completed.stdout
 
 
@@ -228,6 +231,25 @@ def test_cli_compute_automatically_publishes_complete_input_data(
     assert result["publication"]["kind"] == "directory"
     assert result["publication"]["path"] == str(tmp_path / "goldilocks_out")
     assert (tmp_path / "goldilocks_out" / "goldilocks.json").is_file()
+
+
+def test_cli_human_advice_summary_uses_the_normalized_draft_formula() -> None:
+    completed = _run_cli(
+        "compute",
+        str(structure("Si.cif")),
+        "--outputs",
+        "advice",
+        "--no-out",
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "formula: Si" in completed.stdout
+    assert "advice:" in completed.stdout
+    assert "smearing=fixed" in completed.stdout
+    assert "spin=off" in completed.stdout
+    assert "SOC=off" in completed.stdout
+    assert "pseudo=PBEsol/efficiency/any/scalar" in completed.stdout
+    assert "vdW=off" in completed.stdout
 
 
 def test_cli_compute_selected_records_uses_the_same_result_contract() -> None:

@@ -35,6 +35,7 @@ class AssetNotInstalled(FileNotFoundError):
     ) -> None:
         self.reference = reference
         self.root = root
+        self.reason = reason
         super().__init__(
             f"runtime asset {reference.id}@{reference.version} {reason} in {root}; "
             f"run 'goldilocks assets install {reference.id}'"

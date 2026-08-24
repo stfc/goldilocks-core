@@ -161,8 +161,8 @@ def test_mcp_compute_supports_explicit_local_outputs(
 def test_mcp_rejects_unknown_and_conflicting_transport_shapes(test_service) -> None:
     server = create_server(test_service)
 
-    with pytest.raises(ToolError, match="Unknown compute arguments: mode"):
-        asyncio.run(server.call_tool("compute", {"mode": "recommend"}))
+    with pytest.raises(ToolError, match="Unknown compute arguments: unexpected"):
+        asyncio.run(server.call_tool("compute", {"unexpected": True}))
     with pytest.raises(ToolError, match="Extra inputs are not permitted"):
         asyncio.run(
             server.call_tool(
@@ -179,7 +179,7 @@ def test_mcp_rejects_unknown_and_conflicting_transport_shapes(test_service) -> N
             server.call_tool(
                 "compute",
                 {
-                    "draft": {"structure": "Si.cif", "mode": "recommend"},
+                    "draft": {"structure": "Si.cif", "unexpected": True},
                     "selection": {"records": ["analysis"]},
                     "output": {"kind": "memory"},
                 },

@@ -81,7 +81,7 @@ def test_structure_file_to_publication_preserves_inputs_and_provenance(
 ) -> None:
     structure_path = tmp_path / "NaCl.cif"
     sodium_chloride_structure.to(filename=structure_path)
-    output_dir = tmp_path / "published"
+    destination = tmp_path / "published"
     pseudos = (
         pseudo_metadata_factory(
             "Na",
@@ -107,11 +107,11 @@ def test_structure_file_to_publication_preserves_inputs_and_provenance(
             ),
             selection=PresetSelection("generate"),
         ),
-        output=DirectoryOutput(output_dir),
+        output=DirectoryOutput(destination),
     )
 
-    generated_path = output_dir / "inputs" / "qe.in"
-    manifest = json.loads((output_dir / "goldilocks.json").read_text())
+    generated_path = destination / "inputs" / "qe.in"
+    manifest = json.loads((destination / "goldilocks.json").read_text())
 
     assert generated_path.read_bytes() == result.records[GeneratedFiles][
         0
@@ -123,4 +123,4 @@ def test_structure_file_to_publication_preserves_inputs_and_provenance(
     assert manifest["records"]["k_points"]["grid"] == [3, 5, 7]
     assert manifest["records"]["k_points"]["provenance"]["source"] == "user_hint"
     assert result.publication is not None
-    assert result.publication.path == str(output_dir.resolve())
+    assert result.publication.path == str(destination.resolve())

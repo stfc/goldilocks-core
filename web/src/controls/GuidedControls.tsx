@@ -1,10 +1,6 @@
 import { ArrowRight } from "lucide-react";
 
-import type {
-  CalculationDraft,
-  Capabilities,
-  StructureInspection,
-} from "../api/coreClient";
+import type { Capabilities } from "../api/coreClient";
 import { useWorkspace, useWorkspaceSnapshot } from "../workspace/useWorkspace";
 import { StructureSourceControls } from "./StructureSourceControls";
 import "./GuidedControls.css";
@@ -34,13 +30,10 @@ export function GuidedControls() {
         snapshot.capabilities === null ? (
           <div className="rail-placeholder">
             <span>Waiting for a structure</span>
-            <p>Defaults and compatible assets appear after inspection.</p>
+            <p>Core defaults and the asset catalog appear after inspection.</p>
           </div>
         ) : (
-          <CalculationForm
-            capabilities={snapshot.capabilities}
-            inspection={snapshot.inspection}
-          />
+          <CalculationForm capabilities={snapshot.capabilities} />
         )}
       </section>
     </section>
@@ -58,10 +51,8 @@ function SectionHeading({ number, title }: { number: string; title: string }) {
 
 function CalculationForm({
   capabilities,
-  inspection,
 }: {
   readonly capabilities: Capabilities;
-  readonly inspection: StructureInspection;
 }) {
   const workspace = useWorkspace();
   const snapshot = useWorkspaceSnapshot();
@@ -78,7 +69,6 @@ function CalculationForm({
     return null;
   }
 
-  const tables = compatibleSets(capabilities, inspection, intent);
   const functionals = [
     ...new Set(
       capabilities.pseudopotential_sets.map((item) => item.functional),
@@ -176,9 +166,9 @@ function CalculationForm({
           }
         >
           <option value="">Selected by Core</option>
-          {tables.map((table) => (
+          {capabilities.pseudopotential_sets.map((table) => (
             <option key={table.id} value={table.id}>
-              {table.provider} · {table.upstream_name}
+              {table.id} · {table.relativistic_treatment}
             </option>
           ))}
         </select>
@@ -326,24 +316,4 @@ function parseOptionalSwitch(value: string): boolean | null {
 function formatOptionalSwitch(value: boolean | null | undefined): string {
   if (value === null || value === undefined) return "automatic";
   return value ? "on" : "off";
-}
-
-function compatibleSets(
-  capabilities: Capabilities,
-  inspection: StructureInspection,
-  intent: NonNullable<CalculationDraft["intent"]>,
-) {
-  const elements = new Set(
-    inspection.structure.sites.flatMap((site) =>
-      site.species.map((species) => species.symbol),
-    ),
-  );
-  return capabilities.pseudopotential_sets.filter(
-    (item) =>
-      item.functional === intent.functional &&
-      item.accuracy === intent.pseudo_accuracy &&
-      [...elements].every((element) =>
-        item.supported_elements.includes(element),
-      ),
-  );
 }

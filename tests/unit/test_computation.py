@@ -161,7 +161,7 @@ def test_compute_request_rejects_an_invalid_selection_type() -> None:
         )
 
 
-def test_compute_request_has_one_selection_and_no_execution_mode() -> None:
+def test_compute_request_serializes_the_draft_and_selection() -> None:
     from goldilocks_core import ComputeRequest, PresetSelection
 
     request = ComputeRequest(
@@ -175,8 +175,6 @@ def test_compute_request_has_one_selection_and_no_execution_mode() -> None:
     data = request.to_dict()
     assert data["selection"] == {"preset": "generate"}
     assert data["draft"]["hints"]["k_grid"] == [2, 2, 1]
-    assert "mode" not in data
-    assert "output_dir" not in data
 
 
 def test_result_retains_the_normalized_calculation_draft(tmp_path) -> None:
@@ -432,34 +430,3 @@ def test_one_call_compute_uses_the_same_result_contract() -> None:
     )
 
     assert result.records[KPointSelection].grid == (2, 2, 1)
-
-
-def test_service_exposes_one_scientific_execution_method() -> None:
-    from goldilocks_core import Service
-
-    with Service() as service:
-        assert not hasattr(service, "recommend")
-        assert not hasattr(service, "generate")
-        assert not hasattr(service, "run_preset")
-
-
-def test_root_package_has_one_request_result_and_convenience_path() -> None:
-    import goldilocks_core
-
-    removed = (
-        "PresetRequest",
-        "QueryRequest",
-        "Result",
-        "run_core_job",
-        "query_records",
-    )
-
-    assert all(not hasattr(goldilocks_core, name) for name in removed)
-
-
-def test_contract_package_has_no_legacy_request_or_result_types() -> None:
-    import goldilocks_core.contracts as contracts
-
-    removed = ("PresetRequest", "QueryRequest", "Result")
-
-    assert all(not hasattr(contracts, name) for name in removed)

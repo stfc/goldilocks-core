@@ -5,10 +5,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from goldilocks_core.contracts import (
-    JsonDict,
+    CalculationTaskCapability,
+    PresetCapability,
     Records,
+    StageCapability,
     record_type_id,
-    to_jsonable,
 )
 
 
@@ -70,46 +71,10 @@ class TaskGraph:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class StageInfo:
-    id: str
-    name: str
-    description: str
-    input_record_ids: tuple[str, ...]
-    output_record_id: str
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
-
-
-@dataclass(frozen=True, slots=True)
-class PresetInfo:
-    id: str
-    name: str
-    output_record_ids: tuple[str, ...]
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
-
-
-@dataclass(frozen=True, slots=True)
-class GraphInfo:
-    id: str
-    revision: str
-    name: str
-    description: str
-    stages: tuple[StageInfo, ...]
-    presets: tuple[PresetInfo, ...]
-    selectable_record_ids: tuple[str, ...]
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
-
-
-def describe_task(task: TaskGraph) -> GraphInfo:
+def describe_task(task: TaskGraph) -> CalculationTaskCapability:
     """Serializes a TaskGraph to string-keyed IDs. Same input as execute()."""
     stages = tuple(
-        StageInfo(
+        StageCapability(
             id=stage.id,
             name=stage.name,
             description=stage.description,
@@ -119,7 +84,7 @@ def describe_task(task: TaskGraph) -> GraphInfo:
         for stage in task.stages
     )
     presets = tuple(
-        PresetInfo(
+        PresetCapability(
             id=preset.name,
             name=preset.name,
             output_record_ids=tuple(
@@ -128,7 +93,7 @@ def describe_task(task: TaskGraph) -> GraphInfo:
         )
         for preset in task.presets
     )
-    return GraphInfo(
+    return CalculationTaskCapability(
         id=task.task,
         revision=task.revision,
         name=task.name,

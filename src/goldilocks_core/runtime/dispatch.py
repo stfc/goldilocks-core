@@ -3,13 +3,14 @@ from __future__ import annotations
 from dataclasses import replace
 
 from goldilocks_core.contracts import (
+    CalculationTaskCapability,
     ComputationResult,
     ComputeRequest,
     PresetSelection,
 )
 from goldilocks_core.contracts.registry import register_record_types
 from goldilocks_core.io.structures import normalize_structure
-from goldilocks_core.runtime.graph import GraphInfo, describe_task, execute_graph
+from goldilocks_core.runtime.graph import describe_task, execute_graph
 from goldilocks_core.runtime.models import Runtime
 from goldilocks_core.runtime.task import GraphHandler
 
@@ -103,7 +104,7 @@ class Dispatcher:
             warnings=handler.collect_warnings(execution.produced),
         )
 
-    def describe_tasks(self) -> tuple[GraphInfo, ...]:
+    def describe_tasks(self) -> tuple[CalculationTaskCapability, ...]:
         self._ensure_default()
         return tuple(describe_task(handler.spec) for handler in self._tasks.values())
 

@@ -99,7 +99,7 @@ class StructureSourceRequest(_Document):
     @classmethod
     def validate_name(cls, value: str) -> str:
         if (
-            not value
+            not value.strip()
             or value in {".", ".."}
             or "/" in value
             or "\\" in value

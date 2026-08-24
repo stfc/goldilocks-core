@@ -60,15 +60,16 @@ def test_inline_cif_without_extension_or_hint_resolves_from_content() -> None:
 
 
 @pytest.mark.parametrize("origin", ["inline", "path"])
+@pytest.mark.parametrize("name", ["POSCAR", "silicon.poscar"])
 def test_poscar_filename_preserves_source_metadata_before_content_inference(
-    origin: str, tmp_path: Path
+    origin: str, name: str, tmp_path: Path
 ) -> None:
     poscar_lines = make_si_structure().to(fmt="poscar").splitlines()
     content = "\n".join(["data_valid_poscar", *poscar_lines[1:]]) + "\n"
     if origin == "inline":
-        source = InlineStructureSource(name="POSCAR", content=content)
+        source = InlineStructureSource(name=name, content=content)
     else:
-        path = tmp_path / "POSCAR"
+        path = tmp_path / name
         path.write_text(content, encoding="utf-8")
         source = PathStructureSource(path)
 
@@ -78,7 +79,7 @@ def test_poscar_filename_preserves_source_metadata_before_content_inference(
     source_bytes = content.encode()
     assert inspection.source.to_dict() == {
         "origin": origin,
-        "name": "POSCAR",
+        "name": name,
         "format": "poscar",
         "content": content,
         "sha256": hashlib.sha256(source_bytes).hexdigest(),

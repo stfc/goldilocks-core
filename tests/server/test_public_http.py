@@ -314,7 +314,7 @@ def test_openapi_describes_canonical_json_and_archive_contracts(test_service) ->
 def test_generated_openapi_and_typescript_match_the_public_contract(
     test_service,
 ) -> None:
-    root = Path(__file__).parents[2]
+    root = Path(__file__).resolve().parents[2]
     committed = json.loads((root / "web" / "openapi.json").read_text())
     with TestClient(create_app(test_service)) as client:
         generated = client.get("/openapi.json").json()

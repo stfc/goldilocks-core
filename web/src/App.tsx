@@ -45,7 +45,8 @@ export function App() {
             <span>{snapshot.failure.message}</span>
           </div>
           <div className="failure-banner__actions">
-            {snapshot.failure.retryable ? (
+            {(snapshot.failure.retryable ||
+              snapshot.failureOperation === "capabilities") ? (
               <button
                 type="button"
                 onClick={() =>
@@ -56,15 +57,17 @@ export function App() {
                 Retry
               </button>
             ) : null}
-            <button
-              type="button"
-              aria-label="Dismiss error"
-              onClick={() =>
-                void workspace.dispatch({ type: "failure.dismiss" })
-              }
-            >
-              <X aria-hidden="true" size={13} />
-            </button>
+            {snapshot.capabilities === null ? null : (
+              <button
+                type="button"
+                aria-label="Dismiss error"
+                onClick={() =>
+                  void workspace.dispatch({ type: "failure.dismiss" })
+                }
+              >
+                <X aria-hidden="true" size={13} />
+              </button>
+            )}
           </div>
         </div>
       )}

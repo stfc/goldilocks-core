@@ -60,6 +60,10 @@ export interface Workspace {
 
 type ArchiveSink = (archive: ArchiveDownload) => void;
 
+interface OperationOwner {
+  readonly operation: WorkspaceOperation;
+}
+
 const EMPTY_SNAPSHOT: WorkspaceSnapshot = {
   capabilities: null,
   source: null,
@@ -80,62 +84,74 @@ export function createWorkspace(
   saveArchive: ArchiveSink = saveArchiveToBrowser,
 ): Workspace {
   const store = createStore<WorkspaceSnapshot>(() => EMPTY_SNAPSHOT);
-  let startup: Promise<void> | null = null;
-  let sourceEpoch = 0;
+  let activeOperation: OperationOwner | null = null;
+  let startup: {
+    readonly owner: OperationOwner;
+    readonly promise: Promise<void>;
+  } | null = null;
   let draftRevision = 0;
 
-  function start(): Promise<void> {
-    if (store.getState().capabilities !== null) return Promise.resolve();
-    if (startup !== null) return startup;
-    const epoch = sourceEpoch;
+  function beginOperation(operation: WorkspaceOperation): OperationOwner {
+    const owner = { operation };
+    activeOperation = owner;
     store.setState({
-      operation: "capabilities",
+      operation,
       failure: null,
       failureOperation: null,
     });
-    startup = core.capabilities().then(
+    return owner;
+  }
+
+  function completeOperation(
+    owner: OperationOwner,
+    update: Partial<WorkspaceSnapshot> = {},
+  ): boolean {
+    if (activeOperation !== owner) return false;
+    activeOperation = null;
+    store.setState({ ...update, operation: null });
+    return true;
+  }
+
+  function start(): Promise<void> {
+    if (store.getState().capabilities !== null) return Promise.resolve();
+    if (startup !== null) return startup.promise;
+    const owner = beginOperation("capabilities");
+    const promise = core.capabilities().then(
       (capabilities) => {
-        if (epoch !== sourceEpoch) return;
-        store.setState({
+        if (startup?.owner === owner) startup = null;
+        completeOperation(owner, {
           capabilities,
-          operation: null,
           failure: null,
           failureOperation: null,
         });
       },
       (error: unknown) => {
-        startup = null;
-        if (epoch !== sourceEpoch) return;
+        if (startup?.owner === owner) startup = null;
+        if (activeOperation !== owner) return;
         if (!(error instanceof CoreFailure)) {
-          store.setState({ operation: null });
+          completeOperation(owner);
           throw error;
         }
-        store.setState({
-          operation: null,
+        completeOperation(owner, {
           failure: error,
           failureOperation: "capabilities",
         });
       },
     );
-    return startup;
+    startup = { owner, promise };
+    return promise;
   }
 
   async function openSource(source: StructureSource): Promise<void> {
     const capabilities = store.getState().capabilities;
     if (capabilities === null) return;
-    sourceEpoch += 1;
-    const epoch = sourceEpoch;
-    store.setState({
-      attemptedSource: source,
-      operation: "inspect",
-      failure: null,
-      failureOperation: null,
-    });
+    const owner = beginOperation("inspect");
+    store.setState({ attemptedSource: source });
     try {
       const inspection = await core.inspectStructure(source);
-      if (epoch !== sourceEpoch) return;
+      if (activeOperation !== owner) return;
       draftRevision = 0;
-      store.setState({
+      completeOperation(owner, {
         source,
         attemptedSource: null,
         inspection,
@@ -148,18 +164,16 @@ export function createWorkspace(
         outOfDate: false,
         lastDownload: null,
         downloadOutOfDate: false,
-        operation: null,
         failure: null,
         failureOperation: null,
       });
     } catch (error) {
-      if (epoch !== sourceEpoch) return;
+      if (activeOperation !== owner) return;
       if (!(error instanceof CoreFailure)) {
-        store.setState({ operation: null });
+        completeOperation(owner);
         throw error;
       }
-      store.setState({
-        operation: null,
+      completeOperation(owner, {
         failure: error,
         failureOperation: "inspect",
       });
@@ -201,14 +215,9 @@ export function createWorkspace(
   async function computeReview(): Promise<void> {
     const snapshot = store.getState();
     if (snapshot.draft === null || snapshot.operation !== null) return;
-    const epoch = sourceEpoch;
     const revision = draftRevision;
     const submittedDraft = snapshot.draft;
-    store.setState({
-      operation: "compute",
-      failure: null,
-      failureOperation: null,
-    });
+    const owner = beginOperation("compute");
     try {
       const result = await core.compute(
         {
@@ -217,22 +226,19 @@ export function createWorkspace(
         },
         { kind: "memory" },
       );
-      if (epoch !== sourceEpoch) return;
-      store.setState({
+      completeOperation(owner, {
         reviewed: { draft: submittedDraft, result },
         outOfDate: revision !== draftRevision,
-        operation: null,
         failure: null,
         failureOperation: null,
       });
     } catch (error) {
-      if (epoch !== sourceEpoch) return;
+      if (activeOperation !== owner) return;
       if (!(error instanceof CoreFailure)) {
-        store.setState({ operation: null });
+        completeOperation(owner);
         throw error;
       }
-      store.setState({
-        operation: null,
+      completeOperation(owner, {
         failure: error,
         failureOperation: "compute",
       });
@@ -248,14 +254,9 @@ export function createWorkspace(
     ) {
       return;
     }
-    const epoch = sourceEpoch;
     const revision = draftRevision;
     const reviewedDraft = snapshot.reviewed.draft;
-    store.setState({
-      operation: "download",
-      failure: null,
-      failureOperation: null,
-    });
+    const owner = beginOperation("download");
     try {
       const archive = await core.compute(
         {
@@ -264,29 +265,29 @@ export function createWorkspace(
         },
         { kind: "archive" },
       );
-      if (epoch !== sourceEpoch || revision !== draftRevision) {
-        store.setState({ operation: null });
+      if (activeOperation !== owner) return;
+      if (revision !== draftRevision) {
+        completeOperation(owner);
         return;
       }
-      store.setState({
+      completeOperation(owner, {
         lastDownload: archive,
         downloadOutOfDate: false,
-        operation: null,
         failure: null,
         failureOperation: null,
       });
       saveArchive(archive);
     } catch (error) {
-      if (epoch !== sourceEpoch || revision !== draftRevision) {
-        store.setState({ operation: null });
+      if (activeOperation !== owner) return;
+      if (revision !== draftRevision) {
+        completeOperation(owner);
         return;
       }
       if (!(error instanceof CoreFailure)) {
-        store.setState({ operation: null });
+        completeOperation(owner);
         throw error;
       }
-      store.setState({
-        operation: null,
+      completeOperation(owner, {
         failure: error,
         failureOperation: "download",
       });
@@ -333,6 +334,7 @@ export function createWorkspace(
         return;
       }
       case "failure.dismiss":
+        if (store.getState().capabilities === null) return;
         store.setState({
           attemptedSource: null,
           failure: null,
@@ -341,10 +343,23 @@ export function createWorkspace(
         return;
       case "workspace.reset": {
         const capabilities = store.getState().capabilities;
-        sourceEpoch += 1;
+        const pendingStartup =
+          startup !== null && activeOperation === startup.owner ? startup : null;
         draftRevision = 0;
-        startup = null;
-        store.setState({ ...EMPTY_SNAPSHOT, capabilities }, true);
+        if (pendingStartup === null) {
+          activeOperation = null;
+          startup = null;
+        }
+        store.setState(
+          {
+            ...EMPTY_SNAPSHOT,
+            capabilities,
+            operation: pendingStartup?.owner.operation ?? null,
+          },
+          true,
+        );
+        if (capabilities === null && pendingStartup === null) await start();
+        return;
       }
     }
   }

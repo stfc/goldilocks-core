@@ -14,10 +14,12 @@ export function GuidedControls() {
   const workspace = useWorkspace();
   const snapshot = useWorkspaceSnapshot();
   const input = useRef<HTMLInputElement>(null);
+  const selectionEpoch = useRef(0);
   const [dragging, setDragging] = useState(false);
   const [readError, setReadError] = useState<string | null>(null);
 
   async function openFile(file: File): Promise<void> {
+    const selection = ++selectionEpoch.current;
     setReadError(null);
     if (file.size > 5 * 1024 * 1024) {
       setReadError("Structure files must be 5 MB or smaller.");
@@ -29,6 +31,7 @@ export function GuidedControls() {
     }
     try {
       const content = await file.text();
+      if (selection !== selectionEpoch.current) return;
       const source: StructureSource = {
         kind: "inline",
         name: file.name,
@@ -37,7 +40,9 @@ export function GuidedControls() {
       };
       await workspace.dispatch({ type: "source.open", source });
     } catch {
-      setReadError("The selected file could not be read.");
+      if (selection === selectionEpoch.current) {
+        setReadError("The selected file could not be read.");
+      }
     }
   }
 

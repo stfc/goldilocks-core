@@ -59,6 +59,34 @@ def test_inline_cif_without_extension_or_hint_resolves_from_content() -> None:
     assert inspection.structure.reduced_formula == "Si"
 
 
+@pytest.mark.parametrize("origin", ["inline", "path"])
+def test_poscar_filename_preserves_source_metadata_before_content_inference(
+    origin: str, tmp_path: Path
+) -> None:
+    poscar_lines = make_si_structure().to(fmt="poscar").splitlines()
+    content = "\n".join(["data_valid_poscar", *poscar_lines[1:]]) + "\n"
+    if origin == "inline":
+        source = InlineStructureSource(name="POSCAR", content=content)
+    else:
+        path = tmp_path / "POSCAR"
+        path.write_text(content, encoding="utf-8")
+        source = PathStructureSource(path)
+
+    with Service() as service:
+        inspection = service.inspect_structure(source)
+
+    source_bytes = content.encode()
+    assert inspection.source.to_dict() == {
+        "origin": origin,
+        "name": "POSCAR",
+        "format": "poscar",
+        "content": content,
+        "sha256": hashlib.sha256(source_bytes).hexdigest(),
+        "size_bytes": len(source_bytes),
+    }
+    assert inspection.structure.reduced_formula == "Si"
+
+
 def test_path_inspection_reads_once_without_serializing_the_host_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

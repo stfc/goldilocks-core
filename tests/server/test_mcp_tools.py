@@ -68,6 +68,23 @@ def test_mcp_recommend_returns_core_result(test_service, request_body) -> None:
     assert data["generated_files"] == []
 
 
+def test_mcp_recommend_accepts_named_inline_structure(
+    test_service, request_body, sample_structure_text
+) -> None:
+    server = create_server(test_service)
+    body = {
+        **request_body,
+        "structure": {
+            "name": "uploaded-silicon.cif",
+            "content": sample_structure_text,
+        },
+    }
+
+    data = _call(server, "recommend", body)
+
+    assert data["analysis"]["reduced_formula"] == "Si"
+
+
 def test_mcp_rejects_unknown_root_arguments(test_service, request_body) -> None:
     """Reject fields outside the published root tool schema."""
     server = create_server(test_service)

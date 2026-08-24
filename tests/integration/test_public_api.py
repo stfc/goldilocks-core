@@ -4,12 +4,24 @@ from pathlib import Path
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
+    ArchiveOutput,
     CalculationDraft,
     CalculationHints,
+    Capabilities,
+    ComputationResult,
     ComputeRequest,
+    DirectoryOutput,
+    InlineStructureSource,
     InMemoryStructureSource,
+    OutputTarget,
+    PathStructureSource,
     PresetSelection,
+    Publication,
     RecordSelection,
+    Records,
+    Service,
+    StructureInspection,
+    StructureSource,
     compute,
 )
 from goldilocks_core.contracts import (
@@ -64,6 +76,44 @@ def _request(selection, pseudo_root: Path = Path("/pseudo")) -> ComputeRequest:
         ),
         selection=selection,
     )
+
+
+def test_root_interface_exposes_three_operations_and_their_contracts() -> None:
+    assert Service.capabilities.__annotations__["return"] == "Capabilities"
+    assert Service.inspect_structure.__annotations__["return"] == (
+        "StructureInspection"
+    )
+    assert Service.compute.__annotations__["return"] == "ComputationResult"
+    assert Capabilities is not None
+    assert StructureInspection is not None
+    assert ComputationResult is not None
+    assert StructureSource is not None
+    assert OutputTarget is not None
+    assert {
+        InlineStructureSource,
+        PathStructureSource,
+        InMemoryStructureSource,
+        ComputeRequest,
+        DirectoryOutput,
+        ArchiveOutput,
+        Publication,
+        Records,
+    }
+
+
+def test_service_capabilities_and_inspection_share_the_root_interface() -> None:
+    source = InMemoryStructureSource(_make_si_structure())
+
+    with Service() as core:
+        capabilities = core.capabilities()
+        inspection = core.inspect_structure(source)
+
+    assert capabilities.tasks[0].id == "scf_single_point"
+    assert {preset.id for preset in capabilities.tasks[0].presets} == {
+        "recommend",
+        "generate",
+    }
+    assert inspection.structure.reduced_formula == "Si"
 
 
 def test_recommendation_preset_runs_staged_core_pipeline() -> None:

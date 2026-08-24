@@ -107,7 +107,7 @@ describe("Workspace", () => {
     });
   });
 
-  it("reset ignores obsolete source work and clears the Workspace", async () => {
+  it("reset ignores obsolete source work and retains Capabilities", async () => {
     let finishInspection: (value: StructureInspection) => void = () => undefined;
     const pendingInspection = new Promise<StructureInspection>((resolve) => {
       finishInspection = resolve;
@@ -123,7 +123,7 @@ describe("Workspace", () => {
     await opening;
 
     expect(workspace.getSnapshot()).toMatchObject({
-      capabilities: null,
+      capabilities,
       source: null,
       attemptedSource: null,
       inspection: null,

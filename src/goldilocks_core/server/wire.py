@@ -99,14 +99,8 @@ ArchiveOutputDocument = create_model(
     kind=(Literal["archive"], ...),
     path=(str, ...),
 )
-AutomaticOutputDocument = create_model(
-    "AutomaticOutput", __config__=_STRICT, kind=(Literal["automatic"], ...)
-)
 type LocalOutputDocument = (
-    MemoryOutputDocument
-    | DirectoryOutputDocument
-    | ArchiveOutputDocument
-    | AutomaticOutputDocument
+    MemoryOutputDocument | DirectoryOutputDocument | ArchiveOutputDocument
 )
 ComputeRequestDocument = create_model(
     "ComputeRequest",

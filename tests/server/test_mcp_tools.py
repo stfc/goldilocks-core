@@ -34,6 +34,7 @@ def test_mcp_exposes_exactly_three_scientific_tools(test_service) -> None:
         compute.input_schema["$defs"]["LocalCalculationDraft"]["additionalProperties"]
         is False
     )
+    assert "AutomaticOutput" not in compute.input_schema["$defs"]
     assert compute.input_schema["$defs"]["RecordSelection"]["properties"]["records"][
         "items"
     ]["enum"] == [

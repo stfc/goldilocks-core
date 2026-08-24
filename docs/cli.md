@@ -121,4 +121,4 @@ Compute output is either canonical JSON or an unstored ZIP response.
 Local stdio MCP exposes exactly `capabilities`, `inspect_structure`, and
 `compute`. MCP accepts local paths or inline sources. Omitted Compute output
 automatically publishes complete DFT Input Data; explicit memory, directory,
-and archive output variants are also available.
+and archive output variants are available.

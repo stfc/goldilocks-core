@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 
 from pymatgen.core import Lattice, Structure
@@ -28,8 +29,10 @@ def _make_si_structure() -> Structure:
 
 def _make_si_metadata(root: Path = Path("/pseudo")) -> PseudoMetadata:
     path = root / "Si.UPF"
-    if root != Path("/pseudo"):
-        path.write_bytes(b"<UPF version='2.0.1'>Si fixture</UPF>\n")
+    content = b"<UPF version='2.0.1'>Si fixture</UPF>\n"
+    materialized = root != Path("/pseudo")
+    if materialized:
+        path.write_bytes(content)
     return PseudoMetadata(
         filepath=str(path),
         filename="Si.UPF",
@@ -42,6 +45,8 @@ def _make_si_metadata(root: Path = Path("/pseudo")) -> PseudoMetadata:
         relativistic="scalar",
         cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
         source_identifier="synthetic/Si.UPF",
+        content_sha256=(hashlib.sha256(content).hexdigest() if materialized else None),
+        content_size_bytes=len(content) if materialized else None,
         pseudo_info={
             "licence": "CC-BY-4.0",
             "licence_text": "Synthetic fixture licence\n",

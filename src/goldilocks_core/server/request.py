@@ -298,6 +298,7 @@ def _parse_pseudo(value: Any) -> PseudoMetadata:
     _reject_unknown(value, _PSEUDO_FIELDS, "pseudo_metadata")
     string_fields = _PSEUDO_FIELDS - {
         "z_valence",
+        "content_size_bytes",
         "cutoffs",
         "frozen_4f_core",
         "pseudo_info",

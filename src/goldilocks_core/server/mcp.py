@@ -123,6 +123,8 @@ class _PseudoMetadata(BaseModel):
     table_id: str | None = None
     cutoffs: _PseudoCutoffs | None = None
     source_identifier: str | None = None
+    content_sha256: str | None = None
+    content_size_bytes: int | None = None
     frozen_4f_core: bool = False
     pseudo_info: dict[str, Any] = Field(default_factory=dict)
     warnings: tuple[str, ...] = ()

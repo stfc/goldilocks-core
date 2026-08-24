@@ -149,13 +149,18 @@ class Publisher:
                 raise FileExistsError(
                     f"Publication destination already exists: {target}"
                 ) from error
-            if not _has_identity(target, staging_identity):
-                _preserve_public_replacement(target, preferred=staging)
-                raise OSError(
-                    f"Publication destination changed during publication: {target}"
-                )
+            _require_public_identity(
+                target,
+                staging_identity,
+                preferred_quarantine=staging,
+            )
             installed = True
-            _verify_directory(target, files)
+            try:
+                _verify_directory_descriptor(staging_descriptor, files)
+            except OSError:
+                _quarantine_owned_directory(target, staging_identity)
+                raise
+            _require_public_identity(target, staging_identity)
         finally:
             if staging_descriptor is not None:
                 os.close(staging_descriptor)
@@ -191,11 +196,7 @@ class Publisher:
                 raise FileExistsError(
                     f"Publication destination already exists: {target}"
                 ) from error
-            if not _has_identity(target, staging_identity):
-                _preserve_public_replacement(target)
-                raise OSError(
-                    f"Publication destination changed during publication: {target}"
-                )
+            _require_public_identity(target, staging_identity)
             if _sha256(target.read_bytes()) != _sha256(payload):
                 raise OSError(f"Published archive checksum differs: {target}")
         finally:
@@ -357,6 +358,18 @@ def _require_identity(path: Path, identity: tuple[int, int], message: str) -> No
         raise OSError(message)
 
 
+def _require_public_identity(
+    target: Path,
+    identity: tuple[int, int],
+    *,
+    preferred_quarantine: Path | None = None,
+) -> None:
+    if _has_identity(target, identity):
+        return
+    _preserve_public_replacement(target, preferred=preferred_quarantine)
+    raise OSError(f"Publication destination changed during publication: {target}")
+
+
 def _preserve_public_replacement(
     target: Path, *, preferred: Path | None = None
 ) -> Path | None:
@@ -374,6 +387,21 @@ def _preserve_public_replacement(
         except FileExistsError:
             continue
         return destination
+    return None
+
+
+def _quarantine_owned_directory(target: Path, identity: tuple[int, int]) -> Path | None:
+    quarantine = target.with_name(f".{target.name}.quarantine-{secrets.token_hex(16)}")
+    try:
+        _native_rename_no_replace(target, quarantine)
+    except FileNotFoundError:
+        return None
+    if _has_identity(quarantine, identity):
+        return quarantine
+    try:
+        _native_rename_no_replace(quarantine, target)
+    except FileExistsError:
+        pass
     return None
 
 
@@ -468,17 +496,17 @@ def _publication(
 
 
 def _verify_directory(root: Path, files: tuple[PublishedFile, ...]) -> None:
-    actual = {
-        path.relative_to(root).as_posix(): (
-            _sha256(path.read_bytes()),
-            path.stat().st_size,
-        )
-        for path in root.rglob("*")
-        if path.is_file()
-    }
-    expected = {file.path: (file.sha256, len(file.content)) for file in files}
-    if actual != expected:
-        raise OSError(f"Completed directory write differs: {root}")
+    descriptor = os.open(
+        root,
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0),
+    )
+    try:
+        _verify_directory_descriptor(descriptor, files)
+    finally:
+        os.close(descriptor)
 
 
 def _add(

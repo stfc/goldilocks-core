@@ -1,3 +1,4 @@
+import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.contracts import (
@@ -71,6 +72,47 @@ def make_metadata(
         source_identifier=f"source/{filename}",
         frozen_4f_core=frozen_4f_core,
     )
+
+
+@pytest.mark.parametrize(
+    "source_identifier",
+    (
+        "/srv/provider/Si.UPF",
+        r"C:\provider\Si.UPF",
+        r"\\server\share\Si.UPF",
+        "~/provider/Si.UPF",
+        r"~\provider\Si.UPF",
+        "~willow/provider/Si.UPF",
+    ),
+)
+def test_pseudo_source_identity_rejects_host_path_forms(
+    source_identifier: str,
+) -> None:
+    with pytest.raises(ValueError, match="portable source identity"):
+        PseudoMetadata(
+            filepath="operator/Si.UPF",
+            filename="Si.UPF",
+            header_format="attr",
+            source_identifier=source_identifier,
+        )
+
+
+@pytest.mark.parametrize(
+    "source_identifier",
+    ("provider/table/Si.UPF", "https://provider.example/table/Si.UPF"),
+)
+def test_pseudo_source_identity_retains_portable_provider_identifiers(
+    source_identifier: str,
+) -> None:
+    metadata = PseudoMetadata(
+        filepath="operator/Si.UPF",
+        filename="Si.UPF",
+        header_format="attr",
+        source_identifier=source_identifier,
+    )
+
+    assert metadata.source_identifier == source_identifier
+    assert metadata.to_dict()["source_identifier"] == source_identifier
 
 
 def test_selects_complete_candidate_matching_every_requirement() -> None:

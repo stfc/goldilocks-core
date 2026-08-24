@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from pathlib import Path
 
@@ -39,11 +40,10 @@ def pseudo_metadata_factory() -> Callable[..., PseudoMetadata]:
         materialize: bool = False,
     ) -> PseudoMetadata:
         filename = f"{element}.UPF"
+        content = f"<UPF version='2.0.1'>{element} fixture</UPF>\n".encode()
         if materialize:
             root.mkdir(parents=True, exist_ok=True)
-            (root / filename).write_bytes(
-                f"<UPF version='2.0.1'>{element} fixture</UPF>\n".encode()
-            )
+            (root / filename).write_bytes(content)
         return PseudoMetadata(
             filepath=str(root / filename),
             filename=filename,
@@ -59,6 +59,10 @@ def pseudo_metadata_factory() -> Callable[..., PseudoMetadata]:
                 ecutrho_ry=ecutrho_ry,
             ),
             source_identifier=f"synthetic/{filename}",
+            content_sha256=(
+                hashlib.sha256(content).hexdigest() if materialize else None
+            ),
+            content_size_bytes=len(content) if materialize else None,
             pseudo_info={
                 "licence": "CC-BY-4.0",
                 "licence_text": "Synthetic test pseudopotential licence\n",

@@ -69,7 +69,21 @@ existing destination. `DirectoryOutput()` allocates `goldilocks_out`, then
 `goldilocks_out_1`, and so on. Automatic output leaves a Result without DFT
 Input Data in memory rather than failing.
 
-Published outputs contain the original source when available, canonical CIF,
+Directory and ZIP publication use the same extracted layout:
+
+```text
+source/
+structure/
+inputs/
+pseudo/
+licences/
+CITATIONS.md
+README.md
+goldilocks.json
+checksums.sha256
+```
+
+The output contains the original source when available, canonical CIF,
 generated inputs, exact pseudopotentials, licence material, citations,
 provenance, a manifest, and checksums. Publication never runs the target code.
 

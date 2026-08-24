@@ -6,14 +6,16 @@ flow is staged so later calculation types can reuse analysis, advice, resource
 selection, and output handling.
 
 ```text
-Load -> Analyze -> Advise -> Kmesh
-Load + Advice + Kmesh -> Select
+Load -> Analyze -> Advise
+Load -> Kmesh
+Load + Advice -> Select
 Load + Advice + Select + Kmesh -> Generate
+Analysis + Advice + Kmesh + Select + Generate -> DFT Input Data
 ```
 
 The executor resolves this dependency graph from typed stage inputs and
-outputs. Stages are functions with no stage base classes; only source
-resolution and bundle publication touch the filesystem.
+outputs. Stages are functions with no stage base classes; only source and asset
+resolution, input rendering, and publication touch the filesystem.
 
 ## Modules
 
@@ -25,21 +27,22 @@ resolution and bundle publication touch the filesystem.
 | `pseudo/source.py` | One source-resolution interface for request metadata, operator roots, and installed tables. |
 | `contracts/` | Data records and serialization shared between stages. |
 | `runtime/graph.py` | Stage-agnostic, type-keyed DAG executor (`TaskGraph`/`Stage`/`Preset`/`execute`). |
-| `runtime/task.py` | `GraphHandler`: a task's graph plus its context-builder and result-assembler hooks. |
-| `runtime/scf.py` | The SCF task: run context, stage graph, and result assembly. |
+| `runtime/task.py` | `GraphHandler`: a task graph, context builder, and factual warning collector. |
+| `runtime/scf.py` | The SCF Calculation Task, stage graph, Presets, context, and warning collection. |
 | `runtime/models.py` | `Runtime`: kmesh/metallicity model lifecycle (load/reset/close), exposed as read-only services. |
 | `runtime/dispatch.py` | `Dispatcher`: task registry and dispatch by `intent.task` through `GraphHandler`s. |
 | `runtime/jobs.py` | Short-lived `compute` convenience entry point. |
 | `runtime/service.py` | `Service`: process-owned lifecycle, locking, Capabilities, Structure Inspection, Compute, and publication. |
-| `io/structures.py` | Structure loading. |
+| `io/structures.py` | One Structure Source normalization path for Inspection and Compute. |
 | `analysis.py` | Structure facts. |
 | `advice/` | Scientific and numerical recommendations. |
-| `kmesh/`, `advice/` | Concrete k-point selection. |
+| `kmesh/` | K-point resolution and mesh mathematics. |
 | `selection.py` | Pseudopotentials and cutoffs. |
 | `generation/` | Calculation-specific file generation. |
-| `publication.py` | Deterministic ready-to-run directory, archive, and in-memory ZIP publication. |
+| `input_data.py` | Assembly of complete DFT Input Data from trusted Records and asset references. |
+| `publication.py` | One deterministic Ready-to-run Output layout for directories and ZIP archives. |
 | `server/request.py` | Shared HTTP/MCP conversion into Core contracts. |
-| `server/wire.py` | Generated strict transport-shape models and response schemas. |
+| `server/wire.py` | Strict request shapes and mechanically derived Core response schemas. |
 | `server/http.py`, `server/http_contract.py` | Optional HTTP lifecycle, errors, and scientific route adapter. |
 | `server/mcp.py` | Optional local stdio MCP adapter. |
 | `server/capacity.py`, `server/readiness.py` | One Compute admission slot and cached asset readiness. |
@@ -65,8 +68,10 @@ with Service() as core:
     result = core.compute(request, output=DirectoryOutput("run"))
 ```
 
-The built-in `scf_single_point` task provides `recommend` and `generate`
-Presets. Explicit Record selection executes only the required subgraph.
+The built-in `scf_single_point` Calculation Task provides `recommend` and
+`generate` Presets. Explicit Record selection executes only the required
+subgraph. The generic dispatcher constructs every `ComputationResult`; Task
+Handlers supply context and collect factual warnings.
 
 ## Transport adapters
 
@@ -75,43 +80,17 @@ Compute. `server/request.py` converts strict transport shapes into Core
 contracts; Core constructors validate domain values once. Responses serialize
 Core contracts mechanically.
 
-HTTP accepts inline structures and stable asset IDs. Memory Compute returns
-canonical Result JSON. Archive Compute uses the Core publisher to create ZIP
-bytes in memory and never accepts or creates a server output directory. One
-`ComputationCapacity` slot wraps Compute only, so Capabilities, Structure
-Inspection, `/health`, `/ready`, and static files stay responsive.
+HTTP accepts inline structures and stable Pseudopotential Set IDs. Memory
+Compute returns canonical `ComputationResult` JSON. Archive Compute uses the
+Core publisher to create ZIP bytes in memory and never accepts or creates a
+server output directory. One `ComputationCapacity` slot wraps Compute only, so
+Capabilities, Structure Inspection, `/health`, `/ready`, and static files stay
+responsive.
 
 Local MCP accepts inline structures or local paths and supports automatic,
 directory, archive, and memory output. Publication paths are absolute. HTTP and
-MCP remain optional imports, and the generated OpenAPI and TypeScript schemas
-describe the same ordinary Core routes.
-
-## Flexible Python use
-
-The top-level `compute` convenience is not an access restriction. Advanced
-callers can import stage functions and compose them themselves:
-
-```python
-from goldilocks_core.advice import advise_parameters
-from goldilocks_core.analysis import analyze_structure
-from goldilocks_core.advice.kdistance import QrfBackend
-from goldilocks_core.generation import generate_inputs
-from goldilocks_core.io.structures import load_structure
-from goldilocks_core.kmesh import resolve_kpoints
-from goldilocks_core.selection import select_pseudopotentials
-
-structure = load_structure("Fe.cif")
-analysis = analyze_structure(structure)
-advice = advise_parameters(analysis, intent, hints)
-kpoints = resolve_kpoints(structure, hints, QrfBackend())
-selection = select_pseudopotentials(
-    structure, advice.pseudopotential_requirements, metadata
-)
-files = generate_inputs(structure, intent, advice, selection, kpoints)
-```
-
-This supports custom ordering, extra project-specific steps, intermediate
-inspection, and calculation-specific generation without extending a framework.
+MCP remain optional imports. OpenAPI is exported from the application, and the
+Workbench imports generated TypeScript declarations from that document.
 
 ## Runtime assets
 
@@ -167,9 +146,21 @@ writes complete DFT Input Data but does not run calculations.
 
 Runner/AiiDA workflows, schedulers, authentication, and completed-output
 analysis are outside this repository. Browser state belongs in `web/` and does
-not enter Core records. HTTP and MCP do not add queues, persistence, sessions,
+not enter Core Records. HTTP and MCP do not add queues, persistence, sessions,
 or pod management.
 
+## Workbench and production image
+
+Workbench loads Capabilities once, sends inline Structure Sources to Inspection,
+and stores its mutable Calculation Draft in the browser. A successful memory
+Compute stores the exact submitted Draft with its immutable Result. Editing the
+Draft leaves that Result visible but out of date. Download resubmits the stored
+reviewed Draft for archive Compute; the server stores no Result or archive.
+
+The production image builds Workbench assets, installs every registered runtime
+asset, verifies that profile during the image build and readiness checks, then
+runs as the unprivileged `goldilocks` user. FastAPI serves the static Workbench
+and Core routes from one origin.
 
 ## Engineering invariants
 

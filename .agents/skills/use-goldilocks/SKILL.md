@@ -1,123 +1,77 @@
 ---
 name: use-goldilocks
-description: Use goldilocks-core quickly for DFT input recommendation workflows. Trigger when running or scripting recommendations, extracting parameters from structures, generating or publishing Quantum ESPRESSO SCF inputs, or manually writing inputs from Goldilocks-selected records.
+description: Use goldilocks-core quickly for DFT input recommendation workflows. Trigger when running or scripting recommendations, extracting parameters from structures, generating or publishing Quantum ESPRESSO SCF inputs, or manually writing inputs from Goldilocks-selected Records.
 ---
 
 # Use Goldilocks
 
-Operational quickstart for using `goldilocks-core` without rereading the
-implementation. Core currently recommends and generates Quantum ESPRESSO SCF
-single-point inputs.
-
-Fresh installations must install the runtime assets first: run
-`goldilocks assets install default` once, or pass `--fetch-missing`, before any
-command that needs the default k-point model or pseudopotential tables.
+Use the canonical Capabilities, Structure Inspection, and Compute operations.
+Core currently supports Quantum ESPRESSO single-point SCF input preparation.
 
 ## Progressive disclosure
 
-Start here. Read supporting files only for the needed branch:
+- `references/workflows.md` — Python, CLI, HTTP, and MCP workflows.
+- `references/qe-scf-template.md` — mechanical QE SCF template for manually
+  writing an input from trusted Records.
 
-- `references/workflows.md` — Python and CLI operation patterns, record queries,
-  model selection, and bundle publication.
-- `references/qe-scf-template.md` — mechanical Quantum ESPRESSO SCF template for
-  manually writing an input from selected values.
-
-Pair with:
-
-- `use-uv` for Python, CLI, tests, or dependency work.
-- `dft-basics` for physics-bearing choices: k-points, smearing,
-  pseudopotentials, SOC, or convergence.
-- `write-a-test` when changing public behavior or capturing a regression.
+Pair with `use-uv` for execution and `dft-basics` for physics-bearing choices.
 
 ## Mental model
 
-The shipped task is a typed dependency graph:
-
 ```text
-Load -> Analyze -> Advise -> Select
+Load -> Analyze -> Advise
 Load -> Kmesh
+Load + Advice -> Select
 Load + Advice + Select + Kmesh -> Generate
+Analysis + Advice + Kmesh + Select + Generate -> DFT Input Data
 ```
 
-Choose the operation from the needed output:
-
-- Complete recommendation records: `Service.recommend(PresetRequest(...))`.
-- Generated files in memory: `Service.generate(PresetRequest(...))`.
-- Generated files on disk: `Service.generate(..., output_dir=...)`.
-- Selected records only: `Service.compute(QueryRequest(...))`.
-- Repeated calls or discovery: keep one `Service` open.
-- One call: `run_core_job` or `query_records`.
-
-Bundle publication is a side effect of Generate, not a separate mode.
+Use one `ComputeRequest` with either `PresetSelection` or `RecordSelection`.
+`recommend` and `generate` are Preset IDs. Keep one `Service` open for repeated
+work; use top-level `compute()` for one call.
 
 ## Inputs to identify
 
-1. Structure path or `pymatgen.Structure`.
-2. Target code, task, functional, and `pseudo_accuracy`.
-3. Operator hints: k-grid or k-spacing, smearing, spin/SOC, pseudo type,
-   convergence.
-4. Pseudopotential source: the installed default table unless the operator
-   points at a custom library root.
-5. Required output: full recommendation, selected records, generated text, or
-   published directory.
+1. Structure Source: path, inline content, or `pymatgen.Structure`.
+2. Calculation Intent: target code, Calculation Task, functional, and
+   pseudopotential accuracy.
+3. Calculation Hints: k-grid or spacing, smearing, spin/SOC, pseudopotential
+   type, convergence, and dispersion.
+4. Pseudopotential source: registered Set ID, local root, or explicit metadata.
+5. Computation Selection and output target.
 
-## Canonical API surface
-
-Use the root facade for application operations:
+## Canonical entry points
 
 ```python
 from goldilocks_core import (
-    CalculationHints,
-    CalculationIntent,
+    CalculationDraft,
+    ComputeRequest,
+    PathStructureSource,
+    PresetSelection,
     Service,
-    PresetRequest,
-    QueryRequest,
-    query_records,
-    run_core_job,
 )
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
-```
 
-CLI operations map one-to-one to the service:
+request = ComputeRequest(
+    CalculationDraft(PathStructureSource("structure.cif")),
+    PresetSelection("recommend"),
+)
+with Service() as core:
+    result = core.compute(request)
+```
 
 ```bash
-uv run goldilocks recommend STRUCTURE --json
-uv run goldilocks generate STRUCTURE --out RUN_DIR --json
-uv run goldilocks compute STRUCTURE --outputs analysis,k_points
-uv run goldilocks serve http
-uv run goldilocks serve mcp
+uv run goldilocks capabilities --json
+uv run goldilocks inspect STRUCTURE --json
+uv run goldilocks compute STRUCTURE --preset recommend --no-out --json
+uv run goldilocks compute STRUCTURE --preset generate --out RUN_DIR --json
 ```
 
-Requests without a pseudopotential argument resolve the installed default
-table; pass `--pseudo-root` only to use an operator-managed custom library.
-
-HTTP and MCP require the `[http]` and `[mcp]` extras. Both transports keep one
-`Service` alive and expose recommend, generate, compute, task discovery,
-code discovery, and model discovery.
-
-## Common pitfalls
-
-- Use `uv run` and `uv sync`; persistent project environments are uv-owned.
-- The only shipped target is `quantum_espresso` + `scf_single_point`.
-- Generators are mechanical. Scientific choices must already exist in records.
-- Explicit user hints win over model-backed choices.
-- Pseudopotential matching is functional-sensitive: `PBE`, `PBEsol`, `LDA`.
-- Generation requires selected pseudo filenames and both cutoffs for every
-  element; recommendation may instead return fallback records and warnings.
-- Structure-only electronic character is uncertain. Inspect smearing warnings.
-- Core prepares input files; it does not run DFT, schedule jobs, or manage
-  AiiDA, auth, sessions, pods, or frontend state.
+HTTP exposes `/capabilities`, `/inspect`, and `/compute`; local stdio MCP exposes
+`capabilities`, `inspect_structure`, and `compute`.
 
 ## Completion check
 
-For every produced input or parameter list, report:
-
-- structure and reduced formula;
-- functional and target code/task;
-- k-grid and shift;
-- pseudopotential filename by element;
-- `ecutwfc` and `ecutrho`;
-- smearing/degauss or fixed occupations;
-- convergence values;
-- warnings;
-- generated paths and bundle path, when present.
+For prepared input data, report the Structure Source, functional, target
+code/Task, k-grid and shift, pseudopotentials and cutoffs, smearing, spin/SOC,
+convergence controls, factual warnings, generated paths, and publication path.
+Core prepares inputs; it does not run DFT.

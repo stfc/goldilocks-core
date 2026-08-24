@@ -52,35 +52,49 @@ K_POINTS automatic
 ```text
 site_count          -> len(structure)
 element_count       -> len(structure.composition.elements)
-k-grid              -> result.k_points.grid
-k-shift             -> result.k_points.shift
-pseudos             -> result.selection.pseudopotentials
+k-grid              -> result.records[KPointSelection].grid
+k-shift             -> result.records[KPointSelection].shift
+pseudos             -> result.records[SelectionRecord].pseudopotentials
 ecutwfc / ecutrho   -> max selected cutoffs across elements
-smearing/degauss    -> result.advice.smearing
-spin flags          -> result.advice.magnetism and result.advice.spin_orbit
-convergence         -> result.advice.convergence
+smearing/degauss    -> result.records[ParameterAdvice].smearing
+spin flags          -> ParameterAdvice.magnetism and .spin_orbit
+convergence         -> result.records[ParameterAdvice].convergence
 warnings            -> result.warnings
 ```
 
 ## Minimal Python extraction pattern
 
 ```python
-from pymatgen.core import Structure
 from pymatgen.core.periodic_table import Element
-from goldilocks_core import Service, PresetRequest
+from goldilocks_core import (
+    CalculationDraft,
+    ComputeRequest,
+    PathStructureSource,
+    PresetSelection,
+    Service,
+)
+from goldilocks_core.contracts import KPointSelection, SelectionRecord
 
-structure = Structure.from_file("structure.cif")
+request = ComputeRequest(
+    CalculationDraft(
+        PathStructureSource("structure.cif"),
+        pseudo_table="pseudodojo-pbesol-efficiency-sr",
+    ),
+    PresetSelection("recommend"),
+)
 with Service() as core:
-    result = core.recommend(PresetRequest(structure=structure))
+    result = core.compute(request)
 
+selection = result.records[SelectionRecord]
 pseudo_by_element = {
-    pseudo.element: pseudo for pseudo in result.selection.pseudopotentials
+    pseudo.element: pseudo for pseudo in selection.pseudopotentials
 }
-elements = tuple(sorted(element.symbol for element in structure.composition.elements))
+elements = tuple(sorted(pseudo_by_element))
 ecutwfc = max(pseudo.ecutwfc_ry or 0.0 for pseudo in pseudo_by_element.values())
 ecutrho = max(pseudo.ecutrho_ry or 0.0 for pseudo in pseudo_by_element.values())
-grid = result.k_points.grid
-shift = result.k_points.shift
+k_points = result.records[KPointSelection]
+grid = k_points.grid
+shift = k_points.shift
 
 for element in elements:
     pseudo = pseudo_by_element[element]

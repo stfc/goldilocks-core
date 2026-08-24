@@ -133,6 +133,35 @@ def test_workbench_structure_failure_uses_typed_browser_error(test_service) -> N
     assert "Could not parse structure content" in response.json()["error"]["message"]
 
 
+@pytest.mark.parametrize("operation", ["recommendation", "archive"])
+def test_workbench_computation_structure_failure_uses_typed_browser_error(
+    test_service, operation: str
+) -> None:
+    request = {
+        "source": {
+            "name": "broken.cif",
+            "format": "cif",
+            "content": "not a crystal structure",
+        }
+    }
+    if operation == "archive":
+        request["review_digest"] = "0" * 64
+
+    with TestClient(create_app(test_service)) as client:
+        response = client.post(f"/api/workbench/{operation}", json=request)
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "error": {
+            "kind": "invalid_request",
+            "message": response.json()["error"]["message"],
+            "retryable": False,
+            "details": {"operation": operation},
+        }
+    }
+    assert "Could not parse structure content" in response.json()["error"]["message"]
+
+
 def test_workbench_rejects_whitespace_only_source_name_at_transport_seam(
     test_service, sample_structure_text: str
 ) -> None:

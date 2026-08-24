@@ -552,10 +552,14 @@ def _review_digest(response: RecommendationResponse) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _compute_review(service: Service, request: GuidedRequest) -> _ReviewComputation:
-    preset = _guided_preset(request, "recommendation")
+def _compute_review(
+    service: Service, request: GuidedRequest, operation: str
+) -> _ReviewComputation:
+    preset = _guided_preset(request, operation)
     try:
         result = service.compute(preset)
+    except StructureInputError as error:
+        raise WorkbenchRequestError(operation, str(error)) from error
     except AssetNotInstalled as error:
         reference = error.reference
         raise WorkbenchRequestError(
@@ -734,7 +738,7 @@ def install_workbench_routes(
     )
     def recommend(request: GuidedRequest) -> RecommendationResponse:
         with capacity.acquire():
-            return _compute_review(service, request).response
+            return _compute_review(service, request, "recommendation").response
 
     @router.post(
         "/archive",
@@ -749,7 +753,7 @@ def install_workbench_routes(
     )
     def archive(request: ArchiveRequest) -> Response:
         with capacity.acquire():
-            computation = _compute_review(service, request)
+            computation = _compute_review(service, request, "archive")
         current_digest = computation.response.review_digest
         if request.review_digest != current_digest:
             raise WorkbenchRequestError(

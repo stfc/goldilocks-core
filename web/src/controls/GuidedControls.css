@@ -323,7 +323,7 @@
   background: var(--color-accent-bright);
 }
 
-@media (max-width: 64rem) {
+@media (max-width: 70rem) {
   .control-rail {
     overflow: visible;
   }

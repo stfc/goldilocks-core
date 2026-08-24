@@ -215,5 +215,52 @@ export const computationResult: ComputationResult = {
     generated_files: [
       { path: "inputs/qe.in", role: "input", content: "&CONTROL\n/\n" },
     ],
+    dft_input_data: {
+      schema_version: 1,
+      pseudopotential_set: {
+        id: pseudoSet.id,
+        version: pseudoSet.version,
+        provider: pseudoSet.provider,
+        functional: pseudoSet.functional,
+        accuracy: pseudoSet.accuracy,
+        relativistic: pseudoSet.relativistic_treatment,
+        licence: pseudoSet.licence,
+        citation: pseudoSet.citation,
+        policy: {},
+      },
+      artifacts: [
+        {
+          path: "inputs/qe.in",
+          role: "input",
+          media_type: "text/plain",
+          sha256: "c".repeat(64),
+          size_bytes: 11,
+          provenance: null,
+          source: { kind: "generated", identity: "qe-input" },
+        },
+        {
+          path: "pseudo/Si.upf",
+          role: "pseudopotential",
+          media_type: "application/octet-stream",
+          sha256: "d".repeat(64),
+          size_bytes: 128,
+          provenance,
+          source: {
+            kind: "installed",
+            asset_id: pseudoSet.id,
+            asset_version: pseudoSet.version,
+            preparation_fingerprint: "fixture",
+            path: "Si.upf",
+          },
+        },
+      ],
+      citations: [pseudoSet.citation],
+      manifest: {},
+      runtime: {
+        core_version: "1.2.3",
+        models: [],
+        assets: [],
+      },
+    },
   },
 };

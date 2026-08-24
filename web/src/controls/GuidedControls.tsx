@@ -2,9 +2,11 @@ import { type ChangeEvent, type DragEvent, useRef, useState } from "react";
 import { ArrowRight, LoaderCircle, Upload } from "lucide-react";
 
 import type {
+  CalculationDraft,
+  Capabilities,
   StructureInspection,
   StructureSource,
-} from "../api/workbenchClient";
+} from "../api/coreClient";
 import { useWorkspace, useWorkspaceSnapshot } from "../workspace/useWorkspace";
 const K_GRID_AXES = ["x", "y", "z"] as const;
 
@@ -28,6 +30,7 @@ export function GuidedControls() {
     try {
       const content = await file.text();
       const source: StructureSource = {
+        kind: "inline",
         name: file.name,
         format: structureFormat(file.name),
         content,
@@ -121,13 +124,18 @@ export function GuidedControls() {
 
       <section className="rail-section rail-section--calculation">
         <SectionHeading number="02" title="Calculation" />
-        {snapshot.draft === null || snapshot.inspection === null ? (
+        {snapshot.draft === null ||
+        snapshot.inspection === null ||
+        snapshot.capabilities === null ? (
           <div className="rail-placeholder">
             <span>Waiting for a structure</span>
             <p>Defaults and compatible assets appear after inspection.</p>
           </div>
         ) : (
-          <CalculationForm inspection={snapshot.inspection} />
+          <CalculationForm
+            capabilities={snapshot.capabilities}
+            inspection={snapshot.inspection}
+          />
         )}
       </section>
     </aside>
@@ -179,23 +187,37 @@ function StructureSummary({
 }
 
 function CalculationForm({
+  capabilities,
   inspection,
 }: {
+  readonly capabilities: Capabilities;
   readonly inspection: StructureInspection;
 }) {
   const workspace = useWorkspace();
   const snapshot = useWorkspaceSnapshot();
   const draft = snapshot.draft;
-  if (draft === null) return null;
+  const intent = draft?.intent;
+  const hints = draft?.hints;
+  if (
+    draft === null ||
+    intent === null ||
+    intent === undefined ||
+    hints === null ||
+    hints === undefined
+  ) {
+    return null;
+  }
 
-  const tables = compatibleTables(inspection, draft.intent);
+  const tables = compatibleSets(capabilities, inspection, intent);
   const functionals = [
-    ...new Set(inspection.pseudo_tables.map((table) => table.functional)),
+    ...new Set(
+      capabilities.pseudopotential_sets.map((item) => item.functional),
+    ),
   ];
-  const kGrid = draft.hints.k_grid;
+  const kGrid = hints.k_grid;
   const explicitKGrid = kGrid !== null && kGrid !== undefined;
-  const spinSetting = formatOptionalSwitch(draft.hints.spin_polarized);
-  const vdwSetting = formatOptionalSwitch(draft.hints.use_vdw);
+  const spinSetting = formatOptionalSwitch(hints.spin_polarized);
+  const vdwSetting = formatOptionalSwitch(hints.use_vdw);
   const inspecting = snapshot.operation === "inspect";
   const busy = snapshot.operation !== null;
 
@@ -203,7 +225,7 @@ function CalculationForm({
     if (kGrid === null || kGrid === undefined) return;
     const value = Number(raw);
     if (!Number.isInteger(value) || value < 1 || value > 99) return;
-    const next: [number, number, number] = [...kGrid];
+    const next = [...kGrid];
     next[index] = value;
     void workspace.dispatch({ type: "draft.patch", hints: { k_grid: next } });
   }
@@ -213,7 +235,7 @@ function CalculationForm({
       className="calculation-form"
       onSubmit={(event) => {
         event.preventDefault();
-        void workspace.dispatch({ type: "review.recompute" });
+        void workspace.dispatch({ type: "review.compute" });
       }}
     >
       {inspecting ? (
@@ -224,21 +246,25 @@ function CalculationForm({
       ) : null}
       <label className="field">
         <span>Task</span>
-        <select value={draft.intent.task} disabled>
-          <option value="scf_single_point">SCF · single point</option>
+        <select value={intent.task} disabled>
+          {capabilities.tasks.map((task) => (
+            <option key={task.id} value={task.id}>
+              {task.name}
+            </option>
+          ))}
         </select>
       </label>
       <div className="field-row">
         <label className="field">
           <span>Functional</span>
           <select
-            value={draft.intent.functional}
+            value={intent.functional}
             disabled={inspecting}
             onChange={(event) =>
               void workspace.dispatch({
                 type: "draft.patch",
                 intent: { functional: event.currentTarget.value },
-                pseudoTableId: null,
+                pseudoTable: null,
               })
             }
           >
@@ -250,16 +276,15 @@ function CalculationForm({
         <label className="field">
           <span>Accuracy</span>
           <select
-            value={draft.intent.pseudo_accuracy}
+            value={intent.pseudo_accuracy}
             disabled={inspecting}
             onChange={(event) =>
               void workspace.dispatch({
                 type: "draft.patch",
                 intent: {
-                  pseudo_accuracy: event.currentTarget.value as
-                    "efficiency" | "precision",
+                  pseudo_accuracy: event.currentTarget.value,
                 },
-                pseudoTableId: null,
+                pseudoTable: null,
               })
             }
           >
@@ -272,18 +297,18 @@ function CalculationForm({
         <span>Pseudopotential table</span>
         <select
           disabled={inspecting}
-          value={draft.pseudo_table_id ?? ""}
+          value={draft.pseudo_table ?? ""}
           onChange={(event) =>
             void workspace.dispatch({
               type: "draft.patch",
-              pseudoTableId: event.currentTarget.value || null,
+              pseudoTable: event.currentTarget.value || null,
             })
           }
         >
           <option value="">Selected by Core</option>
           {tables.map((table) => (
             <option key={table.id} value={table.id}>
-              {table.provider} · {table.upstream_table}
+              {table.provider} · {table.upstream_name}
             </option>
           ))}
         </select>
@@ -293,10 +318,10 @@ function CalculationForm({
         <summary>Scientific overrides</summary>
         <p className="advanced-controls__summary">
           {explicitKGrid ? `${kGrid.join("×")} k grid` : "automatic k grid"} ·{" "}
-          {draft.hints.smearing_width_ry === null ||
-          draft.hints.smearing_width_ry === undefined
+          {hints.smearing_width_ry === null ||
+          hints.smearing_width_ry === undefined
             ? "automatic smearing"
-            : `${String(draft.hints.smearing_width_ry)} Ry smearing`}{" "}
+            : `${String(hints.smearing_width_ry)} Ry smearing`}{" "}
           · spin {spinSetting} · vdW {vdwSetting}
           <span> Changes require recomputation.</span>
         </p>
@@ -344,7 +369,7 @@ function CalculationForm({
               step="0.001"
               disabled={inspecting}
               min="0"
-              value={draft.hints.smearing_width_ry ?? ""}
+              value={hints.smearing_width_ry ?? ""}
               placeholder="Automatic"
               onChange={(event) =>
                 void workspace.dispatch({
@@ -363,7 +388,7 @@ function CalculationForm({
             <span>Spin treatment</span>
             <select
               disabled={inspecting}
-              value={optionalSwitchValue(draft.hints.spin_polarized)}
+              value={optionalSwitchValue(hints.spin_polarized)}
               onChange={(event) =>
                 void workspace.dispatch({
                   type: "draft.patch",
@@ -384,7 +409,7 @@ function CalculationForm({
             <span>Dispersion correction</span>
             <select
               disabled={inspecting}
-              value={optionalSwitchValue(draft.hints.use_vdw)}
+              value={optionalSwitchValue(hints.use_vdw)}
               onChange={(event) =>
                 void workspace.dispatch({
                   type: "draft.patch",
@@ -402,14 +427,14 @@ function CalculationForm({
         </div>
       </details>
 
-      {snapshot.reviewStale ? (
+      {snapshot.outOfDate ? (
         <p className="stale-note">Overrides changed · review is now stale</p>
       ) : null}
       <button className="primary-action" type="submit" disabled={busy}>
         <span>
-          {snapshot.operation === "review"
+          {snapshot.operation === "compute"
             ? "Computing"
-            : snapshot.review === null
+            : snapshot.reviewed === null
               ? "Generate recommendation"
               : "Recompute recommendation"}
         </span>
@@ -433,21 +458,23 @@ function formatOptionalSwitch(value: boolean | null | undefined): string {
   return value ? "on" : "off";
 }
 
-function compatibleTables(
+function compatibleSets(
+  capabilities: Capabilities,
   inspection: StructureInspection,
-  intent: StructureInspection["defaults"]["intent"],
+  intent: NonNullable<CalculationDraft["intent"]>,
 ) {
   const elements = new Set(
     inspection.structure.sites.flatMap((site) =>
       site.species.map((species) => species.symbol),
     ),
   );
-  return inspection.pseudo_tables.filter(
-    (table) =>
-      table.functional === intent.functional &&
-      table.accuracy === intent.pseudo_accuracy &&
-      table.relativistic === "scalar" &&
-      [...elements].every((element) => table.elements.includes(element)),
+  return capabilities.pseudopotential_sets.filter(
+    (item) =>
+      item.functional === intent.functional &&
+      item.accuracy === intent.pseudo_accuracy &&
+      [...elements].every((element) =>
+        item.supported_elements.includes(element),
+      ),
   );
 }
 

@@ -107,6 +107,22 @@ const computationResult: ComputationResult = {
 };
 
 describe("HttpCoreClient", () => {
+  it("rejects JSON operations with the wrong content type", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify(capabilities), {
+        headers: { "Content-Type": "text/plain" },
+      }),
+    );
+    const client = new HttpCoreClient("", fetcher);
+
+    await expect(client.capabilities()).rejects.toMatchObject({
+      kind: "invalid_response",
+      message: "Goldilocks Core returned an invalid JSON response.",
+      retryable: false,
+      rawResponse: capabilities,
+    });
+  });
+
   it("reports a retryable network failure", async () => {
     const fetcher = vi
       .fn<typeof fetch>()

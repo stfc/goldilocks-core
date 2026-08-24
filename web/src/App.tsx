@@ -168,4 +168,3 @@ function EmptyStage({ loading }: { readonly loading: boolean }) {
     </div>
   );
 }
-

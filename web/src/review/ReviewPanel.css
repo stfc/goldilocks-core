@@ -546,7 +546,7 @@
   color: var(--color-danger) !important;
 }
 
-@media (max-width: 64rem) {
+@media (max-width: 70rem) {
   .review-panel {
     overflow: visible;
     border-top: var(--border-strong);

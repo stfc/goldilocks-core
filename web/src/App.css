@@ -226,7 +226,7 @@
   }
 }
 
-@media (max-width: 64rem) {
+@media (max-width: 70rem) {
   body {
     overflow: auto;
   }

@@ -14,6 +14,12 @@
   text-transform: uppercase;
 }
 
+.header-status__message {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
 .status-light {
   width: 0.5rem;
   height: 0.5rem;
@@ -21,6 +27,15 @@
   border-radius: 50%;
   background: var(--color-success);
   box-shadow: 0 0 0 0.25rem rgb(138 201 169 / 14%);
+}
+
+.header-status--failure {
+  color: var(--color-danger);
+}
+
+.header-status--failure .status-light {
+  background: var(--color-danger);
+  box-shadow: 0 0 0 0.25rem rgb(240 161 140 / 14%);
 }
 
 .version-badge {
@@ -118,7 +133,7 @@
 }
 
 @media (max-width: 26rem) {
-  .header-status > span:nth-child(2) {
+  .header-status__message > span:nth-child(2) {
     max-width: 6.5rem;
     overflow: hidden;
     text-overflow: ellipsis;

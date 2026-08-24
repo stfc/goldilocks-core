@@ -30,7 +30,10 @@ export function App() {
           <span className="header-context__line" aria-hidden="true" />
           <span>Guided SCF preparation</span>
         </div>
-        <OperationStatus operation={snapshot.operation} />
+        <OperationStatus
+          operation={snapshot.operation}
+          hasFailure={snapshot.failure !== null}
+        />
       </header>
 
       {snapshot.failure === null ? null : (

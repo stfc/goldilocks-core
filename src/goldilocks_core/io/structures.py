@@ -181,6 +181,8 @@ def _resolve_format(
     if format_hint is not None:
         return format_hint
     lower_name = name.lower()
+    if lower_name == "poscar":
+        return "poscar"
     first_data_line = next(
         (
             line.strip()

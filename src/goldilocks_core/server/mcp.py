@@ -65,6 +65,7 @@ class _StrictMCPServer(MCPServer):
 class _InlineStructure(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    name: str
     content: str
     format: Literal["cif", "poscar"] | None = None
 

@@ -27,19 +27,17 @@ from goldilocks_core.contracts import (
     ComputationResult,
     ComputeRequest,
     GeneratedFiles,
+    InlineStructureSource,
     KPointSelection,
     ParameterAdvice,
     PresetSelection,
     SelectionRecord,
     StructureAnalysisRecord,
+    StructureInspection,
     record_type_id,
 )
 from goldilocks_core.generation import GenerationError
-from goldilocks_core.io.structures import (
-    StructureInputError,
-    parse_structure_content,
-    structure_document,
-)
+from goldilocks_core.io.structures import StructureInputError
 from goldilocks_core.ml.model_registry import model_asset_specs
 from goldilocks_core.pseudo.registry import (
     PseudoTable,
@@ -421,32 +419,39 @@ def _required_asset_file(
         ) from error
 
 
-def _guided_preset(
-    request: GuidedRequest, operation: str
-) -> tuple[ComputeRequest, StructureResponse, str]:
+def _guided_preset(request: GuidedRequest, operation: str) -> ComputeRequest:
     source = request.source
     try:
-        structure, resolved_format = parse_structure_content(
-            source.content, source.format
-        )
-        preset = ComputeRequest(
+        return ComputeRequest(
             draft=CalculationDraft(
-                structure=structure,
+                structure=InlineStructureSource(
+                    name=source.name,
+                    content=source.content,
+                    format=source.format,
+                ),
                 intent=CalculationIntent(**request.intent.model_dump()),
                 hints=CalculationHints(**request.hints.model_dump()),
                 pseudo_table=request.pseudo_table_id,
             ),
             selection=PresetSelection("generate"),
         )
-    except (StructureInputError, TypeError, ValueError) as error:
+    except (TypeError, ValueError) as error:
         raise WorkbenchRequestError(operation, str(error)) from error
-    document = structure_document(
-        structure,
-        source_name=source.name,
-        source_format=resolved_format,
-        source_content=source.content,
+
+
+def _structure_response(inspection: StructureInspection) -> StructureResponse:
+    source = inspection.source
+    return StructureResponse.model_validate(
+        {
+            **inspection.structure.to_dict(),
+            "source": {
+                "name": source.name,
+                "format": source.format,
+                "sha256": source.sha256,
+                "size_bytes": source.size_bytes,
+            },
+        }
     )
-    return preset, StructureResponse.model_validate(document), structure.to(fmt="cif")
 
 
 def _selected_table(
@@ -548,7 +553,7 @@ def _review_digest(response: RecommendationResponse) -> str:
 
 
 def _compute_review(service: Service, request: GuidedRequest) -> _ReviewComputation:
-    preset, document, canonical_cif = _guided_preset(request, "recommendation")
+    preset = _guided_preset(request, "recommendation")
     try:
         result = service.compute(preset)
     except AssetNotInstalled as error:
@@ -575,6 +580,9 @@ def _compute_review(service: Service, request: GuidedRequest) -> _ReviewComputat
         UnknownTask,
     ) as error:
         raise WorkbenchRequestError("recommendation", str(error)) from error
+    inspection = result.draft.structure
+    document = _structure_response(inspection)
+    canonical_cif = inspection.canonical_cif
     tables = load_tables(service.runtime.pseudo_registry_path)
     table = _selected_table(request, result, tables)
     selection_record = result.records[SelectionRecord]
@@ -686,22 +694,24 @@ def install_workbench_routes(
     ) -> StructureInspectionResponse:
         source = request.source
         try:
-            structure, resolved_format = parse_structure_content(
-                source.content, source.format
+            inspection = service.inspect_structure(
+                InlineStructureSource(
+                    name=source.name,
+                    content=source.content,
+                    format=source.format,
+                )
             )
         except StructureInputError as error:
             raise WorkbenchRequestError("structure", str(error)) from error
-        document = structure_document(
-            structure,
-            source_name=source.name,
-            source_format=resolved_format,
-            source_content=source.content,
-        )
         tables = load_tables(service.runtime.pseudo_registry_path)
-        elements = {element.symbol for element in structure.composition.elements}
+        elements = {
+            species.symbol
+            for site in inspection.structure.sites
+            for species in site.species
+        }
         return StructureInspectionResponse(
-            structure=StructureResponse.model_validate(document),
-            canonical_cif=structure.to(fmt="cif"),
+            structure=_structure_response(inspection),
+            canonical_cif=inspection.canonical_cif,
             defaults=CalculationDefaults(
                 intent=IntentResponse.model_validate(CalculationIntent()),
                 hints=HintsResponse.model_validate(CalculationHints()),

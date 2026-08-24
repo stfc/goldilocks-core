@@ -4,6 +4,7 @@ from goldilocks_core import (
     CalculationDraft,
     CalculationHints,
     ComputeRequest,
+    InMemoryStructureSource,
     PresetSelection,
     RecordSelection,
     compute,
@@ -42,7 +43,7 @@ def _make_si_metadata() -> PseudoMetadata:
 def _request(selection) -> ComputeRequest:
     return ComputeRequest(
         draft=CalculationDraft(
-            structure=_make_si_structure(),
+            structure=InMemoryStructureSource(_make_si_structure()),
             hints=CalculationHints(k_grid=(3, 3, 3), pseudo_type="NC"),
             pseudo_metadata=(_make_si_metadata(),),
         ),
@@ -80,7 +81,7 @@ def test_computation_result_serializes_stable_record_ids() -> None:
     result = compute(
         ComputeRequest(
             draft=CalculationDraft(
-                structure=iodine,
+                structure=InMemoryStructureSource(iodine),
                 hints=CalculationHints(k_grid=(8, 8, 8)),
                 pseudo_metadata=(),
             ),

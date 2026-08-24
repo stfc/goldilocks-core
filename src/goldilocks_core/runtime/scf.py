@@ -20,10 +20,9 @@ from goldilocks_core.contracts import (
     Records,
     SelectionRecord,
     StructureAnalysisRecord,
-    StructureInput,
 )
 from goldilocks_core.generation.registry import generate_inputs
-from goldilocks_core.io.structures import load_structure
+from goldilocks_core.io.structures import NormalizedStructure
 from goldilocks_core.kmesh.resolve import resolve_kpoints
 from goldilocks_core.pseudo.source import PseudoSource, source_for_draft
 from goldilocks_core.runtime.graph import Preset, Stage, TaskGraph
@@ -34,7 +33,7 @@ from goldilocks_core.selection import select_pseudopotentials
 
 @dataclass(frozen=True, slots=True)
 class ScfContext:
-    structure_input: StructureInput
+    normalized_structure: NormalizedStructure
     kmesh_advisor: KMeshAdvisor
     metallicity_classifier: Callable[
         [Structure], tuple[ElectronicCharacter, str, float | None]
@@ -59,10 +58,10 @@ SCF_TASK = TaskGraph(
         Stage(
             output=Structure,
             inputs=(),
-            call=lambda *, ctx: load_structure(ctx.structure_input),
+            call=lambda *, ctx: ctx.normalized_structure.structure,
             id="load_structure",
             name="Load structure",
-            description="Parse and validate the source into a Structure.",
+            description="Provide the normalized source as a Structure.",
         ),
         Stage(
             output=StructureAnalysisRecord,
@@ -146,6 +145,7 @@ SCF_TASK = TaskGraph(
 
 def build_scf_context(
     request: ComputeRequest,
+    normalized_structure: NormalizedStructure,
     runtime: Runtime,
 ) -> ScfContext:
     draft = request.draft
@@ -153,7 +153,7 @@ def build_scf_context(
     if draft.kmesh_model is not None:
         backend = ml_kmesh_advisor(draft.kmesh_model)
     return ScfContext(
-        structure_input=draft.structure,
+        normalized_structure=normalized_structure,
         kmesh_advisor=backend,
         pseudo_source=source_for_draft(
             draft,

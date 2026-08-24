@@ -3,8 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal, get_args
 
-from pymatgen.core import Structure
-
 ProvenanceSource = Literal[
     "analysis",
     "user_hint",
@@ -20,8 +18,6 @@ prediction. ``lookup``: resolved from metadata. ``fallback``: no data available.
 JsonDict = dict[str, Any]
 
 PathLike = str | Path
-
-StructureInput = Structure | PathLike
 
 TaskId = str
 

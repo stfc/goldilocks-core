@@ -9,6 +9,7 @@ from goldilocks_core import (
     CalculationHints,
     CalculationIntent,
     ComputeRequest,
+    InMemoryStructureSource,
     PresetSelection,
     RecordSelection,
     Runtime,
@@ -49,7 +50,7 @@ def make_metadata() -> PseudoMetadata:
 
 def make_request(selection=None, **changes) -> ComputeRequest:
     draft_values = {
-        "structure": make_structure(),
+        "structure": InMemoryStructureSource(make_structure()),
         "hints": CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
         "pseudo_metadata": (make_metadata(),),
     }

@@ -11,6 +11,7 @@ from goldilocks_core import (
     CalculationHints,
     ComputationResult,
     ComputeRequest,
+    InMemoryStructureSource,
     PresetSelection,
     Runtime,
     Service,
@@ -46,7 +47,7 @@ def make_metadata() -> PseudoMetadata:
 def make_request() -> ComputeRequest:
     return ComputeRequest(
         draft=CalculationDraft(
-            structure=make_structure(),
+            structure=InMemoryStructureSource(make_structure()),
             hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
             pseudo_metadata=(make_metadata(),),
         ),
@@ -153,7 +154,7 @@ def test_service_serializes_concurrent_computations() -> None:
     backend = BlockingBackend()
     request = ComputeRequest(
         draft=CalculationDraft(
-            structure=make_structure(),
+            structure=InMemoryStructureSource(make_structure()),
             hints=CalculationHints(pseudo_type="NC"),
             pseudo_metadata=(make_metadata(),),
         ),

@@ -56,10 +56,16 @@ from goldilocks_core.contracts.selection import (
 )
 from goldilocks_core.contracts.serial import to_jsonable
 from goldilocks_core.contracts.structure import (
+    InlineStructureSource,
+    InMemoryStructureSource,
     LatticeDocument,
+    PathStructureSource,
     SpeciesOccupancy,
     StructureDocument,
+    StructureFormat,
+    StructureInspection,
     StructureSiteDocument,
+    StructureSource,
     StructureSourceDocument,
 )
 from goldilocks_core.contracts.types import (
@@ -80,7 +86,6 @@ from goldilocks_core.contracts.types import (
     RelativisticTreatment,
     SmearingType,
     StageId,
-    StructureInput,
     TaskId,
     VdwMethod,
 )
@@ -102,6 +107,8 @@ __all__ = [
     "ElectronicCharacter",
     "GeneratedFile",
     "GeneratedFiles",
+    "InMemoryStructureSource",
+    "InlineStructureSource",
     "JsonDict",
     "KMeshAdvisor",
     "KMeshEntry",
@@ -119,6 +126,7 @@ __all__ = [
     "OUTPUT_TYPES_BY_ID",
     "ParameterAdvice",
     "PathLike",
+    "PathStructureSource",
     "PresetSelection",
     "Provenance",
     "Publication",
@@ -144,9 +152,11 @@ __all__ = [
     "SpeciesOccupancy",
     "StructureAnalysisRecord",
     "StructureFeatureVector",
-    "StructureInput",
     "StructureDocument",
+    "StructureFormat",
+    "StructureInspection",
     "StructureSiteDocument",
+    "StructureSource",
     "StructureSourceDocument",
     "SymmetryUnavailable",
     "TaskId",

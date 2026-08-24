@@ -6,6 +6,8 @@ from pymatgen.core import Structure
 from goldilocks_core.contracts import (
     CalculationDraft,
     ComputeRequest,
+    InlineStructureSource,
+    InMemoryStructureSource,
     ParameterAdvice,
     PresetSelection,
     RecordSelection,
@@ -29,7 +31,11 @@ def test_from_dict_parses_complete_preset_computation(
     """Parse structure, intent, hints, and mode into a preset request."""
     request = from_dict(
         body(
-            sample_structure_text,
+            {
+                "name": "Si.cif",
+                "content": sample_structure_text,
+                "format": "cif",
+            },
             {"preset": "generate"},
             intent={"functional": "PBEsol", "pseudo_accuracy": "efficiency"},
             hints={"k_grid": [3, 3, 3], "use_vdw": False},
@@ -39,8 +45,8 @@ def test_from_dict_parses_complete_preset_computation(
 
     assert isinstance(request, ComputeRequest)
     assert request.selection == PresetSelection("generate")
-    assert isinstance(request.draft.structure, Structure)
-    assert request.draft.structure.reduced_formula == "Si"
+    assert isinstance(request.draft.structure, InlineStructureSource)
+    assert request.draft.structure.name == "Si.cif"
     assert request.draft.intent.functional == "PBEsol"
     assert request.draft.hints.k_grid == (3, 3, 3)
     assert request.draft.pseudo_metadata[0].element == "Si"
@@ -165,19 +171,26 @@ def test_from_dict_rejects_unknown_record_id(sample_structure_path: str) -> None
         from_dict(body(sample_structure_path, {"records": ["Unknown"]}))
 
 
-def test_from_dict_parses_inline_structure_content_object(
+def test_from_dict_preserves_inline_structure_source(
     sample_structure_text: str,
 ) -> None:
     """Parse an inline structure content object with an explicit format."""
     request = from_dict(
         body(
-            {"content": sample_structure_text, "format": "cif"},
+            {
+                "name": "Si.cif",
+                "content": sample_structure_text,
+                "format": "cif",
+            },
             {"records": ["analysis"]},
         )
     )
 
-    assert isinstance(request.draft.structure, Structure)
-    assert request.draft.structure.reduced_formula == "Si"
+    assert request.draft.structure == InlineStructureSource(
+        name="Si.cif",
+        content=sample_structure_text,
+        format="cif",
+    )
 
 
 @pytest.mark.parametrize(
@@ -231,11 +244,11 @@ def test_request_to_dict_round_trips_pymatgen_structure(
     structure_obj = Structure.from_file(sample_structure_path)
     requests = (
         ComputeRequest(
-            CalculationDraft(structure),
+            CalculationDraft(InMemoryStructureSource(structure)),
             PresetSelection("recommend"),
         ),
         ComputeRequest(
-            CalculationDraft(structure),
+            CalculationDraft(InMemoryStructureSource(structure)),
             RecordSelection((StructureAnalysisRecord,)),
         ),
     )
@@ -250,8 +263,8 @@ def test_request_to_dict_round_trips_pymatgen_structure(
         parsed = from_dict(body)
 
         assert parsed.selection == request.selection
-        assert isinstance(parsed.draft.structure, Structure)
-        assert parsed.draft.structure == structure
+        assert isinstance(parsed.draft.structure, InMemoryStructureSource)
+        assert parsed.draft.structure.structure == structure
 
 
 def test_from_dict_rejects_empty_record_selection(

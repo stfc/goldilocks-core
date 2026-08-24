@@ -16,6 +16,7 @@ from goldilocks_core.contracts import (
     ComputeRequest,
     KPointSelection,
     ParameterAdvice,
+    PathStructureSource,
     PresetSelection,
     Provenance,
     Records,
@@ -143,6 +144,7 @@ def test_cli_builds_one_compute_request_for_a_preset() -> None:
     request = cli_core._request_from_args(args)
 
     assert request.selection == PresetSelection("recommend")
+    assert request.draft.structure == PathStructureSource("Si.cif")
     assert request.draft.hints.k_grid == (2, 3, 4)
     assert request.draft.pseudo_table == "sssp-pbe-precision-sr"
 
@@ -254,7 +256,10 @@ def test_main_preserves_preset_json_until_cli_migration(monkeypatch, capsys) -> 
     output = json.loads(capsys.readouterr().out)
     assert output["k_points"]["grid"] == [2, 2, 1]
     assert "records" not in output
-    assert output["request"]["structure"] == "Si.cif"
+    assert output["request"]["structure"] == {
+        "kind": "path",
+        "path": "Si.cif",
+    }
     assert output["request"]["mode"] == "recommend"
 
 

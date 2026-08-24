@@ -9,6 +9,8 @@ from goldilocks_core import (
     CalculationDraft,
     CalculationHints,
     ComputeRequest,
+    InMemoryStructureSource,
+    PathStructureSource,
     PresetSelection,
     compute,
 )
@@ -34,7 +36,7 @@ def test_generate_crosses_every_in_memory_stage_with_real_backends(
     result = compute(
         ComputeRequest(
             draft=CalculationDraft(
-                structure=sodium_chloride_structure,
+                structure=InMemoryStructureSource(sodium_chloride_structure),
                 hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
                 pseudo_metadata=pseudos,
             ),
@@ -73,7 +75,7 @@ def test_structure_file_to_bundle_preserves_generated_files_and_provenance(
     result = compute(
         ComputeRequest(
             draft=CalculationDraft(
-                structure=structure_path,
+                structure=PathStructureSource(structure_path),
                 hints=CalculationHints(k_grid=(3, 5, 7), pseudo_type="NC"),
                 pseudo_metadata=pseudos,
             ),

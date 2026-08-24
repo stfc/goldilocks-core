@@ -20,6 +20,7 @@ from goldilocks_core.contracts import (
     GeneratedFiles,
     KPointSelection,
     ModelSpec,
+    PathStructureSource,
     PresetSelection,
     RecordSelection,
     StructureAnalysisRecord,
@@ -290,7 +291,7 @@ def _request_from_args(args: argparse.Namespace) -> ComputeRequest:
     )
     return ComputeRequest(
         draft=CalculationDraft(
-            structure=args.structure,
+            structure=PathStructureSource(args.structure),
             intent=intent,
             hints=hints,
             pseudo_root=pseudo_root,

@@ -6,6 +6,7 @@ from goldilocks_core import (
     CalculationDraft,
     CalculationHints,
     ComputeRequest,
+    PathStructureSource,
     PresetSelection,
     compute,
 )
@@ -21,7 +22,7 @@ def _recommend(name: str):
     return compute(
         ComputeRequest(
             draft=CalculationDraft(
-                structure=structure(name),
+                structure=PathStructureSource(structure(name)),
                 hints=CalculationHints(k_grid=(4, 4, 4)),
                 pseudo_metadata=(),
             ),

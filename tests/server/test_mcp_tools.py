@@ -37,14 +37,7 @@ def test_mcp_exposes_exactly_three_scientific_tools(test_service) -> None:
     assert "AutomaticOutput" not in compute.input_schema["$defs"]
     assert compute.input_schema["$defs"]["RecordSelection"]["properties"]["records"][
         "items"
-    ]["enum"] == [
-        "analysis",
-        "advice",
-        "k_points",
-        "selection",
-        "generated_files",
-        "dft_input_data",
-    ]
+    ] == {"type": "string"}
 
 
 def test_mcp_capabilities_and_inspection_return_core_contracts(
@@ -94,6 +87,27 @@ def test_mcp_compute_memory_returns_canonical_result(
     assert result["selection"] == {"records": ["k_points"]}
     assert result["records"]["k_points"]["grid"] == [3, 3, 3]
     assert result["publication"] is None
+
+
+def test_mcp_selects_custom_records_through_core_registry(
+    custom_record_service,
+    sample_structure_path: str,
+) -> None:
+    result = _call(
+        create_server(custom_record_service),
+        "compute",
+        {
+            "draft": {
+                "structure": sample_structure_path,
+                "intent": {"task": "custom_task"},
+            },
+            "selection": {"records": ["custom_summary"]},
+            "output": {"kind": "memory"},
+        },
+    )
+
+    assert result["selection"] == {"records": ["custom_summary"]}
+    assert result["records"] == {"custom_summary": {"value": "custom result"}}
 
 
 def test_mcp_compute_automatically_publishes_complete_results(

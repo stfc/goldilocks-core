@@ -620,7 +620,7 @@ export interface components {
         /** RecordSelection */
         readonly RecordSelection: {
             /** Records */
-            readonly records: readonly ("analysis" | "advice" | "k_points" | "selection" | "generated_files" | "dft_input_data")[];
+            readonly records: readonly string[];
         };
         /** Records */
         readonly Records: {

@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, JsonValue, create_model
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
+    CalculationTaskCapability,
     GeneratedContent,
     InputArtifact,
     InstalledArtifactReference,
@@ -22,10 +23,9 @@ from goldilocks_core.contracts import (
     RuntimeIdentity,
     StructureInspection,
 )
-from goldilocks_core.contracts.outputs import OUTPUT_TYPES_BY_ID
+from goldilocks_core.contracts.registry import record_types_by_id
 
 _STRICT = ConfigDict(extra="forbid", strict=True)
-_RECORD_IDS = Literal[tuple(OUTPUT_TYPES_BY_ID)]
 
 
 def _model_from_dataclass(contract: type, name: str) -> type[BaseModel]:
@@ -90,7 +90,7 @@ PresetSelectionDocument = create_model(
     "PresetSelection", __config__=_STRICT, preset=(str, ...)
 )
 RecordSelectionDocument = create_model(
-    "RecordSelection", __config__=_STRICT, records=(list[_RECORD_IDS], ...)
+    "RecordSelection", __config__=_STRICT, records=(list[str], ...)
 )
 type SelectionDocument = PresetSelectionDocument | RecordSelectionDocument
 MemoryOutputDocument = create_model(
@@ -268,26 +268,46 @@ SerializedCalculationDraftDocument = create_model(
     pseudo_table=(str | None, ...),
     kmesh_model=(SerializedModelDocument | None, ...),
 )
-RecordsDocument = create_model(
-    "Records",
-    __config__=_SERIALIZED,
-    **{
-        record_id: (_serialized_annotation(record_type), None)
-        for record_id, record_type in OUTPUT_TYPES_BY_ID.items()
-    },
-)
-ComputationResultDocument = create_model(
-    "ComputationResult",
-    __config__=_STRICT,
-    schema_version=(Literal[1], ...),
-    draft=(SerializedCalculationDraftDocument, ...),
-    task=(str, ...),
-    task_revision=(str, ...),
-    selection=(SelectionDocument, ...),
-    records=(RecordsDocument, ...),
-    warnings=(list[str], ...),
-    publication=(_serialized_annotation(Publication) | None, ...),
-)
+
+
+def computation_result_document(
+    tasks: tuple[CalculationTaskCapability, ...],
+) -> type[BaseModel]:
+    advertised_ids = dict.fromkeys(
+        record_id
+        for task in tasks
+        for record_id in (
+            *task.selectable_record_ids,
+            *(
+                output_id
+                for preset in task.presets
+                for output_id in preset.output_record_ids
+            ),
+        )
+    )
+    registered_types = record_types_by_id()
+    records_document = create_model(
+        "Records",
+        __config__=_SERIALIZED,
+        **{
+            record_id: (_serialized_annotation(registered_types[record_id]), None)
+            for record_id in advertised_ids
+        },
+    )
+    return create_model(
+        "ComputationResult",
+        __config__=_STRICT,
+        schema_version=(Literal[1], ...),
+        draft=(SerializedCalculationDraftDocument, ...),
+        task=(str, ...),
+        task_revision=(str, ...),
+        selection=(SelectionDocument, ...),
+        records=(records_document, ...),
+        warnings=(list[str], ...),
+        publication=(_serialized_annotation(Publication) | None, ...),
+    )
+
+
 ErrorDocument = create_model(
     "Error",
     __config__=_STRICT,

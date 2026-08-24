@@ -83,6 +83,44 @@ def test_http_compute_memory_returns_the_canonical_result(
     assert result["publication"] is None
 
 
+def test_http_selects_and_returns_custom_registered_records(
+    custom_record_service,
+    sample_structure_text: str,
+) -> None:
+    app = create_app(custom_record_service)
+    with TestClient(app) as client:
+        response = client.post(
+            "/compute",
+            json={
+                "draft": {
+                    "structure": {
+                        "name": "Si.cif",
+                        "content": sample_structure_text,
+                        "format": "cif",
+                    },
+                    "intent": {"task": "custom_task"},
+                },
+                "selection": {"records": ["custom_summary"]},
+                "output": {"kind": "memory"},
+            },
+        )
+        schema = client.get("/openapi.json").json()
+
+    assert response.status_code == 200, response.text
+    assert response.json()["records"] == {"custom_summary": {"value": "custom result"}}
+    records = schema["components"]["schemas"]["Records"]
+    assert "custom_summary" in records["properties"]
+    custom_ref = records["properties"]["custom_summary"]["$ref"].rsplit("/", 1)[-1]
+    assert schema["components"]["schemas"][custom_ref]["properties"]["value"] == {
+        "title": "Value",
+        "type": "string",
+    }
+    analysis_ref = records["properties"]["analysis"]["$ref"].rsplit("/", 1)[-1]
+    assert (
+        "reduced_formula" in schema["components"]["schemas"][analysis_ref]["properties"]
+    )
+
+
 def test_http_compute_archive_returns_an_unstored_zip(
     publishable_service,
     sample_structure_text: str,

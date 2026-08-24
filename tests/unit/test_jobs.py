@@ -143,6 +143,7 @@ def test_compute_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> None:
     with Runtime(
         metallicity_checkpoint=checkpoint,
         metallicity_atom_init=atom_table,
+        metallicity_model=config.metallicity_model,
         kmesh_service=QrfBackend(
             config=config,
             metallicity_checkpoint=str(checkpoint),

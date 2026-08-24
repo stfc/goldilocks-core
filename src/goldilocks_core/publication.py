@@ -9,6 +9,7 @@ import os
 import secrets
 import shutil
 import stat
+import sys
 import tempfile
 import unicodedata
 from dataclasses import dataclass
@@ -117,55 +118,19 @@ class Publisher:
         self, files: tuple[PublishedFile, ...], destination: Path
     ) -> Publication:
         target = destination.expanduser().absolute()
+        platform = _publication_platform()
+        if platform == "unsupported_unix":
+            raise OSError(
+                errno.ENOTSUP,
+                "Atomic no-replace directory publication is not supported",
+                os.fspath(target),
+            )
         target.parent.mkdir(parents=True, exist_ok=True)
-        staging = Path(tempfile.mkdtemp(prefix=f".{target.name}.", dir=target.parent))
-        staging_identity = _path_identity(staging)
-        staging_descriptor: int | None = None
-        installed = False
-        try:
-            staging_descriptor = os.open(
-                staging,
-                os.O_RDONLY
-                | getattr(os, "O_DIRECTORY", 0)
-                | getattr(os, "O_CLOEXEC", 0),
-            )
-            staging_identity = _descriptor_identity(staging_descriptor)
-            _write_directory(staging_descriptor, files)
-            _verify_directory_descriptor(staging_descriptor, files)
-            _require_identity(
-                staging,
-                staging_identity,
-                f"Publication staging changed during publication: {staging}",
-            )
-            _verify_directory(staging, files)
-            _require_identity(
-                staging,
-                staging_identity,
-                f"Publication staging changed during publication: {staging}",
-            )
-            try:
-                _rename_no_replace(staging, target)
-            except FileExistsError as error:
-                raise FileExistsError(
-                    f"Publication destination already exists: {target}"
-                ) from error
-            _require_public_identity(
-                target,
-                staging_identity,
-                preferred_quarantine=staging,
-            )
-            installed = True
-            try:
-                _verify_directory_descriptor(staging_descriptor, files)
-            except OSError:
-                _quarantine_owned_directory(target, staging_identity)
-                raise
-            _require_public_identity(target, staging_identity)
-        finally:
-            if staging_descriptor is not None:
-                os.close(staging_descriptor)
-            if not installed:
-                _remove_owned_staging(staging, staging_identity, directory=True)
+        if platform == "windows":
+            _publish_directory_windows(files, target)
+        else:
+            _require_descriptor_directory_support(target)
+            _publish_directory_posix(files, target)
         return _publication("directory", target, files)
 
     def _publish_archive(
@@ -226,6 +191,149 @@ class Publisher:
                 f"Artifact {artifact.path!r} differs from its DFT Input Data descriptor"
             )
         return payload
+
+
+def _publication_platform() -> str:
+    if os.name == "nt":
+        return "windows"
+    if os.name == "posix" and sys.platform.startswith("linux"):
+        return "linux"
+    if os.name == "posix" and sys.platform == "darwin":
+        return "darwin"
+    return "unsupported_unix"
+
+
+def _require_descriptor_directory_support(target: Path) -> None:
+    supports_directory_descriptors = (
+        os.open in os.supports_dir_fd
+        and os.mkdir in os.supports_dir_fd
+        and os.stat in os.supports_dir_fd
+        and os.listdir in os.supports_fd
+    )
+    if not supports_directory_descriptors:
+        raise OSError(
+            errno.ENOTSUP,
+            "Descriptor-anchored directory publication is not supported",
+            os.fspath(target),
+        )
+
+
+def _publish_directory_posix(files: tuple[PublishedFile, ...], target: Path) -> None:
+    staging = Path(tempfile.mkdtemp(prefix=f".{target.name}.", dir=target.parent))
+    staging_identity = _path_identity(staging)
+    staging_descriptor: int | None = None
+    installed = False
+    try:
+        staging_descriptor = os.open(
+            staging,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0),
+        )
+        staging_identity = _descriptor_identity(staging_descriptor)
+        _write_directory(staging_descriptor, files)
+        _verify_directory_descriptor(staging_descriptor, files)
+        _require_identity(
+            staging,
+            staging_identity,
+            f"Publication staging changed during publication: {staging}",
+        )
+        _verify_directory(staging, files)
+        _require_identity(
+            staging,
+            staging_identity,
+            f"Publication staging changed during publication: {staging}",
+        )
+        try:
+            _rename_no_replace(staging, target)
+        except FileExistsError as error:
+            raise FileExistsError(
+                f"Publication destination already exists: {target}"
+            ) from error
+        _require_public_identity(
+            target,
+            staging_identity,
+            preferred_quarantine=staging,
+        )
+        installed = True
+        try:
+            _verify_directory_descriptor(staging_descriptor, files)
+        except OSError:
+            _quarantine_owned_directory(target, staging_identity)
+            raise
+        _require_public_identity(target, staging_identity)
+    finally:
+        if staging_descriptor is not None:
+            os.close(staging_descriptor)
+        if not installed:
+            _remove_owned_staging(staging, staging_identity, directory=True)
+
+
+def _publish_directory_windows(files: tuple[PublishedFile, ...], target: Path) -> None:
+    staging = Path(tempfile.mkdtemp(prefix=f".{target.name}.", dir=target.parent))
+    staging_identity = _path_identity(staging)
+    installed = False
+    try:
+        _write_directory_path(staging, files)
+        _verify_directory_path(staging, files)
+        _require_identity(
+            staging,
+            staging_identity,
+            f"Publication staging changed during publication: {staging}",
+        )
+        try:
+            _rename_no_replace(staging, target)
+        except FileExistsError as error:
+            raise FileExistsError(
+                f"Publication destination already exists: {target}"
+            ) from error
+        _require_public_identity(
+            target,
+            staging_identity,
+            preferred_quarantine=staging,
+        )
+        installed = True
+        try:
+            _verify_directory_path(target, files)
+        except OSError:
+            _quarantine_owned_directory(target, staging_identity)
+            raise
+        _require_public_identity(target, staging_identity)
+    finally:
+        if not installed:
+            _remove_owned_staging(staging, staging_identity, directory=True)
+
+
+def _write_directory_path(root: Path, files: tuple[PublishedFile, ...]) -> None:
+    for file in files:
+        output = root.joinpath(*PurePosixPath(file.path).parts)
+        output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with output.open("xb") as stream:
+            stream.write(file.content)
+
+
+def _verify_directory_path(root: Path, files: tuple[PublishedFile, ...]) -> None:
+    expected = {file.path: (file.sha256, len(file.content)) for file in files}
+    actual = _path_inventory(root)
+    if actual != expected:
+        raise OSError("Completed directory path write differs")
+
+
+def _path_inventory(
+    root: Path, prefix: PurePosixPath = PurePosixPath()
+) -> dict[str, tuple[str, int]]:
+    inventory: dict[str, tuple[str, int]] = {}
+    for child in root.iterdir():
+        path = prefix / child.name
+        status = child.stat(follow_symlinks=False)
+        if getattr(status, "st_file_attributes", 0) & 0x400:
+            raise OSError(f"Completed directory contains reparse path: {path}")
+        if stat.S_ISDIR(status.st_mode):
+            inventory.update(_path_inventory(child, path))
+        elif stat.S_ISREG(status.st_mode):
+            content = child.read_bytes()
+            inventory[path.as_posix()] = (_sha256(content), len(content))
+        else:
+            raise OSError(f"Completed directory contains non-regular path: {path}")
+    return inventory
 
 
 def _write_directory(descriptor: int, files: tuple[PublishedFile, ...]) -> None:
@@ -430,10 +538,46 @@ def _rename_no_replace(source: Path, destination: Path) -> None:
 
 
 def _native_rename_no_replace(source: Path, destination: Path) -> None:
-    if os.name == "nt":
-        os.rename(source, destination)
+    platform = _publication_platform()
+    if platform == "windows":
+        _windows_rename_no_replace(source, destination)
         return
+    if platform == "linux":
+        _linux_rename_no_replace(source, destination)
+        return
+    if platform == "darwin":
+        _darwin_rename_no_replace(source, destination)
+        return
+    raise OSError(
+        errno.ENOTSUP,
+        "Atomic no-replace directory publication is not supported",
+        os.fspath(destination),
+    )
 
+
+def _windows_rename_no_replace(source: Path, destination: Path) -> None:
+    win_dll = getattr(ctypes, "WinDLL")
+    kernel32 = win_dll("kernel32", use_last_error=True)
+    move_file = kernel32.MoveFileExW
+    move_file.argtypes = (ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint)
+    move_file.restype = ctypes.c_int
+    if move_file(os.fspath(source), os.fspath(destination), 0):
+        return
+    error_number = ctypes.get_last_error()
+    if error_number in {80, 183} or destination.exists(follow_symlinks=False):
+        raise FileExistsError(
+            error_number,
+            "Publication destination already exists",
+            os.fspath(destination),
+        )
+    raise OSError(
+        error_number,
+        "Windows no-replace rename failed",
+        os.fspath(destination),
+    )
+
+
+def _linux_rename_no_replace(source: Path, destination: Path) -> None:
     libc = ctypes.CDLL(None, use_errno=True)
     try:
         renameat2 = libc.renameat2
@@ -457,6 +601,36 @@ def _native_rename_no_replace(source: Path, destination: Path) -> None:
         -100,
         os.fsencode(destination),
         1,
+    )
+    if result != 0:
+        error_number = ctypes.get_errno()
+        raise OSError(
+            error_number,
+            os.strerror(error_number),
+            os.fspath(destination),
+        )
+
+
+def _darwin_rename_no_replace(source: Path, destination: Path) -> None:
+    libc = ctypes.CDLL(None, use_errno=True)
+    try:
+        rename_exclusive = libc.renamex_np
+    except AttributeError as error:
+        raise OSError(
+            errno.ENOTSUP,
+            "Atomic no-replace directory publication is not supported",
+            os.fspath(destination),
+        ) from error
+    rename_exclusive.argtypes = (
+        ctypes.c_char_p,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    )
+    rename_exclusive.restype = ctypes.c_int
+    result = rename_exclusive(
+        os.fsencode(source),
+        os.fsencode(destination),
+        0x00000004,
     )
     if result != 0:
         error_number = ctypes.get_errno()

@@ -3,14 +3,28 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Iterator
+from dataclasses import dataclass
 
 import pytest
 from pymatgen.core import Structure
 
 from goldilocks_core.assets import AssetStore
+from goldilocks_core.contracts.registry import RECORD_TYPE_IDS
 from goldilocks_core.examples import structure
 from goldilocks_core.pseudo.registry import load_tables
-from goldilocks_core.runtime import Runtime, Service
+from goldilocks_core.runtime import (
+    GraphHandler,
+    Preset,
+    Runtime,
+    Service,
+    Stage,
+    TaskGraph,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class CustomSummary:
+    value: str
 
 
 @pytest.fixture
@@ -100,6 +114,36 @@ def test_service() -> Iterator[Service]:
     service = Service()
     yield service
     service.close()
+
+
+@pytest.fixture
+def custom_record_service() -> Iterator[Service]:
+    registered = dict(RECORD_TYPE_IDS)
+    handler = GraphHandler(
+        spec=TaskGraph(
+            task="custom_task",
+            stages=(
+                Stage(
+                    CustomSummary,
+                    (),
+                    lambda *, ctx: CustomSummary("custom result"),
+                    id="custom_summary",
+                    name="Custom summary",
+                ),
+            ),
+            presets=(Preset("summary", (CustomSummary,)),),
+            selectable_outputs=(CustomSummary,),
+            record_ids=((CustomSummary, "custom_summary"),),
+        ),
+        build_context=lambda request, normalized, runtime: None,
+    )
+    service = Service(task_handlers=(handler,))
+    try:
+        yield service
+    finally:
+        service.close()
+        RECORD_TYPE_IDS.clear()
+        RECORD_TYPE_IDS.update(registered)
 
 
 @pytest.fixture

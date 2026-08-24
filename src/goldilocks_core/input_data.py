@@ -315,9 +315,7 @@ def _runtime_material(
                 "text/markdown; charset=utf-8",
             )
         )
-        identities.append(
-            RuntimeAssetIdentity(material.asset.id, material.asset.version, "model")
-        )
+        identities.append(_runtime_asset_identity(material, installed))
     return (
         artifacts,
         RuntimeIdentity(
@@ -385,8 +383,7 @@ def _used_model_material(
             uses_default_model=uses_default_metallicity_model,
         )
         if not any(
-            item.spec.name == metallicity.spec.name
-            and item.spec.version == metallicity.spec.version
+            _model_material_identity(item) == _model_material_identity(metallicity)
             for item in materials
         ):
             materials.append(metallicity)
@@ -416,6 +413,56 @@ def _metallicity_material(
         custom_model,
         None,
         "licences/custom-metallicity-model.txt",
+    )
+
+
+def _model_material_identity(material: _ModelMaterial) -> tuple[object, ...]:
+    model = material.spec
+    asset = material.asset
+    return (
+        model.name,
+        model.version,
+        model.model_type,
+        model.target,
+        model.feature_set,
+        model.source,
+        model.location,
+        model.revision,
+        model.licence,
+        model.licence_text,
+        model.citation,
+        asset.id if asset is not None else None,
+        asset.version if asset is not None else None,
+        asset.preparation_fingerprint if asset is not None else None,
+    )
+
+
+def _runtime_asset_identity(
+    material: _ModelMaterial, installed: InstalledAsset
+) -> RuntimeAssetIdentity:
+    assert material.asset is not None
+    roles = {file.path: file.role for file in material.asset.files}
+    installed_paths = {file.path for file in installed.files}
+    if installed_paths != set(roles):
+        raise ValueError(
+            f"Installed model asset inventory differs from registered roles for "
+            f"{installed.id}@{installed.version}"
+        )
+    return RuntimeAssetIdentity(
+        id=installed.id,
+        version=installed.version,
+        role="model",
+        preparation_fingerprint=installed.preparation_fingerprint,
+        model=_published_model_identity(material.spec),
+        files=tuple(
+            {
+                "path": file.path,
+                "role": roles[file.path],
+                "sha256": file.sha256,
+                "size_bytes": file.size,
+            }
+            for file in installed.files
+        ),
     )
 
 

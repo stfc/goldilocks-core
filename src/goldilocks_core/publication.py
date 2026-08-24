@@ -8,6 +8,7 @@ import json
 import os
 import secrets
 import shutil
+import stat
 import tempfile
 import unicodedata
 from dataclasses import dataclass
@@ -129,22 +130,31 @@ class Publisher:
                 | getattr(os, "O_CLOEXEC", 0),
             )
             staging_identity = _descriptor_identity(staging_descriptor)
-            for file in files:
-                path = staging.joinpath(*PurePosixPath(file.path).parts)
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(file.content)
+            _write_directory(staging_descriptor, files)
+            _verify_directory_descriptor(staging_descriptor, files)
+            _require_identity(
+                staging,
+                staging_identity,
+                f"Publication staging changed during publication: {staging}",
+            )
             _verify_directory(staging, files)
+            _require_identity(
+                staging,
+                staging_identity,
+                f"Publication staging changed during publication: {staging}",
+            )
             try:
                 _rename_no_replace(staging, target)
             except FileExistsError as error:
                 raise FileExistsError(
                     f"Publication destination already exists: {target}"
                 ) from error
-            installed = True
             if not _has_identity(target, staging_identity):
+                _preserve_public_replacement(target, preferred=staging)
                 raise OSError(
                     f"Publication destination changed during publication: {target}"
                 )
+            installed = True
             _verify_directory(target, files)
         finally:
             if staging_descriptor is not None:
@@ -167,9 +177,14 @@ class Publisher:
         staging_identity = _descriptor_identity(descriptor)
         try:
             payload = _archive_bytes(files)
-            staging.write_bytes(payload)
-            if staging.read_bytes() != payload:
+            _write_descriptor(descriptor, payload)
+            if _read_descriptor(descriptor) != payload:
                 raise OSError(f"Completed archive write differs: {staging}")
+            _require_identity(
+                staging,
+                staging_identity,
+                f"Publication staging changed during publication: {staging}",
+            )
             try:
                 os.link(staging, target)
             except FileExistsError as error:
@@ -177,6 +192,7 @@ class Publisher:
                     f"Publication destination already exists: {target}"
                 ) from error
             if not _has_identity(target, staging_identity):
+                _preserve_public_replacement(target)
                 raise OSError(
                     f"Publication destination changed during publication: {target}"
                 )
@@ -211,6 +227,114 @@ class Publisher:
         return payload
 
 
+def _write_directory(descriptor: int, files: tuple[PublishedFile, ...]) -> None:
+    for file in files:
+        parts = PurePosixPath(file.path).parts
+        parent = os.dup(descriptor)
+        try:
+            for part in parts[:-1]:
+                try:
+                    os.mkdir(part, mode=0o700, dir_fd=parent)
+                except FileExistsError:
+                    pass
+                child = os.open(
+                    part,
+                    os.O_RDONLY
+                    | getattr(os, "O_DIRECTORY", 0)
+                    | getattr(os, "O_CLOEXEC", 0)
+                    | getattr(os, "O_NOFOLLOW", 0),
+                    dir_fd=parent,
+                )
+                os.close(parent)
+                parent = child
+            output = os.open(
+                parts[-1],
+                os.O_WRONLY
+                | os.O_CREAT
+                | os.O_EXCL
+                | getattr(os, "O_CLOEXEC", 0)
+                | getattr(os, "O_NOFOLLOW", 0),
+                0o600,
+                dir_fd=parent,
+            )
+            try:
+                _write_all(output, file.content)
+            finally:
+                os.close(output)
+        finally:
+            os.close(parent)
+
+
+def _write_descriptor(descriptor: int, content: bytes) -> None:
+    os.ftruncate(descriptor, 0)
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    _write_all(descriptor, content)
+
+
+def _write_all(descriptor: int, content: bytes) -> None:
+    view = memoryview(content)
+    while view:
+        written = os.write(descriptor, view)
+        if written == 0:
+            raise OSError("Descriptor write made no progress")
+        view = view[written:]
+
+
+def _read_descriptor(descriptor: int) -> bytes:
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    chunks: list[bytes] = []
+    while chunk := os.read(descriptor, 1024 * 1024):
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _verify_directory_descriptor(
+    descriptor: int, files: tuple[PublishedFile, ...]
+) -> None:
+    expected = {file.path: (file.sha256, len(file.content)) for file in files}
+    actual = _descriptor_inventory(descriptor)
+    if actual != expected:
+        raise OSError("Completed directory descriptor write differs")
+
+
+def _descriptor_inventory(
+    descriptor: int, prefix: PurePosixPath = PurePosixPath()
+) -> dict[str, tuple[str, int]]:
+    inventory: dict[str, tuple[str, int]] = {}
+    for name in os.listdir(descriptor):
+        path = prefix / name
+        status = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+        if stat.S_ISDIR(status.st_mode):
+            child = os.open(
+                name,
+                os.O_RDONLY
+                | getattr(os, "O_DIRECTORY", 0)
+                | getattr(os, "O_CLOEXEC", 0)
+                | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=descriptor,
+            )
+            try:
+                inventory.update(_descriptor_inventory(child, path))
+            finally:
+                os.close(child)
+        elif stat.S_ISREG(status.st_mode):
+            source = os.open(
+                name,
+                os.O_RDONLY
+                | getattr(os, "O_CLOEXEC", 0)
+                | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=descriptor,
+            )
+            try:
+                content = _read_descriptor(source)
+            finally:
+                os.close(source)
+            inventory[path.as_posix()] = (_sha256(content), len(content))
+        else:
+            raise OSError(f"Completed directory contains non-regular path: {path}")
+    return inventory
+
+
 def _path_identity(path: Path) -> tuple[int, int]:
     status = path.stat(follow_symlinks=False)
     return status.st_dev, status.st_ino
@@ -226,6 +350,31 @@ def _has_identity(path: Path, identity: tuple[int, int]) -> bool:
         return _path_identity(path) == identity
     except FileNotFoundError:
         return False
+
+
+def _require_identity(path: Path, identity: tuple[int, int], message: str) -> None:
+    if not _has_identity(path, identity):
+        raise OSError(message)
+
+
+def _preserve_public_replacement(
+    target: Path, *, preferred: Path | None = None
+) -> Path | None:
+    destinations = []
+    if preferred is not None:
+        destinations.append(preferred)
+    destinations.append(
+        target.with_name(f".{target.name}.quarantine-{secrets.token_hex(16)}")
+    )
+    for destination in destinations:
+        try:
+            _native_rename_no_replace(target, destination)
+        except FileNotFoundError:
+            return None
+        except FileExistsError:
+            continue
+        return destination
+    return None
 
 
 def _remove_owned_staging(

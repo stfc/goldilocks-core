@@ -80,6 +80,9 @@ class RuntimeAssetIdentity:
     id: str
     version: str
     role: str
+    preparation_fingerprint: str
+    model: JsonDict
+    files: tuple[JsonDict, ...]
 
     def to_dict(self) -> JsonDict:
         return to_jsonable(self)

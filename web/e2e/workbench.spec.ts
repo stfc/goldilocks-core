@@ -115,22 +115,23 @@ test("prepares a real Core recommendation from POSCAR", async ({ page }) => {
 });
 
 interface ArchiveManifest {
-  readonly selection: {
-    readonly table: { readonly id: string; readonly version: string };
-    readonly files: readonly {
-      readonly filename: string;
-      readonly sha256: string;
-    }[];
+  readonly pseudopotential_set: {
+    readonly id: string;
+    readonly version: string;
   };
+  readonly selected_artifacts: readonly {
+    readonly path: string;
+    readonly sha256: string;
+  }[];
   readonly runtime: {
-    readonly goldilocks_core_version: string;
-    readonly model_assets: readonly {
+    readonly core_version: string;
+    readonly assets: readonly {
       readonly id: string;
       readonly version: string;
-      readonly files: readonly { readonly sha256: string | null }[];
+      readonly files: readonly { readonly sha256: string }[];
     }[];
   };
-  readonly archive_files: Readonly<
+  readonly files: Readonly<
     Record<string, { readonly sha256: string; readonly size_bytes: number }>
   >;
 }
@@ -162,22 +163,22 @@ function verifyArchive(
   const manifest = JSON.parse(
     textEntry(entries, "goldilocks.json"),
   ) as ArchiveManifest;
-  expect(manifest.selection.table.id).toBe(expected.tableId);
-  expect(manifest.selection.table.version).toBe(expected.tableVersion);
-  expect(manifest.runtime.goldilocks_core_version).toMatch(/^\d+\.\d+\.\d+/);
-  expect(manifest.runtime.model_assets.length).toBeGreaterThan(0);
+  expect(manifest.pseudopotential_set.id).toBe(expected.tableId);
+  expect(manifest.pseudopotential_set.version).toBe(expected.tableVersion);
+  expect(manifest.runtime.core_version).toMatch(/^\d+\.\d+\.\d+/);
+  expect(manifest.runtime.assets.length).toBeGreaterThan(0);
   expect(
-    manifest.runtime.model_assets.every((asset) =>
-      asset.files.every((file) => file.sha256 !== null),
+    manifest.runtime.assets.every((asset) =>
+      asset.files.every((file) => file.sha256.length === 64),
     ),
   ).toBe(true);
 
-  for (const pseudo of manifest.selection.files) {
-    const name = `pseudo/${pseudo.filename}`;
-    expect(names).toContain(name);
-    expect(sha256(entry(entries, name))).toBe(pseudo.sha256);
+  for (const pseudo of manifest.selected_artifacts) {
+    expect(pseudo.path).toMatch(/^pseudo\//);
+    expect(names).toContain(pseudo.path);
+    expect(sha256(entry(entries, pseudo.path))).toBe(pseudo.sha256);
   }
-  for (const [name, facts] of Object.entries(manifest.archive_files)) {
+  for (const [name, facts] of Object.entries(manifest.files)) {
     const payload = entry(entries, name);
     expect(sha256(payload)).toBe(facts.sha256);
     expect(payload.byteLength).toBe(facts.size_bytes);

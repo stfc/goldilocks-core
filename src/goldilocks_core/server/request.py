@@ -58,6 +58,14 @@ _ALLOWED_DRAFT = frozenset(
 )
 _INTENT_FIELDS = frozenset(field.name for field in fields(CalculationIntent))
 _HINT_FIELDS = frozenset(field.name for field in fields(CalculationHints))
+_PSEUDO_FIELDS = frozenset(field.name for field in fields(PseudoMetadata))
+_MODEL_FIELDS = frozenset(field.name for field in fields(ModelSpec))
+_MODEL_REQUIRED = _MODEL_FIELDS - {
+    "revision",
+    "licence",
+    "licence_text",
+    "citation",
+}
 _STRING_HINTS = {
     "smearing_type",
     "pseudo_accuracy",

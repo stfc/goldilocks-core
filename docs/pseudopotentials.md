@@ -165,6 +165,26 @@ The recognized sidecar filenames are a fixed convention:
 Other parent-directory layouts are not searched: keep sidecars beside their
 UPF files, or follow the one table-level filename above.
 
+Generating publishable DFT Input Data from a local root also requires the
+operator to declare the real redistribution terms and source citation. Put a
+`goldilocks-pseudopotentials.json` sidecar at the root:
+
+```json
+{
+    "schema_version": 1,
+    "licence": "the actual licence name or SPDX expression",
+    "licence_file": "LICENSE.txt",
+    "citation": "the citation requested by this pseudopotential source"
+}
+```
+
+`licence_file` is a relative path contained under the root. Goldilocks reads
+and publishes that file verbatim with the selected UPFs. It does not infer a
+licence from a provider name, UPF filename, or cutoff sidecar. Recommendation
+can inspect a root without this publication sidecar, but generation fails
+clearly until complete legal and citation material is supplied.
+>>>>>>> 1b037eab (fix(publication): bind outputs to exact scientific sources)
+
 `pseudo_metadata`, `pseudo_root`, and `pseudo_table` are mutually exclusive.
 Explicit metadata is useful for in-memory callers; an explicit root remains
 operator-managed; an exact table ID resolves through the verified asset store.

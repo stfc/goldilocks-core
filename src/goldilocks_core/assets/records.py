@@ -109,6 +109,7 @@ class InstalledFile:
 class InstalledAsset:
     id: str
     version: str
+    preparation_fingerprint: str
     root: Path
     files: tuple[InstalledFile, ...]
 

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
 
-from goldilocks_core.assets import AssetStore, InstalledAsset
+from goldilocks_core.assets import AssetSpec, AssetStore, InstalledAsset
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
@@ -14,6 +15,7 @@ from goldilocks_core.contracts import (
     InputArtifact,
     InstalledArtifactReference,
     KPointSelection,
+    ModelSpec,
     ParameterAdvice,
     PathLike,
     Provenance,
@@ -27,7 +29,7 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.contracts.types import JsonDict
 from goldilocks_core.io.structures import NormalizedStructure
-from goldilocks_core.ml.model_registry import model_asset_specs
+from goldilocks_core.ml.model_registry import load_default_qrf_config
 from goldilocks_core.pseudo.registry import load_tables
 
 
@@ -45,7 +47,8 @@ def assemble_dft_input_data(
     asset_store: AssetStore,
     pseudo_registry_path: PathLike | None,
     model_registry_path: PathLike | None,
-    runtime_models: tuple[JsonDict, ...],
+    kmesh_model: ModelSpec | None,
+    uses_default_kmesh_model: bool,
 ) -> DftInputData:
     artifacts: list[InputArtifact] = []
     source = normalized_structure.source
@@ -115,7 +118,8 @@ def assemble_dft_input_data(
         k_points,
         asset_store=asset_store,
         registry_path=model_registry_path,
-        models=runtime_models,
+        custom_kmesh_model=kmesh_model,
+        uses_default_kmesh_model=uses_default_kmesh_model,
     )
     artifacts.extend(runtime_artifacts)
     citations = (pseudo_set.citation, *runtime_citations)
@@ -201,48 +205,171 @@ def _validated_generated_input(path: str, content: str) -> bytes:
     return payload
 
 
+@dataclass(frozen=True, slots=True)
+class _ModelMaterial:
+    spec: ModelSpec
+    asset: AssetSpec | None
+    licence_path: str
+
+
 def _runtime_material(
     analysis: StructureAnalysisRecord,
     k_points: KPointSelection,
     *,
     asset_store: AssetStore,
     registry_path: PathLike | None,
-    models: tuple[JsonDict, ...],
+    custom_kmesh_model: ModelSpec | None,
+    uses_default_kmesh_model: bool,
 ) -> tuple[list[InputArtifact], RuntimeIdentity, tuple[str, ...]]:
-    uses_model = (
-        k_points.provenance.source == "model"
-        or analysis.electronic_character_source == "model"
+    materials = _used_model_material(
+        analysis,
+        k_points,
+        registry_path=registry_path,
+        custom_kmesh_model=custom_kmesh_model,
+        uses_default_kmesh_model=uses_default_kmesh_model,
     )
-    if not uses_model:
+    if not materials:
         return [], RuntimeIdentity(core_version=version("goldilocks-core")), ()
 
     artifacts: list[InputArtifact] = []
     identities: list[RuntimeAssetIdentity] = []
     citations: list[str] = []
-    for spec in sorted(model_asset_specs(registry_path), key=lambda item: item.id):
-        installed = asset_store.resolve_spec(spec)
-        licence = next(file for file in spec.files if file.role == "licence")
+    for material in materials:
+        model = material.spec
+        if material.asset is None:
+            missing = [
+                field
+                for field in ("licence", "licence_text", "citation")
+                if not isinstance(getattr(model, field), str)
+                or not getattr(model, field).strip()
+            ]
+            if missing:
+                raise ValueError(
+                    f"Model {model.name!r} used for publication must declare "
+                    "non-empty licence, licence_text, and citation"
+                )
+            citations.append(model.citation)
+            artifacts.append(
+                _generated_artifact(
+                    material.licence_path,
+                    "licence",
+                    model.licence_text.encode("utf-8"),
+                    identity=f"model-licence:{model.name}@{model.version}",
+                    media_type="text/plain; charset=utf-8",
+                )
+            )
+            continue
+
+        if not isinstance(model.citation, str) or not model.citation.strip():
+            raise ValueError(
+                f"Model {model.name!r} used for publication must declare a "
+                "non-empty citation"
+            )
+        citations.append(model.citation)
+        installed = asset_store.resolve_spec(material.asset)
+        licence = next(file for file in material.asset.files if file.role == "licence")
         suffix = Path(licence.path).suffix or ".txt"
         artifacts.append(
             _installed_artifact(
                 installed,
                 licence.path,
-                f"licences/{spec.id}-{spec.version}{suffix}",
+                f"licences/{material.asset.id}-{material.asset.version}{suffix}",
                 "licence",
                 "text/markdown; charset=utf-8",
             )
         )
-        identities.append(RuntimeAssetIdentity(spec.id, spec.version, "model"))
-        citations.append(licence.url)
+        identities.append(
+            RuntimeAssetIdentity(material.asset.id, material.asset.version, "model")
+        )
     return (
         artifacts,
         RuntimeIdentity(
             core_version=version("goldilocks-core"),
-            models=models,
+            models=tuple(_published_model_identity(item.spec) for item in materials),
             assets=tuple(identities),
         ),
         tuple(citations),
     )
+
+
+def _used_model_material(
+    analysis: StructureAnalysisRecord,
+    k_points: KPointSelection,
+    *,
+    registry_path: PathLike | None,
+    custom_kmesh_model: ModelSpec | None,
+    uses_default_kmesh_model: bool,
+) -> tuple[_ModelMaterial, ...]:
+    kpoints_uses_model = k_points.provenance.source == "model"
+    analysis_uses_model = analysis.electronic_character_source == "model"
+    if not kpoints_uses_model and not analysis_uses_model:
+        return ()
+
+    needs_registered_model = analysis_uses_model or (
+        kpoints_uses_model and custom_kmesh_model is None and uses_default_kmesh_model
+    )
+    config = load_default_qrf_config(registry_path) if needs_registered_model else None
+    materials: list[_ModelMaterial] = []
+    if kpoints_uses_model:
+        if custom_kmesh_model is not None:
+            materials.append(
+                _ModelMaterial(
+                    custom_kmesh_model,
+                    None,
+                    "licences/custom-kmesh-model.txt",
+                )
+            )
+        elif uses_default_kmesh_model:
+            assert config is not None
+            materials.extend(
+                (
+                    _ModelMaterial(
+                        config.model,
+                        config.model_asset,
+                        "licences/k-point-model.txt",
+                    ),
+                    _ModelMaterial(
+                        config.metallicity_model,
+                        config.metallicity_asset,
+                        "licences/metallicity-model.txt",
+                    ),
+                )
+            )
+        else:
+            raise ValueError(
+                "Custom KMeshService produced a model result without identity; "
+                "supply a CalculationDraft.kmesh_model with explicit licence and "
+                "citation material"
+            )
+    if analysis_uses_model:
+        assert config is not None
+    if analysis_uses_model and not any(
+        item.spec.name == config.metallicity_model.name
+        and item.spec.version == config.metallicity_model.version
+        for item in materials
+    ):
+        materials.append(
+            _ModelMaterial(
+                config.metallicity_model,
+                config.metallicity_asset,
+                "licences/metallicity-model.txt",
+            )
+        )
+    return tuple(materials)
+
+
+def _published_model_identity(model: ModelSpec) -> JsonDict:
+    return {
+        "name": model.name,
+        "version": model.version,
+        "model_type": model.model_type,
+        "target": model.target,
+        "feature_set": model.feature_set,
+        "source": model.source,
+        "revision": model.revision,
+        "licence": model.licence,
+        "citation": model.citation,
+    }
 
 
 def _pseudopotential_material(
@@ -361,7 +488,10 @@ def _installed_artifact(
         sha256=file.sha256,
         size_bytes=file.size,
         source=InstalledArtifactReference(
-            installed.id, installed.version, relative_path
+            installed.id,
+            installed.version,
+            installed.preparation_fingerprint,
+            relative_path,
         ),
         media_type=media_type,
         provenance=provenance,

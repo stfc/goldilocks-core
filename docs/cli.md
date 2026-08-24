@@ -192,7 +192,9 @@ it does not replace a corrupt asset. An explicit root is never downloaded or
 copied. Core parses `.upf` and `.UPF` files and only recognized provider
 sidecars; declared functionals, accuracy tiers, relativistic treatments, table
 coverage, and source checksums are validated rather than inferred from
-filenames.
+filenames. Publishing from `--pseudo-root` also requires the explicit
+`goldilocks-pseudopotentials.json` legal/citation contract documented in
+[pseudopotentials](pseudopotentials.md#use-your-own-upf-files).
 
 ## Kmesh backend selection
 
@@ -211,7 +213,11 @@ The CLI builds a `ModelSpec` from `--model`, `--model-name`, and
 `--model-version`, puts it on the request's `kmesh_model`, and dispatches
 through the shared service surface. The model spec serializes with the rest of
 the request. `--model-name` and `--model-version` are local-model metadata and
-are rejected unless `--model` is set.
+are rejected unless `--model` is set. A custom model used in publishable DFT
+Input Data must also provide `ModelSpec.licence`, the verbatim
+`ModelSpec.licence_text`, and `ModelSpec.citation` through the Python or typed
+request contract. Generation fails clearly when those fields are absent; Core
+never substitutes the default model identities or invents attribution.
 
 Hint precedence still applies:
 

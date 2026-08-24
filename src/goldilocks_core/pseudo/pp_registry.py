@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from goldilocks_core.contracts import PseudoCutoffs, PseudoMetadata
 from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
@@ -15,6 +15,7 @@ from goldilocks_core.pseudo.validation import (
 )
 
 _HARTREE_TO_RYDBERG = 2.0
+_PUBLICATION_SIDECAR = "goldilocks-pseudopotentials.json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +34,7 @@ def load_pseudo_metadata(root: str | Path) -> list[PseudoMetadata]:
         for path in root.rglob("*")
         if path.is_file() and path.suffix.lower() == ".upf"
     )
+    publication_metadata = _load_publication_metadata(root)
     metadata: list[PseudoMetadata] = []
     for upf in upf_files:
         item = parse_upf_metadata(upf)
@@ -53,8 +55,80 @@ def load_pseudo_metadata(root: str | Path) -> list[PseudoMetadata]:
                 source_identifier=discovered.source_identifier,
                 cutoffs=discovered.cutoffs,
             )
+        if publication_metadata:
+            item = replace(
+                item,
+                pseudo_info={**item.pseudo_info, **publication_metadata},
+            )
         metadata.append(item)
     return metadata
+
+
+def _load_publication_metadata(root: Path) -> dict[str, str]:
+    sidecar = root / _PUBLICATION_SIDECAR
+    if not sidecar.exists():
+        return {}
+    if sidecar.is_symlink() or not sidecar.is_file():
+        raise PseudoImportError(
+            f"pseudopotential publication sidecar must be a regular file: {sidecar}"
+        )
+    try:
+        document = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise PseudoImportError(
+            f"invalid pseudopotential publication sidecar {sidecar}"
+        ) from error
+    required = {
+        "schema_version",
+        "licence",
+        "licence_file",
+        "citation",
+    }
+    if not isinstance(document, dict) or set(document) != required:
+        raise PseudoImportError(
+            f"pseudopotential publication sidecar fields are invalid: {sidecar}"
+        )
+    if isinstance(document["schema_version"], bool) or document["schema_version"] != 1:
+        raise PseudoImportError(
+            f"unsupported pseudopotential publication sidecar schema: {sidecar}"
+        )
+    for field in ("licence", "licence_file", "citation"):
+        value = document[field]
+        if not isinstance(value, str) or not value.strip():
+            raise PseudoImportError(
+                f"pseudopotential publication sidecar {field} must be non-empty: "
+                f"{sidecar}"
+            )
+
+    relative = document["licence_file"]
+    candidate = PurePosixPath(relative)
+    if (
+        "\\" in relative
+        or candidate.is_absolute()
+        or any(part in {"", ".", ".."} for part in relative.split("/"))
+        or candidate.as_posix() != relative
+    ):
+        raise PseudoImportError(
+            f"pseudopotential publication licence_file must be contained: {sidecar}"
+        )
+    licence_file = root.joinpath(*candidate.parts)
+    try:
+        resolved_licence = licence_file.resolve(strict=True)
+        resolved_licence.relative_to(root)
+        licence_text = resolved_licence.read_text(encoding="utf-8")
+    except (OSError, UnicodeError, ValueError) as error:
+        raise PseudoImportError(
+            f"cannot read contained pseudopotential licence_file {licence_file}"
+        ) from error
+    if not licence_text:
+        raise PseudoImportError(
+            f"pseudopotential publication licence_file is empty: {licence_file}"
+        )
+    return {
+        "licence": document["licence"],
+        "licence_text": licence_text,
+        "citation": document["citation"],
+    }
 
 
 def _discover_cutoffs(

@@ -21,6 +21,7 @@ class GeneratedContent:
 class InstalledArtifactReference:
     asset_id: str
     asset_version: str
+    preparation_fingerprint: str
     path: str
 
     def to_dict(self) -> JsonDict:
@@ -28,6 +29,7 @@ class InstalledArtifactReference:
             "kind": "installed",
             "asset_id": self.asset_id,
             "asset_version": self.asset_version,
+            "preparation_fingerprint": self.preparation_fingerprint,
             "path": self.path,
         }
 

@@ -97,6 +97,7 @@ class Runtime:
         self._metallicity_atom_init = metallicity_atom_init
         self._asset_store = asset_store or AssetStore()
         self._pseudo_registry_path = pseudo_registry_path
+        self._uses_default_kmesh_model = kmesh_service is None
         self._backend = (
             kmesh_service if kmesh_service is not None else self._build_backend()
         )
@@ -121,6 +122,10 @@ class Runtime:
     @property
     def kmesh_service(self) -> KMeshService:
         return self._backend
+
+    @property
+    def uses_default_kmesh_model(self) -> bool:
+        return self._uses_default_kmesh_model
 
     @property
     def metallicity(self) -> MetallicityModel:

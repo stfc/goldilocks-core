@@ -10,6 +10,7 @@ from goldilocks_core.assets.runtime import install as install_assets
 from goldilocks_core.assets.runtime import statuses as asset_statuses
 from goldilocks_core.assets.runtime import verify as verify_assets
 from goldilocks_core.contracts import (
+    ArchiveOutput,
     CalculationDraft,
     CalculationHints,
     CalculationIntent,
@@ -19,6 +20,7 @@ from goldilocks_core.contracts import (
     GeneratedFiles,
     KPointSelection,
     ModelSpec,
+    OutputTarget,
     PathStructureSource,
     PresetSelection,
     RecordSelection,
@@ -27,7 +29,8 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.examples import structures_path
 from goldilocks_core.generation import available_codes, available_tasks
-from goldilocks_core.runtime import Runtime, compute
+from goldilocks_core.io.structures import StructureInputError
+from goldilocks_core.runtime import Runtime, Service, compute
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,21 +40,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    for command in ("recommend", "generate"):
-        subparser = subparsers.add_parser(command)
-        _add_common_arguments(subparser)
-        if command == "generate":
-            subparser.add_argument(
-                "--out",
-                help="Output directory for a portable Core bundle.",
-            )
+    capabilities = subparsers.add_parser(
+        "capabilities", help="Describe available Core tasks, presets, and assets."
+    )
+    capabilities.add_argument("--json", action="store_true", help="Print JSON output.")
 
-    compute = subparsers.add_parser("compute")
+    inspect = subparsers.add_parser("inspect", help="Inspect a structure source.")
+    inspect.add_argument("structure", help="Path to the input structure file.")
+    inspect.add_argument("--json", action="store_true", help="Print JSON output.")
+
+    compute = subparsers.add_parser("compute", help="Run one Core computation.")
     _add_common_arguments(compute)
-    compute.add_argument(
-        "--outputs",
-        required=True,
-        help="Comma-separated record type ids to compute.",
+    selection = compute.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--preset", help="Named computation preset id.")
+    selection.add_argument(
+        "--outputs", help="Comma-separated record type ids to compute."
+    )
+    output = compute.add_mutually_exclusive_group()
+    output.add_argument("--out", help="Publish a ready-to-run directory.")
+    output.add_argument("--archive", help="Publish a ready-to-run ZIP archive.")
+    output.add_argument(
+        "--no-out", action="store_true", help="Return memory-only structured output."
     )
 
     serve = subparsers.add_parser(
@@ -111,6 +120,34 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
+    if args.command == "capabilities":
+        with Service() as service:
+            capabilities = service.capabilities()
+        if args.json:
+            print(json.dumps(capabilities.to_dict(), indent=2, sort_keys=True))
+        else:
+            print(f"Goldilocks Core {capabilities.core_version}")
+            for task in capabilities.tasks:
+                presets = ", ".join(preset.id for preset in task.presets)
+                print(f"{task.id}: {presets}")
+        return
+    if args.command == "inspect":
+        try:
+            with Service() as service:
+                inspection = service.inspect_structure(
+                    PathStructureSource(args.structure)
+                )
+        except (StructureInputError, ValueError) as error:
+            parser.print_usage(sys.stderr)
+            print(f"{parser.prog}: error: {error}", file=sys.stderr)
+            raise SystemExit(2) from error
+        if args.json:
+            print(json.dumps(inspection.to_dict(), indent=2, sort_keys=True))
+        else:
+            print(f"structure: {inspection.source.name}")
+            print(f"formula: {inspection.structure.reduced_formula}")
+            print(f"sites: {inspection.structure.site_count}")
+        return
     if args.command == "examples":
         print(structures_path())
         return
@@ -126,11 +163,7 @@ def main() -> None:
     try:
         _validate_backend_options(args)
         request = _request_from_args(args)
-        target = (
-            DirectoryOutput(args.out)
-            if args.command == "generate" and args.out is not None
-            else None
-        )
+        target = _output_from_args(args)
         while True:
             try:
                 with Runtime(asset_store=store) as runtime:
@@ -142,34 +175,22 @@ def main() -> None:
                     raise
                 attempted.add(key)
                 install_assets(error.reference.id, store=store)
-    except (AssetCorrupt, AssetNotInstalled, KeyError, ValueError) as error:
+    except (
+        AssetCorrupt,
+        AssetNotInstalled,
+        FileExistsError,
+        KeyError,
+        ValueError,
+    ) as error:
         parser.print_usage(sys.stderr)
         print(f"{parser.prog}: error: {error}", file=sys.stderr)
         raise SystemExit(2) from error
 
-    if args.command == "compute":
-        print(json.dumps(output.records.to_dict(), indent=2, sort_keys=True))
-        return
-
-    result = output
-    publication = result.publication
     if args.json:
-        request_document = request.draft.to_dict()
-        request_document["mode"] = args.command
-        request_document["output_dir"] = getattr(args, "out", None)
-        records = result.records.to_dict()
-        records.setdefault("generated_files", [])
-        rendered = {
-            "request": request_document,
-            "intent": result.draft.intent.to_dict(),
-            **records,
-            "warnings": list(result.warnings),
-            "bundle": publication.to_dict() if publication is not None else None,
-        }
-        print(json.dumps(rendered, indent=2, sort_keys=True))
+        print(json.dumps(output.to_dict(), indent=2, sort_keys=True))
         return
 
-    _print_human_summary(result)
+    _print_human_summary(output)
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
@@ -287,9 +308,9 @@ def _request_from_args(args: argparse.Namespace) -> ComputeRequest:
     kmesh_model = _model_spec_from_args(args)
 
     selection = (
-        RecordSelection(_parse_outputs(args.outputs))
-        if args.command == "compute"
-        else PresetSelection(args.command)
+        PresetSelection(args.preset)
+        if args.preset is not None
+        else RecordSelection(_parse_outputs(args.outputs))
     )
     return ComputeRequest(
         draft=CalculationDraft(
@@ -302,6 +323,16 @@ def _request_from_args(args: argparse.Namespace) -> ComputeRequest:
         ),
         selection=selection,
     )
+
+
+def _output_from_args(args: argparse.Namespace) -> OutputTarget | None:
+    if args.no_out:
+        return None
+    if args.out is not None:
+        return DirectoryOutput(args.out)
+    if args.archive is not None:
+        return ArchiveOutput(args.archive)
+    return DirectoryOutput()
 
 
 def _parse_outputs(value: str) -> tuple[type, ...]:
@@ -386,18 +417,24 @@ def _parse_optional_bool(value: str | None) -> bool | None:
 
 
 def _print_human_summary(result: ComputationResult) -> None:
-    grid = result.records[KPointSelection].grid
-    print(f"formula: {result.records[StructureAnalysisRecord].reduced_formula}")
+    structure = result.draft.structure
+    print(f"structure: {structure.source.name}")
+    analysis = result.records.get(StructureAnalysisRecord)
+    if analysis is not None:
+        print(f"formula: {analysis.reduced_formula}")
     print(f"code: {result.draft.intent.code}")
     print(f"task: {result.draft.intent.task}")
-    print(f"k-grid: {grid[0]} {grid[1]} {grid[2]}")
+    k_points = result.records.get(KPointSelection)
+    if k_points is not None:
+        grid = k_points.grid
+        print(f"k-grid: {grid[0]} {grid[1]} {grid[2]}")
     generated_files = result.records.get(GeneratedFiles, ())
     if generated_files:
         print("generated files:")
         for generated_file in generated_files:
             print(f"  {generated_file.path}")
     if result.publication is not None:
-        print(f"published: {result.publication.path}")
+        print(f"published {result.publication.kind}: {result.publication.path}")
     if result.warnings:
         print("warnings:")
         for warning in result.warnings:

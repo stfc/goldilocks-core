@@ -249,7 +249,7 @@ def test_http_rejects_non_inline_sources_and_unknown_fields(test_service) -> Non
                 "draft": {"structure": {"name": "Si.cif", "content": ""}},
                 "selection": {"records": ["analysis"]},
                 "output": {"kind": "memory"},
-                "mode": "recommend",
+                "unexpected": True,
             },
         )
         directory = client.post(
@@ -269,7 +269,7 @@ def test_http_rejects_non_inline_sources_and_unknown_fields(test_service) -> Non
     )
     assert unknown.status_code == 422
     assert any(
-        item["path"] == "body.mode"
+        item["path"] == "body.unexpected"
         for item in unknown.json()["error"]["details"]["validation_errors"]
     )
     assert directory.status_code == 422
@@ -316,17 +316,13 @@ def test_openapi_describes_canonical_json_and_archive_contracts(test_service) ->
     with TestClient(create_app(test_service)) as client:
         schema = client.get("/openapi.json").json()
 
-    assert {"/capabilities", "/inspect", "/compute", "/health", "/ready"} <= set(
-        schema["paths"]
-    )
-    assert not {
-        "/tasks",
-        "/codes",
-        "/models",
-        "/recommend",
-        "/generate",
-        "/api/workbench/structure",
-    } & set(schema["paths"])
+    assert set(schema["paths"]) == {
+        "/capabilities",
+        "/inspect",
+        "/compute",
+        "/health",
+        "/ready",
+    }
     capabilities = schema["paths"]["/capabilities"]["get"]["responses"]["200"]
     assert capabilities["content"]["application/json"]["schema"]["$ref"].endswith(
         "/Capabilities"
@@ -397,31 +393,6 @@ def test_generated_openapi_and_typescript_match_the_public_contract(
     assert 'readonly records: components["schemas"]["Records"];' in typescript
     assert "readonly Records:" in typescript
     assert "readonly analysis?:" in typescript
-    assert "GuidedRequest" not in typescript
-    assert "RecommendationResponse" not in typescript
-
-
-def test_http_exposes_no_legacy_or_browser_scientific_routes(test_service) -> None:
-    with TestClient(create_app(test_service)) as client:
-        responses = {
-            path: client.get(path)
-            if path in {"/tasks", "/codes", "/models"}
-            else client.post(path, json={})
-            for path in (
-                "/tasks",
-                "/codes",
-                "/models",
-                "/recommend",
-                "/generate",
-                "/api/workbench/structure",
-                "/api/workbench/recommendation",
-                "/api/workbench/archive",
-            )
-        }
-
-    assert {
-        path for path, response in responses.items() if response.status_code != 404
-    } == set()
 
 
 class _DefectiveService(Service):

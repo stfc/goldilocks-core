@@ -333,9 +333,14 @@ describe("Goldilocks Workbench", () => {
         content: "data_Si",
       },
     ]);
-    expect(screen.getByLabelText("Pseudopotential table")).toHaveTextContent(
-      "pseudodojo · PseudoDojo fixture",
-    );
+    const tableSelect = screen.getByLabelText("Pseudopotential table");
+    expect(
+      Array.from(tableSelect.querySelectorAll("option"), (option) => option.value),
+    ).toEqual([
+      "",
+      "pseudodojo-pbesol-efficiency-sr",
+      "sssp-pbesol-efficiency-sr",
+    ]);
   });
 
   it("opens only the latest file when an earlier read resolves last", async () => {

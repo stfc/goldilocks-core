@@ -31,6 +31,30 @@ class Dispatcher:
 
     def register(self, handler: GraphHandler) -> None:
         task = handler.spec
+        for field, value in (("task", task.task), ("revision", task.revision)):
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"TaskGraph {field} must be a non-empty string; got {value!r}"
+                )
+
+        stage_ids = tuple(stage.id for stage in task.stages)
+        if any(
+            not isinstance(stage_id, str) or not stage_id.strip()
+            for stage_id in stage_ids
+        ):
+            raise ValueError("TaskGraph stage ids must be non-empty strings")
+        if len(stage_ids) != len(set(stage_ids)):
+            raise ValueError("TaskGraph stage ids must be unique")
+
+        preset_names = tuple(preset.name for preset in task.presets)
+        if any(
+            not isinstance(preset_name, str) or not preset_name.strip()
+            for preset_name in preset_names
+        ):
+            raise ValueError("TaskGraph preset names must be non-empty strings")
+        if len(preset_names) != len(set(preset_names)):
+            raise ValueError("TaskGraph preset names must be unique")
+
         record_types = dict.fromkeys(
             record_type
             for stage in task.stages

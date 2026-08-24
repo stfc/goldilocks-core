@@ -1,5 +1,7 @@
 from dataclasses import FrozenInstanceError, dataclass
+from importlib import resources
 from importlib.metadata import version
+from pathlib import Path
 
 import pytest
 
@@ -14,7 +16,7 @@ from goldilocks_core.contracts import (
     PseudopotentialSetCapability,
     StageCapability,
 )
-from goldilocks_core.runtime import GraphHandler, Preset, Stage, TaskGraph
+from goldilocks_core.runtime import GraphHandler, Preset, Runtime, Stage, TaskGraph
 
 
 def test_capabilities_contract_is_an_immutable_serializable_domain_value() -> None:
@@ -274,6 +276,29 @@ def test_service_capabilities_describes_the_complete_core_catalog() -> None:
     assert all(not value.startswith("/") for value in strings(serialized))
 
 
+def test_custom_model_registry_rejects_path_like_source_labels(
+    tmp_path: Path,
+) -> None:
+    registry = tmp_path / "models.toml"
+    packaged_registry = (
+        resources.files("goldilocks_core.ml")
+        .joinpath("registry.toml")
+        .read_text(encoding="utf-8")
+    )
+    registry.write_text(
+        packaged_registry.replace(
+            'model_type = "random_forest"',
+            'model_type = "random_forest"\nsource = "/home/operator/model"',
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    with Runtime(registry_path=registry) as runtime:
+        with pytest.raises(ValueError, match="model source must be one of"):
+            Service(runtime).capabilities()
+
+
 def test_registered_future_task_appears_without_a_new_service_method() -> None:
     @dataclass(frozen=True, slots=True)
     class FutureRecord:
@@ -312,14 +337,23 @@ def test_registered_future_task_appears_without_a_new_service_method() -> None:
 
 
 def test_capability_catalogs_use_deterministic_identity_order() -> None:
-    with Service() as service:
+    future_handler = GraphHandler(
+        spec=TaskGraph(
+            task="zzz_future_task",
+            revision="1",
+            stages=(),
+            presets=(),
+        ),
+        build_context=lambda request, runtime: object(),
+    )
+    with Service(task_handlers=(future_handler,)) as service:
         capabilities = service.capabilities()
 
     task_ids = tuple(task.id for task in capabilities.tasks)
     model_ids = tuple(model.id for model in capabilities.models)
     set_ids = tuple(item.id for item in capabilities.pseudopotential_sets)
 
-    assert task_ids == tuple(sorted(task_ids))
+    assert task_ids == ("scf_single_point", "zzz_future_task")
     assert capabilities.target_codes == tuple(sorted(capabilities.target_codes))
     assert model_ids == tuple(sorted(model_ids))
     assert set_ids == tuple(sorted(set_ids))

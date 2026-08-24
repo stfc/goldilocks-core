@@ -5,13 +5,15 @@ import tomllib
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, get_args
 
 from goldilocks_core.assets import AssetFile, AssetSpec
 from goldilocks_core.contracts import ModelSource, ModelSpec, ModelType, PathLike
 
 MODEL_REGISTRY_ENV = "GOLDILOCKS_MODEL_REGISTRY"
 _REGISTRY_RESOURCE = "registry.toml"
+_VALID_MODEL_SOURCES = frozenset(get_args(ModelSource))
+_VALID_MODEL_TYPES = frozenset(get_args(ModelType))
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,16 +175,40 @@ def _asset_spec(data: dict[str, Any] | None) -> AssetSpec | None:
 
 
 def _model_spec(data: dict[str, Any], location: str) -> ModelSpec:
-    source = cast(ModelSource, data.get("source", "local"))
+    identity = {
+        "name": data["name"],
+        "version": str(data["version"]),
+        "target": data["target"],
+        "feature_set": data["feature_set"],
+    }
+    for field, value in identity.items():
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"model {field} must be a non-empty string; got {value!r}")
+    revision = data.get("revision")
+    if revision is not None and (not isinstance(revision, str) or not revision.strip()):
+        raise ValueError(
+            f"model revision must be a non-empty string, or absent; got {revision!r}"
+        )
+
+    source_value = data.get("source", "local")
+    if source_value not in _VALID_MODEL_SOURCES:
+        valid = ", ".join(sorted(_VALID_MODEL_SOURCES))
+        raise ValueError(f"model source must be one of {valid}; got {source_value!r}")
+    source = cast(ModelSource, source_value)
+    model_type_value = data["model_type"]
+    if model_type_value not in _VALID_MODEL_TYPES:
+        valid = ", ".join(sorted(_VALID_MODEL_TYPES))
+        raise ValueError(f"model type must be one of {valid}; got {model_type_value!r}")
+    model_type = cast(ModelType, model_type_value)
     return ModelSpec(
-        name=data["name"],
-        version=str(data["version"]),
-        model_type=cast(ModelType, data["model_type"]),
-        target=data["target"],
-        feature_set=data["feature_set"],
+        name=identity["name"],
+        version=identity["version"],
+        model_type=model_type,
+        target=identity["target"],
+        feature_set=identity["feature_set"],
         source=source,
         location=data.get("location", location),
-        revision=data.get("revision"),
+        revision=revision,
     )
 
 

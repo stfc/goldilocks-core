@@ -1,163 +1,116 @@
-# Pipeline
+# Pipeline and stage behavior
 
-Goldilocks Core exposes one staged SCF workflow through `Service`. The same
-service backs Python, CLI, HTTP, and MCP entry points.
-
-## Reusable service
-
-Use one service for repeated work. It owns lazy model state and closes resources
-when the context exits.
+Use one `Service` for repeated work. It owns lazy model state, serializes
+computation, and closes owned resources.
 
 ```python
-from goldilocks_core import CalculationHints, Service, PresetRequest
+from goldilocks_core import (
+    CalculationDraft,
+    CalculationHints,
+    ComputeRequest,
+    PathStructureSource,
+    PresetSelection,
+    Service,
+)
 
-request = PresetRequest(
-    structure="Fe.cif",
-    hints=CalculationHints(k_grid=(6, 6, 6), spin_polarized=True),
-    pseudo_table="pseudodojo-pbesol-efficiency-sr",
+request = ComputeRequest(
+    CalculationDraft(
+        PathStructureSource("Fe.cif"),
+        hints=CalculationHints(k_grid=(6, 6, 6)),
+    ),
+    PresetSelection("recommend"),
 )
 
 with Service() as core:
-    recommendation = core.recommend(request)
-    generated = core.generate(request, output_dir="run")
-
-print(recommendation.selection.pseudopotentials)
-for generated_file in generated.generated_files:
-    print(generated_file.path)
-print(generated.bundle.path)
+    result = core.compute(request)
 ```
 
-`recommend` runs through Select, including lazy pseudopotential source
-resolution. `generate` also runs Generate; its optional `output_dir` publishes
-the generated files and `manifest.json` into a new directory.
+## Public operations
 
-## Selected record queries
+`Service` exposes three scientific operations:
 
-`compute` asks the DAG for selected record types and runs only their
-prerequisites:
+- `capabilities()` returns tasks, Presets, selectable Records, codes, models,
+  pseudopotential sets, and defaults;
+- `inspect_structure(source)` normalizes a Structure Source and returns a
+  canonical `StructureInspection`;
+- `compute(request, output=...)` executes one Preset or Record selection.
+
+The top-level `compute()` convenience uses the same request and output
+contracts. It owns a short-lived Runtime unless the caller supplies one.
+
+## Compute selection
+
+`PresetSelection("recommend")` requests `analysis`, `advice`, `k_points`, and
+`selection`. `PresetSelection("generate")` additionally requests
+`generated_files` and `dft_input_data`.
+
+Use `RecordSelection` for a minimal subgraph:
 
 ```python
-from goldilocks_core import CalculationHints, Service, QueryRequest
+from goldilocks_core import RecordSelection
 from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
 
-request = QueryRequest(
-    structure="Fe.cif",
-    outputs=(StructureAnalysisRecord, KPointSelection),
-    hints=CalculationHints(k_grid=(6, 6, 6)),
+request = ComputeRequest(
+    draft,
+    RecordSelection((StructureAnalysisRecord, KPointSelection)),
 )
-
-with Service() as core:
-    records = core.compute(request)
-
-print(records[StructureAnalysisRecord].reduced_formula)
-print(records[KPointSelection].grid)
+result = compute(request)
 ```
 
-Record type IDs on CLI and transport boundaries are `analysis`, `advice`,
-`k_points`, `selection`, and `generated_files`. Python requests use the record
-types themselves.
+Results always use `ComputationResult`. Its `Records` mapping serializes class
+keys as stable IDs: `analysis`, `advice`, `k_points`, `selection`,
+`generated_files`, and `dft_input_data`.
 
-## One-call entry points
+## Output targets
 
-For a single operation, `run_core_job` and `query_records` create a short-lived
-service:
+`output=None` keeps the canonical Result in memory. `DirectoryOutput(path)` and
+`ArchiveOutput(path)` atomically publish complete DFT Input Data and refuse an
+existing destination. `DirectoryOutput()` allocates `goldilocks_out`, then
+`goldilocks_out_1`, and so on. Automatic output leaves a Result without DFT
+Input Data in memory rather than failing.
 
-```python
-from goldilocks_core import PresetRequest, QueryRequest, query_records, run_core_job
-from goldilocks_core.contracts import StructureAnalysisRecord
+Published outputs contain the original source when available, canonical CIF,
+generated inputs, exact pseudopotentials, licence material, citations,
+provenance, a manifest, and checksums. Publication never runs the target code.
 
-result = run_core_job(PresetRequest(structure="Fe.cif", mode="recommend"))
-records = query_records(
-    QueryRequest(structure="Fe.cif", outputs=(StructureAnalysisRecord,))
-)
-```
+## Stage graph
 
-Use `Service` when multiple calls should reuse loaded models or when task,
-code, and model discovery is needed.
-
-## K-point backends
-
-K-points are resolved by `resolve_kpoints(structure, hints, backend)`. An
-explicit `k_grid` wins over `k_spacing`; both bypass model loading. Without a
-k-point hint, the configured QRF k-distance model is loaded lazily.
-
-Put a `ModelSpec` on either request type to select a local k-index model:
-
-```python
-from goldilocks_core import Service, PresetRequest
-from goldilocks_core.contracts import ModelSpec
-
-spec = ModelSpec(
-    name="local-kmesh",
-    version="1",
-    model_type="random_forest",
-    target="k_index",
-    feature_set="cslr",
-    source="local",
-    location="model.joblib",
-)
-
-with Service() as core:
-    result = core.recommend(
-        PresetRequest(structure="Fe.cif", kmesh_model=spec)
-    )
-```
-
-The model specification is request data and is included in serialized requests.
-
-## Task graph
-
-The built-in `SCF_TASK` declares each stage's inputs and output record type.
-`Dispatcher` selects the graph from `CalculationIntent.task`; the executor
-resolves the minimal subgraph for a preset or query. `Runtime` owns only
-model lifecycle.
+The built-in SCF graph is type keyed:
 
 ```text
-Load -> Analyze -> Advise -> Kmesh
-Load + Advice + Kmesh -> Select
+Load -> Analyze -> Advise
+Load -> Kmesh
+Load + Advice -> Select
 Load + Advice + Select + Kmesh -> Generate
+Analysis + Advice + Kmesh + Select + Generate -> DFT Input Data
 ```
 
-The shipped task is `scf_single_point`. New calculation tasks register another
-`GraphHandler` containing a `TaskGraph`, context builder, and result assembler;
-the executor itself remains task-agnostic.
+- **Load** normalizes the Structure Source.
+- **Analyze** records structure facts.
+- **Advise** chooses scientific and numerical intent with provenance.
+- **Kmesh** resolves an operator hint or model result.
+- **Select** resolves and selects concrete pseudopotentials.
+- **Generate** renders target-code syntax.
+- **DFT Input Data** binds every runnable artifact and its provenance.
 
-## Direct stage composition
+The executor resolves dependencies from selected Record types. New tasks
+register one `GraphHandler`; the generic Runtime and executor remain
+stage-agnostic.
 
-The service is not an access restriction. Scientific stages remain ordinary
-functions:
+## K-point models
 
-```python
-from goldilocks_core.advice import advise_parameters
-from goldilocks_core.analysis import analyze_structure
-from goldilocks_core.advice.kdistance import QrfBackend
-from goldilocks_core.generation import generate_inputs
-from goldilocks_core.io.structures import load_structure
-from goldilocks_core.kmesh import resolve_kpoints
-from goldilocks_core.selection import select_pseudopotentials
+An explicit `k_grid` wins over `k_spacing`; both bypass model loading. Without
+a hint, the configured QRF backend loads lazily. A request-specific
+`ModelSpec` selects a local k-index model. Publishable custom-model results must
+provide licence text and citation identity; Core does not invent attribution.
 
-loaded = load_structure("Fe.cif")
-analysis = analyze_structure(loaded)
-advice = advise_parameters(analysis, intent, hints)
-k_points = resolve_kpoints(loaded, hints, QrfBackend())
-selection = select_pseudopotentials(
-    loaded, advice.pseudopotential_requirements, metadata
-)
-files = generate_inputs(loaded, intent, advice, selection, k_points)
-```
+## Pseudopotential sources
 
-Use direct composition for intermediate inspection or project-specific work,
-not to reproduce service dispatch in another wrapper.
+A `CalculationDraft` accepts one of explicit metadata, a local root, or a
+stable registered table ID. Without an explicit source, Select chooses a
+compatible registered table. Resolution happens only when selected Records
+depend on pseudopotentials.
 
-## Stage responsibilities
-
-- **Load** reads a `pymatgen.Structure` or periodic structure file.
-- **Analyze** reports structure facts.
-- **Advise** recommends physics and numerical settings with provenance.
-- **Kmesh** resolves operator hints or a model into a concrete grid.
-- **Select** resolves the configured pseudopotential source and chooses
-  pseudopotentials and cutoffs from the available metadata.
-- **Generate** creates target-code input files from completed records.
-
-Bundle publication is a filesystem side effect of generation, not a separate
-stage preset or job mode.
+Transport adapters expose only source variants appropriate to their seam:
+HTTP accepts inline structures and stable table IDs; CLI and local MCP may also
+accept local structure and pseudopotential paths.

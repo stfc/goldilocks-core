@@ -29,15 +29,18 @@ from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
     ComputeRequest,
+    InlineStructureSource,
+    InMemoryStructureSource,
     ModelSource,
     ModelSpec,
     ModelType,
+    PathStructureSource,
     PresetSelection,
     PseudoMetadata,
     RecordSelection,
+    StructureSource,
     resolve_output_types,
 )
-from goldilocks_core.io.structures import StructureInputError, parse_structure_content
 
 __all__ = ["RequestError", "from_dict"]
 
@@ -114,46 +117,55 @@ def _reject_unknown(
         raise RequestError(f"Unknown {section} fields: {', '.join(unknown)}")
 
 
-def _parse_structure(value: Any) -> Structure:
-    """Parse a Structure Source: inline content only, never a server path."""
+def _parse_structure(value: Any) -> StructureSource:
     if isinstance(value, str):
-        if "\n" in value or value.lstrip().startswith("data_"):
-            return _parse_structure_text(value, None)
-        raise RequestError(
-            "Field 'structure' must be inline CIF/POSCAR content; transports "
-            "do not accept file paths. Read the file and pass its text."
-        )
+        try:
+            return PathStructureSource(value)
+        except ValueError as error:
+            raise RequestError(str(error)) from error
     if not isinstance(value, Mapping):
         raise RequestError(
-            "Field 'structure' must be inline CIF/POSCAR content as a string, "
-            "a content object, or a pymatgen Structure object."
+            "Field 'structure' must be an inline, path, or in-memory "
+            "Structure Source object."
         )
-    if (
-        value.get("@module") == "pymatgen.core.structure"
-        and value.get("@class") == "Structure"
-    ):
-        try:
-            return Structure.from_dict(dict(value))
-        except (KeyError, TypeError, ValueError) as error:
-            raise RequestError(
-                f"Could not parse pymatgen structure object: {error}"
-            ) from error
-    _reject_unknown(value, frozenset({"content", "format"}), "structure")
-    content = value.get("content")
-    fmt = value.get("format")
-    if not isinstance(content, str):
-        raise RequestError("Inline 'structure' requires a 'content' string.")
-    if fmt is not None and not isinstance(fmt, str):
-        raise RequestError("Field 'structure.format' must be a string or null.")
-    return _parse_structure_text(content, fmt)
 
-
-def _parse_structure_text(content: str, fmt: str | None) -> Structure:
+    kind = value.get("kind", "inline")
     try:
-        structure, _ = parse_structure_content(content, fmt)
-    except StructureInputError as error:
+        if kind == "inline":
+            _reject_unknown(
+                value,
+                frozenset({"kind", "name", "content", "format"}),
+                "structure",
+            )
+            name = value.get("name")
+            content = value.get("content")
+            fmt = value.get("format")
+            if not isinstance(name, str):
+                raise RequestError("Inline 'structure' requires a 'name' string.")
+            if not isinstance(content, str):
+                raise RequestError("Inline 'structure' requires a 'content' string.")
+            if fmt is not None and not isinstance(fmt, str):
+                raise RequestError("Field 'structure.format' must be a string or null.")
+            return InlineStructureSource(name=name, content=content, format=fmt)
+        if kind == "path":
+            _reject_unknown(value, frozenset({"kind", "path"}), "structure")
+            path = value.get("path")
+            if not isinstance(path, str):
+                raise RequestError("Path 'structure' requires a 'path' string.")
+            return PathStructureSource(path)
+        if kind == "in_memory":
+            _reject_unknown(value, frozenset({"kind", "structure"}), "structure")
+            document = value.get("structure")
+            if not isinstance(document, Mapping):
+                raise RequestError(
+                    "In-memory 'structure' requires a pymatgen structure object."
+                )
+            return InMemoryStructureSource(Structure.from_dict(dict(document)))
+    except (KeyError, TypeError, ValueError) as error:
+        if isinstance(error, RequestError):
+            raise
         raise RequestError(str(error)) from error
-    return structure
+    raise RequestError(f"Unknown Structure Source kind: {kind!r}.")
 
 
 def _parse_intent(value: Any) -> CalculationIntent:

@@ -13,6 +13,7 @@ from goldilocks_core.contracts import (
     GeneratedFile,
     GeneratedFiles,
     KPointSelection,
+    PathStructureSource,
     PresetSelection,
     Provenance,
     Records,
@@ -49,7 +50,7 @@ def make_result(
     )
     return ComputationResult(
         draft=CalculationDraft(
-            structure="Si.cif",
+            structure=PathStructureSource("Si.cif"),
             intent=CalculationIntent(),
             hints=CalculationHints(),
         ),

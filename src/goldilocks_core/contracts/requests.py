@@ -8,7 +8,14 @@ from goldilocks_core.contracts.models import ModelSpec
 from goldilocks_core.contracts.registry import record_type_id
 from goldilocks_core.contracts.selection import PseudoMetadata
 from goldilocks_core.contracts.serial import to_jsonable
-from goldilocks_core.contracts.types import JsonDict, StructureInput
+from goldilocks_core.contracts.structure import (
+    InlineStructureSource,
+    InMemoryStructureSource,
+    PathStructureSource,
+    StructureInspection,
+    StructureSource,
+)
+from goldilocks_core.contracts.types import JsonDict
 from goldilocks_core.contracts.validate import _validate_optional_nonempty_str
 
 
@@ -62,7 +69,7 @@ def _validate_pseudo_source(
 
 @dataclass(frozen=True, slots=True)
 class CalculationDraft:
-    structure: StructureInput
+    structure: StructureSource | StructureInspection
     intent: CalculationIntent = field(default_factory=CalculationIntent)
     hints: CalculationHints = field(default_factory=CalculationHints)
     pseudo_metadata: tuple[PseudoMetadata, ...] | None = None
@@ -90,7 +97,7 @@ class CalculationDraft:
 
     def to_dict(self) -> JsonDict:
         return {
-            "structure": to_jsonable(self.structure),
+            "structure": self.structure.to_dict(),
             "intent": to_jsonable(self.intent),
             "hints": to_jsonable(self.hints),
             "pseudo_metadata": to_jsonable(self.pseudo_metadata),
@@ -108,6 +115,13 @@ class ComputeRequest:
     def __post_init__(self) -> None:
         if not isinstance(self.draft, CalculationDraft):
             raise ValueError("ComputeRequest.draft must be a CalculationDraft")
+        if not isinstance(
+            self.draft.structure,
+            InlineStructureSource | PathStructureSource | InMemoryStructureSource,
+        ):
+            raise ValueError(
+                "ComputeRequest.draft.structure must be a Structure Source variant"
+            )
         if not isinstance(self.selection, PresetSelection | RecordSelection):
             raise ValueError(
                 "ComputeRequest.selection must be a PresetSelection or RecordSelection"

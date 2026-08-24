@@ -10,6 +10,7 @@ from goldilocks_core import (
     CalculationHints,
     CalculationIntent,
     ComputeRequest,
+    InMemoryStructureSource,
     PresetSelection,
     compute,
 )
@@ -30,7 +31,7 @@ def test_elemental_metal_uses_modest_cold_smearing_in_qe_rydberg_units(
     result = compute(
         ComputeRequest(
             draft=CalculationDraft(
-                structure=aluminium,
+                structure=InMemoryStructureSource(aluminium),
                 hints=CalculationHints(k_grid=(8, 8, 8)),
                 pseudo_metadata=(pseudo_metadata_factory("Al"),),
             ),
@@ -55,7 +56,7 @@ def test_heavy_element_prompts_for_soc_without_silently_enabling_it() -> None:
     result = compute(
         ComputeRequest(
             draft=CalculationDraft(
-                structure=iodine,
+                structure=InMemoryStructureSource(iodine),
                 hints=CalculationHints(k_grid=(2, 2, 2)),
                 pseudo_metadata=(),
             ),
@@ -79,7 +80,7 @@ def test_explicit_soc_couples_fully_relativistic_pseudos_to_qe_noncollinear_flag
     result = compute(
         ComputeRequest(
             draft=CalculationDraft(
-                structure=iodine,
+                structure=InMemoryStructureSource(iodine),
                 hints=CalculationHints(k_grid=(2, 2, 2), spin_orbit_coupling=True),
                 pseudo_metadata=(pseudo_metadata_factory("I", relativistic="full"),),
             ),
@@ -107,7 +108,7 @@ def test_pseudopotential_functional_must_match_calculation_functional(
     result = compute(
         ComputeRequest(
             draft=CalculationDraft(
-                structure=silicon_structure,
+                structure=InMemoryStructureSource(silicon_structure),
                 intent=CalculationIntent(functional="PBEsol"),
                 hints=CalculationHints(k_grid=(4, 4, 4)),
                 pseudo_metadata=(pbe, pbesol),

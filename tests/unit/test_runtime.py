@@ -14,6 +14,8 @@ from goldilocks_core import (
     CalculationHints,
     ComputeRequest,
     Dispatcher,
+    InMemoryStructureSource,
+    PathStructureSource,
     PresetSelection,
     RecordSelection,
     Runtime,
@@ -176,7 +178,7 @@ def table_fixture(
 def make_request(*, preset: str = "recommend") -> ComputeRequest:
     return ComputeRequest(
         draft=CalculationDraft(
-            structure=make_structure(),
+            structure=InMemoryStructureSource(make_structure()),
             hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
             pseudo_metadata=(make_metadata(),),
         ),
@@ -187,7 +189,7 @@ def make_request(*, preset: str = "recommend") -> ComputeRequest:
 def make_query_request(outputs, **kw) -> ComputeRequest:
     request = ComputeRequest(
         draft=CalculationDraft(
-            structure=kw.pop("structure", make_structure()),
+            structure=kw.pop("structure", InMemoryStructureSource(make_structure())),
             intent=kw.pop("intent", CalculationIntent()),
             hints=kw.pop("hints", CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC")),
             pseudo_metadata=kw.pop("pseudo_metadata", (make_metadata(),)),
@@ -357,7 +359,7 @@ def test_runtime_resolves_one_explicit_installed_table(
     monkeypatch.setattr(source, "load_tables", lambda path: {table.id: table})
     request = ComputeRequest(
         draft=CalculationDraft(
-            structure=make_structure(),
+            structure=InMemoryStructureSource(make_structure()),
             hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
             pseudo_table=table.id,
         ),
@@ -382,7 +384,7 @@ def test_explicit_table_must_satisfy_scientific_requirements(
     monkeypatch.setattr(source, "load_tables", lambda path: {table.id: table})
     request = ComputeRequest(
         draft=CalculationDraft(
-            structure=make_structure(),
+            structure=InMemoryStructureSource(make_structure()),
             intent=CalculationIntent(functional="PBE"),
             hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
             pseudo_table=table.id,
@@ -505,7 +507,7 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     monkeypatch.setattr(metallicity, "classify_metallicity", classify)
     request = ComputeRequest(
         draft=CalculationDraft(
-            structure=make_structure(),
+            structure=InMemoryStructureSource(make_structure()),
             hints=CalculationHints(pseudo_type="NC"),
             pseudo_metadata=(make_metadata(),),
         ),
@@ -621,7 +623,7 @@ def test_task_registration_requires_stable_ids_for_custom_records(
             presets=(Preset("only", (StubRecord,)),),
             selectable_outputs=(StubRecord,),
         ),
-        build_context=lambda request, runtime: SimpleNamespace(),
+        build_context=lambda request, normalized, runtime: SimpleNamespace(),
     )
 
     with (
@@ -656,14 +658,14 @@ def test_runtime_dispatches_a_registered_task_via_compute(
             selectable_outputs=(StubRecord,),
             record_ids=((StubRecord, "stub"),),
         ),
-        build_context=lambda request, runtime: SimpleNamespace(),
+        build_context=lambda request, normalized, runtime: SimpleNamespace(),
     )
 
     structure_path = tmp_path / "Si.cif"
     make_structure().to(filename=structure_path)
     request = ComputeRequest(
         draft=CalculationDraft(
-            structure_path,
+            PathStructureSource(structure_path),
             intent=CalculationIntent(task="stub_task"),
         ),
         selection=RecordSelection((StubRecord,)),
@@ -676,7 +678,7 @@ def test_runtime_dispatches_a_registered_task_via_compute(
 
     assert document["selection"] == {"records": ["stub"]}
     assert resolve_output_types(["stub"]) == (StubRecord,)
-    assert isinstance(result.draft.structure, Structure)
+    assert result.draft.structure.source.origin == "path"
     assert isinstance(result.records[StubRecord], StubRecord)
     assert result.records[StubRecord].value == "ran"
     assert result.to_dict()["records"] == {"stub": {"value": "ran"}}
@@ -702,7 +704,7 @@ def test_runtime_recommend_dispatches_a_registered_task_preset(
             presets=(Preset("recommend", (StubRecord,)),),
             record_ids=((StubRecord, "stub_preset"),),
         ),
-        build_context=lambda request, runtime: SimpleNamespace(),
+        build_context=lambda request, normalized, runtime: SimpleNamespace(),
     )
 
     with Runtime() as runtime:
@@ -711,7 +713,7 @@ def test_runtime_recommend_dispatches_a_registered_task_preset(
         result = dispatcher.compute(
             ComputeRequest(
                 draft=CalculationDraft(
-                    make_structure(),
+                    InMemoryStructureSource(make_structure()),
                     intent=CalculationIntent(task="stub_task"),
                 ),
                 selection=PresetSelection("recommend"),

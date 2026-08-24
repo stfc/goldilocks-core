@@ -6,8 +6,11 @@ from goldilocks_core.contracts import (
     CodeName,
     ComputationResult,
     ComputeRequest,
+    StructureInspection,
+    StructureSource,
 )
 from goldilocks_core.generation.registry import available_codes
+from goldilocks_core.io.structures import normalize_structure
 from goldilocks_core.runtime.dispatch import Dispatcher
 from goldilocks_core.runtime.graph import GraphInfo
 from goldilocks_core.runtime.models import Runtime
@@ -44,6 +47,11 @@ class Service:
         with self._lock:
             self._ensure_open()
             return self._dispatcher.compute(request)
+
+    def inspect_structure(self, source: StructureSource) -> StructureInspection:
+        with self._lock:
+            self._ensure_open()
+            return normalize_structure(source).inspection
 
     def describe_tasks(self) -> tuple[GraphInfo, ...]:
         with self._lock:

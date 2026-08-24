@@ -8,7 +8,7 @@ from goldilocks_core.contracts import (
     PresetSelection,
 )
 from goldilocks_core.contracts.registry import register_record_types
-from goldilocks_core.io.structures import load_structure
+from goldilocks_core.io.structures import normalize_structure
 from goldilocks_core.runtime.graph import GraphInfo, describe_task, execute_graph
 from goldilocks_core.runtime.models import Runtime
 from goldilocks_core.runtime.task import GraphHandler
@@ -84,20 +84,18 @@ class Dispatcher:
                 raise UnavailableRecord(
                     f"Record(s) {names} are not selectable for task {task.task!r}."
                 )
-        normalized_request = replace(
-            request,
-            draft=replace(
-                request.draft,
-                structure=load_structure(request.draft.structure),
-            ),
+        normalized_structure = normalize_structure(request.draft.structure)
+        normalized_draft = replace(
+            request.draft,
+            structure=normalized_structure.inspection,
         )
         execution = execute_graph(
             task,
             outputs,
-            handler.build_context(normalized_request, self._runtime),
+            handler.build_context(request, normalized_structure, self._runtime),
         )
         return ComputationResult(
-            draft=normalized_request.draft,
+            draft=normalized_draft,
             task=task.task,
             task_revision=task.revision,
             selection=request.selection,

@@ -5,6 +5,8 @@ from goldilocks_core import (
     CalculationDraft,
     CalculationHints,
     CalculationIntent,
+    InMemoryStructureSource,
+    PathStructureSource,
 )
 from goldilocks_core.contracts import (
     GeneratedFiles,
@@ -89,7 +91,7 @@ def test_compute_request_rejects_an_invalid_selection_type() -> None:
 
     with pytest.raises(ValueError, match="ComputeRequest.selection"):
         ComputeRequest(
-            draft=CalculationDraft(make_structure()),
+            draft=CalculationDraft(InMemoryStructureSource(make_structure())),
             selection=object(),
         )
 
@@ -99,7 +101,7 @@ def test_compute_request_has_one_selection_and_no_execution_mode() -> None:
 
     request = ComputeRequest(
         draft=CalculationDraft(
-            structure=make_structure(),
+            structure=InMemoryStructureSource(make_structure()),
             hints=CalculationHints(k_grid=(2, 2, 1)),
         ),
         selection=PresetSelection("generate"),
@@ -124,7 +126,7 @@ def test_result_retains_the_normalized_calculation_draft(tmp_path) -> None:
     source.write_text(make_structure().to(fmt="cif"), encoding="utf-8")
     request = ComputeRequest(
         draft=CalculationDraft(
-            structure=source,
+            structure=PathStructureSource(source),
             hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
             pseudo_metadata=(make_metadata(),),
         ),
@@ -134,9 +136,10 @@ def test_result_retains_the_normalized_calculation_draft(tmp_path) -> None:
     with Service() as service:
         result = service.compute(request)
 
-    assert isinstance(result.draft.structure, Structure)
-    assert result.draft.structure.reduced_formula == "Si"
-    assert result.to_dict()["draft"]["structure"]["@class"] == "Structure"
+    assert result.draft.structure.source.origin == "path"
+    assert result.draft.structure.structure.reduced_formula == "Si"
+    assert result.to_dict()["draft"]["structure"]["source"]["name"] == "Si.cif"
+    assert str(tmp_path) not in str(result.to_dict())
 
 
 def test_computation_result_serializes_records_without_scf_projection() -> None:
@@ -155,7 +158,7 @@ def test_computation_result_serializes_records_without_scf_projection() -> None:
         heavy_elements=(),
     )
     result = ComputationResult(
-        draft=CalculationDraft(make_structure()),
+        draft=CalculationDraft(InMemoryStructureSource(make_structure())),
         task="scf_single_point",
         task_revision="1",
         selection=PresetSelection("recommend"),
@@ -184,7 +187,7 @@ def test_service_computes_the_recommendation_preset_as_records() -> None:
 
     request = ComputeRequest(
         draft=CalculationDraft(
-            structure=make_structure(),
+            structure=InMemoryStructureSource(make_structure()),
             hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
             pseudo_metadata=(make_metadata(),),
         ),
@@ -212,7 +215,7 @@ def test_computation_result_collects_factual_task_warnings() -> None:
 
     request = ComputeRequest(
         draft=CalculationDraft(
-            structure=make_structure(),
+            structure=InMemoryStructureSource(make_structure()),
             hints=CalculationHints(
                 k_grid=(2, 2, 1),
                 k_spacing=0.2,
@@ -237,7 +240,7 @@ def test_explicit_records_collect_warnings_from_executed_dependencies() -> None:
 
     request = ComputeRequest(
         draft=CalculationDraft(
-            structure=make_structure(),
+            structure=InMemoryStructureSource(make_structure()),
             hints=CalculationHints(
                 k_grid=(2, 2, 1),
                 k_spacing=0.2,
@@ -262,7 +265,7 @@ def test_computation_omits_generic_scientific_reminders() -> None:
 
     request = ComputeRequest(
         draft=CalculationDraft(
-            structure=make_structure(),
+            structure=InMemoryStructureSource(make_structure()),
             hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
             pseudo_metadata=(make_metadata(),),
         ),
@@ -279,7 +282,7 @@ def test_compute_rejects_an_unknown_preset_at_the_task_seam() -> None:
     from goldilocks_core import ComputeRequest, PresetSelection, Service, UnknownPreset
 
     request = ComputeRequest(
-        draft=CalculationDraft(make_structure()),
+        draft=CalculationDraft(InMemoryStructureSource(make_structure())),
         selection=PresetSelection("missing"),
     )
 
@@ -303,7 +306,7 @@ def test_compute_rejects_an_unknown_calculation_task() -> None:
 
     request = ComputeRequest(
         draft=CalculationDraft(
-            make_structure(),
+            InMemoryStructureSource(make_structure()),
             intent=CalculationIntent(task="magnetic_nscf"),
         ),
         selection=PresetSelection("recommend"),
@@ -334,7 +337,7 @@ def test_compute_rejects_a_record_not_selectable_for_the_task() -> None:
         pass
 
     request = ComputeRequest(
-        draft=CalculationDraft(make_structure()),
+        draft=CalculationDraft(InMemoryStructureSource(make_structure())),
         selection=RecordSelection((FirstUnsupportedRecord, SecondUnsupportedRecord)),
     )
 
@@ -354,7 +357,7 @@ def test_one_call_compute_uses_the_same_result_contract() -> None:
     result = compute(
         ComputeRequest(
             draft=CalculationDraft(
-                structure=make_structure(),
+                structure=InMemoryStructureSource(make_structure()),
                 hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
                 pseudo_metadata=(make_metadata(),),
             ),

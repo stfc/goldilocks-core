@@ -6,6 +6,7 @@ import json
 import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from threading import Event, Lock
 from types import SimpleNamespace
@@ -24,6 +25,7 @@ from goldilocks_core.contracts import (
     ComputeRequest,
     GeneratedFile,
     GeneratedFiles,
+    InlineStructureSource,
     KPointSelection,
     ParameterAdvice,
     PresetSelection,
@@ -33,6 +35,7 @@ from goldilocks_core.contracts import (
     SelectionRecord,
     StructureAnalysisRecord,
 )
+from goldilocks_core.io.structures import normalize_structure
 from goldilocks_core.server.http import create_app
 
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
@@ -203,7 +206,7 @@ def test_workbench_recommendation_is_typed_stable_and_browser_safe(
     assert first.status_code == 200
     assert second.status_code == 200
     assert isinstance(service.request, ComputeRequest)
-    assert isinstance(service.request.draft.structure, Structure)
+    assert isinstance(service.request.draft.structure, InlineStructureSource)
     assert service.request.draft.hints.k_grid == (3, 3, 3)
     assert service.request.draft.pseudo_table == body["pseudo_table_id"]
     assert service.request.selection == PresetSelection("generate")
@@ -695,7 +698,7 @@ class _RecommendingService:
     def compute(self, request: ComputeRequest) -> ComputationResult:
         self.calls += 1
         self.request = request
-        return self.result
+        return _normalized_result(self.result, request)
 
 
 class _FailingService:
@@ -732,7 +735,7 @@ class _BlockingService(_RecommendingService):
                 raise RuntimeError("test did not release computation")
             if self.fail_first:
                 raise ValueError("synthetic calculation failure")
-        return self.result
+        return _normalized_result(self.result, request)
 
 
 class _ReadinessStore:
@@ -767,6 +770,16 @@ class _AssetStore:
             return resolved
 
         return SimpleNamespace(root=root, path=path)
+
+
+def _normalized_result(
+    result: ComputationResult, request: ComputeRequest
+) -> ComputationResult:
+    inspection = normalize_structure(request.draft.structure).inspection
+    return replace(
+        result,
+        draft=replace(request.draft, structure=inspection),
+    )
 
 
 def _result_with_pseudo(path: Path) -> ComputationResult:

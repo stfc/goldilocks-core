@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from goldilocks_core.contracts import ComputeRequest, Records
+from goldilocks_core.io.structures import NormalizedStructure
 from goldilocks_core.runtime.graph import TaskGraph
 from goldilocks_core.runtime.models import Runtime
 
@@ -17,5 +18,5 @@ def _no_warnings(records: Records) -> tuple[str, ...]:
 @dataclass(frozen=True, slots=True)
 class GraphHandler:
     spec: TaskGraph
-    build_context: Callable[[ComputeRequest, Runtime], Any]
+    build_context: Callable[[ComputeRequest, NormalizedStructure, Runtime], Any]
     collect_warnings: Callable[[Records], tuple[str, ...]] = _no_warnings

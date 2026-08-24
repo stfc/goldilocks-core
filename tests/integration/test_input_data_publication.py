@@ -28,11 +28,15 @@ from goldilocks_core.contracts import (
     InputArtifact,
     InstalledArtifactReference,
     KPointSelection,
+    ModelSpec,
     Provenance,
     PseudoCutoffs,
     PseudoMetadata,
 )
-from goldilocks_core.ml.model_registry import model_asset_specs
+from goldilocks_core.ml.model_registry import (
+    load_default_qrf_config,
+    model_asset_specs,
+)
 from goldilocks_core.pseudo.registry import load_tables
 from goldilocks_core.publication import Publisher
 
@@ -201,6 +205,69 @@ def _explicit_input_data(tmp_path: Path) -> tuple[DftInputData, str, bytes]:
     return result.records[DftInputData], source_text, pseudo_bytes
 
 
+def test_pseudo_root_publication_uses_explicit_legal_sidecar(tmp_path: Path) -> None:
+    pseudo_root = tmp_path / "operator-pseudos"
+    pseudo_root.mkdir()
+    upf = pseudo_root / "Si.custom.UPF"
+    upf.write_text(
+        '<UPF><PP_HEADER element="Si" pseudo_type="NC" '
+        'functional="PBEsol" relativistic="scalar" '
+        'z_valence="4.0" /></UPF>\n',
+        encoding="utf-8",
+    )
+    (pseudo_root / "cutoffs.json").write_text(
+        json.dumps(
+            {
+                "Si": {
+                    "filename": upf.name,
+                    "md5": hashlib.md5(upf.read_bytes()).hexdigest(),
+                    "functional": "PBEsol",
+                    "cutoff_wfc": 30,
+                    "cutoff_rho": 120,
+                    "pseudopotential": "operator-library/Si.custom.UPF",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    licence_text = "Operator library redistribution terms.\n"
+    (pseudo_root / "LICENSE.txt").write_text(licence_text, encoding="utf-8")
+    citation = "A. Scientist, Operator pseudopotential library (2026)."
+    (pseudo_root / "goldilocks-pseudopotentials.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "licence": "Operator-Licence-1.0",
+                "licence_file": "LICENSE.txt",
+                "citation": citation,
+            }
+        ),
+        encoding="utf-8",
+    )
+    structure = Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
+    request = ComputeRequest(
+        CalculationDraft(
+            InlineStructureSource("Si.cif", structure.to(fmt="cif"), "cif"),
+            hints=CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC"),
+            pseudo_root=str(pseudo_root),
+        ),
+        PresetSelection("generate"),
+    )
+
+    with Service() as service:
+        result = service.compute(request)
+
+    input_data = result.records[DftInputData]
+    files = {item.path: item.content for item in Publisher().files(input_data)}
+    assert input_data.pseudopotential_set.licence == "Operator-Licence-1.0"
+    assert input_data.citations == (citation,)
+    assert files["pseudo/Si.custom.UPF"] == upf.read_bytes()
+    assert (
+        files["licences/explicit-local-pseudopotentials.txt"] == licence_text.encode()
+    )
+    assert citation.encode() in files["CITATIONS.md"]
+
+
 def test_publisher_rejects_unsafe_and_duplicate_logical_paths(tmp_path: Path) -> None:
     input_data, _, _ = _explicit_input_data(tmp_path)
     template = input_data.artifacts[0]
@@ -232,6 +299,31 @@ def test_publisher_rejects_unsafe_and_duplicate_logical_paths(tmp_path: Path) ->
     for invalid, message in cases:
         with pytest.raises(ValueError, match=message):
             Publisher().files(invalid)
+
+
+def test_publisher_rejects_control_characters_before_writing_checksums(
+    tmp_path: Path,
+) -> None:
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    template = input_data.artifacts[0]
+    injected = replace(
+        template,
+        path=(f"source/structure.cif\n{'0' * 64}  forged/entry"),
+    )
+
+    with pytest.raises(ValueError, match="Unsafe publication path"):
+        Publisher().files(replace(input_data, artifacts=(injected,)))
+
+
+@pytest.mark.parametrize("control", ("\r", "\x00", "\x1f", "\x7f", "\x85"))
+def test_publisher_rejects_every_control_character_in_paths(
+    tmp_path: Path, control: str
+) -> None:
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    artifact = replace(input_data.artifacts[0], path=f"source/a{control}b.cif")
+
+    with pytest.raises(ValueError, match="Unsafe publication path"):
+        Publisher().files(replace(input_data, artifacts=(artifact,)))
 
 
 def test_publisher_atomically_writes_explicit_destinations_without_overwrite(
@@ -287,11 +379,18 @@ def test_automatic_directory_allocation_uses_occupancy_and_is_concurrency_safe(
 ) -> None:
     from concurrent.futures import ThreadPoolExecutor
 
+    import goldilocks_core.publication as publication_module
+
+    class AutomaticRootPath(type(Path())):
+        @classmethod
+        def cwd(cls):
+            return cls(tmp_path)
+
     input_data, _, _ = _explicit_input_data(tmp_path)
-    monkeypatch.chdir(tmp_path)
     (tmp_path / "goldilocks_out").write_text("occupied", encoding="utf-8")
     (tmp_path / "goldilocks_out_1").mkdir()
     (tmp_path / "goldilocks_out_2").symlink_to("missing-target")
+    monkeypatch.setattr(publication_module, "Path", AutomaticRootPath)
     publisher = Publisher()
 
     first = publisher.publish(input_data, DirectoryOutput())
@@ -310,6 +409,35 @@ def test_automatic_directory_allocation_uses_occupancy_and_is_concurrency_safe(
     assert len({item.path for item in publications}) == 8
     assert (tmp_path / "goldilocks_out").read_text() == "occupied"
     assert (tmp_path / "goldilocks_out_2").is_symlink()
+
+
+def test_directory_verification_failure_recursively_removes_published_destination(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "verification-failed"
+    verify = publication_module._verify_directory
+    calls = 0
+
+    def fail_after_rename(root, files) -> None:
+        nonlocal calls
+        calls += 1
+        verify(root, files)
+        if calls == 2:
+            unexpected = root / "unexpected" / "partial.txt"
+            unexpected.parent.mkdir()
+            unexpected.write_text("failed verification", encoding="utf-8")
+            raise OSError("post-rename verification failed")
+
+    monkeypatch.setattr(publication_module, "_verify_directory", fail_after_rename)
+
+    with pytest.raises(OSError, match="post-rename verification failed"):
+        Publisher().publish(input_data, DirectoryOutput(destination))
+
+    assert calls == 2
+    assert not destination.exists()
 
 
 def test_service_compute_applies_output_targets_and_returns_publication_info(
@@ -465,12 +593,12 @@ url = "{licence_source.as_uri()}"
     )
     licence = next(item for item in input_data.artifacts if item.role == "licence")
 
-    assert pseudo.source == InstalledArtifactReference(
-        "fixture-table", "1", "pseudos/Si.UPF"
-    )
-    assert licence.source == InstalledArtifactReference(
-        "fixture-table", "1", "LICENSE.txt"
-    )
+    assert pseudo.source.asset_id == "fixture-table"
+    assert pseudo.source.asset_version == "1"
+    assert pseudo.source.path == "pseudos/Si.UPF"
+    assert licence.source.asset_id == "fixture-table"
+    assert licence.source.asset_version == "1"
+    assert licence.source.path == "LICENSE.txt"
     assert input_data.pseudopotential_set.id == "fixture-table"
     assert input_data.pseudopotential_set.policy == {
         "accuracy": "efficiency",
@@ -482,9 +610,34 @@ url = "{licence_source.as_uri()}"
     assert files["licences/fixture-table.txt"] == b"Installed exact licence\n"
     assert str(store.root) not in str(input_data.to_dict())
 
+    manifest_path = store.root / "fixture-table" / "1" / "manifest.json"
+    installed_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    wrong_preparation = {
+        **installed_manifest,
+        "preparation_fingerprint": "0" * 64,
+    }
+    manifest_path.write_text(json.dumps(wrong_preparation), encoding="utf-8")
+    with pytest.raises(ValueError, match="installed preparation differs"):
+        Publisher(store).files(input_data)
+    manifest_path.write_text(json.dumps(installed_manifest), encoding="utf-8")
+
+    replacement = pseudo_bytes.replace(b"exact", b"other")
+    assert len(replacement) == len(pseudo_bytes)
+    (store.root / "fixture-table" / "1" / "pseudos" / "Si.UPF").write_bytes(replacement)
+    for entry in installed_manifest["files"]:
+        if entry["path"] == "pseudos/Si.UPF":
+            entry["sha256"] = hashlib.sha256(replacement).hexdigest()
+            entry["size"] = len(replacement)
+    manifest_path.write_text(json.dumps(installed_manifest), encoding="utf-8")
+    store.verify("fixture-table", "1")
+
+    with pytest.raises(ValueError, match="differs from its DFT Input Data descriptor"):
+        Publisher(store).files(input_data)
+    assert pseudo.source.preparation_fingerprint == table.asset.preparation_fingerprint
+
 
 def test_model_runtime_identities_licences_and_citations_are_published(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = AssetStore(tmp_path / "model-assets")
     expected_licences: dict[str, bytes] = {}
@@ -502,32 +655,26 @@ def test_model_runtime_identities_licences_and_citations_are_published(
             contents[file.path] for file in spec.files if file.role == "licence"
         )
 
-    class ModelKmesh:
-        def __call__(self, structure: Structure) -> KPointSelection:
-            del structure
-            return KPointSelection(
-                grid=(4, 4, 4),
-                shift=(0, 0, 0),
-                mesh_type="monkhorst-pack",
-                provenance=Provenance(
-                    source="model",
-                    reason="Fixture model prediction.",
-                    data_source="fixture-qrf",
-                ),
-            )
+    def predict(self, structure: Structure) -> KPointSelection:
+        del self, structure
+        return KPointSelection(
+            grid=(4, 4, 4),
+            shift=(0, 0, 0),
+            mesh_type="monkhorst-pack",
+            provenance=Provenance(
+                source="model",
+                reason="Fixture model prediction.",
+                data_source="fixture-qrf",
+            ),
+        )
 
-        def reset(self) -> None:
-            pass
-
-        def close(self) -> None:
-            pass
-
+    monkeypatch.setattr("goldilocks_core.advice.kdistance.QrfBackend.__call__", predict)
     request = _explicit_request(tmp_path, "model-Si.UPF")
     request = ComputeRequest(
         replace(request.draft, hints=CalculationHints(pseudo_type="NC")),
         request.selection,
     )
-    with Runtime(asset_store=store, kmesh_service=ModelKmesh()) as runtime:
+    with Runtime(asset_store=store) as runtime:
         with Service(runtime) as service:
             result = service.compute(request)
 
@@ -552,14 +699,183 @@ def test_model_runtime_identities_licences_and_citations_are_published(
     )
     files = {item.path: item.content for item in Publisher(store).files(input_data)}
     assert {path: files[path] for path in expected_licences} == expected_licences
-    expected_sources = {
+    expected_citations = {
+        "STFC-SCD, kpoints-goldilocks-QRF QRF95 model source, "
+        "https://huggingface.co/STFC-SCD/kpoints-goldilocks-QRF/tree/"
+        "75588288f755522e47984b5a31b82824860d6943",
+        "Junwen Yin, metallicity-goldilocks-CGCNN model source, "
+        "https://huggingface.co/JunwenYin/metallicity-goldilocks-CGCNN/tree/"
+        "a95dc7d8902c8088f709e13c602864167838cc17",
+    }
+    licence_urls = {
         file.url
         for spec in model_asset_specs()
         for file in spec.files
         if file.role == "licence"
     }
-    assert expected_sources.issubset(input_data.citations)
+    assert set(input_data.citations) >= expected_citations
+    assert set(input_data.citations).isdisjoint(licence_urls)
     assert str(store.root) not in str(input_data.to_dict())
+
+
+def test_unidentified_runtime_kmesh_model_is_not_attributed_to_defaults(
+    tmp_path: Path,
+) -> None:
+    class UnidentifiedModel:
+        def __call__(self, structure: Structure) -> KPointSelection:
+            del structure
+            return KPointSelection(
+                grid=(4, 4, 4),
+                shift=(0, 0, 0),
+                mesh_type="monkhorst-pack",
+                provenance=Provenance(
+                    source="model",
+                    reason="Unidentified runtime model.",
+                ),
+            )
+
+        def reset(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    request = _explicit_request(tmp_path, "unidentified-model-Si.UPF")
+    request = ComputeRequest(
+        replace(request.draft, hints=CalculationHints(pseudo_type="NC")),
+        request.selection,
+    )
+    with Runtime(
+        asset_store=AssetStore(tmp_path / "empty-assets"),
+        kmesh_service=UnidentifiedModel(),
+    ) as runtime:
+        with Service(runtime) as service:
+            with pytest.raises(
+                ValueError,
+                match="Custom KMeshService produced a model result without identity",
+            ):
+                service.compute(request)
+
+
+def test_standalone_metallicity_attributes_only_its_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from goldilocks_core.runtime.models import MetallicityModel
+
+    config = load_default_qrf_config()
+    assert config.metallicity_asset is not None
+    store = AssetStore(tmp_path / "standalone-metallicity-assets")
+    contents = {
+        file.path: f"fixture {file.role}\n".encode()
+        for file in config.metallicity_asset.files
+    }
+    _create_installed_asset(store, config.metallicity_asset, contents)
+
+    def classify(self, structure):
+        del self, structure
+        return "insulator", "model", 0.91
+
+    monkeypatch.setattr(MetallicityModel, "__call__", classify)
+    request = _explicit_request(tmp_path, "standalone-metallicity-Si.UPF")
+    with Runtime(
+        asset_store=store,
+        metallicity_checkpoint="model.ckpt",
+        metallicity_atom_init="atom-init.json",
+    ) as runtime:
+        with Service(runtime) as service:
+            result = service.compute(request)
+
+    input_data = result.records[DftInputData]
+    assert [item.id for item in input_data.runtime.assets] == ["metallicity-cgcnn"]
+    assert [model["target"] for model in input_data.runtime.models] == ["metallicity"]
+    assert all("qrf" not in citation.lower() for citation in input_data.citations)
+
+
+def test_custom_kmesh_model_publishes_its_explicit_material_not_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "goldilocks_core.advice.kindex.predict_kindex",
+        lambda structure, spec: 1.0,
+    )
+    licence_text = "Custom model redistribution terms.\n"
+    citation = "A. Scientist, Custom k-index model (2026)."
+    custom = ModelSpec(
+        name="operator-kindex",
+        version="2026.1",
+        model_type="random_forest",
+        target="k_index",
+        feature_set="operator-features",
+        source="local",
+        location=str(tmp_path / "operator.joblib"),
+        licence="Operator-Model-Licence-1.0",
+        licence_text=licence_text,
+        citation=citation,
+    )
+    request = _explicit_request(tmp_path, "custom-model-Si.UPF")
+    request = ComputeRequest(
+        replace(
+            request.draft,
+            hints=CalculationHints(pseudo_type="NC"),
+            kmesh_model=custom,
+        ),
+        request.selection,
+    )
+    store = AssetStore(tmp_path / "empty-assets")
+    unused_registry = tmp_path / "unused-default-models.toml"
+    unused_registry.write_text("[defaults]\n", encoding="utf-8")
+
+    with Runtime(asset_store=store, registry_path=unused_registry) as runtime:
+        with Service(runtime) as service:
+            result = service.compute(request)
+
+    input_data = result.records[DftInputData]
+    assert input_data.runtime.assets == ()
+    assert [model["name"] for model in input_data.runtime.models] == ["operator-kindex"]
+    assert input_data.citations == (
+        "Fixture pseudopotential citation.",
+        citation,
+    )
+    files = {item.path: item.content for item in Publisher(store).files(input_data)}
+    assert files["licences/custom-kmesh-model.txt"] == licence_text.encode()
+    assert str(tmp_path) not in str(input_data.to_dict())
+
+
+def test_custom_kmesh_model_without_publication_material_fails_clearly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "goldilocks_core.advice.kindex.predict_kindex",
+        lambda structure, spec: 1.0,
+    )
+    request = _explicit_request(tmp_path, "incomplete-custom-model-Si.UPF")
+    request = ComputeRequest(
+        replace(
+            request.draft,
+            hints=CalculationHints(pseudo_type="NC"),
+            kmesh_model=ModelSpec(
+                name="incomplete-operator-model",
+                version="1",
+                model_type="random_forest",
+                target="k_index",
+                feature_set="operator-features",
+                source="local",
+                location=str(tmp_path / "operator.joblib"),
+            ),
+        ),
+        request.selection,
+    )
+
+    with Runtime(asset_store=AssetStore(tmp_path / "empty-assets")) as runtime:
+        with Service(runtime) as service:
+            with pytest.raises(
+                ValueError,
+                match=(
+                    "Model 'incomplete-operator-model' used for publication must "
+                    "declare non-empty licence, licence_text, and citation"
+                ),
+            ):
+                service.compute(request)
 
 
 def _create_installed_asset(

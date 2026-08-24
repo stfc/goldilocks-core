@@ -167,7 +167,13 @@ class AssetStore:
                     raise AssetCorrupt(f"installed file changed: {path}")
             except OSError as error:
                 raise AssetCorrupt(f"cannot verify installed file: {path}") from error
-        return InstalledAsset(asset_id, version, root, files)
+        return InstalledAsset(
+            id=asset_id,
+            version=version,
+            preparation_fingerprint=installed_fingerprint,
+            root=root,
+            files=files,
+        )
 
     def status(self, asset_id: str, version: str) -> str:
         try:

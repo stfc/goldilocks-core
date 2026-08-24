@@ -17,6 +17,7 @@ from goldilocks_core.contracts import (
     GeneratedFiles,
     KMeshAdvisor,
     KPointSelection,
+    ModelSpec,
     ParameterAdvice,
     PseudoMetadata,
     PseudopotentialRequirements,
@@ -44,6 +45,8 @@ class ScfContext:
     ]
     pseudo_source: PseudoSource
     runtime: Runtime
+    runtime_kmesh_model: ModelSpec | None = None
+    uses_default_kmesh_model: bool = True
     intent: CalculationIntent = field(default_factory=CalculationIntent)
     hints: CalculationHints = field(default_factory=CalculationHints)
     pseudo_cache: list[tuple[PseudoMetadata, ...]] = field(
@@ -159,12 +162,8 @@ SCF_TASK = TaskGraph(
                     asset_store=ctx.runtime.asset_store,
                     pseudo_registry_path=ctx.runtime.pseudo_registry_path,
                     model_registry_path=ctx.runtime.model_registry_path,
-                    runtime_models=(
-                        tuple(ctx.runtime.describe_models())
-                        if k_points.provenance.source == "model"
-                        or analysis.electronic_character_source == "model"
-                        else ()
-                    ),
+                    kmesh_model=ctx.runtime_kmesh_model,
+                    uses_default_kmesh_model=ctx.uses_default_kmesh_model,
                 )
             ),
             id="assemble_dft_input_data",
@@ -210,6 +209,8 @@ def build_scf_context(
         normalized_structure=normalized_structure,
         kmesh_advisor=backend,
         runtime=runtime,
+        runtime_kmesh_model=draft.kmesh_model,
+        uses_default_kmesh_model=runtime.uses_default_kmesh_model,
         pseudo_source=source_for_draft(
             draft,
             store=runtime.asset_store,

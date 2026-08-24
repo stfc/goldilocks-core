@@ -200,6 +200,15 @@ def _model_spec(data: dict[str, Any], location: str) -> ModelSpec:
         valid = ", ".join(sorted(_VALID_MODEL_TYPES))
         raise ValueError(f"model type must be one of {valid}; got {model_type_value!r}")
     model_type = cast(ModelType, model_type_value)
+    optional_material = {
+        field: data.get(field) for field in ("licence", "licence_text", "citation")
+    }
+    for field, value in optional_material.items():
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ValueError(
+                f"model {field} must be a non-empty string, or absent; got {value!r}"
+            )
+
     return ModelSpec(
         name=identity["name"],
         version=identity["version"],
@@ -209,6 +218,7 @@ def _model_spec(data: dict[str, Any], location: str) -> ModelSpec:
         source=source,
         location=data.get("location", location),
         revision=revision,
+        **optional_material,
     )
 
 

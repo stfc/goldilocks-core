@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import tempfile
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
@@ -15,7 +16,7 @@ from goldilocks_core.contracts import (
     DftInputData,
     DirectoryOutput,
     GeneratedContent,
-    InstalledArtifactReference,
+    InputArtifact,
     OutputTarget,
     Publication,
 )
@@ -36,7 +37,8 @@ class Publisher:
     def files(self, input_data: DftInputData) -> tuple[PublishedFile, ...]:
         files: dict[str, tuple[bytes, str]] = {}
         for artifact in input_data.artifacts:
-            _add(files, artifact.path, self._content(artifact.source), artifact.role)
+            _validate_publication_path(artifact.path)
+            _add(files, artifact.path, self._content(artifact), artifact.role)
 
         _add(
             files,
@@ -134,10 +136,7 @@ class Publisher:
         except BaseException:
             if staging is not None:
                 shutil.rmtree(staging, ignore_errors=True)
-            try:
-                target.rmdir()
-            except OSError:
-                pass
+            shutil.rmtree(target, ignore_errors=True)
             raise
         return _publication("directory", target, files)
 
@@ -178,15 +177,26 @@ class Publisher:
             raise
         return _publication("archive", target, files, _sha256(payload))
 
-    def _content(self, source: GeneratedContent | InstalledArtifactReference) -> bytes:
+    def _content(self, artifact: InputArtifact) -> bytes:
+        source = artifact.source
         if isinstance(source, GeneratedContent):
-            return source.content
-        if self._asset_store is None:
-            raise ValueError(
-                "An AssetStore is required to publish installed artifact references"
+            payload = source.content
+        else:
+            if self._asset_store is None:
+                raise ValueError(
+                    "An AssetStore is required to publish installed artifact references"
+                )
+            installed = self._asset_store.verify(
+                source.asset_id,
+                source.asset_version,
+                preparation_fingerprint=source.preparation_fingerprint,
             )
-        installed = self._asset_store.resolve(source.asset_id, source.asset_version)
-        return installed.path(source.path).read_bytes()
+            payload = installed.path(source.path).read_bytes()
+        if len(payload) != artifact.size_bytes or _sha256(payload) != artifact.sha256:
+            raise ValueError(
+                f"Artifact {artifact.path!r} differs from its DFT Input Data descriptor"
+            )
+        return payload
 
 
 def _archive_bytes(files: tuple[PublishedFile, ...]) -> bytes:
@@ -234,19 +244,24 @@ def _verify_directory(root: Path, files: tuple[PublishedFile, ...]) -> None:
 def _add(
     files: dict[str, tuple[bytes, str]], path: str, content: bytes, role: str
 ) -> None:
+    _validate_publication_path(path)
+    if path in files:
+        raise ValueError(f"Duplicate publication path: {path!r}")
+    files[path] = (content, role)
+
+
+def _validate_publication_path(path: str) -> None:
+    if not isinstance(path, str) or not path:
+        raise ValueError(f"Unsafe publication path: {path!r}")
     candidate = PurePosixPath(path)
     if (
-        not isinstance(path, str)
-        or not path
-        or "\\" in path
+        "\\" in path
+        or any(unicodedata.category(character) == "Cc" for character in path)
         or candidate.is_absolute()
         or any(part in {"", ".", ".."} for part in path.split("/"))
         or candidate.as_posix() != path
     ):
         raise ValueError(f"Unsafe publication path: {path!r}")
-    if path in files:
-        raise ValueError(f"Duplicate publication path: {path!r}")
-    files[path] = (content, role)
 
 
 def _sha256(content: bytes) -> str:

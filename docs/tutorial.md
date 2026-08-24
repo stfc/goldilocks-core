@@ -146,5 +146,4 @@ filename; the server does not store the archive. Use `GET /capabilities` and
 Local stdio MCP exposes `capabilities`, `inspect_structure`, and `compute`.
 Compute accepts the same draft and selection shape, but local sources may be
 paths. Omitted output automatically publishes complete DFT Input Data. Explicit
-`memory`, `directory`, `archive`, and `automatic` output variants are
-available.
+`memory`, `directory`, and `archive` output variants are available.

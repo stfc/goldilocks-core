@@ -139,13 +139,7 @@ def local_output_from_dict(
         from goldilocks_core.contracts import ArchiveOutput
 
         return TransportOutput("archive", ArchiveOutput(path))
-    if kind == "automatic":
-        if "path" in output:
-            raise RequestError("Automatic output does not accept 'path'.")
-        return TransportOutput("automatic", DirectoryOutput())
-    raise RequestError(
-        "Field 'output.kind' must be memory, directory, archive, or automatic."
-    )
+    raise RequestError("Field 'output.kind' must be memory, directory, or archive.")
 
 
 def _contract(contract_type: type, value: Any, name: str):

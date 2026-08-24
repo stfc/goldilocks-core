@@ -107,7 +107,19 @@ test("has no Axe violations in empty, failure, and viewer fallback states", asyn
     });
   }, { times: 1 });
   await page.getByRole("button", { name: "Generate recommendation" }).click();
-  await expect(page.getByRole("alert")).toBeVisible();
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("Workbench is busy");
+  await expect(alert).toContainText(
+    "Another calculation is using the compute slot.",
+  );
+  const status = page.getByRole("status", { name: "Workbench status" });
+  await expect(status).toHaveText("Needs attention");
+  await expect(status).not.toContainText("Ready");
+  await expect(status).not.toContainText("Another calculation");
+  await expect(status.locator(".status-light")).toHaveCSS(
+    "background-color",
+    "rgb(240, 161, 140)",
+  );
   await expectNoAxeViolations(page);
 
   await page.addInitScript({

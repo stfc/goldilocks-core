@@ -396,9 +396,13 @@ describe("Goldilocks Workbench", () => {
       </WorkspaceProvider>,
     );
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Runtime assets unavailable",
-    );
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Runtime assets unavailable");
+    expect(alert).toHaveTextContent("Runtime assets are unavailable.");
+    const status = screen.getByRole("status", { name: "Workbench status" });
+    expect(status).toHaveTextContent("Needs attention");
+    expect(status).not.toHaveTextContent("Ready");
+    expect(status).not.toHaveTextContent("Runtime assets are unavailable.");
     expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
     expect(
       screen.queryByRole("button", { name: "Dismiss error" }),

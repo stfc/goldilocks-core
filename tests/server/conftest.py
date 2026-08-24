@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterator
 
 import pytest
@@ -53,7 +54,8 @@ def sample_structure_text(sample_structure_path: str) -> str:
 @pytest.fixture
 def pseudo_metadata(tmp_path) -> dict[str, object]:
     pseudo_path = tmp_path / "Si.UPF"
-    pseudo_path.write_bytes(b"<UPF version='2.0.1'>server fixture</UPF>\n")
+    content = b"<UPF version='2.0.1'>server fixture</UPF>\n"
+    pseudo_path.write_bytes(content)
     return {
         "filepath": str(pseudo_path),
         "filename": "Si.UPF",
@@ -70,6 +72,8 @@ def pseudo_metadata(tmp_path) -> dict[str, object]:
             "ecutrho_ry": 120.0,
         },
         "source_identifier": "synthetic/Si.UPF",
+        "content_sha256": hashlib.sha256(content).hexdigest(),
+        "content_size_bytes": len(content),
         "pseudo_info": {
             "licence": "CC-BY-4.0",
             "licence_text": "Synthetic server fixture licence\n",

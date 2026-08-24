@@ -533,7 +533,7 @@ def _pseudopotential_material(
             _generated_artifact(
                 f"pseudo/{selected.filename}",
                 "pseudopotential",
-                Path(selected.filepath).read_bytes(),
+                _read_explicit_pseudo(item),
                 identity=item.source_identifier or selected.filename,
                 media_type="application/x-upf",
                 provenance=selected.provenance,
@@ -550,6 +550,24 @@ def _pseudopotential_material(
         )
     )
     return artifacts, pseudo_set
+
+
+def _read_explicit_pseudo(metadata: PseudoMetadata) -> bytes:
+    if metadata.content_sha256 is None or metadata.content_size_bytes is None:
+        raise ValueError(
+            f"Explicit pseudopotential {metadata.filename!r} lacks a parsed "
+            "content binding"
+        )
+    payload = Path(metadata.filepath).read_bytes()
+    if (
+        len(payload) != metadata.content_size_bytes
+        or hashlib.sha256(payload).hexdigest() != metadata.content_sha256
+    ):
+        raise ValueError(
+            f"Explicit pseudopotential {metadata.filename!r} differs from its "
+            "parsed content binding"
+        )
+    return payload
 
 
 def _installed_pseudo_artifact(

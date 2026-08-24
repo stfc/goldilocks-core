@@ -289,13 +289,21 @@ def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
 
 def test_generation_preset_returns_generated_files(tmp_path) -> None:
     pseudo_path = tmp_path / "Si.UPF"
-    pseudo_path.write_bytes(b"<UPF version='2.0.1'>Si fixture</UPF>\n")
+    content = b"<UPF version='2.0.1'>Si fixture</UPF>\n"
+    pseudo_path.write_bytes(content)
     request = make_request(preset="generate")
     request = replace(
         request,
         draft=replace(
             request.draft,
-            pseudo_metadata=(replace(make_metadata(), filepath=str(pseudo_path)),),
+            pseudo_metadata=(
+                replace(
+                    make_metadata(),
+                    filepath=str(pseudo_path),
+                    content_sha256=hashlib.sha256(content).hexdigest(),
+                    content_size_bytes=len(content),
+                ),
+            ),
         ),
     )
     with Runtime() as runtime:

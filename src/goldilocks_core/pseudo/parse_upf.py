@@ -1,15 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 from typing import Any
 
 from goldilocks_core.contracts import PseudoMetadata
 from goldilocks_core.functionals import normalize_functional_label
-
-
-def _read_text(path: Path) -> str:
-    return path.read_text(errors="ignore")
 
 
 def _clean_string(value: object) -> str | None:
@@ -261,7 +258,8 @@ def _get_element(
 
 def parse_upf_metadata(path: str | Path) -> PseudoMetadata:
     path = Path(path)
-    text = _read_text(path)
+    content = path.read_bytes()
+    text = content.decode(errors="ignore")
 
     header_format = _detect_header_format(text)
     if header_format == "attr":
@@ -284,5 +282,7 @@ def parse_upf_metadata(path: str | Path) -> PseudoMetadata:
         functional=normalize_functional_label(header_data.get("functional")),
         relativistic=_normalize_relativistic(header_data.get("relativistic")),
         z_valence=_to_float(header_data.get("z_valence")),
+        content_sha256=hashlib.sha256(content).hexdigest(),
+        content_size_bytes=len(content),
         pseudo_info=header_data,
     )

@@ -1,3 +1,4 @@
+import hashlib
 from dataclasses import replace
 
 import numpy as np
@@ -168,8 +169,14 @@ def test_compute_rejects_unknown_task() -> None:
 
 def test_compute_generation_preset_produces_generated_inputs(tmp_path) -> None:
     pseudo_path = tmp_path / "Si.UPF"
-    pseudo_path.write_bytes(b"<UPF version='2.0.1'>Si fixture</UPF>\n")
-    metadata = replace(make_metadata(), filepath=str(pseudo_path))
+    content = b"<UPF version='2.0.1'>Si fixture</UPF>\n"
+    pseudo_path.write_bytes(content)
+    metadata = replace(
+        make_metadata(),
+        filepath=str(pseudo_path),
+        content_sha256=hashlib.sha256(content).hexdigest(),
+        content_size_bytes=len(content),
+    )
     result = compute(
         make_request(
             PresetSelection("generate"),

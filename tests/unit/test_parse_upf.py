@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -70,6 +71,36 @@ def test_parse_upf_metadata_parses_attribute_style_header(
     assert metadata.functional == "PBE"
     assert metadata.relativistic == "scalar"
     assert metadata.z_valence == 12.0
+    content = pseudo_path.read_bytes()
+    assert metadata.content_sha256 == hashlib.sha256(content).hexdigest()
+    assert metadata.content_size_bytes == len(content)
+
+
+def test_parse_upf_metadata_reads_external_bytes_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pseudo_path = write_attr_upf(
+        tmp_path / "Si.UPF",
+        element="Si",
+        pseudo_type="NC",
+        functional="PBEsol",
+        relativistic="scalar",
+        z_valence="4.0",
+    )
+    read_bytes = Path.read_bytes
+    reads = 0
+
+    def count_reads(path: Path) -> bytes:
+        nonlocal reads
+        if path == pseudo_path:
+            reads += 1
+        return read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", count_reads)
+
+    parse_upf_metadata(pseudo_path)
+
+    assert reads == 1
 
 
 def test_parse_upf_metadata_parses_text_header(tmp_path: Path) -> None:

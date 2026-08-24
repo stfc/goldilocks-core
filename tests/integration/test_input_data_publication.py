@@ -36,6 +36,7 @@ from goldilocks_core.contracts import (
     SelectionRecord,
 )
 from goldilocks_core.ml.model_registry import model_asset_specs
+from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
 from goldilocks_core.pseudo.registry import load_tables
 from goldilocks_core.publication import Publisher
 
@@ -60,6 +61,8 @@ def test_generation_assembles_complete_dft_input_data_without_host_paths(
         relativistic="scalar",
         cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
         source_identifier="fixture/Si.UPF",
+        content_sha256=hashlib.sha256(pseudo_bytes).hexdigest(),
+        content_size_bytes=len(pseudo_bytes),
         pseudo_info={
             "licence": "CC-BY-4.0",
             "licence_text": "Fixture licence text\n",
@@ -115,6 +118,76 @@ def test_generation_assembles_complete_dft_input_data_without_host_paths(
     assert DftInputData not in recommendation.records
 
 
+def test_explicit_pseudo_changed_after_metadata_selection_fails_before_publication(
+    tmp_path: Path,
+) -> None:
+    structure = Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
+    pseudo_path = tmp_path / "Si.UPF"
+    pseudo_path.write_text(
+        '<UPF><PP_HEADER element="Si" pseudo_type="NC" '
+        'functional="PBEsol" relativistic="scalar" z_valence="4.0" /></UPF>\n',
+        encoding="utf-8",
+    )
+    pseudo = replace(
+        parse_upf_metadata(pseudo_path),
+        provider="fixture",
+        accuracy="efficiency",
+        cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
+        source_identifier="fixture/Si.UPF",
+        pseudo_info={
+            "licence": "CC-BY-4.0",
+            "licence_text": "Fixture licence text\n",
+            "citation": "Fixture pseudopotential citation.",
+        },
+    )
+    request = ComputeRequest(
+        CalculationDraft(
+            InlineStructureSource("Si.cif", structure.to(fmt="cif"), "cif"),
+            hints=CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC"),
+            pseudo_metadata=(pseudo,),
+        ),
+        PresetSelection("generate"),
+    )
+    destination = tmp_path / "must-not-publish"
+    pseudo_path.write_text(
+        '<UPF><PP_HEADER element="Si" pseudo_type="NC" '
+        'functional="LDA" relativistic="scalar" z_valence="4.0" /></UPF>\n',
+        encoding="utf-8",
+    )
+
+    with (
+        Service() as service,
+        pytest.raises(ValueError, match="differs from its parsed content binding"),
+    ):
+        service.compute(request, output=DirectoryOutput(destination))
+
+    assert not destination.exists(follow_symlinks=False)
+
+
+def test_explicit_pseudo_without_content_binding_fails_before_publication(
+    tmp_path: Path,
+) -> None:
+    request = _explicit_request(tmp_path, "unbound-Si.UPF")
+    unbound = replace(
+        request.draft.pseudo_metadata[0],
+        content_sha256=None,
+        content_size_bytes=None,
+    )
+    request = replace(
+        request,
+        draft=replace(request.draft, pseudo_metadata=(unbound,)),
+    )
+    destination = tmp_path / "unbound-must-not-publish"
+
+    with (
+        Service() as service,
+        pytest.raises(ValueError, match="lacks.*content binding"),
+    ):
+        service.compute(request, output=DirectoryOutput(destination))
+
+    assert not destination.exists(follow_symlinks=False)
+
+
 def test_selected_pseudo_binds_to_one_exact_same_element_candidate(
     tmp_path: Path,
 ) -> None:
@@ -141,6 +214,8 @@ def test_selected_pseudo_binds_to_one_exact_same_element_candidate(
                 relativistic="scalar",
                 cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
                 source_identifier=identity,
+                content_sha256=hashlib.sha256(payload).hexdigest(),
+                content_size_bytes=len(payload),
                 pseudo_info={
                     "licence": f"{identity}-licence",
                     "licence_text": f"{identity} legal terms\n",
@@ -362,6 +437,8 @@ def _explicit_input_data(tmp_path: Path) -> tuple[DftInputData, str, bytes]:
         relativistic="scalar",
         cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
         source_identifier="fixture/Si.UPF",
+        content_sha256=hashlib.sha256(pseudo_bytes).hexdigest(),
+        content_size_bytes=len(pseudo_bytes),
         pseudo_info={
             "licence": "CC-BY-4.0",
             "licence_text": "Fixture licence text\n",
@@ -809,7 +886,7 @@ def test_directory_identity_mismatch_restores_moved_foreign_staging_tree(
     assert (displaced / "goldilocks.json").is_file()
 
 
-def test_directory_publication_preserves_foreign_file_added_after_install(
+def test_directory_publication_quarantines_foreign_file_added_after_install(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import goldilocks_core.publication as publication_module
@@ -824,11 +901,46 @@ def test_directory_publication_preserves_foreign_file_added_after_install(
 
     monkeypatch.setattr(publication_module, "_rename_no_replace", modify_after_install)
 
-    with pytest.raises(OSError, match="Completed directory write differs"):
+    with pytest.raises(OSError, match="Completed directory descriptor write differs"):
         Publisher().publish(input_data, DirectoryOutput(destination))
 
-    assert (destination / "goldilocks.json").is_file()
-    assert (destination / "foreign.txt").read_text(encoding="utf-8") == "foreign"
+    assert not destination.exists(follow_symlinks=False)
+    quarantined = list(tmp_path.glob(".modified-after-install.quarantine-*"))
+    assert len(quarantined) == 1
+    assert (quarantined[0] / "goldilocks.json").is_file()
+    assert (quarantined[0] / "foreign.txt").read_text(encoding="utf-8") == "foreign"
+
+
+def test_directory_publication_quarantines_symlink_installed_by_race(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, pseudo_bytes = _explicit_input_data(tmp_path)
+    destination = tmp_path / "symlinked-after-install"
+    host_target = tmp_path / "host-secret-target"
+    host_target.write_bytes(pseudo_bytes)
+    rename_no_replace = publication_module._rename_no_replace
+
+    def replace_file_after_install(staging: Path, target: Path) -> None:
+        rename_no_replace(staging, target)
+        published_pseudo = target / "pseudo" / "Si.UPF"
+        published_pseudo.unlink()
+        published_pseudo.symlink_to(host_target)
+
+    monkeypatch.setattr(
+        publication_module,
+        "_rename_no_replace",
+        replace_file_after_install,
+    )
+
+    with pytest.raises(OSError, match="non-regular path"):
+        Publisher().publish(input_data, DirectoryOutput(destination))
+
+    assert not destination.exists(follow_symlinks=False)
+    assert host_target.is_file()
+    assert not host_target.is_symlink()
+    assert host_target.read_bytes() == pseudo_bytes
 
 
 def test_directory_publication_quarantines_replacement_after_install(
@@ -861,6 +973,42 @@ def test_directory_publication_quarantines_replacement_after_install(
         "replacement"
     )
     assert (displaced / "goldilocks.json").is_file()
+
+
+def test_directory_publication_rechecks_public_identity_after_verification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "replaced-after-verification"
+    displaced = tmp_path / "displaced-after-verification"
+    verify_descriptor = publication_module._verify_directory_descriptor
+    verification_count = 0
+
+    def replace_after_post_install_verification(descriptor: int, files) -> None:
+        nonlocal verification_count
+        verify_descriptor(descriptor, files)
+        verification_count += 1
+        if verification_count == 3:
+            destination.rename(displaced)
+            destination.mkdir()
+            (destination / "foreign.txt").write_text("foreign", encoding="utf-8")
+
+    monkeypatch.setattr(
+        publication_module,
+        "_verify_directory_descriptor",
+        replace_after_post_install_verification,
+    )
+
+    with pytest.raises(OSError, match="destination changed during publication"):
+        Publisher().publish(input_data, DirectoryOutput(destination))
+
+    assert not destination.exists(follow_symlinks=False)
+    assert (displaced / "goldilocks.json").is_file()
+    quarantined = list(tmp_path.glob(".replaced-after-verification.quarantine-*"))
+    assert len(quarantined) == 1
+    assert (quarantined[0] / "foreign.txt").read_text(encoding="utf-8") == "foreign"
 
 
 def test_archive_writes_remain_bound_to_open_staging_descriptor_after_replacement(
@@ -1050,7 +1198,8 @@ def test_service_compute_applies_output_targets_and_returns_publication_info(
 def _explicit_request(tmp_path: Path, pseudo_name: str) -> ComputeRequest:
     structure = Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
     pseudo_path = tmp_path / pseudo_name
-    pseudo_path.write_bytes(b"<UPF version='2.0.1'>service fixture</UPF>\n")
+    pseudo_bytes = b"<UPF version='2.0.1'>service fixture</UPF>\n"
+    pseudo_path.write_bytes(pseudo_bytes)
     return ComputeRequest(
         draft=CalculationDraft(
             structure=InlineStructureSource(
@@ -1070,6 +1219,8 @@ def _explicit_request(tmp_path: Path, pseudo_name: str) -> ComputeRequest:
                     relativistic="scalar",
                     cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
                     source_identifier="fixture/Si.UPF",
+                    content_sha256=hashlib.sha256(pseudo_bytes).hexdigest(),
+                    content_size_bytes=len(pseudo_bytes),
                     pseudo_info={
                         "licence": "CC-BY-4.0",
                         "licence_text": "Fixture licence text\n",

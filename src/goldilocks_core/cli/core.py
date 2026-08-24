@@ -9,18 +9,25 @@ from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled, AssetStore
 from goldilocks_core.assets.runtime import install as install_assets
 from goldilocks_core.assets.runtime import statuses as asset_statuses
 from goldilocks_core.assets.runtime import verify as verify_assets
+from goldilocks_core.bundle import write_bundle_directory
 from goldilocks_core.contracts import (
+    BundleRecord,
+    CalculationDraft,
     CalculationHints,
     CalculationIntent,
+    ComputationResult,
+    ComputeRequest,
+    GeneratedFiles,
+    KPointSelection,
     ModelSpec,
-    PresetRequest,
-    QueryRequest,
-    Result,
+    PresetSelection,
+    RecordSelection,
+    StructureAnalysisRecord,
     resolve_output_types,
 )
 from goldilocks_core.examples import structures_path
 from goldilocks_core.generation import available_codes, available_tasks
-from goldilocks_core.runtime import Runtime, query_records, run_core_job
+from goldilocks_core.runtime import Runtime, compute
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -122,11 +129,7 @@ def main() -> None:
         while True:
             try:
                 with Runtime(asset_store=store) as runtime:
-                    output = (
-                        query_records(request, runtime=runtime)
-                        if args.command == "compute"
-                        else run_core_job(request, runtime=runtime)
-                    )
+                    output = compute(request, runtime=runtime)
                 break
             except AssetNotInstalled as error:
                 key = (error.reference.id, error.reference.version)
@@ -140,16 +143,30 @@ def main() -> None:
         raise SystemExit(2) from error
 
     if args.command == "compute":
-        print(json.dumps(output.to_dict(), indent=2, sort_keys=True))
+        print(json.dumps(output.records.to_dict(), indent=2, sort_keys=True))
         return
 
     result = output
+    bundle = None
+    if args.command == "generate" and args.out is not None:
+        bundle = write_bundle_directory(result, args.out)
     if args.json:
-        rendered = {"request": request.to_dict(), **result.to_dict()}
+        request_document = request.draft.to_dict()
+        request_document["mode"] = args.command
+        request_document["output_dir"] = getattr(args, "out", None)
+        records = result.records.to_dict()
+        records.setdefault("generated_files", [])
+        rendered = {
+            "request": request_document,
+            "intent": result.draft.intent.to_dict(),
+            **records,
+            "warnings": list(result.warnings),
+            "bundle": bundle.to_dict() if bundle is not None else None,
+        }
         print(json.dumps(rendered, indent=2, sort_keys=True))
         return
 
-    _print_human_summary(result)
+    _print_human_summary(result, bundle)
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
@@ -241,7 +258,7 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _request_from_args(args: argparse.Namespace) -> PresetRequest | QueryRequest:
+def _request_from_args(args: argparse.Namespace) -> ComputeRequest:
     intent = CalculationIntent(
         code=args.code,
         task=args.task,
@@ -266,25 +283,21 @@ def _request_from_args(args: argparse.Namespace) -> PresetRequest | QueryRequest
     pseudo_root = str(Path(args.pseudo_root).expanduser()) if args.pseudo_root else None
     kmesh_model = _model_spec_from_args(args)
 
-    if args.command == "compute":
-        return QueryRequest(
+    selection = (
+        RecordSelection(_parse_outputs(args.outputs))
+        if args.command == "compute"
+        else PresetSelection(args.command)
+    )
+    return ComputeRequest(
+        draft=CalculationDraft(
             structure=args.structure,
-            outputs=_parse_outputs(args.outputs),
             intent=intent,
             hints=hints,
             pseudo_root=pseudo_root,
             pseudo_table=args.pseudo_table,
             kmesh_model=kmesh_model,
-        )
-    return PresetRequest(
-        structure=args.structure,
-        intent=intent,
-        hints=hints,
-        mode=args.command,
-        pseudo_root=pseudo_root,
-        pseudo_table=args.pseudo_table,
-        output_dir=getattr(args, "out", None),
-        kmesh_model=kmesh_model,
+        ),
+        selection=selection,
     )
 
 
@@ -369,18 +382,22 @@ def _parse_optional_bool(value: str | None) -> bool | None:
     return value == "true"
 
 
-def _print_human_summary(result: Result) -> None:
-    grid = result.k_points.grid
-    print(f"formula: {result.analysis.reduced_formula}")
-    print(f"code: {result.intent.code}")
-    print(f"task: {result.intent.task}")
+def _print_human_summary(
+    result: ComputationResult,
+    bundle: BundleRecord | None = None,
+) -> None:
+    grid = result.records[KPointSelection].grid
+    print(f"formula: {result.records[StructureAnalysisRecord].reduced_formula}")
+    print(f"code: {result.draft.intent.code}")
+    print(f"task: {result.draft.intent.task}")
     print(f"k-grid: {grid[0]} {grid[1]} {grid[2]}")
-    if result.generated_files:
+    generated_files = result.records.get(GeneratedFiles, ())
+    if generated_files:
         print("generated files:")
-        for generated_file in result.generated_files:
+        for generated_file in generated_files:
             print(f"  {generated_file.path}")
-    if result.bundle is not None:
-        print(f"bundle: {result.bundle.path}")
+    if bundle is not None:
+        print(f"bundle: {bundle.path}")
     if result.warnings:
         print("warnings:")
         for warning in result.warnings:

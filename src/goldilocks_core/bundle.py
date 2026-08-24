@@ -3,35 +3,44 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from goldilocks_core.contracts import BundleRecord, JsonDict, Result
+from goldilocks_core.contracts import (
+    BundleRecord,
+    ComputationResult,
+    GeneratedFiles,
+    JsonDict,
+    KPointSelection,
+    ParameterAdvice,
+    SelectionRecord,
+    StructureAnalysisRecord,
+)
 
 MANIFEST_FILENAME = "manifest.json"
 MANIFEST_VERSION = 2
 
 
-def build_bundle_manifest(result: Result) -> JsonDict:
+def build_bundle_manifest(result: ComputationResult) -> JsonDict:
     files = [
         {
             "path": generated_file.path,
             "role": generated_file.role,
         }
-        for generated_file in result.generated_files
+        for generated_file in result.records.get(GeneratedFiles, ())
     ]
 
     return {
         "manifest_version": MANIFEST_VERSION,
-        "intent": result.intent.to_dict(),
-        "analysis": result.analysis.to_dict(),
-        "advice": result.advice.to_dict(),
-        "k_points": result.k_points.to_dict(),
-        "selection": result.selection.to_dict(),
+        "intent": result.draft.intent.to_dict(),
+        "analysis": result.records[StructureAnalysisRecord].to_dict(),
+        "advice": result.records[ParameterAdvice].to_dict(),
+        "k_points": result.records[KPointSelection].to_dict(),
+        "selection": result.records[SelectionRecord].to_dict(),
         "generated_files": files,
         "warnings": list(result.warnings),
     }
 
 
 def write_bundle_directory(
-    result: Result,
+    result: ComputationResult,
     output_dir: str | Path,
 ) -> BundleRecord:
     target_dir = Path(output_dir)
@@ -43,7 +52,7 @@ def write_bundle_directory(
     manifest_path = target_dir / MANIFEST_FILENAME
     files = tuple(
         (generated_file, _resolve_bundle_path(target_dir, generated_file.path))
-        for generated_file in result.generated_files
+        for generated_file in result.records.get(GeneratedFiles, ())
     )
     if len({path for _, path in files}) != len(files):
         raise ValueError("Generated file paths must be unique")

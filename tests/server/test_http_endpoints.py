@@ -75,8 +75,19 @@ def test_recommend_returns_core_result_json(test_service, request_body) -> None:
     assert data["generated_files"] == []
 
 
-def test_generate_returns_generated_files_without_bundle(
-    test_service, request_body
+def test_recommend_treats_null_outputs_as_omitted(test_service, request_body) -> None:
+    with TestClient(create_app(test_service)) as client:
+        response = client.post(
+            "/recommend",
+            json={**request_body, "outputs": None},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["analysis"]["reduced_formula"] == "Si"
+
+
+def test_generate_publishes_bundle_and_returns_core_result_json(
+    test_service, request_body, tmp_path
 ) -> None:
     """Return generated files; output locations are server-managed."""
     with TestClient(create_app(test_service)) as client:
@@ -124,7 +135,7 @@ def test_request_error_maps_to_422_with_message(test_service, request_body) -> N
         response = client.post("/recommend", json=body)
 
     assert response.status_code == 422
-    assert "Unknown request fields" in response.json()["error"]["message"]
+    assert "Unknown draft fields" in response.json()["error"]["message"]
 
 
 def test_unknown_task_maps_to_422_with_message(test_service, request_body) -> None:
@@ -147,7 +158,7 @@ def test_asset_corrupt_maps_to_424(test_service, request_body, monkeypatch) -> N
         del service, request
         raise AssetCorrupt("installed pseudopotential manifest is invalid")
 
-    monkeypatch.setattr(type(test_service), "run_preset", raise_corrupt)
+    monkeypatch.setattr(type(test_service), "compute", raise_corrupt)
 
     with TestClient(create_app(test_service)) as client:
         response = client.post("/recommend", json=request_body)
@@ -209,7 +220,7 @@ def test_unexpected_value_error_remains_a_500(
         del service, request
         raise ValueError("unexpected internal defect")
 
-    monkeypatch.setattr(type(test_service), "run_preset", raise_unexpected)
+    monkeypatch.setattr(type(test_service), "compute", raise_unexpected)
 
     with TestClient(create_app(test_service), raise_server_exceptions=False) as client:
         response = client.post("/recommend", json=request_body)

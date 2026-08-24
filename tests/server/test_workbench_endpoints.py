@@ -17,13 +17,19 @@ from goldilocks_core.advice import advise_parameters
 from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled
 from goldilocks_core.assets.records import AssetReference
 from goldilocks_core.contracts import (
+    CalculationDraft,
+    CalculationHints,
     CalculationIntent,
+    ComputationResult,
+    ComputeRequest,
     GeneratedFile,
+    GeneratedFiles,
     KPointSelection,
-    PresetRequest,
+    ParameterAdvice,
+    PresetSelection,
     Provenance,
     PseudopotentialSelection,
-    Result,
+    Records,
     SelectionRecord,
     StructureAnalysisRecord,
 )
@@ -196,11 +202,11 @@ def test_workbench_recommendation_is_typed_stable_and_browser_safe(
 
     assert first.status_code == 200
     assert second.status_code == 200
-    assert isinstance(service.request, PresetRequest)
-    assert isinstance(service.request.structure, Structure)
-    assert service.request.hints.k_grid == (3, 3, 3)
-    assert service.request.pseudo_table == body["pseudo_table_id"]
-    assert service.request.mode == "generate"
+    assert isinstance(service.request, ComputeRequest)
+    assert isinstance(service.request.draft.structure, Structure)
+    assert service.request.draft.hints.k_grid == (3, 3, 3)
+    assert service.request.draft.pseudo_table == body["pseudo_table_id"]
+    assert service.request.selection == PresetSelection("generate")
     payload = first.json()
     assert payload["review_digest"] == second.json()["review_digest"]
     assert len(payload["review_digest"]) == 64
@@ -659,7 +665,11 @@ def test_workbench_static_root_is_served_after_api_routes(
 
 
 class _RecommendingService:
-    def __init__(self, result: Result, installed_root: Path | None = None) -> None:
+    def __init__(
+        self,
+        result: ComputationResult,
+        installed_root: Path | None = None,
+    ) -> None:
         self.runtime = SimpleNamespace(
             pseudo_registry_path=None,
             model_registry_path=None,
@@ -679,10 +689,10 @@ class _RecommendingService:
             ),
         )
         self.result = result
-        self.request: PresetRequest | None = None
+        self.request: ComputeRequest | None = None
         self.calls = 0
 
-    def generate(self, request: PresetRequest) -> Result:
+    def compute(self, request: ComputeRequest) -> ComputationResult:
         self.calls += 1
         self.request = request
         return self.result
@@ -698,20 +708,20 @@ class _FailingService:
         )
         self.error = error
 
-    def generate(self, request: PresetRequest) -> Result:
+    def compute(self, request: ComputeRequest) -> ComputationResult:
         del request
         raise self.error
 
 
 class _BlockingService(_RecommendingService):
-    def __init__(self, result: Result, *, fail_first: bool) -> None:
+    def __init__(self, result: ComputationResult, *, fail_first: bool) -> None:
         super().__init__(result)
         self.entered = Event()
         self.release = Event()
         self.fail_first = fail_first
         self._calls_lock = Lock()
 
-    def generate(self, request: PresetRequest) -> Result:
+    def compute(self, request: ComputeRequest) -> ComputationResult:
         with self._calls_lock:
             self.calls += 1
             call_number = self.calls
@@ -759,7 +769,7 @@ class _AssetStore:
         return SimpleNamespace(root=root, path=path)
 
 
-def _result_with_pseudo(path: Path) -> Result:
+def _result_with_pseudo(path: Path) -> ComputationResult:
     analysis = StructureAnalysisRecord(
         formula="Si1",
         reduced_formula="Si",
@@ -772,36 +782,50 @@ def _result_with_pseudo(path: Path) -> Result:
         magnetic_elements=(),
         heavy_elements=(),
     )
-    return Result(
-        intent=CalculationIntent(),
-        analysis=analysis,
-        advice=advise_parameters(analysis),
-        k_points=KPointSelection(
-            grid=(3, 3, 3),
-            shift=(0, 0, 0),
-            mesh_type="monkhorst-pack",
-            provenance=Provenance(source="user_hint", reason="test"),
-        ),
-        selection=SelectionRecord(
-            pseudopotentials=(
-                PseudopotentialSelection(
-                    element="Si",
-                    filename=path.name,
-                    filepath=str(path),
-                    functional="PBEsol",
-                    relativistic="scalar",
-                    ecutwfc_ry=30.0,
-                    ecutrho_ry=120.0,
-                    provenance=Provenance(
-                        source="lookup",
-                        reason="test",
-                        data_source="pseudodojo-pbesol-efficiency-sr",
-                    ),
+    advice = advise_parameters(analysis)
+    k_points = KPointSelection(
+        grid=(3, 3, 3),
+        shift=(0, 0, 0),
+        mesh_type="monkhorst-pack",
+        provenance=Provenance(source="user_hint", reason="test"),
+    )
+    selection = SelectionRecord(
+        pseudopotentials=(
+            PseudopotentialSelection(
+                element="Si",
+                filename=path.name,
+                filepath=str(path),
+                functional="PBEsol",
+                relativistic="scalar",
+                ecutwfc_ry=30.0,
+                ecutrho_ry=120.0,
+                provenance=Provenance(
+                    source="lookup",
+                    reason="test",
+                    data_source="pseudodojo-pbesol-efficiency-sr",
                 ),
-            )
+            ),
+        )
+    )
+    return ComputationResult(
+        draft=CalculationDraft(
+            structure=Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]]),
+            intent=CalculationIntent(),
+            hints=CalculationHints(),
         ),
-        generated_files=(
-            GeneratedFile(path="inputs/qe.in", content="&CONTROL\\n/\\n"),
+        task="scf_single_point",
+        task_revision="1",
+        selection=PresetSelection("generate"),
+        records=Records(
+            {
+                StructureAnalysisRecord: analysis,
+                ParameterAdvice: advice,
+                KPointSelection: k_points,
+                SelectionRecord: selection,
+                GeneratedFiles: (
+                    GeneratedFile(path="inputs/qe.in", content="&CONTROL\\n/\\n"),
+                ),
+            }
         ),
         warnings=("test warning",),
     )

@@ -4,100 +4,165 @@ import pytest
 from pymatgen.core import Structure
 
 from goldilocks_core.contracts import (
+    CalculationDraft,
+    ComputeRequest,
     ParameterAdvice,
-    PresetRequest,
-    QueryRequest,
+    PresetSelection,
+    RecordSelection,
     StructureAnalysisRecord,
 )
 from goldilocks_core.examples import structure
 from goldilocks_core.server.request import RequestError, from_dict
 
 
-def test_from_dict_parses_complete_preset_request(
+def body(structure, selection, **draft) -> dict[str, object]:
+    return {
+        "draft": {"structure": structure, **draft},
+        "selection": selection,
+    }
+
+
+def test_from_dict_parses_complete_preset_computation(
     sample_structure_text: str,
+    pseudo_metadata: dict[str, object],
 ) -> None:
     """Parse structure, intent, hints, and mode into a preset request."""
     request = from_dict(
-        {
-            "structure": sample_structure_text,
-            "intent": {"functional": "PBEsol", "pseudo_accuracy": "efficiency"},
-            "hints": {"k_grid": [3, 3, 3], "use_vdw": False},
-            "mode": "generate",
-        }
+        body(
+            sample_structure_text,
+            {"preset": "generate"},
+            intent={"functional": "PBEsol", "pseudo_accuracy": "efficiency"},
+            hints={"k_grid": [3, 3, 3], "use_vdw": False},
+            pseudo_metadata=[pseudo_metadata],
+        )
     )
 
-    assert isinstance(request, PresetRequest)
-    assert isinstance(request.structure, Structure)
-    assert request.structure.reduced_formula == "Si"
-    assert request.intent.functional == "PBEsol"
-    assert request.hints.k_grid == (3, 3, 3)
-    assert request.mode == "generate"
-    assert request.pseudo_metadata is None
-    assert request.pseudo_root is None
-    assert request.pseudo_table is None
-    assert request.kmesh_model is None
+    assert isinstance(request, ComputeRequest)
+    assert request.selection == PresetSelection("generate")
+    assert isinstance(request.draft.structure, Structure)
+    assert request.draft.structure.reduced_formula == "Si"
+    assert request.draft.intent.functional == "PBEsol"
+    assert request.draft.hints.k_grid == (3, 3, 3)
+    assert request.draft.pseudo_metadata[0].element == "Si"
 
 
 def test_from_dict_defers_pseudo_source_resolution(
     sample_structure_text: str,
 ) -> None:
-    """Leave pseudopotential resolution to the server's runtime."""
-    request = from_dict({"structure": sample_structure_text})
+    request = from_dict(body(sample_structure_path, {"preset": "recommend"}))
 
-    assert request.pseudo_metadata is None
-    assert request.pseudo_root is None
-    assert request.pseudo_table is None
+    assert request.draft.pseudo_metadata is None
+    assert request.draft.pseudo_root is None
+    assert request.draft.pseudo_table is None
 
 
 def test_from_dict_resolves_output_record_names(sample_structure_text: str) -> None:
     """Resolve query output names through the shared contract catalogue."""
     request = from_dict(
-        {
-            "structure": sample_structure_text,
-            "outputs": ["analysis", "advice"],
-        }
+        body(
+            sample_structure_path,
+            {"preset": "recommend"},
+            pseudo_table="sssp-pbe-precision-sr",
+        )
     )
 
-    assert isinstance(request, QueryRequest)
-    assert request.outputs == (StructureAnalysisRecord, ParameterAdvice)
+    assert request.draft.pseudo_table == "sssp-pbe-precision-sr"
+    assert request.draft.pseudo_metadata is None
+    assert request.draft.pseudo_root is None
 
 
-def test_from_dict_rejects_unknown_keys(sample_structure_text: str) -> None:
-    """Do not silently discard unknown transport fields."""
+def test_from_dict_rejects_multiple_pseudopotential_sources(
+    sample_structure_path: str,
+    pseudo_metadata: dict[str, object],
+) -> None:
+    with pytest.raises(RequestError, match="accepts only one"):
+        from_dict(
+            body(
+                sample_structure_path,
+                {"preset": "recommend"},
+                pseudo_metadata=[pseudo_metadata],
+                pseudo_table="sssp-pbe-precision-sr",
+            )
+        )
+
+
+def test_from_dict_resolves_selected_record_names(sample_structure_path: str) -> None:
+    request = from_dict(
+        body(
+            sample_structure_path,
+            {"records": ["analysis", "advice"]},
+        )
+    )
+
+    assert request.selection == RecordSelection(
+        (StructureAnalysisRecord, ParameterAdvice)
+    )
+
+
+def test_from_dict_rejects_unknown_root_keys(sample_structure_path: str) -> None:
+    request = body(sample_structure_path, {"preset": "recommend"})
+    request["surprise"] = True
+
     with pytest.raises(RequestError, match="Unknown request fields: surprise"):
-        from_dict({"structure": sample_structure_text, "surprise": True})
+        from_dict(request)
+
+
+def test_from_dict_rejects_unknown_draft_keys(sample_structure_path: str) -> None:
+    request = body(
+        sample_structure_path,
+        {"preset": "recommend"},
+        surprise=True,
+    )
+
+    with pytest.raises(RequestError, match="Unknown draft fields: surprise"):
+        from_dict(request)
 
 
 @pytest.mark.parametrize(
-    "field",
-    ["output_dir", "pseudo_metadata", "pseudo_root", "kmesh_model"],
+    "document",
+    [
+        body(42, {"preset": "recommend"}),
+        body("Si.cif", {"preset": "recommend"}, intent=[]),
+        body("Si.cif", {"preset": "recommend"}, hints={"use_vdw": "yes"}),
+        body("Si.cif", "recommend"),
+        body("Si.cif", {"records": "advice"}),
+        body("Si.cif", {"records": [3]}),
+    ],
 )
-def test_from_dict_rejects_deployment_configuration(
-    sample_structure_text: str, field: str
+def test_from_dict_maps_bad_types_to_request_error(
+    document: dict[str, object],
 ) -> None:
-    """Deployment configuration is never request data on the transports."""
-    body = {"structure": sample_structure_text, field: "anything"}
-
-    with pytest.raises(RequestError, match=f"Unknown request fields: {field}"):
-        from_dict(body)
+    with pytest.raises(RequestError):
+        from_dict(document)
 
 
-def test_from_dict_rejects_path_form_structure(tmp_path) -> None:
-    """A bare string names no server path; transports require inline content."""
-    structure_path = str(structure("Si.cif"))
-    assert "\n" not in structure_path
-
-    with pytest.raises(RequestError, match="do not accept file paths"):
-        from_dict({"structure": structure_path})
+def test_from_dict_requires_a_calculation_draft() -> None:
+    with pytest.raises(RequestError, match="requires 'draft'"):
+        from_dict({"selection": {"preset": "recommend"}})
 
 
-def test_from_dict_parses_inline_structure_string(sample_structure_text: str) -> None:
-    """Parse a multi-line CIF passed directly as a string."""
-    request = from_dict({"structure": sample_structure_text, "outputs": ["analysis"]})
+def test_from_dict_requires_a_computation_selection(
+    sample_structure_path: str,
+) -> None:
+    with pytest.raises(RequestError, match="requires 'selection'"):
+        from_dict({"draft": {"structure": sample_structure_path}})
 
-    assert isinstance(request, QueryRequest)
-    assert isinstance(request.structure, Structure)
-    assert request.structure.reduced_formula == "Si"
+
+def test_from_dict_requires_exactly_one_selection_variant(
+    sample_structure_path: str,
+) -> None:
+    with pytest.raises(RequestError, match="exactly one"):
+        from_dict(
+            body(
+                sample_structure_path,
+                {"preset": "recommend", "records": ["analysis"]},
+            )
+        )
+
+
+def test_from_dict_rejects_unknown_record_id(sample_structure_path: str) -> None:
+    with pytest.raises(RequestError, match="Unknown output record type"):
+        from_dict(body(sample_structure_path, {"records": ["Unknown"]}))
 
 
 def test_from_dict_parses_inline_structure_content_object(
@@ -105,15 +170,14 @@ def test_from_dict_parses_inline_structure_content_object(
 ) -> None:
     """Parse an inline structure content object with an explicit format."""
     request = from_dict(
-        {
-            "structure": {"content": sample_structure_text, "format": "cif"},
-            "outputs": ["analysis"],
-        }
+        body(
+            {"content": sample_structure_text, "format": "cif"},
+            {"records": ["analysis"]},
+        )
     )
 
-    assert isinstance(request, QueryRequest)
-    assert isinstance(request.structure, Structure)
-    assert request.structure.reduced_formula == "Si"
+    assert isinstance(request.draft.structure, Structure)
+    assert request.draft.structure.reduced_formula == "Si"
 
 
 @pytest.mark.parametrize(
@@ -166,8 +230,14 @@ def test_request_to_dict_round_trips_pymatgen_structure(
     """Deserialize the pymatgen structure form emitted by request to_dict."""
     structure_obj = Structure.from_file(sample_structure_path)
     requests = (
-        PresetRequest(structure=structure_obj),
-        QueryRequest(structure=structure_obj, outputs=(StructureAnalysisRecord,)),
+        ComputeRequest(
+            CalculationDraft(structure),
+            PresetSelection("recommend"),
+        ),
+        ComputeRequest(
+            CalculationDraft(structure),
+            RecordSelection((StructureAnalysisRecord,)),
+        ),
     )
     transport_keys = {"structure", "intent", "hints", "mode", "outputs"}
 
@@ -179,6 +249,13 @@ def test_request_to_dict_round_trips_pymatgen_structure(
         }
         parsed = from_dict(body)
 
-        assert type(parsed) is type(request)
-        assert isinstance(parsed.structure, Structure)
-        assert parsed.structure == structure_obj
+        assert parsed.selection == request.selection
+        assert isinstance(parsed.draft.structure, Structure)
+        assert parsed.draft.structure == structure
+
+
+def test_from_dict_rejects_empty_record_selection(
+    sample_structure_path: str,
+) -> None:
+    with pytest.raises(RequestError, match="at least one record type id"):
+        from_dict(body(sample_structure_path, {"records": []}))

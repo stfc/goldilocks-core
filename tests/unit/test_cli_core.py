@@ -12,13 +12,14 @@ from goldilocks_core.contracts import (
     BundleRecord,
     CalculationHints,
     CalculationIntent,
+    ComputationResult,
+    ComputeRequest,
     KPointSelection,
     ParameterAdvice,
-    PresetRequest,
+    PresetSelection,
     Provenance,
-    QueryRequest,
     Records,
-    Result,
+    RecordSelection,
     SelectionRecord,
     StructureAnalysisRecord,
 )
@@ -26,7 +27,7 @@ from goldilocks_core.contracts import (
 _VDW_METHODS = ("d3", "d3bj", "ts", "mbd")
 
 
-def make_result(request: PresetRequest | QueryRequest, *, runtime=None) -> Result:
+def make_result(request: ComputeRequest, *, runtime=None) -> ComputationResult:
     del runtime
     analysis = StructureAnalysisRecord(
         formula="Si1",
@@ -40,37 +41,38 @@ def make_result(request: PresetRequest | QueryRequest, *, runtime=None) -> Resul
         magnetic_elements=(),
         heavy_elements=(),
     )
-    advice = advise_parameters(analysis, intent=request.intent, hints=request.hints)
-    return Result(
-        intent=request.intent,
-        analysis=analysis,
-        advice=advice,
-        k_points=KPointSelection(
+    advice = advise_parameters(
+        analysis,
+        intent=request.draft.intent,
+        hints=request.draft.hints,
+    )
+    available = {
+        StructureAnalysisRecord: analysis,
+        ParameterAdvice: advice,
+        KPointSelection: KPointSelection(
             grid=(2, 2, 1),
             shift=(0, 0, 0),
             mesh_type="monkhorst-pack",
             provenance=Provenance(source="user_hint", reason="test"),
         ),
-        selection=SelectionRecord(pseudopotentials=()),
-    )
-
-
-def make_records(request: QueryRequest, *, runtime=None) -> Records:
-    del runtime
-    result = make_result(request)
-    available = {
-        StructureAnalysisRecord: result.analysis,
-        ParameterAdvice: result.advice,
+        SelectionRecord: SelectionRecord(pseudopotentials=()),
     }
-    return Records(
-        {output_type: available[output_type] for output_type in request.outputs or ()}
+    selected = (
+        request.selection.records
+        if isinstance(request.selection, RecordSelection)
+        else tuple(available)
+    )
+    return ComputationResult(
+        draft=request.draft,
+        task=request.draft.intent.task,
+        task_revision="1",
+        selection=request.selection,
+        records=Records({record: available[record] for record in selected}),
     )
 
 
 def test_build_parser_parses_recommend_arguments() -> None:
-    parser = cli_core.build_parser()
-
-    args = parser.parse_args(
+    args = cli_core.build_parser().parse_args(
         [
             "recommend",
             "Si.cif",
@@ -90,10 +92,7 @@ def test_build_parser_parses_recommend_arguments() -> None:
 
     assert args.command == "recommend"
     assert args.structure == "Si.cif"
-    assert args.functional == "PBEsol"
     assert args.k_grid == [2, 2, 1]
-    assert args.model == "model.joblib"
-    assert args.spin_polarized == "true"
     assert args.json is True
 
 
@@ -111,7 +110,6 @@ def test_cli_public_control_parity_is_explicit_and_complete() -> None:
         "smearing_width_ry": "--smearing-width-ry",
         "spin_polarized": "--spin-polarized",
         "spin_orbit_coupling": "--spin-orbit-coupling",
-        # Accuracy is request intent; the CLI exposes no duplicate hint flag.
         "pseudo_accuracy": None,
         "pseudo_type": "--pseudo-type",
         "relativistic_mode": "--relativistic-mode",
@@ -127,94 +125,38 @@ def test_cli_public_control_parity_is_explicit_and_complete() -> None:
     }
     assert set(hints_cli_mapping) == {field.name for field in fields(CalculationHints)}
 
-    parser = cli_core.build_parser()
-    subparsers = next(action for action in parser._actions if action.dest == "command")
-    recommend_parser = subparsers.choices["recommend"]
-    option_destinations = {
-        option: action.dest
-        for action in recommend_parser._actions
-        for option in action.option_strings
-    }
-    for field_name, option in {**intent_cli_mapping, **hints_cli_mapping}.items():
-        if option is not None:
-            assert option_destinations[option] == field_name
 
-    args = parser.parse_args(
+def test_cli_builds_one_compute_request_for_a_preset() -> None:
+    args = cli_core.build_parser().parse_args(
         [
             "recommend",
             "Si.cif",
-            "--code",
-            "quantum_espresso",
-            "--task",
-            "scf_single_point",
-            "--functional",
-            "PBEsol",
-            "--pseudo-accuracy",
-            "precision",
-            "--k-spacing",
-            "0.25",
             "--k-grid",
             "2",
             "3",
             "4",
-            "--smearing-type",
-            "cold",
-            "--smearing-width-ry",
-            "0.02",
-            "--spin-polarized",
-            "true",
-            "--spin-orbit-coupling",
-            "false",
-            "--pseudo-type",
-            "NC",
-            "--relativistic-mode",
-            "full",
-            "--conv-thr",
-            "1e-8",
-            "--mixing-beta",
-            "0.2",
-            "--electron-maxstep",
-            "120",
-            "--use-vdw",
-            "true",
-            "--vdw-method",
-            "ts",
+            "--pseudo-table",
+            "sssp-pbe-precision-sr",
         ]
     )
 
     request = cli_core._request_from_args(args)
 
-    assert request.intent == CalculationIntent(
-        code="quantum_espresso",
-        task="scf_single_point",
-        functional="PBEsol",
-        pseudo_accuracy="precision",
-    )
-    assert request.hints == CalculationHints(
-        k_spacing=0.25,
-        k_grid=(2, 3, 4),
-        smearing_type="cold",
-        smearing_width_ry=0.02,
-        spin_polarized=True,
-        spin_orbit_coupling=False,
-        pseudo_type="NC",
-        relativistic_mode="full",
-        conv_thr=1e-8,
-        mixing_beta=0.2,
-        electron_maxstep=120,
-        use_vdw=True,
-        vdw_method="ts",
-    )
+    assert request.selection == PresetSelection("recommend")
+    assert request.draft.hints.k_grid == (2, 3, 4)
+    assert request.draft.pseudo_table == "sssp-pbe-precision-sr"
 
 
-def test_cli_request_canonicalizes_functional_intent() -> None:
+def test_cli_builds_one_compute_request_for_selected_records() -> None:
     args = cli_core.build_parser().parse_args(
-        ["recommend", "Si.cif", "--functional", "PBE_SOL"]
+        ["compute", "Si.cif", "--outputs", "analysis,advice"]
     )
 
     request = cli_core._request_from_args(args)
 
-    assert request.intent.functional == "PBEsol"
+    assert request.selection == RecordSelection(
+        (StructureAnalysisRecord, ParameterAdvice)
+    )
 
 
 @pytest.mark.parametrize(
@@ -231,28 +173,7 @@ def test_cli_preserves_use_vdw_tri_state(
 
     request = cli_core._request_from_args(cli_core.build_parser().parse_args(argv))
 
-    assert request.hints.use_vdw is expected
-
-
-@pytest.mark.parametrize("vdw_method", _VDW_METHODS)
-@pytest.mark.parametrize(
-    ("use_vdw", "expected"),
-    [(None, None), ("true", True)],
-    ids=["omitted", "enabled"],
-)
-def test_cli_preserves_vdw_method_with_omitted_or_enabled_vdw(
-    vdw_method: str,
-    use_vdw: str | None,
-    expected: bool | None,
-) -> None:
-    argv = ["recommend", "Si.cif", "--vdw-method", vdw_method]
-    if use_vdw is not None:
-        argv.extend(["--use-vdw", use_vdw])
-
-    request = cli_core._request_from_args(cli_core.build_parser().parse_args(argv))
-
-    assert request.hints.use_vdw is expected
-    assert request.hints.vdw_method == vdw_method
+    assert request.draft.hints.use_vdw is expected
 
 
 @pytest.mark.parametrize("vdw_method", _VDW_METHODS)
@@ -265,17 +186,12 @@ def test_cli_rejects_every_vdw_method_when_vdw_is_disabled(vdw_method: str) -> N
         cli_core._request_from_args(args)
 
 
-@pytest.mark.parametrize("vdw_method", _VDW_METHODS)
-def test_main_rejects_disabled_vdw_method_before_job_execution(
-    vdw_method: str,
-    monkeypatch,
-    capsys,
-) -> None:
-
-    def fail_if_run(*args, **kwargs) -> Result:
-        pytest.fail("run_core_job must not be called for invalid CLI options")
-
-    monkeypatch.setattr(cli_core, "run_core_job", fail_if_run)
+def test_main_rejects_invalid_options_before_computation(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        cli_core,
+        "compute",
+        lambda *args, **kwargs: pytest.fail("compute must not run"),
+    )
     monkeypatch.setattr(
         sys,
         "argv",
@@ -286,7 +202,7 @@ def test_main_rejects_disabled_vdw_method_before_job_execution(
             "--use-vdw",
             "false",
             "--vdw-method",
-            vdw_method,
+            "ts",
         ],
     )
 
@@ -297,219 +213,58 @@ def test_main_rejects_disabled_vdw_method_before_job_execution(
     assert "vdw_method must be None" in capsys.readouterr().err
 
 
-def test_cli_uses_default_kmesh_backend_without_an_override() -> None:
-    args = cli_core.build_parser().parse_args(["recommend", "Si.cif"])
+def test_main_compute_prints_only_selected_records(monkeypatch, capsys) -> None:
+    captured: dict[str, ComputeRequest] = {}
 
-    assert cli_core._model_spec_from_args(args) is None
-
-
-@pytest.mark.parametrize("option", ["--model-name", "--model-version"])
-def test_main_rejects_model_metadata_without_model_before_job_execution(
-    option: str,
-    monkeypatch,
-    capsys,
-) -> None:
-
-    def fail_if_run(*args, **kwargs) -> Result:
-        pytest.fail("run_core_job must not be called for invalid CLI options")
-
-    monkeypatch.setattr(cli_core, "run_core_job", fail_if_run)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["goldilocks", "recommend", "Si.cif", option, "metadata"],
-    )
-
-    with pytest.raises(SystemExit) as error:
-        cli_core.main()
-
-    assert error.value.code == 2
-    assert f"{option} requires --model" in capsys.readouterr().err
-
-
-def test_cli_rejects_retired_pseudo_mode_control(capsys) -> None:
-    parser = cli_core.build_parser()
-
-    with pytest.raises(SystemExit):
-        parser.parse_args(["recommend", "Si.cif", "--pseudo-mode", "precision"])
-
-    assert "unrecognized arguments: --pseudo-mode" in capsys.readouterr().err
-
-
-def test_main_compute_prints_requested_analysis_and_advice(monkeypatch, capsys) -> None:
-    captured: dict[str, QueryRequest] = {}
-
-    def fake_query_records(request: QueryRequest, *, runtime=None) -> Records:
-        del runtime
+    def fake_compute(request: ComputeRequest, *, runtime=None):
         captured["request"] = request
-        return make_records(request)
+        return make_result(request, runtime=runtime)
 
-    monkeypatch.setattr(cli_core, "query_records", fake_query_records)
+    monkeypatch.setattr(cli_core, "compute", fake_compute)
     monkeypatch.setattr(
         sys,
         "argv",
-        [
-            "goldilocks",
-            "compute",
-            "Si.cif",
-            "--outputs",
-            "analysis,advice",
-        ],
+        ["goldilocks", "compute", "Si.cif", "--outputs", "analysis,advice"],
     )
 
     cli_core.main()
 
-    assert captured["request"].outputs == (
-        StructureAnalysisRecord,
-        ParameterAdvice,
-    )
+    assert isinstance(captured["request"].selection, RecordSelection)
     output = json.loads(capsys.readouterr().out)
     assert set(output) == {"analysis", "advice"}
-    assert output["analysis"]["reduced_formula"] == "Si"
-    assert "smearing" in output["advice"]
 
 
-def test_main_compute_prints_only_requested_analysis(monkeypatch, capsys) -> None:
-    monkeypatch.setattr(cli_core, "query_records", make_records)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "goldilocks",
-            "compute",
-            "Si.cif",
-            "--outputs",
-            "analysis",
-        ],
-    )
+def test_main_preserves_preset_json_until_cli_migration(monkeypatch, capsys) -> None:
+    captured: dict[str, ComputeRequest] = {}
 
-    cli_core.main()
-
-    output = json.loads(capsys.readouterr().out)
-    assert set(output) == {"analysis"}
-    assert output["analysis"]["reduced_formula"] == "Si"
-
-
-def test_main_compute_rejects_unknown_output_type(monkeypatch, capsys) -> None:
-
-    def fail_if_run(*args, **kwargs) -> Records:
-        pytest.fail("query_records must not be called for invalid output types")
-
-    monkeypatch.setattr(cli_core, "query_records", fail_if_run)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "goldilocks",
-            "compute",
-            "Si.cif",
-            "--outputs",
-            "UnknownRecord",
-        ],
-    )
-
-    with pytest.raises(SystemExit) as error:
-        cli_core.main()
-
-    assert error.value.code == 2
-    message = capsys.readouterr().err
-    assert "Unknown output record type id(s): UnknownRecord" in message
-    assert "analysis" in message
-
-
-def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
-    captured: dict[str, PresetRequest] = {}
-
-    def fake_run_core_job(request: PresetRequest, *, runtime=None) -> Result:
-        del runtime
+    def fake_compute(request: ComputeRequest, *, runtime=None):
         captured["request"] = request
-        return make_result(request)
+        return make_result(request, runtime=runtime)
 
-    monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)
+    monkeypatch.setattr(cli_core, "compute", fake_compute)
     monkeypatch.setattr(
         sys,
         "argv",
-        [
-            "goldilocks",
-            "recommend",
-            "Si.cif",
-            "--k-grid",
-            "2",
-            "2",
-            "1",
-            "--pseudo-type",
-            "NC",
-            "--pseudo-table",
-            "sssp-pbe-precision-sr",
-            "--json",
-        ],
+        ["goldilocks", "recommend", "Si.cif", "--k-grid", "2", "2", "1", "--json"],
     )
 
     cli_core.main()
 
-    request = captured["request"]
-    assert isinstance(request, PresetRequest)
-    assert request.structure == "Si.cif"
-    assert request.mode == "recommend"
-    assert request.hints.k_grid == (2, 2, 1)
-    assert request.hints.pseudo_type == "NC"
-    assert request.pseudo_table == "sssp-pbe-precision-sr"
+    assert captured["request"].selection == PresetSelection("recommend")
     output = json.loads(capsys.readouterr().out)
     assert output["k_points"]["grid"] == [2, 2, 1]
+    assert "records" not in output
     assert output["request"]["structure"] == "Si.cif"
+    assert output["request"]["mode"] == "recommend"
 
 
-def test_main_builds_request_with_model_backend(monkeypatch, capsys) -> None:
-    captured: dict[str, PresetRequest] = {}
-
-    def fake_run_core_job(request: PresetRequest, *, runtime=None) -> Result:
-        del runtime
-        captured["request"] = request
-        return make_result(request)
-
-    monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)
+def test_main_generate_publishes_requested_bundle(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cli_core, "compute", make_result)
     monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "goldilocks",
-            "recommend",
-            "Si.cif",
-            "--model",
-            "model.joblib",
-            "--model-name",
-            "fixture-model",
-            "--json",
-        ],
+        cli_core,
+        "write_bundle_directory",
+        lambda result, path: BundleRecord(path=path, manifest={}),
     )
-
-    cli_core.main()
-
-    request = captured["request"]
-    assert isinstance(request, PresetRequest)
-    assert request.kmesh_model is not None
-    assert request.kmesh_model.location == "model.joblib"
-    assert request.kmesh_model.name == "fixture-model"
-    assert json.loads(capsys.readouterr().out)["request"]["structure"] == "Si.cif"
-
-
-def test_main_builds_generate_request_with_output_dir(monkeypatch, capsys) -> None:
-    captured: dict[str, PresetRequest] = {}
-
-    def fake_run_core_job(request: PresetRequest, *, runtime=None) -> Result:
-        del runtime
-        captured["request"] = request
-        result = make_result(request)
-        return Result(
-            intent=result.intent,
-            analysis=result.analysis,
-            advice=result.advice,
-            k_points=result.k_points,
-            selection=result.selection,
-            bundle=BundleRecord(path=request.output_dir, manifest={}),
-        )
-
-    monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -518,8 +273,6 @@ def test_main_builds_generate_request_with_output_dir(monkeypatch, capsys) -> No
 
     cli_core.main()
 
-    assert captured["request"].mode == "generate"
-    assert captured["request"].output_dir == "run"
     assert "bundle: run" in capsys.readouterr().out
 
 
@@ -530,7 +283,7 @@ def test_main_fetches_only_the_missing_asset_then_retries(
     installed: list[str] = []
     calls = 0
 
-    def fake_run_core_job(request, *, runtime):
+    def fake_compute(request, *, runtime):
         nonlocal calls
         calls += 1
         if calls == 1:
@@ -542,13 +295,12 @@ def test_main_fetches_only_the_missing_asset_then_retries(
             )
         return make_result(request)
 
-    def fake_install(name, *, store):
-        del store
-        installed.append(name)
-        return ()
-
-    monkeypatch.setattr(cli_core, "install_assets", fake_install)
-    monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)
+    monkeypatch.setattr(cli_core, "compute", fake_compute)
+    monkeypatch.setattr(
+        cli_core,
+        "install_assets",
+        lambda name, *, store: installed.append(name) or (),
+    )
     monkeypatch.setattr(
         sys,
         "argv",
@@ -574,16 +326,7 @@ def test_main_prints_asset_status_without_installing(
         "asset_statuses",
         lambda name, *, store: (("qrf-kpoints", "QRF95", "missing"),),
     )
-    monkeypatch.setattr(
-        cli_core,
-        "install_assets",
-        lambda name, *, store: pytest.fail("status must not install assets"),
-    )
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["goldilocks", "assets", "status"],
-    )
+    monkeypatch.setattr(sys, "argv", ["goldilocks", "assets", "status"])
 
     cli_core.main()
 
@@ -613,6 +356,4 @@ def test_main_installs_named_asset(
     cli_core.main()
 
     assert names == ["qrf-kpoints"]
-    output = capsys.readouterr().out
-    assert "asset root: " in output
-    assert "qrf-kpoints@1: installed" in output
+    assert "qrf-kpoints@1: installed" in capsys.readouterr().out

@@ -1,14 +1,46 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TypeAliasType
 
 from goldilocks_core.contracts.hints import CalculationHints, CalculationIntent
 from goldilocks_core.contracts.models import ModelSpec
 from goldilocks_core.contracts.registry import record_type_id
 from goldilocks_core.contracts.selection import PseudoMetadata
 from goldilocks_core.contracts.serial import to_jsonable
-from goldilocks_core.contracts.types import JobMode, JsonDict, StructureInput
+from goldilocks_core.contracts.types import JsonDict, StructureInput
 from goldilocks_core.contracts.validate import _validate_optional_nonempty_str
+
+
+@dataclass(frozen=True, slots=True)
+class RecordSelection:
+    records: tuple[type, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.records, tuple):
+            object.__setattr__(self, "records", tuple(self.records))
+        if not self.records:
+            raise ValueError("RecordSelection.records must not be empty")
+        if any(not isinstance(record, type | TypeAliasType) for record in self.records):
+            raise ValueError("RecordSelection.records must contain types")
+
+    def to_dict(self) -> JsonDict:
+        return {"records": [record_type_id(item) for item in self.records]}
+
+
+@dataclass(frozen=True, slots=True)
+class PresetSelection:
+    preset: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.preset, str) or not self.preset.strip():
+            raise ValueError("PresetSelection.preset must be a non-empty string")
+
+    def to_dict(self) -> JsonDict:
+        return {"preset": self.preset}
+
+
+type ComputationSelection = PresetSelection | RecordSelection
 
 
 def _validate_pseudo_source(
@@ -29,40 +61,31 @@ def _validate_pseudo_source(
 
 
 @dataclass(frozen=True, slots=True)
-class PresetRequest:
-    """One complete recommend-or-generate job.
-
-    Exactly one pseudopotential source may be set: ``pseudo_metadata``
-    (in-memory records), ``pseudo_root`` (operator-managed directory), or
-    ``pseudo_table`` (registered asset-store table). All three unset falls
-    back to the registered default table. ``output_dir`` publishes a bundle
-    and only applies to generate jobs.
-    """
-
+class CalculationDraft:
     structure: StructureInput
     intent: CalculationIntent = field(default_factory=CalculationIntent)
     hints: CalculationHints = field(default_factory=CalculationHints)
-    mode: JobMode = "recommend"
     pseudo_metadata: tuple[PseudoMetadata, ...] | None = None
     pseudo_root: str | None = None
     pseudo_table: str | None = None
-    output_dir: str | None = None
     kmesh_model: ModelSpec | None = None
 
     def __post_init__(self) -> None:
-        if self.mode not in {"recommend", "generate"}:
-            raise ValueError(f"Unsupported Core job mode: {self.mode}")
         if self.pseudo_metadata is not None and not isinstance(
             self.pseudo_metadata, tuple
         ):
             object.__setattr__(self, "pseudo_metadata", tuple(self.pseudo_metadata))
-        _validate_optional_nonempty_str(self.pseudo_root, "PresetRequest.pseudo_root")
-        _validate_optional_nonempty_str(self.pseudo_table, "PresetRequest.pseudo_table")
+        _validate_optional_nonempty_str(
+            self.pseudo_root, "CalculationDraft.pseudo_root"
+        )
+        _validate_optional_nonempty_str(
+            self.pseudo_table, "CalculationDraft.pseudo_table"
+        )
         _validate_pseudo_source(
             self.pseudo_metadata,
             self.pseudo_root,
             self.pseudo_table,
-            "PresetRequest",
+            "CalculationDraft",
         )
 
     def to_dict(self) -> JsonDict:
@@ -70,56 +93,28 @@ class PresetRequest:
             "structure": to_jsonable(self.structure),
             "intent": to_jsonable(self.intent),
             "hints": to_jsonable(self.hints),
-            "mode": self.mode,
             "pseudo_metadata": to_jsonable(self.pseudo_metadata),
             "pseudo_root": self.pseudo_root,
             "pseudo_table": self.pseudo_table,
-            "output_dir": self.output_dir,
             "kmesh_model": to_jsonable(self.kmesh_model),
         }
 
 
 @dataclass(frozen=True, slots=True)
-class QueryRequest:
-    """One compute job returning only the named record types.
-
-    ``outputs`` names record types resolved through the Core registry.
-    Exactly one pseudopotential source may be set: ``pseudo_metadata``,
-    ``pseudo_root``, or ``pseudo_table``; all unset falls back to the
-    registered default table.
-    """
-
-    structure: StructureInput
-    outputs: tuple[type, ...]
-    intent: CalculationIntent = field(default_factory=CalculationIntent)
-    hints: CalculationHints = field(default_factory=CalculationHints)
-    pseudo_metadata: tuple[PseudoMetadata, ...] | None = None
-    pseudo_root: str | None = None
-    pseudo_table: str | None = None
-    kmesh_model: ModelSpec | None = None
+class ComputeRequest:
+    draft: CalculationDraft
+    selection: ComputationSelection
 
     def __post_init__(self) -> None:
-        if self.pseudo_metadata is not None and not isinstance(
-            self.pseudo_metadata, tuple
-        ):
-            object.__setattr__(self, "pseudo_metadata", tuple(self.pseudo_metadata))
-        _validate_optional_nonempty_str(self.pseudo_root, "QueryRequest.pseudo_root")
-        _validate_optional_nonempty_str(self.pseudo_table, "QueryRequest.pseudo_table")
-        _validate_pseudo_source(
-            self.pseudo_metadata,
-            self.pseudo_root,
-            self.pseudo_table,
-            "QueryRequest",
-        )
+        if not isinstance(self.draft, CalculationDraft):
+            raise ValueError("ComputeRequest.draft must be a CalculationDraft")
+        if not isinstance(self.selection, PresetSelection | RecordSelection):
+            raise ValueError(
+                "ComputeRequest.selection must be a PresetSelection or RecordSelection"
+            )
 
     def to_dict(self) -> JsonDict:
         return {
-            "structure": to_jsonable(self.structure),
-            "outputs": [record_type_id(output_type) for output_type in self.outputs],
-            "intent": to_jsonable(self.intent),
-            "hints": to_jsonable(self.hints),
-            "pseudo_metadata": to_jsonable(self.pseudo_metadata),
-            "pseudo_root": self.pseudo_root,
-            "pseudo_table": self.pseudo_table,
-            "kmesh_model": to_jsonable(self.kmesh_model),
+            "draft": self.draft.to_dict(),
+            "selection": self.selection.to_dict(),
         }

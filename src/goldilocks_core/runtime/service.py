@@ -4,10 +4,8 @@ import threading
 
 from goldilocks_core.contracts import (
     CodeName,
-    PresetRequest,
-    QueryRequest,
-    Records,
-    Result,
+    ComputationResult,
+    ComputeRequest,
 )
 from goldilocks_core.generation.registry import available_codes
 from goldilocks_core.runtime.dispatch import Dispatcher
@@ -35,30 +33,17 @@ class Service:
     def is_closed(self) -> bool:
         return self._closed
 
-    def recommend(self, request: PresetRequest) -> Result:
-        with self._lock:
-            self._ensure_open()
-            return self._dispatcher.recommend(request)
-
-    def generate(
+    def compute(
         self,
-        request: PresetRequest,
+        request: ComputeRequest,
         *,
-        output_dir: str | None = None,
-    ) -> Result:
-        with self._lock:
-            self._ensure_open()
-            return self._dispatcher.generate(request, output_dir=output_dir)
-
-    def compute(self, request: QueryRequest) -> Records:
+        output: None = None,
+    ) -> ComputationResult:
+        if output is not None:
+            raise ValueError("P1 supports memory output only")
         with self._lock:
             self._ensure_open()
             return self._dispatcher.compute(request)
-
-    def run_preset(self, request: PresetRequest) -> Result:
-        with self._lock:
-            self._ensure_open()
-            return self._dispatcher.run_preset(request)
 
     def describe_tasks(self) -> tuple[GraphInfo, ...]:
         with self._lock:

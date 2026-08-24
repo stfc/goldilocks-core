@@ -1,33 +1,41 @@
 from __future__ import annotations
 
 from goldilocks_core.contracts import (
-    BundleRecord,
+    CalculationDraft,
     CalculationHints,
     CalculationIntent,
-    PresetRequest,
-    QueryRequest,
+    ComputationResult,
+    ComputeRequest,
+    PresetSelection,
+    Publication,
     Records,
-    Result,
+    RecordSelection,
 )
 from goldilocks_core.runtime import (
     Dispatcher,
     Runtime,
     Service,
-    query_records,
-    run_core_job,
+    UnavailableRecord,
+    UnknownPreset,
+    UnknownTask,
+    compute,
 )
 
 __all__ = [
-    "BundleRecord",
+    "CalculationDraft",
     "CalculationHints",
     "CalculationIntent",
+    "ComputationResult",
+    "ComputeRequest",
     "Dispatcher",
-    "PresetRequest",
-    "QueryRequest",
+    "PresetSelection",
+    "Publication",
+    "RecordSelection",
     "Records",
-    "Result",
     "Runtime",
     "Service",
-    "query_records",
-    "run_core_job",
+    "UnavailableRecord",
+    "UnknownPreset",
+    "UnknownTask",
+    "compute",
 ]

@@ -20,15 +20,24 @@ uv run goldilocks recommend "$(uv run goldilocks examples path)/Si.cif"
 From Python:
 
 ```python
-from goldilocks_core import Service, PresetRequest
+from goldilocks_core import (
+    CalculationDraft,
+    ComputeRequest,
+    PresetSelection,
+    Service,
+)
+from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
 from goldilocks_core.examples import structure
 
-request = PresetRequest(structure=structure("Si.cif"))
+request = ComputeRequest(
+    draft=CalculationDraft(structure=structure("Si.cif")),
+    selection=PresetSelection("recommend"),
+)
 with Service() as core:
-    result = core.recommend(request)
+    result = core.compute(request)
 
-print(result.analysis.reduced_formula)
-print(result.k_points.grid)
+print(result.records[StructureAnalysisRecord].reduced_formula)
+print(result.records[KPointSelection].grid)
 ```
 
 ## Available structures

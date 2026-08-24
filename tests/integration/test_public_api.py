@@ -1,19 +1,26 @@
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
+    CalculationDraft,
     CalculationHints,
-    PresetRequest,
-    run_core_job,
+    ComputeRequest,
+    PresetSelection,
+    RecordSelection,
+    compute,
 )
-from goldilocks_core.contracts import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.contracts import (
+    GeneratedFiles,
+    KPointSelection,
+    ParameterAdvice,
+    PseudoCutoffs,
+    PseudoMetadata,
+    SelectionRecord,
+    StructureAnalysisRecord,
+)
 
 
 def _make_si_structure() -> Structure:
-    return Structure(
-        lattice=Lattice.cubic(4.0),
-        species=["Si"],
-        coords=[[0.0, 0.0, 0.0]],
-    )
+    return Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
 
 
 def _make_si_metadata() -> PseudoMetadata:
@@ -27,77 +34,61 @@ def _make_si_metadata() -> PseudoMetadata:
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        cutoffs=PseudoCutoffs(
-            ecutwfc_ry=30,
-            ecutrho_ry=120,
-        ),
+        cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
         source_identifier="synthetic/Si.UPF",
     )
 
 
-def test_recommend_runs_staged_core_pipeline() -> None:
-    result = run_core_job(
-        PresetRequest(
-            structure=_make_si_structure(),
-            hints=CalculationHints(k_grid=(3, 3, 3)),
-            pseudo_metadata=(_make_si_metadata(),),
-        )
-    )
-
-    assert result.analysis.reduced_formula == "Si"
-    assert result.k_points.grid == (3, 3, 3)
-    assert result.selection.pseudopotentials[0].filename == "Si.UPF"
-
-
-def test_generate_runs_pipeline_through_generated_files() -> None:
-    result = run_core_job(
-        PresetRequest(
-            structure=_make_si_structure(),
-            mode="generate",
-            hints=CalculationHints(k_grid=(3, 3, 3), pseudo_type="NC"),
-            pseudo_metadata=(_make_si_metadata(),),
-        )
-    )
-
-    assert result.generated_files[0].path == "inputs/qe.in"
-    assert "3  3  3  0  0  0" in result.generated_files[0].content
-
-
-def test_run_core_job_generate_with_output_dir_writes_bundle(tmp_path) -> None:
-    output_dir = tmp_path / "bundle"
-    result = run_core_job(
-        PresetRequest(
+def _request(selection) -> ComputeRequest:
+    return ComputeRequest(
+        draft=CalculationDraft(
             structure=_make_si_structure(),
             hints=CalculationHints(k_grid=(3, 3, 3), pseudo_type="NC"),
             pseudo_metadata=(_make_si_metadata(),),
-            mode="generate",
-            output_dir=str(output_dir),
+        ),
+        selection=selection,
+    )
+
+
+def test_recommendation_preset_runs_staged_core_pipeline() -> None:
+    result = compute(_request(PresetSelection("recommend")))
+
+    assert result.records[StructureAnalysisRecord].reduced_formula == "Si"
+    assert result.records[KPointSelection].grid == (3, 3, 3)
+    assert result.records[SelectionRecord].pseudopotentials[0].filename == "Si.UPF"
+    assert GeneratedFiles not in result.records
+
+
+def test_generation_preset_runs_pipeline_through_generated_files() -> None:
+    result = compute(_request(PresetSelection("generate")))
+
+    assert result.records[GeneratedFiles][0].path == "inputs/qe.in"
+    assert "3  3  3  0  0  0" in result.records[GeneratedFiles][0].content
+
+
+def test_explicit_record_selection_returns_one_generic_result() -> None:
+    result = compute(
+        _request(RecordSelection((StructureAnalysisRecord, ParameterAdvice)))
+    )
+
+    assert tuple(result.records) == (StructureAnalysisRecord, ParameterAdvice)
+    assert result.to_dict()["selection"] == {"records": ["analysis", "advice"]}
+
+
+def test_computation_result_serializes_stable_record_ids() -> None:
+    iodine = Structure(Lattice.cubic(4.0), ["I"], [[0.0, 0.0, 0.0]])
+    result = compute(
+        ComputeRequest(
+            draft=CalculationDraft(
+                structure=iodine,
+                hints=CalculationHints(k_grid=(8, 8, 8)),
+                pseudo_metadata=(),
+            ),
+            selection=PresetSelection("recommend"),
         )
     )
+    document = result.to_dict()
 
-    assert result.bundle is not None
-    assert result.bundle.path == str(output_dir)
-    assert (output_dir / "manifest.json").exists()
-    assert (output_dir / "inputs" / "qe.in").exists()
-
-
-def test_core_result_serializes_to_manifest_style_dict() -> None:
-    structure = Structure(
-        lattice=Lattice.cubic(4.0),
-        species=["I"],
-        coords=[[0.0, 0.0, 0.0]],
-    )
-
-    result = run_core_job(
-        PresetRequest(
-            structure=structure,
-            hints=CalculationHints(k_grid=(8, 8, 8)),
-            pseudo_metadata=(),
-        )
-    )
-    manifest = result.to_dict()
-
-    assert manifest["analysis"]["heavy_elements"] == ["I"]
-    assert manifest["advice"]["spin_orbit"]["consider"] is True
-    assert manifest["k_points"]["grid"] == [8, 8, 8]
-    assert "contains_heavy_elements" not in manifest
+    assert document["records"]["analysis"]["heavy_elements"] == ["I"]
+    assert document["records"]["advice"]["spin_orbit"]["consider"] is True
+    assert document["records"]["k_points"]["grid"] == [8, 8, 8]

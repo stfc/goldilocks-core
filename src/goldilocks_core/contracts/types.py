@@ -49,7 +49,6 @@ KPointGrid = tuple[int, int, int]
 
 KPointShift = tuple[Literal[0, 1], Literal[0, 1], Literal[0, 1]]
 
-JobMode = Literal["recommend", "generate"]
 
 Dimensionality = Literal["3d", "2d", "1d", "molecule", "unknown"]
 

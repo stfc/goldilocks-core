@@ -11,11 +11,11 @@ TestClient = pytest.importorskip("fastapi.testclient").TestClient
 class _CountingService(Service):
     def __init__(self) -> None:
         super().__init__()
-        self.preset_calls = 0
+        self.computation_calls = 0
 
-    def run_preset(self, request):
-        self.preset_calls += 1
-        return super().run_preset(request)
+    def compute(self, request):
+        self.computation_calls += 1
+        return super().compute(request)
 
 
 def test_http_reuses_one_service_across_requests(request_body) -> None:
@@ -27,7 +27,7 @@ def test_http_reuses_one_service_across_requests(request_body) -> None:
 
         assert first.status_code == 200
         assert second.status_code == 200
-        assert service.preset_calls == 2
+        assert service.computation_calls == 2
         assert not service.is_closed
     finally:
         service.close()

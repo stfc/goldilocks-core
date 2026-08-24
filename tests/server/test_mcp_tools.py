@@ -172,6 +172,18 @@ def test_mcp_rejects_deployment_configuration_arguments(
         )
 
 
+def test_mcp_rejects_empty_output_directory(test_service, request_body) -> None:
+    server = create_server(test_service)
+
+    with pytest.raises(ToolError, match="non-empty"):
+        asyncio.run(
+            server.call_tool(
+                "generate",
+                {**request_body, "output_dir": ""},
+            )
+        )
+
+
 def test_mcp_compute_returns_requested_records(test_service, request_body) -> None:
     """Return only records named by the compute outputs argument."""
     server = create_server(test_service)

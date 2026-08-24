@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from goldilocks_core.runtime import Preset, Stage, TaskGraph, execute
+from goldilocks_core.runtime import Preset, Stage, TaskGraph, UnknownPreset, execute
 
 
 @dataclass
@@ -194,5 +194,5 @@ def test_task_preset_lookup() -> None:
     task = TaskGraph(task="preset", stages=(), presets=(recommend,))
 
     assert task.preset("recommend") is recommend
-    with pytest.raises(KeyError):
+    with pytest.raises(UnknownPreset, match="Unknown preset 'unknown'"):
         task.preset("unknown")

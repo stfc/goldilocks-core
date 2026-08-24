@@ -3,7 +3,7 @@ from __future__ import annotations
 from goldilocks_core.contracts.advice import ParameterAdvice
 from goldilocks_core.contracts.analysis import StructureAnalysisRecord
 from goldilocks_core.contracts.kpoints import KPointSelection
-from goldilocks_core.contracts.registry import record_type_id
+from goldilocks_core.contracts.registry import record_type_id, record_types_by_id
 from goldilocks_core.contracts.result import GeneratedFiles
 from goldilocks_core.contracts.selection import SelectionRecord
 
@@ -27,13 +27,12 @@ def resolve_output_types(ids: list[str] | tuple[str, ...]) -> tuple[type, ...]:
         raise ValueError("outputs must contain at least one record type id")
 
     normalized = [record_id.strip() for record_id in ids]
-    unknown = [
-        record_id for record_id in normalized if record_id not in OUTPUT_TYPES_BY_ID
-    ]
+    types_by_id = record_types_by_id()
+    unknown = [record_id for record_id in normalized if record_id not in types_by_id]
     if unknown:
-        available = ", ".join(OUTPUT_TYPES_BY_ID)
+        available = ", ".join(types_by_id)
         invalid = ", ".join(unknown)
         raise ValueError(
             f"Unknown output record type id(s): {invalid}. Available: {available}"
         )
-    return tuple(OUTPUT_TYPES_BY_ID[record_id] for record_id in normalized)
+    return tuple(types_by_id[record_id] for record_id in normalized)

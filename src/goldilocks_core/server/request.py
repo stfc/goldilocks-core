@@ -25,24 +25,32 @@ from typing import Any
 from pymatgen.core import Structure
 
 from goldilocks_core.contracts import (
+    CalculationDraft,
     CalculationHints,
     CalculationIntent,
-    JobMode,
-    PresetRequest,
-    QueryRequest,
+    ComputeRequest,
+    ModelSource,
+    ModelSpec,
+    ModelType,
+    PresetSelection,
+    PseudoMetadata,
+    RecordSelection,
     resolve_output_types,
 )
 from goldilocks_core.io.structures import StructureInputError, parse_structure_content
 
 __all__ = ["RequestError", "from_dict"]
 
-_ALLOWED_TOP_LEVEL = frozenset(
+_ALLOWED_TOP_LEVEL = frozenset({"draft", "selection"})
+_ALLOWED_DRAFT = frozenset(
     {
         "structure",
         "intent",
         "hints",
-        "mode",
-        "outputs",
+        "pseudo_metadata",
+        "pseudo_root",
+        "pseudo_table",
+        "kmesh_model",
     }
 )
 _INTENT_FIELDS = frozenset(field.name for field in fields(CalculationIntent))
@@ -67,37 +75,34 @@ class RequestError(ValueError):
     """A malformed transport request."""
 
 
-def from_dict(data: Mapping[str, Any]) -> PresetRequest | QueryRequest:
-    """Parse a JSON-like mapping into a validated Core job request.
-
-    Returns a :class:`QueryRequest` when ``outputs`` names record types, and a
-    :class:`PresetRequest` (selected by ``mode``) otherwise.
-    """
+def from_dict(data: Mapping[str, Any]) -> ComputeRequest:
     if not isinstance(data, Mapping):
         raise RequestError("Request body must be a JSON object.")
     _reject_unknown(data, _ALLOWED_TOP_LEVEL, "request")
-    if "structure" not in data or data["structure"] is None:
-        raise RequestError("Request body requires 'structure'.")
+    if "draft" not in data or data["draft"] is None:
+        raise RequestError("Request body requires 'draft'.")
+    if "selection" not in data or data["selection"] is None:
+        raise RequestError("Request body requires 'selection'.")
+    draft_data = data["draft"]
+    if not isinstance(draft_data, Mapping):
+        raise RequestError("Field 'draft' must be a JSON object.")
+    _reject_unknown(draft_data, _ALLOWED_DRAFT, "draft")
+    if "structure" not in draft_data or draft_data["structure"] is None:
+        raise RequestError("Field 'draft' requires 'structure'.")
 
-    mode = _parse_mode(data.get("mode"))
-    outputs = _parse_outputs(data.get("outputs"))
-
-    structure = _parse_structure(data["structure"])
-    intent = _parse_intent(data.get("intent"))
-    hints = _parse_hints(data.get("hints"))
-
-    if outputs is not None:
-        return QueryRequest(
-            structure=structure,
-            outputs=outputs,
-            intent=intent,
-            hints=hints,
-        )
-    return PresetRequest(
-        structure=structure,
-        intent=intent,
-        hints=hints,
-        mode=mode,
+    pseudo_metadata, pseudo_root, pseudo_table = _parse_pseudo_source(draft_data)
+    draft = CalculationDraft(
+        structure=_parse_structure(draft_data["structure"]),
+        intent=_parse_intent(draft_data.get("intent")),
+        hints=_parse_hints(draft_data.get("hints")),
+        pseudo_metadata=pseudo_metadata,
+        pseudo_root=pseudo_root,
+        pseudo_table=pseudo_table,
+        kmesh_model=_parse_kmesh_model(draft_data.get("kmesh_model")),
+    )
+    return ComputeRequest(
+        draft=draft,
+        selection=_parse_selection(data["selection"]),
     )
 
 
@@ -205,24 +210,138 @@ def _parse_hint(name: str, value: Any) -> Any:
     return value
 
 
-def _parse_mode(value: Any) -> JobMode:
-    if value is None:
-        return "recommend"
-    if not isinstance(value, str) or value not in {"recommend", "generate"}:
-        raise RequestError("Field 'mode' must be 'recommend' or 'generate'.")
-    return value  # type: ignore[return-value]
+def _parse_selection(value: Any) -> PresetSelection | RecordSelection:
+    if not isinstance(value, Mapping):
+        raise RequestError("Field 'selection' must be a JSON object.")
+    _reject_unknown(value, frozenset({"preset", "records"}), "selection")
+    choices = [name for name in ("preset", "records") if name in value]
+    if len(choices) != 1:
+        raise RequestError(
+            "Field 'selection' requires exactly one of 'preset' or 'records'."
+        )
+
+    if choices[0] == "preset":
+        preset = value["preset"]
+        if not isinstance(preset, str) or not preset.strip():
+            raise RequestError("Field 'selection.preset' must be a non-empty string.")
+        return PresetSelection(preset)
+
+    records = value["records"]
+    if not _is_sequence(records) or any(not isinstance(item, str) for item in records):
+        raise RequestError(
+            "Field 'selection.records' must be a list of record type names."
+        )
+    try:
+        return RecordSelection(resolve_output_types(list(records)))
+    except ValueError as error:
+        raise RequestError(str(error)) from error
 
 
-def _parse_outputs(value: Any) -> tuple[type, ...] | None:
+def _parse_pseudo_source(
+    data: Mapping[str, Any],
+) -> tuple[tuple[PseudoMetadata, ...] | None, str | None, str | None]:
+    metadata: tuple[PseudoMetadata, ...] | None = None
+    if "pseudo_metadata" in data and data["pseudo_metadata"] is not None:
+        value = data["pseudo_metadata"]
+        if not _is_sequence(value):
+            raise RequestError("Field 'pseudo_metadata' must be a list or null.")
+        metadata = tuple(_parse_pseudo(item) for item in value)
+
+    root = data.get("pseudo_root")
+    if root is not None and (not isinstance(root, str) or not root.strip()):
+        raise RequestError(
+            "Field 'pseudo_root' must be a non-empty path string or null."
+        )
+    table = data.get("pseudo_table")
+    if table is not None and (not isinstance(table, str) or not table.strip()):
+        raise RequestError("Field 'pseudo_table' must be a non-empty string or null.")
+    if (
+        sum(
+            (
+                metadata is not None,
+                root is not None,
+                table is not None,
+            )
+        )
+        > 1
+    ):
+        raise RequestError(
+            "Request accepts only one of 'pseudo_metadata', 'pseudo_root', "
+            "or 'pseudo_table'."
+        )
+    return metadata, root, table
+
+
+def _parse_pseudo(value: Any) -> PseudoMetadata:
+    if not isinstance(value, Mapping):
+        raise RequestError("Each 'pseudo_metadata' entry must be a JSON object.")
+    _reject_unknown(value, _PSEUDO_FIELDS, "pseudo_metadata")
+    string_fields = _PSEUDO_FIELDS - {
+        "z_valence",
+        "cutoffs",
+        "frozen_4f_core",
+        "pseudo_info",
+        "warnings",
+    }
+    for name in string_fields:
+        item = value.get(name)
+        if item is not None and not isinstance(item, str):
+            raise RequestError(
+                f"Field 'pseudo_metadata.{name}' must be a string or null."
+            )
+    z_valence = value.get("z_valence")
+    if z_valence is not None and (
+        not isinstance(z_valence, (int, float)) or isinstance(z_valence, bool)
+    ):
+        raise RequestError(
+            "Field 'pseudo_metadata.z_valence' must be a number or null."
+        )
+    pseudo_info = value.get("pseudo_info", {})
+    if not isinstance(pseudo_info, Mapping):
+        raise RequestError("Field 'pseudo_metadata.pseudo_info' must be an object.")
+    cutoffs = value.get("cutoffs")
+    if cutoffs is not None and not isinstance(cutoffs, Mapping):
+        raise RequestError("Field 'pseudo_metadata.cutoffs' must be an object or null.")
+    frozen_4f_core = value.get("frozen_4f_core", False)
+    if not isinstance(frozen_4f_core, bool):
+        raise RequestError("Field 'pseudo_metadata.frozen_4f_core' must be a boolean.")
+    warnings = value.get("warnings", ())
+    if not _is_sequence(warnings) or any(
+        not isinstance(warning, str) for warning in warnings
+    ):
+        raise RequestError(
+            "Field 'pseudo_metadata.warnings' must be a list of strings."
+        )
+    normalized = dict(value)
+    normalized["pseudo_info"] = dict(pseudo_info)
+    normalized["warnings"] = tuple(warnings)
+    try:
+        return PseudoMetadata(**normalized)
+    except (TypeError, ValueError) as error:
+        raise RequestError(str(error)) from error
+
+
+def _parse_kmesh_model(value: Any) -> ModelSpec | None:
     if value is None:
         return None
-    if not _is_sequence(value):
-        raise RequestError("Field 'outputs' must be a list of record type names.")
-    if any(not isinstance(item, str) for item in value):
-        raise RequestError("Field 'outputs' must be a list of record type names.")
+    if not isinstance(value, Mapping):
+        raise RequestError("Field 'kmesh_model' must be a JSON object or null.")
+    _reject_unknown(value, _MODEL_FIELDS, "kmesh_model")
+    missing = sorted(_MODEL_REQUIRED - set(value))
+    if missing:
+        raise RequestError(
+            f"Field 'kmesh_model' is missing required keys: {', '.join(missing)}"
+        )
+    for name, item in value.items():
+        if item is not None and not isinstance(item, str):
+            raise RequestError(f"Field 'kmesh_model.{name}' must be a string.")
+    if value["model_type"] not in get_args(ModelType):
+        raise RequestError(f"Unsupported model type: {value['model_type']!r}")
+    if value["source"] not in get_args(ModelSource):
+        raise RequestError(f"Unsupported model source: {value['source']!r}")
     try:
-        return resolve_output_types(list(value))
-    except ValueError as error:
+        return ModelSpec(**value)
+    except (TypeError, ValueError) as error:
         raise RequestError(str(error)) from error
 
 

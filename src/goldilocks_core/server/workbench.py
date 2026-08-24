@@ -21,10 +21,17 @@ from goldilocks_core.assets import (
     AssetStore,
 )
 from goldilocks_core.contracts import (
+    CalculationDraft,
     CalculationHints,
     CalculationIntent,
-    PresetRequest,
-    Result,
+    ComputationResult,
+    ComputeRequest,
+    GeneratedFiles,
+    KPointSelection,
+    ParameterAdvice,
+    PresetSelection,
+    SelectionRecord,
+    StructureAnalysisRecord,
     record_type_id,
 )
 from goldilocks_core.generation import GenerationError
@@ -318,7 +325,7 @@ class RecommendationResponse(_Document):
 @dataclass(frozen=True, slots=True)
 class _ReviewComputation:
     response: RecommendationResponse
-    result: Result
+    result: ComputationResult
     table: PseudoTable
 
 
@@ -416,18 +423,20 @@ def _required_asset_file(
 
 def _guided_preset(
     request: GuidedRequest, operation: str
-) -> tuple[PresetRequest, StructureResponse, str]:
+) -> tuple[ComputeRequest, StructureResponse, str]:
     source = request.source
     try:
         structure, resolved_format = parse_structure_content(
             source.content, source.format
         )
-        preset = PresetRequest(
-            structure=structure,
-            intent=CalculationIntent(**request.intent.model_dump()),
-            hints=CalculationHints(**request.hints.model_dump()),
-            mode="generate",
-            pseudo_table=request.pseudo_table_id,
+        preset = ComputeRequest(
+            draft=CalculationDraft(
+                structure=structure,
+                intent=CalculationIntent(**request.intent.model_dump()),
+                hints=CalculationHints(**request.hints.model_dump()),
+                pseudo_table=request.pseudo_table_id,
+            ),
+            selection=PresetSelection("generate"),
         )
     except (StructureInputError, TypeError, ValueError) as error:
         raise WorkbenchRequestError(operation, str(error)) from error
@@ -441,7 +450,9 @@ def _guided_preset(
 
 
 def _selected_table(
-    request: GuidedRequest, result: Result, tables: dict[str, PseudoTable]
+    request: GuidedRequest,
+    result: ComputationResult,
+    tables: dict[str, PseudoTable],
 ) -> PseudoTable:
     if request.pseudo_table_id is not None:
         try:
@@ -453,7 +464,7 @@ def _selected_table(
             ) from error
     table_ids = {
         item.provenance.data_source
-        for item in result.selection.pseudopotentials
+        for item in result.records[SelectionRecord].pseudopotentials
         if item.provenance.data_source in tables
     }
     if len(table_ids) != 1:
@@ -496,24 +507,26 @@ def _generated_file(file: object) -> GeneratedFileResponse:
 
 
 def _browser_records(
-    result: Result, selection: PseudoSelectionResponse
+    result: ComputationResult, selection: PseudoSelectionResponse
 ) -> dict[str, JsonValue]:
     return {
-        record_type_id(type(result.analysis)): result.analysis.to_dict(),
-        record_type_id(type(result.advice)): result.advice.to_dict(),
-        record_type_id(type(result.k_points)): result.k_points.to_dict(),
-        record_type_id(type(result.selection)): {
+        record_type_id(StructureAnalysisRecord): result.records[
+            StructureAnalysisRecord
+        ].to_dict(),
+        record_type_id(ParameterAdvice): result.records[ParameterAdvice].to_dict(),
+        record_type_id(KPointSelection): result.records[KPointSelection].to_dict(),
+        record_type_id(SelectionRecord): {
             "pseudopotentials": [
                 item.model_dump(mode="json") for item in selection.files
             ],
             "warnings": list(selection.warnings),
         },
-        "generated_files": [
+        record_type_id(GeneratedFiles): [
             {
                 "path": item.path,
                 "role": item.role,
             }
-            for item in result.generated_files
+            for item in result.records[GeneratedFiles]
         ],
     }
 
@@ -537,7 +550,7 @@ def _review_digest(response: RecommendationResponse) -> str:
 def _compute_review(service: Service, request: GuidedRequest) -> _ReviewComputation:
     preset, document, canonical_cif = _guided_preset(request, "recommendation")
     try:
-        result = service.generate(preset)
+        result = service.compute(preset)
     except AssetNotInstalled as error:
         reference = error.reference
         raise WorkbenchRequestError(
@@ -564,29 +577,32 @@ def _compute_review(service: Service, request: GuidedRequest) -> _ReviewComputat
         raise WorkbenchRequestError("recommendation", str(error)) from error
     tables = load_tables(service.runtime.pseudo_registry_path)
     table = _selected_table(request, result, tables)
-    files = tuple(_selected_pseudo(item) for item in result.selection.pseudopotentials)
+    selection_record = result.records[SelectionRecord]
+    files = tuple(_selected_pseudo(item) for item in selection_record.pseudopotentials)
     selection = PseudoSelectionResponse(
         table=_table_response(table),
         files=files,
-        warnings=result.selection.warnings,
+        warnings=selection_record.warnings,
     )
-    generated_files = tuple(_generated_file(item) for item in result.generated_files)
+    generated_files = tuple(
+        _generated_file(item) for item in result.records[GeneratedFiles]
+    )
     response = RecommendationResponse(
         schema_version=1,
         review_digest="",
         structure=document,
         canonical_cif=canonical_cif,
-        intent=IntentResponse.model_validate(result.intent),
-        hints=HintsResponse.model_validate(preset.hints),
+        intent=IntentResponse.model_validate(result.draft.intent),
+        hints=HintsResponse.model_validate(result.draft.hints),
         decisions=RecommendationDecisions(
-            k_grid=result.k_points.grid,
-            k_shift=result.k_points.shift,
-            k_mesh_type=result.k_points.mesh_type,
-            spin_polarized=result.advice.magnetism.spin_polarized,
-            spin_orbit_coupling=result.advice.spin_orbit.enabled,
-            smearing_type=result.advice.smearing.smearing_type,
-            smearing_width_ry=result.advice.smearing.width_ry,
-            use_vdw=result.advice.vdw.use_vdw,
+            k_grid=result.records[KPointSelection].grid,
+            k_shift=result.records[KPointSelection].shift,
+            k_mesh_type=result.records[KPointSelection].mesh_type,
+            spin_polarized=result.records[ParameterAdvice].magnetism.spin_polarized,
+            spin_orbit_coupling=result.records[ParameterAdvice].spin_orbit.enabled,
+            smearing_type=result.records[ParameterAdvice].smearing.smearing_type,
+            smearing_width_ry=result.records[ParameterAdvice].smearing.width_ry,
+            use_vdw=result.records[ParameterAdvice].vdw.use_vdw,
             pseudo_table_id=table.id,
             pseudo_functional=table.functional,
             pseudo_accuracy=table.accuracy,

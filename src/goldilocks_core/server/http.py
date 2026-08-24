@@ -25,11 +25,11 @@ from typing import Any
 
 from goldilocks_core.analysis import DimensionalityClassificationError
 from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled
-from goldilocks_core.contracts import QueryRequest
+from goldilocks_core.bundle import write_bundle_directory
 from goldilocks_core.generation import GenerationError
 from goldilocks_core.io.structures import StructureInputError
 from goldilocks_core.pseudo.source import PseudoTableMismatch
-from goldilocks_core.runtime import UnknownTask
+from goldilocks_core.runtime import UnavailableRecord, UnknownPreset, UnknownTask
 from goldilocks_core.runtime.service import Service
 from goldilocks_core.server.capacity import (
     ComputationCapacity,
@@ -136,6 +136,26 @@ def create_app(
         return JSONResponse(
             status_code=422,
             content={"error": {"kind": "invalid_task", "message": str(error)}},
+        )
+
+    @app.exception_handler(UnknownPreset)
+    async def unknown_preset_handler(
+        request: Request, error: UnknownPreset
+    ) -> JSONResponse:
+        del request
+        return JSONResponse(
+            status_code=422,
+            content={"error": {"kind": "invalid_preset", "message": str(error)}},
+        )
+
+    @app.exception_handler(UnavailableRecord)
+    async def unavailable_record_handler(
+        request: Request, error: UnavailableRecord
+    ) -> JSONResponse:
+        del request
+        return JSONResponse(
+            status_code=422,
+            content={"error": {"kind": "invalid_record", "message": str(error)}},
         )
 
     @app.exception_handler(StructureInputError)
@@ -309,23 +329,50 @@ def create_app(
 def _execute(endpoint: str, body: dict[str, Any], service: Service) -> dict[str, Any]:
     """Parse, dispatch, and serialize one transport request."""
     raw = dict(body)
+    output_dir = raw.pop("output_dir", None)
+    if output_dir is not None and (
+        not isinstance(output_dir, str) or not output_dir.strip()
+    ):
+        raise RequestError("Field 'output_dir' must be a non-empty string.")
+
     if endpoint == "compute":
-        if raw.get("outputs") is None:
+        outputs = raw.pop("outputs", None)
+        if outputs is None:
             raise RequestError("POST /compute requires 'outputs'.")
+        if output_dir is not None:
+            raise RequestError(
+                "Field 'output_dir' is only valid for generate requests."
+            )
+        raw["selection"] = {"records": outputs}
     else:
-        if raw.get("outputs") is not None:
+        if raw.pop("outputs", None) is not None:
             raise RequestError("Preset endpoints do not accept 'outputs'.")
-        supplied_mode = raw.get("mode")
+        supplied_mode = raw.pop("mode", None)
         if supplied_mode is not None and supplied_mode != endpoint:
             raise RequestError(
                 f"Field 'mode' must be {endpoint!r} for POST /{endpoint}."
             )
-        raw["mode"] = endpoint
+        if endpoint != "generate" and output_dir is not None:
+            raise RequestError(
+                "Field 'output_dir' is only valid for generate requests."
+            )
+        raw["selection"] = {"preset": endpoint}
 
-    request = from_dict(raw)
-    if isinstance(request, QueryRequest):
-        return service.compute(request).to_dict()
-    return service.run_preset(request).to_dict()
+    selection = raw.pop("selection")
+    result = service.compute(from_dict({"draft": raw, "selection": selection}))
+    if endpoint == "compute":
+        return result.records.to_dict()
+    records = result.records.to_dict()
+    records.setdefault("generated_files", [])
+    rendered = {
+        "intent": result.draft.intent.to_dict(),
+        **records,
+        "warnings": list(result.warnings),
+        "bundle": None,
+    }
+    if output_dir is not None:
+        rendered["bundle"] = write_bundle_directory(result, output_dir).to_dict()
+    return rendered
 
 
 def serve(

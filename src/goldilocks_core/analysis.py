@@ -210,12 +210,11 @@ def _electronic_character_warnings(
         return ()
     if character == "likely_metal":
         return (
-            "All elements are metallic; treat metallicity as likely, not "
-            "confirmed without electronic-structure data.",
+            "All elements are metallic; metallicity is likely but not confirmed "
+            "by electronic-structure data.",
         )
     if character == "unknown":
         return (
-            "Electronic character is unknown from structure facts alone; verify "
-            "smearing manually for metallic systems.",
+            "Electronic character could not be inferred from structure facts alone.",
         )
     return ()

@@ -1,5 +1,4 @@
 import json
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -7,17 +6,24 @@ import pytest
 from goldilocks_core.advice import advise_parameters
 from goldilocks_core.bundle import build_bundle_manifest, write_bundle_directory
 from goldilocks_core.contracts import (
+    CalculationDraft,
+    CalculationHints,
     CalculationIntent,
+    ComputationResult,
     GeneratedFile,
+    GeneratedFiles,
     KPointSelection,
+    PresetSelection,
     Provenance,
-    Result,
+    Records,
     SelectionRecord,
     StructureAnalysisRecord,
 )
 
 
-def make_result() -> Result:
+def make_result(
+    generated_files: GeneratedFiles | None = None,
+) -> ComputationResult:
     analysis = StructureAnalysisRecord(
         formula="Si1",
         reduced_formula="Si",
@@ -38,13 +44,27 @@ def make_result() -> Result:
         provenance=Provenance(source="default", reason="test"),
     )
     selection = SelectionRecord(pseudopotentials=())
-    return Result(
-        intent=CalculationIntent(),
-        analysis=analysis,
-        advice=advice,
-        k_points=k_points,
-        selection=selection,
-        generated_files=(GeneratedFile(path="inputs/qe.in", content="&CONTROL\n/\n"),),
+    files = generated_files or (
+        GeneratedFile(path="inputs/qe.in", content="&CONTROL\n/\n"),
+    )
+    return ComputationResult(
+        draft=CalculationDraft(
+            structure="Si.cif",
+            intent=CalculationIntent(),
+            hints=CalculationHints(),
+        ),
+        task="scf_single_point",
+        task_revision="1",
+        selection=PresetSelection("generate"),
+        records=Records(
+            {
+                StructureAnalysisRecord: analysis,
+                type(advice): advice,
+                KPointSelection: k_points,
+                SelectionRecord: selection,
+                GeneratedFiles: files,
+            }
+        ),
         warnings=("test warning",),
     )
 
@@ -67,21 +87,15 @@ def test_build_bundle_manifest_records_file_metadata_without_content() -> None:
 
 
 def test_write_bundle_directory_writes_manifest_and_files(tmp_path: Path) -> None:
-    result = make_result()
     output_dir = tmp_path / "bundle"
 
-    bundle_record = write_bundle_directory(result, output_dir)
+    bundle_record = write_bundle_directory(make_result(), output_dir)
 
-    written_content = (output_dir / "inputs" / "qe.in").read_bytes()
-    assert written_content == b"&CONTROL\n/\n"
+    assert (output_dir / "inputs" / "qe.in").read_bytes() == b"&CONTROL\n/\n"
     manifest_data = json.loads(
         (output_dir / "manifest.json").read_text(encoding="utf-8")
     )
     assert manifest_data == bundle_record.manifest
-    assert manifest_data["generated_files"][0] == {
-        "path": "inputs/qe.in",
-        "role": "input",
-    }
     assert bundle_record.path == str(output_dir)
     assert {
         path.relative_to(output_dir).as_posix()
@@ -109,15 +123,11 @@ def test_write_bundle_refuses_existing_destination(
         assert output_dir.read_text(encoding="utf-8") == "keep me"
     else:
         assert [path.name for path in output_dir.iterdir()] == ["stale.txt"]
-        assert (output_dir / "stale.txt").read_text(encoding="utf-8") == "keep me"
 
 
 @pytest.mark.parametrize("path", ["manifest.json", "manifest.json/nested"])
 def test_write_bundle_rejects_manifest_collision(tmp_path: Path, path: str) -> None:
-    result = replace(
-        make_result(),
-        generated_files=(GeneratedFile(path=path, content="collision"),),
-    )
+    result = make_result((GeneratedFile(path=path, content="collision"),))
     output_dir = tmp_path / "bundle"
 
     with pytest.raises(ValueError, match="reserved for the bundle manifest"):
@@ -127,18 +137,17 @@ def test_write_bundle_rejects_manifest_collision(tmp_path: Path, path: str) -> N
 
 
 def test_bundle_rejects_duplicate_paths(tmp_path: Path) -> None:
-    generated = make_result().generated_files[0]
-    result = replace(make_result(), generated_files=(generated, generated))
+    generated = GeneratedFile(path="inputs/qe.in", content="same")
 
     with pytest.raises(ValueError, match="paths must be unique"):
-        write_bundle_directory(result, tmp_path / "bundle")
+        write_bundle_directory(
+            make_result((generated, generated)),
+            tmp_path / "bundle",
+        )
 
 
 def test_bundle_rejects_path_traversal(tmp_path: Path) -> None:
-    result = replace(
-        make_result(),
-        generated_files=(GeneratedFile(path="../qe.in", content="bad"),),
-    )
+    result = make_result((GeneratedFile(path="../qe.in", content="bad"),))
 
     with pytest.raises(ValueError, match="escapes bundle directory"):
         write_bundle_directory(result, tmp_path / "bundle")

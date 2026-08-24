@@ -1,4 +1,6 @@
 import hashlib
+import subprocess
+import sys
 from pathlib import Path
 
 from pymatgen.core import Lattice, Structure
@@ -10,22 +12,24 @@ from goldilocks_core import (
     Capabilities,
     ComputationResult,
     ComputeRequest,
+    DftInputData,
     DirectoryOutput,
+    GeneratedFile,
+    GeneratedFiles,
     InlineStructureSource,
     InMemoryStructureSource,
     OutputTarget,
     PathStructureSource,
     PresetSelection,
     Publication,
-    RecordSelection,
     Records,
+    RecordSelection,
     Service,
     StructureInspection,
     StructureSource,
     compute,
 )
 from goldilocks_core.contracts import (
-    GeneratedFiles,
     KPointSelection,
     ParameterAdvice,
     PseudoCutoffs,
@@ -89,6 +93,16 @@ def test_root_interface_exposes_three_operations_and_their_contracts() -> None:
     assert ComputationResult is not None
     assert StructureSource is not None
     assert OutputTarget is not None
+    assert not any(
+        hasattr(Service, name)
+        for name in (
+            "recommend",
+            "generate",
+            "describe_tasks",
+            "describe_codes",
+            "describe_models",
+        )
+    )
     assert {
         InlineStructureSource,
         PathStructureSource,
@@ -96,9 +110,34 @@ def test_root_interface_exposes_three_operations_and_their_contracts() -> None:
         ComputeRequest,
         DirectoryOutput,
         ArchiveOutput,
+        DftInputData,
+        GeneratedFile,
+        GeneratedFiles,
         Publication,
         Records,
     }
+
+
+def test_root_import_does_not_require_optional_transports() -> None:
+    script = """
+import builtins
+original = builtins.__import__
+def guarded(name, *args, **kwargs):
+    if name.split('.')[0] in {'fastapi', 'mcp'}:
+        raise ImportError(f'blocked optional import: {name}')
+    return original(name, *args, **kwargs)
+builtins.__import__ = guarded
+import goldilocks_core
+assert goldilocks_core.Service
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_service_capabilities_and_inspection_share_the_root_interface() -> None:

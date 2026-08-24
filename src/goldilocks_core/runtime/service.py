@@ -5,9 +5,7 @@ from dataclasses import replace
 
 from goldilocks_core.contracts import (
     ArchiveOutput,
-    CalculationTaskCapability,
     Capabilities,
-    CodeName,
     ComputationResult,
     ComputeRequest,
     DftInputData,
@@ -16,7 +14,6 @@ from goldilocks_core.contracts import (
     StructureInspection,
     StructureSource,
 )
-from goldilocks_core.generation.registry import available_codes
 from goldilocks_core.io.structures import normalize_structure
 from goldilocks_core.publication import Publisher
 from goldilocks_core.runtime.capabilities import build_capabilities
@@ -88,19 +85,6 @@ class Service:
         with self._lock:
             self._ensure_open()
             return normalize_structure(source).inspection
-
-    def describe_tasks(self) -> tuple[CalculationTaskCapability, ...]:
-        with self._lock:
-            self._ensure_open()
-            return self._dispatcher.describe_tasks()
-
-    def describe_codes(self) -> tuple[CodeName, ...]:
-        self._ensure_open()
-        return available_codes()
-
-    def describe_models(self) -> list[dict[str, str | None]]:
-        self._ensure_open()
-        return self._runtime.describe_models()
 
     def close(self) -> None:
         if self._closed:

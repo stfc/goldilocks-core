@@ -10,7 +10,7 @@ from goldilocks_core.server.http import create_app
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Export the typed HTTP contract used by Goldilocks Workbench."
+        description="Export the typed Goldilocks Core HTTP contract."
     )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()

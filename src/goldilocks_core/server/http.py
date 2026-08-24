@@ -25,7 +25,6 @@ from typing import Any
 
 from goldilocks_core.analysis import DimensionalityClassificationError
 from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled
-from goldilocks_core.contracts import DirectoryOutput
 from goldilocks_core.generation import GenerationError
 from goldilocks_core.io.structures import StructureInputError
 from goldilocks_core.pseudo.source import PseudoTableMismatch
@@ -37,7 +36,7 @@ from goldilocks_core.server.capacity import (
     configured_compute_wait_seconds,
 )
 from goldilocks_core.server.readiness import AssetReadiness
-from goldilocks_core.server.request import RequestError, from_dict
+from goldilocks_core.server.request import RequestError
 
 __all__ = ["create_app", "serve"]
 
@@ -70,11 +69,12 @@ def create_app(
 ) -> Any:
     try:
         from fastapi import FastAPI, Request
+        from fastapi.exceptions import RequestValidationError
         from fastapi.responses import JSONResponse
         from fastapi.staticfiles import StaticFiles
     except ImportError as error:
         raise ImportError(_MISSING_HTTP_EXTRA) from error
-    from goldilocks_core.server.workbench import install_workbench_routes
+    from goldilocks_core.server.http_contract import install_scientific_routes
 
     owns_service = service is None
     state = service if service is not None else Service()
@@ -101,7 +101,7 @@ def create_app(
     app.state.goldilocks = state
     app.state.compute_capacity = capacity
     app.state.asset_readiness = readiness
-    install_workbench_routes(app, state, capacity)
+    install_scientific_routes(app, state, capacity)
 
     @app.exception_handler(ServerBusy)
     async def server_busy_handler(request: Request, error: ServerBusy) -> JSONResponse:
@@ -114,6 +114,31 @@ def create_app(
                     "message": str(error),
                     "retryable": True,
                     "details": {"retry_after_seconds": error.retry_after_seconds},
+                }
+            },
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(
+        request: Request, error: RequestValidationError
+    ) -> JSONResponse:
+        del request
+        validation_errors = [
+            {
+                "path": ".".join(str(part) for part in item["loc"]),
+                "type": item["type"],
+                "message": item["msg"],
+            }
+            for item in error.errors()
+        ]
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": {
+                    "kind": "invalid_request",
+                    "message": "The request does not match the transport contract.",
+                    "retryable": False,
+                    "details": {"validation_errors": validation_errors},
                 }
             },
         )
@@ -246,16 +271,6 @@ def create_app(
             content={"error": {"kind": "not_found", "message": str(error)}},
         )
 
-    @app.exception_handler(FileExistsError)
-    async def output_conflict_handler(
-        request: Request, error: FileExistsError
-    ) -> JSONResponse:
-        del request
-        return JSONResponse(
-            status_code=409,
-            content={"error": {"kind": "output_conflict", "message": str(error)}},
-        )
-
     @app.get("/health")
     def health() -> dict[str, str]:
         """Report process liveness."""
@@ -286,36 +301,6 @@ def create_app(
             },
         )
 
-    @app.get("/tasks")
-    def tasks() -> dict[str, Any]:
-        """List every registered Core task with stable stage and record ids."""
-        return {"tasks": [task.to_dict() for task in state.describe_tasks()]}
-
-    @app.get("/codes")
-    def codes() -> dict[str, Any]:
-        """List target DFT codes with registered input writers."""
-        return {"codes": list(state.describe_codes())}
-
-    @app.get("/models")
-    def models() -> dict[str, Any]:
-        """List available k-mesh models known to the runtime."""
-        return {"models": state.describe_models()}
-
-    @app.post("/recommend")
-    def recommend(body: dict[str, Any]) -> dict[str, Any]:
-        with capacity.acquire():
-            return _execute("recommend", body, state)
-
-    @app.post("/generate")
-    def generate(body: dict[str, Any]) -> dict[str, Any]:
-        with capacity.acquire():
-            return _execute("generate", body, state)
-
-    @app.post("/compute")
-    def compute(body: dict[str, Any]) -> dict[str, Any]:
-        with capacity.acquire():
-            return _execute("compute", body, state)
-
     if workbench_static_root is not None:
         app.mount(
             "/",
@@ -324,58 +309,6 @@ def create_app(
         )
 
     return app
-
-
-def _execute(endpoint: str, body: dict[str, Any], service: Service) -> dict[str, Any]:
-    """Parse, dispatch, and serialize one transport request."""
-    raw = dict(body)
-    output_dir = raw.pop("output_dir", None)
-    if output_dir is not None and (
-        not isinstance(output_dir, str) or not output_dir.strip()
-    ):
-        raise RequestError("Field 'output_dir' must be a non-empty string.")
-
-    if endpoint == "compute":
-        outputs = raw.pop("outputs", None)
-        if outputs is None:
-            raise RequestError("POST /compute requires 'outputs'.")
-        if output_dir is not None:
-            raise RequestError(
-                "Field 'output_dir' is only valid for generate requests."
-            )
-        raw["selection"] = {"records": outputs}
-    else:
-        if raw.pop("outputs", None) is not None:
-            raise RequestError("Preset endpoints do not accept 'outputs'.")
-        supplied_mode = raw.pop("mode", None)
-        if supplied_mode is not None and supplied_mode != endpoint:
-            raise RequestError(
-                f"Field 'mode' must be {endpoint!r} for POST /{endpoint}."
-            )
-        if endpoint != "generate" and output_dir is not None:
-            raise RequestError(
-                "Field 'output_dir' is only valid for generate requests."
-            )
-        raw["selection"] = {"preset": endpoint}
-
-    selection = raw.pop("selection")
-    target = DirectoryOutput(output_dir) if output_dir is not None else None
-    result = service.compute(
-        from_dict({"draft": raw, "selection": selection}), output=target
-    )
-    if endpoint == "compute":
-        return result.records.to_dict()
-    records = result.records.to_dict()
-    records.setdefault("generated_files", [])
-    rendered = {
-        "intent": result.draft.intent.to_dict(),
-        **records,
-        "warnings": list(result.warnings),
-        "bundle": None,
-    }
-    if result.publication is not None:
-        rendered["bundle"] = result.publication.to_dict()
-    return rendered
 
 
 def serve(

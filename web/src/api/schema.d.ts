@@ -4,66 +4,15 @@
  */
 
 export interface paths {
-    readonly "/api/workbench/archive": {
+    readonly "/capabilities": {
         readonly parameters: {
             readonly query?: never;
             readonly header?: never;
             readonly path?: never;
             readonly cookie?: never;
         };
-        readonly get?: never;
-        readonly put?: never;
-        /** Archive */
-        readonly post: operations["archive_workbench_recommendation"];
-        readonly delete?: never;
-        readonly options?: never;
-        readonly head?: never;
-        readonly patch?: never;
-        readonly trace?: never;
-    };
-    readonly "/api/workbench/recommendation": {
-        readonly parameters: {
-            readonly query?: never;
-            readonly header?: never;
-            readonly path?: never;
-            readonly cookie?: never;
-        };
-        readonly get?: never;
-        readonly put?: never;
-        /** Recommend */
-        readonly post: operations["review_workbench_recommendation"];
-        readonly delete?: never;
-        readonly options?: never;
-        readonly head?: never;
-        readonly patch?: never;
-        readonly trace?: never;
-    };
-    readonly "/api/workbench/structure": {
-        readonly parameters: {
-            readonly query?: never;
-            readonly header?: never;
-            readonly path?: never;
-            readonly cookie?: never;
-        };
-        readonly get?: never;
-        readonly put?: never;
-        /** Inspect Structure */
-        readonly post: operations["inspect_workbench_structure"];
-        readonly delete?: never;
-        readonly options?: never;
-        readonly head?: never;
-        readonly patch?: never;
-        readonly trace?: never;
-    };
-    readonly "/codes": {
-        readonly parameters: {
-            readonly query?: never;
-            readonly header?: never;
-            readonly path?: never;
-            readonly cookie?: never;
-        };
-        /** Codes */
-        readonly get: operations["codes_codes_get"];
+        /** Capabilities */
+        readonly get: operations["capabilities_capabilities_get"];
         readonly put?: never;
         readonly post?: never;
         readonly delete?: never;
@@ -89,23 +38,6 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
-    readonly "/generate": {
-        readonly parameters: {
-            readonly query?: never;
-            readonly header?: never;
-            readonly path?: never;
-            readonly cookie?: never;
-        };
-        readonly get?: never;
-        readonly put?: never;
-        /** Generate */
-        readonly post: operations["generate_generate_post"];
-        readonly delete?: never;
-        readonly options?: never;
-        readonly head?: never;
-        readonly patch?: never;
-        readonly trace?: never;
-    };
     readonly "/health": {
         readonly parameters: {
             readonly query?: never;
@@ -123,17 +55,17 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
-    readonly "/models": {
+    readonly "/inspect": {
         readonly parameters: {
             readonly query?: never;
             readonly header?: never;
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** Models */
-        readonly get: operations["models_models_get"];
+        readonly get?: never;
         readonly put?: never;
-        readonly post?: never;
+        /** Inspect */
+        readonly post: operations["inspect_inspect_post"];
         readonly delete?: never;
         readonly options?: never;
         readonly head?: never;
@@ -157,103 +89,57 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
-    readonly "/recommend": {
-        readonly parameters: {
-            readonly query?: never;
-            readonly header?: never;
-            readonly path?: never;
-            readonly cookie?: never;
-        };
-        readonly get?: never;
-        readonly put?: never;
-        /** Recommend */
-        readonly post: operations["recommend_recommend_post"];
-        readonly delete?: never;
-        readonly options?: never;
-        readonly head?: never;
-        readonly patch?: never;
-        readonly trace?: never;
-    };
-    readonly "/tasks": {
-        readonly parameters: {
-            readonly query?: never;
-            readonly header?: never;
-            readonly path?: never;
-            readonly cookie?: never;
-        };
-        /** Tasks */
-        readonly get: operations["tasks_tasks_get"];
-        readonly put?: never;
-        readonly post?: never;
-        readonly delete?: never;
-        readonly options?: never;
-        readonly head?: never;
-        readonly patch?: never;
-        readonly trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** ArchiveRequest */
-        readonly ArchiveRequest: {
-            /** @default {} */
-            readonly hints: components["schemas"]["HintsResponse"];
-            /**
-             * @default {
-             *       "code": "quantum_espresso",
-             *       "functional": "PBEsol",
-             *       "pseudo_accuracy": "efficiency",
-             *       "task": "scf_single_point"
-             *     }
-             */
-            readonly intent: components["schemas"]["IntentResponse"];
-            /** Pseudo Table Id */
-            readonly pseudo_table_id?: string | null;
-            /** Review Digest */
-            readonly review_digest: string;
-            readonly source: components["schemas"]["StructureSourceRequest"];
+        /** CalculationDraft */
+        readonly CalculationDraft: {
+            readonly hints?: components["schemas"]["CalculationHints-Input"] | null;
+            readonly intent?: components["schemas"]["CalculationIntent-Input"] | null;
+            /** Pseudo Table */
+            readonly pseudo_table?: string | null;
+            readonly structure: components["schemas"]["InlineStructureSource"];
         };
-        /** CalculationDefaults */
-        readonly CalculationDefaults: {
-            readonly hints: components["schemas"]["HintsResponse"];
-            readonly intent: components["schemas"]["IntentResponse"];
+        /** CalculationHints */
+        readonly "CalculationHints-Input": {
+            /** Conv Thr */
+            readonly conv_thr?: number | null;
+            /** Electron Maxstep */
+            readonly electron_maxstep?: number | null;
+            /** K Grid */
+            readonly k_grid?: readonly number[] | null;
+            /** K Spacing */
+            readonly k_spacing?: number | null;
+            /** Mixing Beta */
+            readonly mixing_beta?: number | null;
+            /** Pseudo Accuracy */
+            readonly pseudo_accuracy?: string | null;
+            /** Pseudo Type */
+            readonly pseudo_type?: string | null;
+            /** Relativistic Mode */
+            readonly relativistic_mode?: string | null;
+            /** Smearing Type */
+            readonly smearing_type?: string | null;
+            /** Smearing Width Ry */
+            readonly smearing_width_ry?: number | null;
+            /** Spin Orbit Coupling */
+            readonly spin_orbit_coupling?: boolean | null;
+            /** Spin Polarized */
+            readonly spin_polarized?: boolean | null;
+            /** Use Vdw */
+            readonly use_vdw?: boolean | null;
+            /** Vdw Method */
+            readonly vdw_method?: string | null;
         };
-        /** GeneratedFileResponse */
-        readonly GeneratedFileResponse: {
-            /** Content */
-            readonly content: string;
-            /** Path */
-            readonly path: string;
-            /** Role */
-            readonly role: string;
-            /** Sha256 */
-            readonly sha256: string;
-        };
-        /** GuidedRequest */
-        readonly GuidedRequest: {
-            /** @default {} */
-            readonly hints: components["schemas"]["HintsResponse"];
-            /**
-             * @default {
-             *       "code": "quantum_espresso",
-             *       "functional": "PBEsol",
-             *       "pseudo_accuracy": "efficiency",
-             *       "task": "scf_single_point"
-             *     }
-             */
-            readonly intent: components["schemas"]["IntentResponse"];
-            /** Pseudo Table Id */
-            readonly pseudo_table_id?: string | null;
-            readonly source: components["schemas"]["StructureSourceRequest"];
-        };
-        /** HTTPValidationError */
-        readonly HTTPValidationError: {
-            /** Detail */
-            readonly detail?: readonly components["schemas"]["ValidationError"][];
-        };
-        /** HintsResponse */
-        readonly HintsResponse: {
+        /**
+         * CalculationHints
+         * @description Optional operator overrides. ``None`` means let Core decide.
+         *     Non-None records ``user_hint`` provenance. Partial overrides supported.
+         *     Units: ``k_spacing`` in Å⁻¹ (VASP KSPACING),
+         *     ``smearing_width_ry`` and ``conv_thr`` in Rydberg.
+         */
+        readonly "CalculationHints-Output": {
             /** Conv Thr */
             readonly conv_thr?: number | null;
             /** Electron Maxstep */
@@ -285,10 +171,33 @@ export interface components {
             /** Use Vdw */
             readonly use_vdw?: boolean | null;
             /** Vdw Method */
-            readonly vdw_method?: string | null;
+            readonly vdw_method?: ("d3" | "d3bj" | "ts" | "mbd") | null;
         };
-        /** IntentResponse */
-        readonly IntentResponse: {
+        /** CalculationIntent */
+        readonly "CalculationIntent-Input": {
+            /**
+             * Code
+             * @default quantum_espresso
+             */
+            readonly code: string;
+            /**
+             * Functional
+             * @default PBEsol
+             */
+            readonly functional: string;
+            /**
+             * Pseudo Accuracy
+             * @default efficiency
+             */
+            readonly pseudo_accuracy: string;
+            /**
+             * Task
+             * @default scf_single_point
+             */
+            readonly task: string;
+        };
+        /** CalculationIntent */
+        readonly "CalculationIntent-Output": {
             /**
              * Code
              * @default quantum_espresso
@@ -311,9 +220,121 @@ export interface components {
              */
             readonly task: string;
         };
+        /** CalculationTaskCapability */
+        readonly CalculationTaskCapability: {
+            /** Description */
+            readonly description: string;
+            /** Id */
+            readonly id: string;
+            /** Name */
+            readonly name: string;
+            /** Presets */
+            readonly presets: readonly components["schemas"]["PresetCapability"][];
+            /** Revision */
+            readonly revision: string;
+            /** Selectable Record Ids */
+            readonly selectable_record_ids: readonly string[];
+            /** Stages */
+            readonly stages: readonly components["schemas"]["StageCapability"][];
+        };
+        /** Capabilities */
+        readonly Capabilities: {
+            /** Core Version */
+            readonly core_version: string;
+            readonly default_hints: components["schemas"]["CalculationHints-Output"];
+            readonly default_intent: components["schemas"]["CalculationIntent-Output"];
+            /** Models */
+            readonly models: readonly components["schemas"]["ModelCapability"][];
+            /** Pseudopotential Sets */
+            readonly pseudopotential_sets: readonly components["schemas"]["PseudopotentialSetCapability"][];
+            /** Target Codes */
+            readonly target_codes: readonly string[];
+            /** Tasks */
+            readonly tasks: readonly components["schemas"]["CalculationTaskCapability"][];
+        };
+        /** ComputationResult */
+        readonly ComputationResult: {
+            /** Draft */
+            readonly draft: {
+                readonly [key: string]: components["schemas"]["JsonValue"];
+            };
+            readonly publication: components["schemas"]["Publication"] | null;
+            /** Records */
+            readonly records: {
+                readonly [key: string]: components["schemas"]["JsonValue"];
+            };
+            /**
+             * Schema Version
+             * @constant
+             */
+            readonly schema_version: 1;
+            /** Selection */
+            readonly selection: {
+                readonly [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Task */
+            readonly task: string;
+            /** Task Revision */
+            readonly task_revision: string;
+            /** Warnings */
+            readonly warnings: readonly string[];
+        };
+        /** ComputeRequest */
+        readonly ComputeRequest: {
+            readonly draft: components["schemas"]["CalculationDraft"];
+            /** Output */
+            readonly output: components["schemas"]["MemoryOutput"] | components["schemas"]["HttpArchiveOutput"];
+            readonly selection: components["schemas"]["SelectionDocument"];
+        };
+        /** Error */
+        readonly Error: {
+            /** Asset Id */
+            readonly asset_id?: string | null;
+            /** Details */
+            readonly details?: {
+                readonly [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /** Kind */
+            readonly kind: string;
+            /** Message */
+            readonly message: string;
+            /** Retryable */
+            readonly retryable?: boolean | null;
+            /** Root */
+            readonly root?: string | null;
+            /** Version */
+            readonly version?: string | null;
+        };
+        /** ErrorResponse */
+        readonly ErrorResponse: {
+            readonly error: components["schemas"]["Error"];
+        };
+        /** HttpArchiveOutput */
+        readonly HttpArchiveOutput: {
+            /**
+             * Kind
+             * @constant
+             */
+            readonly kind: "archive";
+        };
+        /** InlineStructureSource */
+        readonly InlineStructureSource: {
+            /** Content */
+            readonly content: string;
+            /** Format */
+            readonly format?: ("cif" | "poscar") | null;
+            /**
+             * Kind
+             * @default inline
+             * @constant
+             */
+            readonly kind: "inline";
+            /** Name */
+            readonly name: string;
+        };
         readonly JsonValue: unknown;
-        /** LatticeResponse */
-        readonly LatticeResponse: {
+        /** LatticeDocument */
+        readonly LatticeDocument: {
             /** Angles Degrees */
             readonly angles_degrees: readonly [
                 number,
@@ -347,27 +368,57 @@ export interface components {
             /** Volume Angstrom3 */
             readonly volume_angstrom3: number;
         };
-        /** PseudoSelectionResponse */
-        readonly PseudoSelectionResponse: {
-            /** Files */
-            readonly files: readonly components["schemas"]["SelectedPseudoResponse"][];
-            readonly table: components["schemas"]["PseudoTableResponse"];
-            /** Warnings */
-            readonly warnings: readonly string[];
-        };
-        /** PseudoTableResponse */
-        readonly PseudoTableResponse: {
+        /** MemoryOutput */
+        readonly MemoryOutput: {
             /**
-             * Accuracy
-             * @enum {string}
+             * Kind
+             * @constant
              */
-            readonly accuracy: "efficiency" | "precision";
+            readonly kind: "memory";
+        };
+        /** ModelCapability */
+        readonly ModelCapability: {
+            /** Feature Set */
+            readonly feature_set: string;
+            /** Id */
+            readonly id: string;
+            /** Model Type */
+            readonly model_type: string;
+            /** Name */
+            readonly name: string;
+            /** Revision */
+            readonly revision: string | null;
+            /** Role */
+            readonly role: string;
+            /** Source */
+            readonly source: string;
+            /** Target */
+            readonly target: string;
+            /** Version */
+            readonly version: string;
+        };
+        /** PresetCapability */
+        readonly PresetCapability: {
+            /** Id */
+            readonly id: string;
+            /** Name */
+            readonly name: string;
+            /** Output Record Ids */
+            readonly output_record_ids: readonly string[];
+        };
+        /** PresetSelection */
+        readonly PresetSelection: {
+            /** Preset */
+            readonly preset: string;
+        };
+        /** PseudopotentialSetCapability */
+        readonly PseudopotentialSetCapability: {
+            /** Accuracy */
+            readonly accuracy: string;
             /** Citation */
             readonly citation: string;
             /** Default */
             readonly default: boolean;
-            /** Elements */
-            readonly elements: readonly string[];
             /** Functional */
             readonly functional: string;
             /** Id */
@@ -376,173 +427,39 @@ export interface components {
             readonly licence: string;
             /** Provider */
             readonly provider: string;
-            /** Relativistic */
-            readonly relativistic: string;
-            /** Upstream Table */
-            readonly upstream_table: string;
+            /** Relativistic Treatment */
+            readonly relativistic_treatment: string;
+            /** Supported Elements */
+            readonly supported_elements: readonly string[];
+            /** Upstream Name */
+            readonly upstream_name: string;
             /** Version */
             readonly version: string;
         };
-        /** RecommendationDecisions */
-        readonly RecommendationDecisions: {
-            /** K Grid */
-            readonly k_grid: readonly [
-                number,
-                number,
-                number
-            ];
-            /** K Mesh Type */
-            readonly k_mesh_type: string;
-            /** K Shift */
-            readonly k_shift: readonly [
-                number,
-                number,
-                number
-            ];
+        /** Publication */
+        readonly Publication: {
+            /** Files */
+            readonly files: readonly string[];
             /**
-             * Pseudo Accuracy
+             * Kind
              * @enum {string}
              */
-            readonly pseudo_accuracy: "efficiency" | "precision";
-            /** Pseudo Functional */
-            readonly pseudo_functional: string;
-            /** Pseudo Relativistic */
-            readonly pseudo_relativistic: string;
-            /** Pseudo Table Id */
-            readonly pseudo_table_id: string;
-            /** Smearing Type */
-            readonly smearing_type: string | null;
-            /** Smearing Width Ry */
-            readonly smearing_width_ry: number | null;
-            /** Spin Orbit Coupling */
-            readonly spin_orbit_coupling: boolean;
-            /** Spin Polarized */
-            readonly spin_polarized: boolean;
-            /** Use Vdw */
-            readonly use_vdw: boolean;
-        };
-        /** RecommendationResponse */
-        readonly RecommendationResponse: {
-            /** Canonical Cif */
-            readonly canonical_cif: string;
-            readonly decisions: components["schemas"]["RecommendationDecisions"];
-            /** Generated Files */
-            readonly generated_files: readonly components["schemas"]["GeneratedFileResponse"][];
-            readonly hints: components["schemas"]["HintsResponse"];
-            readonly intent: components["schemas"]["IntentResponse"];
-            /** Records */
-            readonly records: {
-                readonly [key: string]: components["schemas"]["JsonValue"];
-            };
-            /** Review Digest */
-            readonly review_digest: string;
-            readonly runtime: components["schemas"]["RuntimeProvenanceResponse"];
-            /** Schema Version */
-            readonly schema_version: number;
-            readonly selection: components["schemas"]["PseudoSelectionResponse"];
-            readonly structure: components["schemas"]["StructureResponse"];
-            /** Warnings */
-            readonly warnings: readonly string[];
-        };
-        /** RuntimeAssetFileResponse */
-        readonly RuntimeAssetFileResponse: {
+            readonly kind: "directory" | "archive";
+            /** Manifest Sha256 */
+            readonly manifest_sha256: string;
+            /** Output Sha256 */
+            readonly output_sha256?: string | null;
             /** Path */
             readonly path: string;
-            /** Role */
-            readonly role: string;
-            /** Sha256 */
-            readonly sha256: string | null;
-            /** Size Bytes */
-            readonly size_bytes: number | null;
         };
-        /** RuntimeAssetResponse */
-        readonly RuntimeAssetResponse: {
-            /** Files */
-            readonly files: readonly components["schemas"]["RuntimeAssetFileResponse"][];
-            /** Id */
-            readonly id: string;
-            /** Version */
-            readonly version: string;
+        /** RecordSelection */
+        readonly RecordSelection: {
+            /** Records */
+            readonly records: readonly ("analysis" | "advice" | "k_points" | "selection" | "generated_files" | "dft_input_data")[];
         };
-        /** RuntimeModelResponse */
-        readonly RuntimeModelResponse: {
-            /** Feature Set */
-            readonly feature_set: string | null;
-            /** Model Type */
-            readonly model_type: string | null;
-            /** Name */
-            readonly name: string | null;
-            /** Revision */
-            readonly revision: string | null;
-            /** Source */
-            readonly source: string | null;
-            /** Target */
-            readonly target: string | null;
-            /** Version */
-            readonly version: string | null;
-        };
-        /** RuntimeProvenanceResponse */
-        readonly RuntimeProvenanceResponse: {
-            /** Goldilocks Core Version */
-            readonly goldilocks_core_version: string;
-            /** Model Assets */
-            readonly model_assets: readonly components["schemas"]["RuntimeAssetResponse"][];
-            /** Models */
-            readonly models: readonly components["schemas"]["RuntimeModelResponse"][];
-        };
-        /** SelectedPseudoResponse */
-        readonly SelectedPseudoResponse: {
-            /** Ecutrho Ry */
-            readonly ecutrho_ry: number | null;
-            /** Ecutwfc Ry */
-            readonly ecutwfc_ry: number | null;
-            /** Element */
-            readonly element: string;
-            /** Filename */
-            readonly filename: string;
-            /** Functional */
-            readonly functional: string | null;
-            /** Provenance */
-            readonly provenance: {
-                readonly [key: string]: components["schemas"]["JsonValue"];
-            };
-            /** Relativistic */
-            readonly relativistic: string | null;
-            /** Sha256 */
-            readonly sha256: string;
-            /** Warnings */
-            readonly warnings: readonly string[];
-        };
-        /** SiteDocument */
-        readonly SiteDocument: {
-            /** Cartesian Coordinates Angstrom */
-            readonly cartesian_coordinates_angstrom: readonly [
-                number,
-                number,
-                number
-            ];
-            /** Fractional Coordinates */
-            readonly fractional_coordinates: readonly [
-                number,
-                number,
-                number
-            ];
-            /** Species */
-            readonly species: readonly components["schemas"]["SpeciesDocument"][];
-        };
-        /** SourceDocument */
-        readonly SourceDocument: {
-            /** Format */
-            readonly format: string;
-            /** Name */
-            readonly name: string;
-            /** Sha256 */
-            readonly sha256: string;
-            /** Size Bytes */
-            readonly size_bytes: number;
-        };
-        /** SpeciesDocument */
-        readonly SpeciesDocument: {
+        readonly SelectionDocument: components["schemas"]["PresetSelection"] | components["schemas"]["RecordSelection"];
+        /** SpeciesOccupancy */
+        readonly SpeciesOccupancy: {
             /** Label */
             readonly label: string;
             /** Occupancy */
@@ -552,24 +469,24 @@ export interface components {
             /** Symbol */
             readonly symbol: string;
         };
-        /** StructureInspectionRequest */
-        readonly StructureInspectionRequest: {
-            readonly source: components["schemas"]["StructureSourceRequest"];
+        /** StageCapability */
+        readonly StageCapability: {
+            /** Description */
+            readonly description: string;
+            /** Id */
+            readonly id: string;
+            /** Input Record Ids */
+            readonly input_record_ids: readonly string[];
+            /** Name */
+            readonly name: string;
+            /** Output Record Id */
+            readonly output_record_id: string;
         };
-        /** StructureInspectionResponse */
-        readonly StructureInspectionResponse: {
-            /** Canonical Cif */
-            readonly canonical_cif: string;
-            readonly defaults: components["schemas"]["CalculationDefaults"];
-            /** Pseudo Tables */
-            readonly pseudo_tables: readonly components["schemas"]["PseudoTableResponse"][];
-            readonly structure: components["schemas"]["StructureResponse"];
-        };
-        /** StructureResponse */
-        readonly StructureResponse: {
+        /** StructureDocument */
+        readonly StructureDocument: {
             /** Formula */
             readonly formula: string;
-            readonly lattice: components["schemas"]["LatticeResponse"];
+            readonly lattice: components["schemas"]["LatticeDocument"];
             /** Periodicity */
             readonly periodicity: readonly [
                 boolean,
@@ -583,47 +500,58 @@ export interface components {
             /** Site Count */
             readonly site_count: number;
             /** Sites */
-            readonly sites: readonly components["schemas"]["SiteDocument"][];
-            readonly source: components["schemas"]["SourceDocument"];
+            readonly sites: readonly components["schemas"]["StructureSiteDocument"][];
         };
-        /** StructureSourceRequest */
-        readonly StructureSourceRequest: {
+        /** StructureInspection */
+        readonly StructureInspection: {
+            /** Canonical Cif */
+            readonly canonical_cif: string;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            readonly schema_version: number;
+            readonly source: components["schemas"]["StructureSourceDocument"];
+            readonly structure: components["schemas"]["StructureDocument"];
+        };
+        /** StructureInspectionRequest */
+        readonly StructureInspectionRequest: {
+            readonly source: components["schemas"]["InlineStructureSource"];
+        };
+        /** StructureSiteDocument */
+        readonly StructureSiteDocument: {
+            /** Cartesian Coordinates Angstrom */
+            readonly cartesian_coordinates_angstrom: readonly [
+                number,
+                number,
+                number
+            ];
+            /** Fractional Coordinates */
+            readonly fractional_coordinates: readonly [
+                number,
+                number,
+                number
+            ];
+            /** Species */
+            readonly species: readonly components["schemas"]["SpeciesOccupancy"][];
+        };
+        /** StructureSourceDocument */
+        readonly StructureSourceDocument: {
             /** Content */
-            readonly content: string;
+            readonly content: string | null;
             /** Format */
-            readonly format?: ("cif" | "poscar") | null;
+            readonly format: string;
             /** Name */
             readonly name: string;
-        };
-        /** ValidationError */
-        readonly ValidationError: {
-            /** Context */
-            readonly ctx?: Record<string, never>;
-            /** Input */
-            readonly input?: unknown;
-            /** Location */
-            readonly loc: readonly (string | number)[];
-            /** Message */
-            readonly msg: string;
-            /** Error Type */
-            readonly type: string;
-        };
-        /** WorkbenchErrorDetail */
-        readonly WorkbenchErrorDetail: {
-            /** Details */
-            readonly details: {
-                readonly [key: string]: components["schemas"]["JsonValue"];
-            };
-            /** Kind */
-            readonly kind: string;
-            /** Message */
-            readonly message: string;
-            /** Retryable */
-            readonly retryable: boolean;
-        };
-        /** WorkbenchErrorResponse */
-        readonly WorkbenchErrorResponse: {
-            readonly error: components["schemas"]["WorkbenchErrorDetail"];
+            /**
+             * Origin
+             * @enum {string}
+             */
+            readonly origin: "inline" | "path" | "generated";
+            /** Sha256 */
+            readonly sha256: string | null;
+            /** Size Bytes */
+            readonly size_bytes: number | null;
         };
     };
     responses: never;
@@ -634,133 +562,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    readonly archive_workbench_recommendation: {
-        readonly parameters: {
-            readonly query?: never;
-            readonly header?: never;
-            readonly path?: never;
-            readonly cookie?: never;
-        };
-        readonly requestBody: {
-            readonly content: {
-                readonly "application/json": components["schemas"]["ArchiveRequest"];
-            };
-        };
-        readonly responses: {
-            /** @description Successful Response */
-            readonly 200: {
-                headers: {
-                    readonly [name: string]: unknown;
-                };
-                content: {
-                    readonly "application/zip": unknown;
-                };
-            };
-            /** @description Conflict */
-            readonly 409: {
-                headers: {
-                    readonly [name: string]: unknown;
-                };
-                content: {
-                    readonly "application/json": components["schemas"]["WorkbenchErrorResponse"];
-                };
-            };
-            /** @description Unprocessable Entity */
-            readonly 422: {
-                headers: {
-                    readonly [name: string]: unknown;
-                };
-                content: {
-                    readonly "application/json": components["schemas"]["WorkbenchErrorResponse"];
-                };
-            };
-            /** @description Service Unavailable */
-            readonly 503: {
-                headers: {
-                    readonly [name: string]: unknown;
-                };
-                content: {
-                    readonly "application/json": components["schemas"]["WorkbenchErrorResponse"];
-                };
-            };
-        };
-    };
-    readonly review_workbench_recommendation: {
-        readonly parameters: {
-            readonly query?: never;
-            readonly header?: never;
-            readonly path?: never;
-            readonly cookie?: never;
-        };
-        readonly requestBody: {
-            readonly content: {
-                readonly "application/json": components["schemas"]["GuidedRequest"];
-            };
-        };
-        readonly responses: {
-            /** @description Successful Response */
-            readonly 200: {
-                headers: {
-                    readonly [name: string]: unknown;
-                };
-                content: {
-                    readonly "application/json": components["schemas"]["RecommendationResponse"];
-                };
-            };
-            /** @description Unprocessable Entity */
-            readonly 422: {
-                headers: {
-                    readonly [name: string]: unknown;
-                };
-                content: {
-                    readonly "application/json": components["schemas"]["WorkbenchErrorResponse"];
-                };
-            };
-            /** @description Service Unavailable */
-            readonly 503: {
-                headers: {
-                    readonly [name: string]: unknown;
-                };
-                content: {
-                    readonly "application/json": components["schemas"]["WorkbenchErrorResponse"];
-                };
-            };
-        };
-    };
-    readonly inspect_workbench_structure: {
-        readonly parameters: {
-            readonly query?: never;
-            readonly header?: never;
-            readonly path?: never;
-            readonly cookie?: never;
-        };
-        readonly requestBody: {
-            readonly content: {
-                readonly "application/json": components["schemas"]["StructureInspectionRequest"];
-            };
-        };
-        readonly responses: {
-            /** @description Successful Response */
-            readonly 200: {
-                headers: {
-                    readonly [name: string]: unknown;
-                };
-                content: {
-                    readonly "application/json": components["schemas"]["StructureInspectionResponse"];
-                };
-            };
-            /** @description Unprocessable Entity */
-            readonly 422: {
-                headers: {
-                    readonly [name: string]: unknown;
-                };
-                content: {
-                    readonly "application/json": components["schemas"]["WorkbenchErrorResponse"];
-                };
-            };
-        };
-    };
-    readonly codes_codes_get: {
+    readonly capabilities_capabilities_get: {
         readonly parameters: {
             readonly query?: never;
             readonly header?: never;
@@ -775,9 +577,7 @@ export interface operations {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": {
-                        readonly [key: string]: unknown;
-                    };
+                    readonly "application/json": components["schemas"]["Capabilities"];
                 };
             };
         };
@@ -791,67 +591,45 @@ export interface operations {
         };
         readonly requestBody: {
             readonly content: {
-                readonly "application/json": {
-                    readonly [key: string]: unknown;
-                };
+                readonly "application/json": components["schemas"]["ComputeRequest"];
             };
         };
         readonly responses: {
-            /** @description Successful Response */
+            /** @description Canonical Computation Result JSON or an in-memory ZIP archive. */
             readonly 200: {
                 headers: {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": {
-                        readonly [key: string]: unknown;
-                    };
+                    readonly "application/json": components["schemas"]["ComputationResult"];
+                    readonly "application/zip": string;
                 };
             };
-            /** @description Validation Error */
+            /** @description Unprocessable Entity */
             readonly 422: {
                 headers: {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-        };
-    };
-    readonly generate_generate_post: {
-        readonly parameters: {
-            readonly query?: never;
-            readonly header?: never;
-            readonly path?: never;
-            readonly cookie?: never;
-        };
-        readonly requestBody: {
-            readonly content: {
-                readonly "application/json": {
-                    readonly [key: string]: unknown;
-                };
-            };
-        };
-        readonly responses: {
-            /** @description Successful Response */
-            readonly 200: {
+            /** @description Failed Dependency */
+            readonly 424: {
                 headers: {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": {
-                        readonly [key: string]: unknown;
-                    };
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation Error */
-            readonly 422: {
+            /** @description Service Unavailable */
+            readonly 503: {
                 headers: {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": components["schemas"]["HTTPValidationError"];
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -878,14 +656,18 @@ export interface operations {
             };
         };
     };
-    readonly models_models_get: {
+    readonly inspect_inspect_post: {
         readonly parameters: {
             readonly query?: never;
             readonly header?: never;
             readonly path?: never;
             readonly cookie?: never;
         };
-        readonly requestBody?: never;
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["StructureInspectionRequest"];
+            };
+        };
         readonly responses: {
             /** @description Successful Response */
             readonly 200: {
@@ -893,9 +675,16 @@ export interface operations {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": {
-                        readonly [key: string]: unknown;
-                    };
+                    readonly "application/json": components["schemas"]["StructureInspection"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -916,65 +705,6 @@ export interface operations {
                 };
                 content: {
                     readonly "application/json": unknown;
-                };
-            };
-        };
-    };
-    readonly recommend_recommend_post: {
-        readonly parameters: {
-            readonly query?: never;
-            readonly header?: never;
-            readonly path?: never;
-            readonly cookie?: never;
-        };
-        readonly requestBody: {
-            readonly content: {
-                readonly "application/json": {
-                    readonly [key: string]: unknown;
-                };
-            };
-        };
-        readonly responses: {
-            /** @description Successful Response */
-            readonly 200: {
-                headers: {
-                    readonly [name: string]: unknown;
-                };
-                content: {
-                    readonly "application/json": {
-                        readonly [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            readonly 422: {
-                headers: {
-                    readonly [name: string]: unknown;
-                };
-                content: {
-                    readonly "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    readonly tasks_tasks_get: {
-        readonly parameters: {
-            readonly query?: never;
-            readonly header?: never;
-            readonly path?: never;
-            readonly cookie?: never;
-        };
-        readonly requestBody?: never;
-        readonly responses: {
-            /** @description Successful Response */
-            readonly 200: {
-                headers: {
-                    readonly [name: string]: unknown;
-                };
-                content: {
-                    readonly "application/json": {
-                        readonly [key: string]: unknown;
-                    };
                 };
             };
         };

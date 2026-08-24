@@ -1,23 +1,30 @@
 {
   "components": {
     "schemas": {
-      "ArchiveRequest": {
+      "CalculationDraft": {
         "additionalProperties": false,
         "properties": {
           "hints": {
-            "$ref": "#/components/schemas/HintsResponse",
-            "default": {}
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalculationHints-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "intent": {
-            "$ref": "#/components/schemas/IntentResponse",
-            "default": {
-              "code": "quantum_espresso",
-              "functional": "PBEsol",
-              "pseudo_accuracy": "efficiency",
-              "task": "scf_single_point"
-            }
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalculationIntent-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
-          "pseudo_table_id": {
+          "pseudo_table": {
             "anyOf": [
               {
                 "type": "string"
@@ -26,86 +33,80 @@
                 "type": "null"
               }
             ],
-            "title": "Pseudo Table Id"
+            "title": "Pseudo Table"
           },
-          "review_digest": {
-            "title": "Review Digest",
-            "type": "string"
-          },
-          "source": {
-            "$ref": "#/components/schemas/StructureSourceRequest"
+          "structure": {
+            "$ref": "#/components/schemas/InlineStructureSource"
           }
         },
         "required": [
-          "source",
-          "review_digest"
+          "structure"
         ],
-        "title": "ArchiveRequest",
+        "title": "CalculationDraft",
         "type": "object"
       },
-      "CalculationDefaults": {
+      "CalculationHints-Input": {
         "additionalProperties": false,
         "properties": {
-          "hints": {
-            "$ref": "#/components/schemas/HintsResponse"
+          "conv_thr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conv Thr"
           },
-          "intent": {
-            "$ref": "#/components/schemas/IntentResponse"
-          }
-        },
-        "required": [
-          "intent",
-          "hints"
-        ],
-        "title": "CalculationDefaults",
-        "type": "object"
-      },
-      "GeneratedFileResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "content": {
-            "title": "Content",
-            "type": "string"
+          "electron_maxstep": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Electron Maxstep"
           },
-          "path": {
-            "title": "Path",
-            "type": "string"
+          "k_grid": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "K Grid"
           },
-          "role": {
-            "title": "Role",
-            "type": "string"
+          "k_spacing": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "K Spacing"
           },
-          "sha256": {
-            "title": "Sha256",
-            "type": "string"
-          }
-        },
-        "required": [
-          "path",
-          "role",
-          "content",
-          "sha256"
-        ],
-        "title": "GeneratedFileResponse",
-        "type": "object"
-      },
-      "GuidedRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "hints": {
-            "$ref": "#/components/schemas/HintsResponse",
-            "default": {}
+          "mixing_beta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mixing Beta"
           },
-          "intent": {
-            "$ref": "#/components/schemas/IntentResponse",
-            "default": {
-              "code": "quantum_espresso",
-              "functional": "PBEsol",
-              "pseudo_accuracy": "efficiency",
-              "task": "scf_single_point"
-            }
-          },
-          "pseudo_table_id": {
+          "pseudo_accuracy": {
             "anyOf": [
               {
                 "type": "string"
@@ -114,33 +115,102 @@
                 "type": "null"
               }
             ],
-            "title": "Pseudo Table Id"
+            "title": "Pseudo Accuracy"
           },
-          "source": {
-            "$ref": "#/components/schemas/StructureSourceRequest"
+          "pseudo_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pseudo Type"
+          },
+          "relativistic_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relativistic Mode"
+          },
+          "smearing_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smearing Type"
+          },
+          "smearing_width_ry": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smearing Width Ry"
+          },
+          "spin_orbit_coupling": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spin Orbit Coupling"
+          },
+          "spin_polarized": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spin Polarized"
+          },
+          "use_vdw": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Vdw"
+          },
+          "vdw_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vdw Method"
           }
         },
-        "required": [
-          "source"
-        ],
-        "title": "GuidedRequest",
+        "title": "CalculationHints",
         "type": "object"
       },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "title": "Detail",
-            "type": "array"
-          }
-        },
-        "title": "HTTPValidationError",
-        "type": "object"
-      },
-      "HintsResponse": {
-        "additionalProperties": false,
+      "CalculationHints-Output": {
+        "description": "Optional operator overrides. ``None`` means let Core decide.\nNon-None records ``user_hint`` provenance. Partial overrides supported.\nUnits: ``k_spacing`` in \u00c5\u207b\u00b9 (VASP KSPACING),\n``smearing_width_ry`` and ``conv_thr`` in Rydberg.",
         "properties": {
           "conv_thr": {
             "anyOf": [
@@ -305,6 +375,12 @@
           "vdw_method": {
             "anyOf": [
               {
+                "enum": [
+                  "d3",
+                  "d3bj",
+                  "ts",
+                  "mbd"
+                ],
                 "type": "string"
               },
               {
@@ -314,11 +390,37 @@
             "title": "Vdw Method"
           }
         },
-        "title": "HintsResponse",
+        "title": "CalculationHints",
         "type": "object"
       },
-      "IntentResponse": {
+      "CalculationIntent-Input": {
         "additionalProperties": false,
+        "properties": {
+          "code": {
+            "default": "quantum_espresso",
+            "title": "Code",
+            "type": "string"
+          },
+          "functional": {
+            "default": "PBEsol",
+            "title": "Functional",
+            "type": "string"
+          },
+          "pseudo_accuracy": {
+            "default": "efficiency",
+            "title": "Pseudo Accuracy",
+            "type": "string"
+          },
+          "task": {
+            "default": "scf_single_point",
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "title": "CalculationIntent",
+        "type": "object"
+      },
+      "CalculationIntent-Output": {
         "properties": {
           "code": {
             "default": "quantum_espresso",
@@ -345,12 +447,358 @@
             "type": "string"
           }
         },
-        "title": "IntentResponse",
+        "title": "CalculationIntent",
+        "type": "object"
+      },
+      "CalculationTaskCapability": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/PresetCapability"
+            },
+            "title": "Presets",
+            "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "selectable_record_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Selectable Record Ids",
+            "type": "array"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/StageCapability"
+            },
+            "title": "Stages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "name",
+          "description",
+          "stages",
+          "presets",
+          "selectable_record_ids"
+        ],
+        "title": "CalculationTaskCapability",
+        "type": "object"
+      },
+      "Capabilities": {
+        "properties": {
+          "core_version": {
+            "title": "Core Version",
+            "type": "string"
+          },
+          "default_hints": {
+            "$ref": "#/components/schemas/CalculationHints-Output"
+          },
+          "default_intent": {
+            "$ref": "#/components/schemas/CalculationIntent-Output"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelCapability"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "pseudopotential_sets": {
+            "items": {
+              "$ref": "#/components/schemas/PseudopotentialSetCapability"
+            },
+            "title": "Pseudopotential Sets",
+            "type": "array"
+          },
+          "target_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Target Codes",
+            "type": "array"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/CalculationTaskCapability"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "core_version",
+          "tasks",
+          "target_codes",
+          "models",
+          "pseudopotential_sets",
+          "default_intent",
+          "default_hints"
+        ],
+        "title": "Capabilities",
+        "type": "object"
+      },
+      "ComputationResult": {
+        "additionalProperties": false,
+        "properties": {
+          "draft": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Draft",
+            "type": "object"
+          },
+          "publication": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Publication"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "records": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Records",
+            "type": "object"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "selection": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Selection",
+            "type": "object"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          },
+          "task_revision": {
+            "title": "Task Revision",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schema_version",
+          "draft",
+          "task",
+          "task_revision",
+          "selection",
+          "records",
+          "warnings",
+          "publication"
+        ],
+        "title": "ComputationResult",
+        "type": "object"
+      },
+      "ComputeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/CalculationDraft"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryOutput"
+              },
+              {
+                "$ref": "#/components/schemas/HttpArchiveOutput"
+              }
+            ],
+            "title": "Output"
+          },
+          "selection": {
+            "$ref": "#/components/schemas/SelectionDocument"
+          }
+        },
+        "required": [
+          "draft",
+          "selection",
+          "output"
+        ],
+        "title": "ComputeRequest",
+        "type": "object"
+      },
+      "Error": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retryable"
+          },
+          "root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "kind",
+          "message"
+        ],
+        "title": "Error",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/Error"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
+      "HttpArchiveOutput": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "archive",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "HttpArchiveOutput",
+        "type": "object"
+      },
+      "InlineStructureSource": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cif",
+                  "poscar"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "kind": {
+            "const": "inline",
+            "default": "inline",
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "content"
+        ],
+        "title": "InlineStructureSource",
         "type": "object"
       },
       "JsonValue": {},
-      "LatticeResponse": {
-        "additionalProperties": false,
+      "LatticeDocument": {
         "properties": {
           "angles_degrees": {
             "maxItems": 3,
@@ -453,46 +901,127 @@
           "angles_degrees",
           "volume_angstrom3"
         ],
-        "title": "LatticeResponse",
+        "title": "LatticeDocument",
         "type": "object"
       },
-      "PseudoSelectionResponse": {
+      "MemoryOutput": {
         "additionalProperties": false,
         "properties": {
-          "files": {
-            "items": {
-              "$ref": "#/components/schemas/SelectedPseudoResponse"
-            },
-            "title": "Files",
-            "type": "array"
+          "kind": {
+            "const": "memory",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "MemoryOutput",
+        "type": "object"
+      },
+      "ModelCapability": {
+        "properties": {
+          "feature_set": {
+            "title": "Feature Set",
+            "type": "string"
           },
-          "table": {
-            "$ref": "#/components/schemas/PseudoTableResponse"
+          "id": {
+            "title": "Id",
+            "type": "string"
           },
-          "warnings": {
+          "model_type": {
+            "title": "Model Type",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version",
+          "role",
+          "model_type",
+          "target",
+          "feature_set",
+          "source",
+          "revision"
+        ],
+        "title": "ModelCapability",
+        "type": "object"
+      },
+      "PresetCapability": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "output_record_ids": {
             "items": {
               "type": "string"
             },
-            "title": "Warnings",
+            "title": "Output Record Ids",
             "type": "array"
           }
         },
         "required": [
-          "table",
-          "files",
-          "warnings"
+          "id",
+          "name",
+          "output_record_ids"
         ],
-        "title": "PseudoSelectionResponse",
+        "title": "PresetCapability",
         "type": "object"
       },
-      "PseudoTableResponse": {
+      "PresetSelection": {
         "additionalProperties": false,
         "properties": {
+          "preset": {
+            "title": "Preset",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preset"
+        ],
+        "title": "PresetSelection",
+        "type": "object"
+      },
+      "PseudopotentialSetCapability": {
+        "properties": {
           "accuracy": {
-            "enum": [
-              "efficiency",
-              "precision"
-            ],
             "title": "Accuracy",
             "type": "string"
           },
@@ -503,13 +1032,6 @@
           "default": {
             "title": "Default",
             "type": "boolean"
-          },
-          "elements": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Elements",
-            "type": "array"
           },
           "functional": {
             "title": "Functional",
@@ -527,12 +1049,19 @@
             "title": "Provider",
             "type": "string"
           },
-          "relativistic": {
-            "title": "Relativistic",
+          "relativistic_treatment": {
+            "title": "Relativistic Treatment",
             "type": "string"
           },
-          "upstream_table": {
-            "title": "Upstream Table",
+          "supported_elements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Elements",
+            "type": "array"
+          },
+          "upstream_name": {
+            "title": "Upstream Name",
             "type": "string"
           },
           "version": {
@@ -544,80 +1073,40 @@
           "id",
           "version",
           "provider",
-          "upstream_table",
+          "upstream_name",
           "functional",
           "accuracy",
-          "relativistic",
+          "relativistic_treatment",
+          "supported_elements",
           "licence",
           "citation",
-          "elements",
           "default"
         ],
-        "title": "PseudoTableResponse",
+        "title": "PseudopotentialSetCapability",
         "type": "object"
       },
-      "RecommendationDecisions": {
-        "additionalProperties": false,
+      "Publication": {
         "properties": {
-          "k_grid": {
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "integer"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "K Grid",
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Files",
             "type": "array"
           },
-          "k_mesh_type": {
-            "title": "K Mesh Type",
-            "type": "string"
-          },
-          "k_shift": {
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "integer"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "K Shift",
-            "type": "array"
-          },
-          "pseudo_accuracy": {
+          "kind": {
             "enum": [
-              "efficiency",
-              "precision"
+              "directory",
+              "archive"
             ],
-            "title": "Pseudo Accuracy",
+            "title": "Kind",
             "type": "string"
           },
-          "pseudo_functional": {
-            "title": "Pseudo Functional",
+          "manifest_sha256": {
+            "title": "Manifest Sha256",
             "type": "string"
           },
-          "pseudo_relativistic": {
-            "title": "Pseudo Relativistic",
-            "type": "string"
-          },
-          "pseudo_table_id": {
-            "title": "Pseudo Table Id",
-            "type": "string"
-          },
-          "smearing_type": {
+          "output_sha256": {
             "anyOf": [
               {
                 "type": "string"
@@ -626,9 +1115,68 @@
                 "type": "null"
               }
             ],
-            "title": "Smearing Type"
+            "title": "Output Sha256"
           },
-          "smearing_width_ry": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "path",
+          "files",
+          "manifest_sha256"
+        ],
+        "title": "Publication",
+        "type": "object"
+      },
+      "RecordSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "records": {
+            "items": {
+              "enum": [
+                "analysis",
+                "advice",
+                "k_points",
+                "selection",
+                "generated_files",
+                "dft_input_data"
+              ],
+              "type": "string"
+            },
+            "title": "Records",
+            "type": "array"
+          }
+        },
+        "required": [
+          "records"
+        ],
+        "title": "RecordSelection",
+        "type": "object"
+      },
+      "SelectionDocument": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/PresetSelection"
+          },
+          {
+            "$ref": "#/components/schemas/RecordSelection"
+          }
+        ]
+      },
+      "SpeciesOccupancy": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "occupancy": {
+            "title": "Occupancy",
+            "type": "number"
+          },
+          "oxidation_state": {
             "anyOf": [
               {
                 "type": "number"
@@ -637,393 +1185,155 @@
                 "type": "null"
               }
             ],
-            "title": "Smearing Width Ry"
+            "title": "Oxidation State"
           },
-          "spin_orbit_coupling": {
-            "title": "Spin Orbit Coupling",
-            "type": "boolean"
-          },
-          "spin_polarized": {
-            "title": "Spin Polarized",
-            "type": "boolean"
-          },
-          "use_vdw": {
-            "title": "Use Vdw",
-            "type": "boolean"
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
           }
         },
         "required": [
-          "k_grid",
-          "k_shift",
-          "k_mesh_type",
-          "spin_polarized",
-          "spin_orbit_coupling",
-          "smearing_type",
-          "smearing_width_ry",
-          "use_vdw",
-          "pseudo_table_id",
-          "pseudo_functional",
-          "pseudo_accuracy",
-          "pseudo_relativistic"
+          "symbol",
+          "label",
+          "occupancy"
         ],
-        "title": "RecommendationDecisions",
+        "title": "SpeciesOccupancy",
         "type": "object"
       },
-      "RecommendationResponse": {
-        "additionalProperties": false,
+      "StageCapability": {
         "properties": {
-          "canonical_cif": {
-            "title": "Canonical Cif",
+          "description": {
+            "title": "Description",
             "type": "string"
-          },
-          "decisions": {
-            "$ref": "#/components/schemas/RecommendationDecisions"
-          },
-          "generated_files": {
-            "items": {
-              "$ref": "#/components/schemas/GeneratedFileResponse"
-            },
-            "title": "Generated Files",
-            "type": "array"
-          },
-          "hints": {
-            "$ref": "#/components/schemas/HintsResponse"
-          },
-          "intent": {
-            "$ref": "#/components/schemas/IntentResponse"
-          },
-          "records": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue"
-            },
-            "title": "Records",
-            "type": "object"
-          },
-          "review_digest": {
-            "title": "Review Digest",
-            "type": "string"
-          },
-          "runtime": {
-            "$ref": "#/components/schemas/RuntimeProvenanceResponse"
-          },
-          "schema_version": {
-            "title": "Schema Version",
-            "type": "integer"
-          },
-          "selection": {
-            "$ref": "#/components/schemas/PseudoSelectionResponse"
-          },
-          "structure": {
-            "$ref": "#/components/schemas/StructureResponse"
-          },
-          "warnings": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Warnings",
-            "type": "array"
-          }
-        },
-        "required": [
-          "schema_version",
-          "review_digest",
-          "structure",
-          "canonical_cif",
-          "intent",
-          "hints",
-          "decisions",
-          "runtime",
-          "records",
-          "generated_files",
-          "selection",
-          "warnings"
-        ],
-        "title": "RecommendationResponse",
-        "type": "object"
-      },
-      "RuntimeAssetFileResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "path": {
-            "title": "Path",
-            "type": "string"
-          },
-          "role": {
-            "title": "Role",
-            "type": "string"
-          },
-          "sha256": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sha256"
-          },
-          "size_bytes": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Size Bytes"
-          }
-        },
-        "required": [
-          "role",
-          "path",
-          "sha256",
-          "size_bytes"
-        ],
-        "title": "RuntimeAssetFileResponse",
-        "type": "object"
-      },
-      "RuntimeAssetResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "files": {
-            "items": {
-              "$ref": "#/components/schemas/RuntimeAssetFileResponse"
-            },
-            "title": "Files",
-            "type": "array"
           },
           "id": {
             "title": "Id",
             "type": "string"
           },
-          "version": {
-            "title": "Version",
+          "input_record_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Input Record Ids",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "output_record_id": {
+            "title": "Output Record Id",
             "type": "string"
           }
         },
         "required": [
           "id",
-          "version",
-          "files"
+          "name",
+          "description",
+          "input_record_ids",
+          "output_record_id"
         ],
-        "title": "RuntimeAssetResponse",
+        "title": "StageCapability",
         "type": "object"
       },
-      "RuntimeModelResponse": {
-        "additionalProperties": false,
+      "StructureDocument": {
         "properties": {
-          "feature_set": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Feature Set"
+          "formula": {
+            "title": "Formula",
+            "type": "string"
           },
-          "model_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model Type"
+          "lattice": {
+            "$ref": "#/components/schemas/LatticeDocument"
           },
-          "name": {
-            "anyOf": [
+          "periodicity": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
               {
-                "type": "string"
+                "type": "boolean"
               },
               {
-                "type": "null"
+                "type": "boolean"
+              },
+              {
+                "type": "boolean"
               }
             ],
-            "title": "Name"
+            "title": "Periodicity",
+            "type": "array"
           },
-          "revision": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Revision"
+          "reduced_formula": {
+            "title": "Reduced Formula",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "site_count": {
+            "title": "Site Count",
+            "type": "integer"
+          },
+          "sites": {
+            "items": {
+              "$ref": "#/components/schemas/StructureSiteDocument"
+            },
+            "title": "Sites",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schema_version",
+          "formula",
+          "reduced_formula",
+          "site_count",
+          "lattice",
+          "periodicity",
+          "sites"
+        ],
+        "title": "StructureDocument",
+        "type": "object"
+      },
+      "StructureInspection": {
+        "properties": {
+          "canonical_cif": {
+            "title": "Canonical Cif",
+            "type": "string"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
           },
           "source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source"
+            "$ref": "#/components/schemas/StructureSourceDocument"
           },
-          "target": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target"
-          },
-          "version": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Version"
+          "structure": {
+            "$ref": "#/components/schemas/StructureDocument"
           }
         },
         "required": [
-          "name",
-          "version",
-          "model_type",
-          "target",
-          "feature_set",
           "source",
-          "revision"
+          "structure",
+          "canonical_cif"
         ],
-        "title": "RuntimeModelResponse",
+        "title": "StructureInspection",
         "type": "object"
       },
-      "RuntimeProvenanceResponse": {
+      "StructureInspectionRequest": {
         "additionalProperties": false,
         "properties": {
-          "goldilocks_core_version": {
-            "title": "Goldilocks Core Version",
-            "type": "string"
-          },
-          "model_assets": {
-            "items": {
-              "$ref": "#/components/schemas/RuntimeAssetResponse"
-            },
-            "title": "Model Assets",
-            "type": "array"
-          },
-          "models": {
-            "items": {
-              "$ref": "#/components/schemas/RuntimeModelResponse"
-            },
-            "title": "Models",
-            "type": "array"
+          "source": {
+            "$ref": "#/components/schemas/InlineStructureSource"
           }
         },
         "required": [
-          "goldilocks_core_version",
-          "models",
-          "model_assets"
+          "source"
         ],
-        "title": "RuntimeProvenanceResponse",
+        "title": "StructureInspectionRequest",
         "type": "object"
       },
-      "SelectedPseudoResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "ecutrho_ry": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ecutrho Ry"
-          },
-          "ecutwfc_ry": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ecutwfc Ry"
-          },
-          "element": {
-            "title": "Element",
-            "type": "string"
-          },
-          "filename": {
-            "title": "Filename",
-            "type": "string"
-          },
-          "functional": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Functional"
-          },
-          "provenance": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue"
-            },
-            "title": "Provenance",
-            "type": "object"
-          },
-          "relativistic": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Relativistic"
-          },
-          "sha256": {
-            "title": "Sha256",
-            "type": "string"
-          },
-          "warnings": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Warnings",
-            "type": "array"
-          }
-        },
-        "required": [
-          "element",
-          "filename",
-          "sha256",
-          "functional",
-          "relativistic",
-          "ecutwfc_ry",
-          "ecutrho_ry",
-          "provenance",
-          "warnings"
-        ],
-        "title": "SelectedPseudoResponse",
-        "type": "object"
-      },
-      "SiteDocument": {
-        "additionalProperties": false,
+      "StructureSiteDocument": {
         "properties": {
           "cartesian_coordinates_angstrom": {
             "maxItems": 3,
@@ -1061,7 +1371,7 @@
           },
           "species": {
             "items": {
-              "$ref": "#/components/schemas/SpeciesDocument"
+              "$ref": "#/components/schemas/SpeciesOccupancy"
             },
             "title": "Species",
             "type": "array"
@@ -1072,12 +1382,22 @@
           "cartesian_coordinates_angstrom",
           "species"
         ],
-        "title": "SiteDocument",
+        "title": "StructureSiteDocument",
         "type": "object"
       },
-      "SourceDocument": {
-        "additionalProperties": false,
+      "StructureSourceDocument": {
         "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
           "format": {
             "title": "Format",
             "type": "string"
@@ -1086,282 +1406,47 @@
             "title": "Name",
             "type": "string"
           },
+          "origin": {
+            "enum": [
+              "inline",
+              "path",
+              "generated"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
           "sha256": {
-            "title": "Sha256",
-            "type": "string"
-          },
-          "size_bytes": {
-            "title": "Size Bytes",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "name",
-          "format",
-          "sha256",
-          "size_bytes"
-        ],
-        "title": "SourceDocument",
-        "type": "object"
-      },
-      "SpeciesDocument": {
-        "additionalProperties": false,
-        "properties": {
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "occupancy": {
-            "title": "Occupancy",
-            "type": "number"
-          },
-          "oxidation_state": {
             "anyOf": [
               {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Oxidation State"
-          },
-          "symbol": {
-            "title": "Symbol",
-            "type": "string"
-          }
-        },
-        "required": [
-          "symbol",
-          "label",
-          "occupancy"
-        ],
-        "title": "SpeciesDocument",
-        "type": "object"
-      },
-      "StructureInspectionRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "source": {
-            "$ref": "#/components/schemas/StructureSourceRequest"
-          }
-        },
-        "required": [
-          "source"
-        ],
-        "title": "StructureInspectionRequest",
-        "type": "object"
-      },
-      "StructureInspectionResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "canonical_cif": {
-            "title": "Canonical Cif",
-            "type": "string"
-          },
-          "defaults": {
-            "$ref": "#/components/schemas/CalculationDefaults"
-          },
-          "pseudo_tables": {
-            "items": {
-              "$ref": "#/components/schemas/PseudoTableResponse"
-            },
-            "title": "Pseudo Tables",
-            "type": "array"
-          },
-          "structure": {
-            "$ref": "#/components/schemas/StructureResponse"
-          }
-        },
-        "required": [
-          "structure",
-          "canonical_cif",
-          "defaults",
-          "pseudo_tables"
-        ],
-        "title": "StructureInspectionResponse",
-        "type": "object"
-      },
-      "StructureResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "formula": {
-            "title": "Formula",
-            "type": "string"
-          },
-          "lattice": {
-            "$ref": "#/components/schemas/LatticeResponse"
-          },
-          "periodicity": {
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "boolean"
-              }
-            ],
-            "title": "Periodicity",
-            "type": "array"
-          },
-          "reduced_formula": {
-            "title": "Reduced Formula",
-            "type": "string"
-          },
-          "schema_version": {
-            "title": "Schema Version",
-            "type": "integer"
-          },
-          "site_count": {
-            "title": "Site Count",
-            "type": "integer"
-          },
-          "sites": {
-            "items": {
-              "$ref": "#/components/schemas/SiteDocument"
-            },
-            "title": "Sites",
-            "type": "array"
-          },
-          "source": {
-            "$ref": "#/components/schemas/SourceDocument"
-          }
-        },
-        "required": [
-          "schema_version",
-          "source",
-          "formula",
-          "reduced_formula",
-          "site_count",
-          "lattice",
-          "periodicity",
-          "sites"
-        ],
-        "title": "StructureResponse",
-        "type": "object"
-      },
-      "StructureSourceRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "content": {
-            "title": "Content",
-            "type": "string"
-          },
-          "format": {
-            "anyOf": [
-              {
-                "enum": [
-                  "cif",
-                  "poscar"
-                ],
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Format"
+            "title": "Sha256"
           },
-          "name": {
-            "title": "Name",
-            "type": "string"
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
           }
         },
         "required": [
+          "origin",
           "name",
-          "content"
+          "format",
+          "content",
+          "sha256",
+          "size_bytes"
         ],
-        "title": "StructureSourceRequest",
-        "type": "object"
-      },
-      "ValidationError": {
-        "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "title": "Location",
-            "type": "array"
-          },
-          "msg": {
-            "title": "Message",
-            "type": "string"
-          },
-          "type": {
-            "title": "Error Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError",
-        "type": "object"
-      },
-      "WorkbenchErrorDetail": {
-        "additionalProperties": false,
-        "properties": {
-          "details": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue"
-            },
-            "title": "Details",
-            "type": "object"
-          },
-          "kind": {
-            "title": "Kind",
-            "type": "string"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "retryable": {
-            "title": "Retryable",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "kind",
-          "message",
-          "retryable",
-          "details"
-        ],
-        "title": "WorkbenchErrorDetail",
-        "type": "object"
-      },
-      "WorkbenchErrorResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "error": {
-            "$ref": "#/components/schemas/WorkbenchErrorDetail"
-          }
-        },
-        "required": [
-          "error"
-        ],
-        "title": "WorkbenchErrorResponse",
+        "title": "StructureSourceDocument",
         "type": "object"
       }
     }
@@ -1372,173 +1457,22 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/api/workbench/archive": {
-      "post": {
-        "operationId": "archive_workbench_recommendation",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ArchiveRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/zip": {}
-            },
-            "description": "Successful Response"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkbenchErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkbenchErrorResponse"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkbenchErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "summary": "Archive",
-        "tags": [
-          "workbench"
-        ]
-      }
-    },
-    "/api/workbench/recommendation": {
-      "post": {
-        "operationId": "review_workbench_recommendation",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GuidedRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RecommendationResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkbenchErrorResponse"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkbenchErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "summary": "Recommend",
-        "tags": [
-          "workbench"
-        ]
-      }
-    },
-    "/api/workbench/structure": {
-      "post": {
-        "operationId": "inspect_workbench_structure",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/StructureInspectionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StructureInspectionResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkbenchErrorResponse"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          }
-        },
-        "summary": "Inspect Structure",
-        "tags": [
-          "workbench"
-        ]
-      }
-    },
-    "/codes": {
+    "/capabilities": {
       "get": {
-        "operationId": "codes_codes_get",
+        "operationId": "capabilities_capabilities_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Codes Codes Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/Capabilities"
                 }
               }
             },
             "description": "Successful Response"
           }
         },
-        "summary": "Codes"
+        "summary": "Capabilities"
       }
     },
     "/compute": {
@@ -1548,9 +1482,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "title": "Body",
-                "type": "object"
+                "$ref": "#/components/schemas/ComputeRequest"
               }
             }
           },
@@ -1561,68 +1493,50 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Compute Compute Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ComputationResult"
+                }
+              },
+              "application/zip": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Canonical Computation Result JSON or an in-memory ZIP archive."
           },
           "422": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Entity"
+          },
+          "424": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Failed Dependency"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Compute"
-      }
-    },
-    "/generate": {
-      "post": {
-        "operationId": "generate_generate_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "additionalProperties": true,
-                "title": "Body",
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Generate Generate Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Generate"
       }
     },
     "/health": {
@@ -1647,24 +1561,42 @@
         "summary": "Health"
       }
     },
-    "/models": {
-      "get": {
-        "operationId": "models_models_get",
+    "/inspect": {
+      "post": {
+        "operationId": "inspect_inspect_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StructureInspectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Models Models Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/StructureInspection"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
           }
         },
-        "summary": "Models"
+        "summary": "Inspect"
       }
     },
     "/ready": {
@@ -1683,68 +1615,6 @@
           }
         },
         "summary": "Ready"
-      }
-    },
-    "/recommend": {
-      "post": {
-        "operationId": "recommend_recommend_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "additionalProperties": true,
-                "title": "Body",
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Recommend Recommend Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Recommend"
-      }
-    },
-    "/tasks": {
-      "get": {
-        "operationId": "tasks_tasks_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Tasks Tasks Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Tasks"
       }
     }
   }

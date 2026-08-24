@@ -104,10 +104,7 @@ def assemble_dft_input_data(
             )
         )
 
-    metadata_by_element = {item.element: item for item in pseudo_metadata}
-    selected_metadata = tuple(
-        metadata_by_element[item.element] for item in selection.pseudopotentials
-    )
+    selected_metadata = _bind_selected_pseudo_metadata(selection, pseudo_metadata)
     pseudo_artifacts, pseudo_set = _pseudopotential_material(
         selection,
         selected_metadata,
@@ -164,6 +161,38 @@ def assemble_dft_input_data(
         citations=citations,
         manifest=manifest,
     )
+
+
+def _bind_selected_pseudo_metadata(
+    selection: SelectionRecord,
+    metadata: tuple[PseudoMetadata, ...],
+) -> tuple[PseudoMetadata, ...]:
+    bound: list[PseudoMetadata] = []
+    for selected in selection.pseudopotentials:
+        matches = tuple(
+            candidate
+            for candidate in metadata
+            if candidate.element == selected.element
+            and candidate.filename == selected.filename
+            and candidate.filepath == selected.filepath
+            and _pseudo_source_identity(candidate) == selected.provenance.data_source
+        )
+        if not matches:
+            raise ValueError(
+                "Selected pseudopotential has no exact metadata candidate for "
+                f"{selected.element}"
+            )
+        if len(matches) != 1:
+            raise ValueError(
+                "Selected pseudopotential metadata is ambiguous for "
+                f"{selected.element}: {len(matches)} exact candidates"
+            )
+        bound.append(matches[0])
+    return tuple(bound)
+
+
+def _pseudo_source_identity(metadata: PseudoMetadata) -> str | None:
+    return metadata.table_id or metadata.provider or metadata.source_identifier
 
 
 def _generated_artifact(
@@ -448,13 +477,11 @@ def _pseudopotential_material(
         raise ValueError("Selected pseudopotentials must come from one installed set")
 
     artifacts: list[InputArtifact] = []
-    metadata_by_element = {item.element: item for item in metadata}
-    for selected in selection.pseudopotentials:
+    for selected, item in zip(selection.pseudopotentials, metadata, strict=True):
         if selected.filepath is None or selected.filename is None:
             raise ValueError(
                 f"Cannot assemble unresolved pseudopotential for {selected.element}."
             )
-        item = metadata_by_element[selected.element]
         artifacts.append(
             _generated_artifact(
                 f"pseudo/{selected.filename}",

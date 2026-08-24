@@ -32,6 +32,8 @@ from goldilocks_core.contracts import (
     Provenance,
     PseudoCutoffs,
     PseudoMetadata,
+    PseudopotentialSelection,
+    SelectionRecord,
 )
 from goldilocks_core.ml.model_registry import model_asset_specs
 from goldilocks_core.pseudo.registry import load_tables
@@ -111,6 +113,185 @@ def test_generation_assembles_complete_dft_input_data_without_host_paths(
             ComputeRequest(request.draft, PresetSelection("recommend"))
         )
     assert DftInputData not in recommendation.records
+
+
+def test_selected_pseudo_binds_to_one_exact_same_element_candidate(
+    tmp_path: Path,
+) -> None:
+    structure = Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
+    candidates = []
+    for identity, payload in (
+        ("a-source", b"selected UPF\n"),
+        ("z-source", b"other UPF\n"),
+    ):
+        root = tmp_path / identity
+        root.mkdir()
+        path = root / "Si.UPF"
+        path.write_bytes(payload)
+        candidates.append(
+            PseudoMetadata(
+                filepath=str(path),
+                filename="Si.UPF",
+                header_format="attr",
+                provider="fixture",
+                accuracy="efficiency",
+                element="Si",
+                pseudo_type="NC",
+                functional="PBEsol",
+                relativistic="scalar",
+                cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
+                source_identifier=identity,
+                pseudo_info={
+                    "licence": f"{identity}-licence",
+                    "licence_text": f"{identity} legal terms\n",
+                    "citation": f"{identity} citation",
+                },
+            )
+        )
+    request = ComputeRequest(
+        CalculationDraft(
+            InlineStructureSource("Si.cif", structure.to(fmt="cif"), "cif"),
+            hints=CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC"),
+            pseudo_metadata=tuple(candidates),
+        ),
+        PresetSelection("generate"),
+    )
+
+    with Service() as service:
+        result = service.compute(request)
+
+    input_data = result.records[DftInputData]
+    pseudo = next(
+        artifact
+        for artifact in input_data.artifacts
+        if artifact.role == "pseudopotential"
+    )
+    licence = next(
+        artifact for artifact in input_data.artifacts if artifact.role == "licence"
+    )
+    assert isinstance(pseudo.source, GeneratedContent)
+    assert pseudo.source.identity == "a-source"
+    assert pseudo.source.content == b"selected UPF\n"
+    assert isinstance(licence.source, GeneratedContent)
+    assert licence.source.content == b"a-source legal terms\n"
+    assert input_data.pseudopotential_set.licence == "a-source-licence"
+    assert input_data.citations == ("a-source citation",)
+
+
+def test_selected_pseudo_rejects_ambiguous_exact_metadata_candidates(
+    tmp_path: Path,
+) -> None:
+    structure = Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
+    path = tmp_path / "Si.UPF"
+    path.write_bytes(b"ambiguous UPF\n")
+    candidate = PseudoMetadata(
+        filepath=str(path),
+        filename="Si.UPF",
+        header_format="attr",
+        provider="fixture",
+        accuracy="efficiency",
+        element="Si",
+        pseudo_type="NC",
+        functional="PBEsol",
+        relativistic="scalar",
+        cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
+        source_identifier="same-source",
+        pseudo_info={
+            "licence": "first",
+            "licence_text": "first legal terms\n",
+            "citation": "first citation",
+        },
+    )
+    duplicate = replace(
+        candidate,
+        pseudo_info={
+            "licence": "second",
+            "licence_text": "second legal terms\n",
+            "citation": "second citation",
+        },
+    )
+    request = ComputeRequest(
+        CalculationDraft(
+            InlineStructureSource("Si.cif", structure.to(fmt="cif"), "cif"),
+            hints=CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC"),
+            pseudo_metadata=(candidate, duplicate),
+        ),
+        PresetSelection("generate"),
+    )
+
+    with Service() as service, pytest.raises(ValueError, match="ambiguous.*Si"):
+        service.compute(request)
+
+
+def test_selected_pseudo_binding_uses_source_identity_for_same_path_candidates(
+    tmp_path: Path,
+) -> None:
+    from goldilocks_core.input_data import _bind_selected_pseudo_metadata
+
+    path = tmp_path / "Si.UPF"
+    first = PseudoMetadata(
+        filepath=str(path),
+        filename="Si.UPF",
+        header_format="attr",
+        provider="first-source",
+        element="Si",
+    )
+    second = replace(first, provider="second-source")
+    selected = PseudopotentialSelection(
+        element="Si",
+        filename="Si.UPF",
+        filepath=str(path),
+        functional="PBEsol",
+        relativistic="scalar",
+        ecutwfc_ry=30,
+        ecutrho_ry=120,
+        provenance=Provenance(
+            source="lookup",
+            reason="Fixture selection.",
+            data_source="first-source",
+        ),
+    )
+
+    assert _bind_selected_pseudo_metadata(
+        SelectionRecord((selected,)),
+        (first, second),
+    ) == (first,)
+
+
+def test_selected_pseudo_rejects_zero_exact_metadata_candidates(
+    tmp_path: Path,
+) -> None:
+    from goldilocks_core.input_data import _bind_selected_pseudo_metadata
+
+    candidate_path = tmp_path / "candidate" / "Si.UPF"
+    candidate = PseudoMetadata(
+        filepath=str(candidate_path),
+        filename="Si.UPF",
+        header_format="attr",
+        provider="fixture",
+        element="Si",
+        source_identifier="fixture-source",
+    )
+    selected = PseudopotentialSelection(
+        element="Si",
+        filename="Si.UPF",
+        filepath=str(tmp_path / "other" / "Si.UPF"),
+        functional="PBEsol",
+        relativistic="scalar",
+        ecutwfc_ry=30,
+        ecutrho_ry=120,
+        provenance=Provenance(
+            source="lookup",
+            reason="Fixture selection.",
+            data_source="fixture",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="no exact metadata candidate.*Si"):
+        _bind_selected_pseudo_metadata(
+            SelectionRecord((selected,)),
+            (candidate,),
+        )
 
 
 def test_publisher_builds_golden_layout_with_deterministic_zip_parity(
@@ -263,6 +444,10 @@ def test_pseudo_root_publication_uses_explicit_legal_sidecar(tmp_path: Path) -> 
         files["licences/explicit-local-pseudopotentials.txt"] == licence_text.encode()
     )
     assert citation.encode() in files["CITATIONS.md"]
+    serialized_result = json.dumps(result.to_dict())
+    assert str(tmp_path) not in serialized_result
+    assert licence_text not in serialized_result
+    assert "operator-library/Si.custom.UPF" in serialized_result
 
 
 def test_publisher_rejects_unsafe_and_duplicate_logical_paths(tmp_path: Path) -> None:
@@ -408,8 +593,33 @@ def test_automatic_directory_allocation_uses_occupancy_and_is_concurrency_safe(
     assert (tmp_path / "goldilocks_out_2").is_symlink()
 
 
+def test_directory_target_stays_absent_until_a_complete_tree_is_installed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "not-public-until-complete"
+    verify_directory = publication_module._verify_directory
+    verified_private_staging = False
+
+    def observe(root: Path, files) -> None:
+        nonlocal verified_private_staging
+        if root != destination:
+            verified_private_staging = True
+            assert not destination.exists()
+        verify_directory(root, files)
+
+    monkeypatch.setattr(publication_module, "_verify_directory", observe)
+
+    Publisher().publish(input_data, DirectoryOutput(destination))
+
+    assert verified_private_staging
+    assert (destination / "goldilocks.json").is_file()
+
+
 @pytest.mark.parametrize("foreign_kind", ("file", "directory"))
-def test_directory_publication_never_replaces_foreign_destination(
+def test_directory_install_never_replaces_or_removes_a_raced_foreign_target(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     foreign_kind: str,
@@ -421,9 +631,7 @@ def test_directory_publication_never_replaces_foreign_destination(
     rename_no_replace = publication_module._rename_no_replace
 
     def race(staging: Path, target: Path) -> None:
-        if staging.name.startswith(".goldilocks-claim-"):
-            rename_no_replace(staging, target)
-            return
+        assert (staging / "goldilocks.json").is_file()
         if foreign_kind == "file":
             target.write_text("foreign file", encoding="utf-8")
         else:
@@ -442,41 +650,10 @@ def test_directory_publication_never_replaces_foreign_destination(
         assert (destination / "foreign.txt").read_text(encoding="utf-8") == (
             "foreign directory"
         )
+    assert not list(tmp_path.glob(".raced-destination.*"))
 
 
-@pytest.mark.parametrize("claim_race", ("populated", "replaced_empty"))
-def test_directory_publication_retains_foreign_claim_contents(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    claim_race: str,
-) -> None:
-    import goldilocks_core.publication as publication_module
-
-    input_data, _, _ = _explicit_input_data(tmp_path)
-    destination = tmp_path / "raced-claim"
-    release_claim = publication_module._release_directory_claim
-
-    def race(target: Path, identity: tuple[int, int]) -> None:
-        if claim_race == "replaced_empty":
-            target.rmdir()
-            target.mkdir()
-        else:
-            (target / "foreign.txt").write_text(claim_race, encoding="utf-8")
-        release_claim(target, identity)
-
-    monkeypatch.setattr(publication_module, "_release_directory_claim", race)
-
-    with pytest.raises(FileExistsError, match="already exists"):
-        Publisher().publish(input_data, DirectoryOutput(destination))
-
-    assert destination.is_dir()
-    if claim_race == "populated":
-        assert (destination / "foreign.txt").read_text(encoding="utf-8") == claim_race
-    else:
-        assert not tuple(destination.iterdir())
-
-
-def test_automatic_directory_publication_preserves_raced_claim_and_advances(
+def test_automatic_directory_allocation_advances_after_no_replace_race(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import goldilocks_core.publication as publication_module
@@ -487,23 +664,83 @@ def test_automatic_directory_publication_preserves_raced_claim_and_advances(
             return cls(tmp_path)
 
     input_data, _, _ = _explicit_input_data(tmp_path)
-    release_claim = publication_module._release_directory_claim
+    rename_no_replace = publication_module._rename_no_replace
     raced = False
 
-    def race_once(target: Path, identity: tuple[int, int]) -> None:
+    def race_once(staging: Path, target: Path) -> None:
         nonlocal raced
+        assert (staging / "goldilocks.json").is_file()
         if not raced:
             raced = True
+            target.mkdir()
             (target / "foreign.txt").write_text("foreign", encoding="utf-8")
-        release_claim(target, identity)
+        rename_no_replace(staging, target)
 
     monkeypatch.setattr(publication_module, "Path", AutomaticRootPath)
-    monkeypatch.setattr(publication_module, "_release_directory_claim", race_once)
+    monkeypatch.setattr(publication_module, "_rename_no_replace", race_once)
 
     publication = Publisher().publish(input_data, DirectoryOutput())
 
     assert Path(publication.path).name == "goldilocks_out_1"
     assert (tmp_path / "goldilocks_out" / "foreign.txt").read_text() == "foreign"
+    assert (tmp_path / "goldilocks_out_1" / "goldilocks.json").is_file()
+
+
+def test_preinstall_failure_removes_only_private_staging(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "foreign-on-failure"
+
+    def fail_before_install(root: Path, files) -> None:
+        del root, files
+        destination.mkdir()
+        (destination / "foreign.txt").write_text("foreign", encoding="utf-8")
+        raise OSError("private staging verification failed")
+
+    monkeypatch.setattr(publication_module, "_verify_directory", fail_before_install)
+
+    with pytest.raises(OSError, match="private staging verification failed"):
+        Publisher().publish(input_data, DirectoryOutput(destination))
+
+    assert (destination / "foreign.txt").read_text(encoding="utf-8") == "foreign"
+    assert not list(tmp_path.glob(".foreign-on-failure.*"))
+
+
+def test_preinstall_cleanup_never_removes_a_foreign_staging_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "must-stay-absent"
+    displaced = tmp_path / "displaced-owned-staging"
+    foreign_staging: Path | None = None
+
+    def replace_staging_then_fail(staging: Path, target: Path) -> None:
+        nonlocal foreign_staging
+        del target
+        staging.rename(displaced)
+        staging.mkdir()
+        (staging / "foreign.txt").write_text("foreign", encoding="utf-8")
+        foreign_staging = staging
+        raise FileExistsError("forced no-replace race")
+
+    monkeypatch.setattr(
+        publication_module,
+        "_rename_no_replace",
+        replace_staging_then_fail,
+    )
+
+    with pytest.raises(FileExistsError, match="already exists"):
+        Publisher().publish(input_data, DirectoryOutput(destination))
+
+    assert not destination.exists()
+    assert foreign_staging is not None
+    assert (foreign_staging / "foreign.txt").read_text(encoding="utf-8") == "foreign"
+    assert (displaced / "goldilocks.json").is_file()
 
 
 def test_directory_publication_preserves_foreign_file_added_after_install(
@@ -517,8 +754,6 @@ def test_directory_publication_preserves_foreign_file_added_after_install(
 
     def modify_after_install(staging: Path, target: Path) -> None:
         rename_no_replace(staging, target)
-        if staging.name.startswith(".goldilocks-claim-"):
-            return
         (target / "foreign.txt").write_text("foreign", encoding="utf-8")
 
     monkeypatch.setattr(publication_module, "_rename_no_replace", modify_after_install)
@@ -542,8 +777,6 @@ def test_directory_publication_does_not_delete_replacement_after_install(
 
     def replace_after_install(staging: Path, target: Path) -> None:
         rename_no_replace(staging, target)
-        if staging.name.startswith(".goldilocks-claim-"):
-            return
         target.rename(displaced)
         target.mkdir()
         (target / "foreign.txt").write_text("replacement", encoding="utf-8")
@@ -612,6 +845,35 @@ def test_archive_publication_never_overwrites_or_deletes_foreign_file(
 
     expected = f"foreign {replacement_timing.replace('_', ' ')}".encode()
     assert destination.read_bytes() == expected
+
+
+def test_archive_cleanup_never_removes_a_foreign_staging_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "must-stay-absent.zip"
+    displaced = tmp_path / "displaced-owned-archive"
+    foreign_staging: Path | None = None
+
+    def replace_staging_then_fail(staging: Path, target: Path) -> None:
+        nonlocal foreign_staging
+        del target
+        staging.rename(displaced)
+        staging.write_bytes(b"foreign archive staging")
+        foreign_staging = staging
+        raise FileExistsError("forced no-replace race")
+
+    monkeypatch.setattr(publication_module.os, "link", replace_staging_then_fail)
+
+    with pytest.raises(FileExistsError, match="already exists"):
+        Publisher().publish(input_data, ArchiveOutput(destination))
+
+    assert not destination.exists()
+    assert foreign_staging is not None
+    assert foreign_staging.read_bytes() == b"foreign archive staging"
+    assert displaced.is_file()
 
 
 def test_service_compute_applies_output_targets_and_returns_publication_info(
@@ -1064,6 +1326,9 @@ def test_custom_kmesh_model_publishes_its_explicit_material_not_defaults(
     files = {item.path: item.content for item in Publisher(store).files(input_data)}
     assert files["licences/custom-kmesh-model.txt"] == licence_text.encode()
     assert str(tmp_path) not in str(input_data.to_dict())
+    serialized_result = json.dumps(result.to_dict())
+    assert str(tmp_path) not in serialized_result
+    assert licence_text not in serialized_result
 
 
 def test_custom_kmesh_model_without_publication_material_fails_clearly(
@@ -1152,6 +1417,9 @@ def test_computation_result_serializes_input_data_without_payloads_or_host_paths
     serialized = str(document)
     assert str(tmp_path) not in serialized
     assert "filepath" not in serialized
+    assert "Fixture licence text" not in serialized
+    assert "service fixture" not in serialized
+    assert "pseudo_info" not in serialized
     assert document["records"]["dft_input_data"]["artifacts"][0]["source"] == {
         "kind": "generated",
         "identity": document["records"]["dft_input_data"]["artifacts"][0]["source"][
@@ -1160,7 +1428,7 @@ def test_computation_result_serializes_input_data_without_payloads_or_host_paths
     }
 
 
-def test_staging_creation_failure_removes_claimed_explicit_destination(
+def test_staging_creation_failure_never_creates_explicit_destination(
     tmp_path: Path,
 ) -> None:
     input_data, _, _ = _explicit_input_data(tmp_path)

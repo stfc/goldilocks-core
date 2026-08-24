@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import PurePath
 
 from goldilocks_core.contracts.provenance import Provenance
 from goldilocks_core.contracts.serial import to_jsonable
@@ -59,6 +60,13 @@ class PseudoMetadata:
                     f"PseudoMetadata.{field_name} must be a non-empty string; "
                     f"got {value!r}"
                 )
+        if (
+            self.filename in {".", ".."}
+            or PurePath(self.filename).name != self.filename
+            or "/" in self.filename
+            or "\\" in self.filename
+        ):
+            raise ValueError("PseudoMetadata.filename must be one filename")
         for field_name in ("provider", "element", "source_identifier", "table_id"):
             _validate_optional_nonempty_str(
                 getattr(self, field_name), f"PseudoMetadata.{field_name}"
@@ -109,9 +117,22 @@ class PseudoMetadata:
             raise ValueError("PseudoMetadata.warnings must contain non-empty strings")
 
     def to_dict(self) -> JsonDict:
-        document = to_jsonable(self)
-        document.pop("filepath")
-        return document
+        return {
+            "filename": self.filename,
+            "header_format": self.header_format,
+            "provider": self.provider,
+            "accuracy": self.accuracy,
+            "element": self.element,
+            "pseudo_type": self.pseudo_type,
+            "functional": self.functional,
+            "relativistic": self.relativistic,
+            "z_valence": self.z_valence,
+            "table_id": self.table_id,
+            "cutoffs": to_jsonable(self.cutoffs),
+            "source_identifier": self.source_identifier,
+            "frozen_4f_core": self.frozen_4f_core,
+            "warnings": list(self.warnings),
+        }
 
 
 @dataclass(frozen=True, slots=True)

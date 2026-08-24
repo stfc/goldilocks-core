@@ -133,6 +133,30 @@ def test_workbench_structure_failure_uses_typed_browser_error(test_service) -> N
     assert "Could not parse structure content" in response.json()["error"]["message"]
 
 
+def test_workbench_rejects_whitespace_only_source_name_at_transport_seam(
+    test_service, sample_structure_text: str
+) -> None:
+    with TestClient(create_app(test_service), raise_server_exceptions=False) as client:
+        response = client.post(
+            "/api/workbench/structure",
+            json={
+                "source": {
+                    "name": "   ",
+                    "format": "cif",
+                    "content": sample_structure_text,
+                }
+            },
+        )
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["kind"] == "invalid_request"
+    assert error["message"] == "The request does not match the Workbench contract."
+    assert error["retryable"] is False
+    assert error["details"]["operation"] == "structure"
+    assert error["details"]["validation_errors"][0]["path"] == "body.source.name"
+
+
 def test_workbench_request_validation_uses_the_typed_error_envelope(
     test_service,
 ) -> None:

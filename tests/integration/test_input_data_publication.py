@@ -743,6 +743,72 @@ def test_preinstall_cleanup_never_removes_a_foreign_staging_replacement(
     assert (displaced / "goldilocks.json").is_file()
 
 
+def test_directory_writes_remain_bound_to_open_staging_descriptor_after_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "descriptor-bound-directory"
+    displaced = tmp_path / "displaced-descriptor-directory"
+    descriptor_identity = publication_module._descriptor_identity
+    foreign_staging: Path | None = None
+
+    def replace_after_descriptor_open(descriptor: int) -> tuple[int, int]:
+        nonlocal foreign_staging
+        identity = descriptor_identity(descriptor)
+        staging = next(tmp_path.glob(".descriptor-bound-directory.*"))
+        staging.rename(displaced)
+        staging.mkdir()
+        (staging / "foreign.txt").write_text("foreign", encoding="utf-8")
+        foreign_staging = staging
+        return identity
+
+    monkeypatch.setattr(
+        publication_module,
+        "_descriptor_identity",
+        replace_after_descriptor_open,
+    )
+
+    with pytest.raises(OSError, match="staging changed during publication"):
+        Publisher().publish(input_data, DirectoryOutput(destination))
+
+    assert not destination.exists()
+    assert foreign_staging is not None
+    assert list(foreign_staging.iterdir()) == [foreign_staging / "foreign.txt"]
+    assert (foreign_staging / "foreign.txt").read_text(encoding="utf-8") == "foreign"
+    assert (displaced / "goldilocks.json").is_file()
+
+
+def test_directory_identity_mismatch_restores_moved_foreign_staging_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "moved-replacement"
+    displaced = tmp_path / "displaced-owned-publication"
+    foreign_staging: Path | None = None
+
+    def move_replacement(staging: Path, target: Path) -> None:
+        nonlocal foreign_staging
+        staging.rename(displaced)
+        staging.mkdir()
+        (staging / "foreign.txt").write_text("foreign", encoding="utf-8")
+        foreign_staging = staging
+        publication_module._native_rename_no_replace(staging, target)
+
+    monkeypatch.setattr(publication_module, "_rename_no_replace", move_replacement)
+
+    with pytest.raises(OSError, match="changed during publication"):
+        Publisher().publish(input_data, DirectoryOutput(destination))
+
+    assert not destination.exists()
+    assert foreign_staging is not None
+    assert (foreign_staging / "foreign.txt").read_text(encoding="utf-8") == "foreign"
+    assert (displaced / "goldilocks.json").is_file()
+
+
 def test_directory_publication_preserves_foreign_file_added_after_install(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -765,7 +831,7 @@ def test_directory_publication_preserves_foreign_file_added_after_install(
     assert (destination / "foreign.txt").read_text(encoding="utf-8") == "foreign"
 
 
-def test_directory_publication_does_not_delete_replacement_after_install(
+def test_directory_publication_quarantines_replacement_after_install(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import goldilocks_core.publication as publication_module
@@ -774,20 +840,95 @@ def test_directory_publication_does_not_delete_replacement_after_install(
     destination = tmp_path / "replaced-after-install"
     displaced = tmp_path / "displaced-publication"
     rename_no_replace = publication_module._rename_no_replace
+    foreign_staging: Path | None = None
 
     def replace_after_install(staging: Path, target: Path) -> None:
+        nonlocal foreign_staging
         rename_no_replace(staging, target)
         target.rename(displaced)
         target.mkdir()
         (target / "foreign.txt").write_text("replacement", encoding="utf-8")
+        foreign_staging = staging
 
     monkeypatch.setattr(publication_module, "_rename_no_replace", replace_after_install)
 
     with pytest.raises(OSError, match="changed during publication"):
         Publisher().publish(input_data, DirectoryOutput(destination))
 
-    assert (destination / "foreign.txt").read_text(encoding="utf-8") == "replacement"
+    assert not destination.exists()
+    assert foreign_staging is not None
+    assert (foreign_staging / "foreign.txt").read_text(encoding="utf-8") == (
+        "replacement"
+    )
     assert (displaced / "goldilocks.json").is_file()
+
+
+def test_archive_writes_remain_bound_to_open_staging_descriptor_after_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "descriptor-bound.zip"
+    displaced = tmp_path / "displaced-descriptor-archive"
+    descriptor_identity = publication_module._descriptor_identity
+    foreign_staging: Path | None = None
+
+    def replace_after_descriptor_open(descriptor: int) -> tuple[int, int]:
+        nonlocal foreign_staging
+        identity = descriptor_identity(descriptor)
+        staging = next(tmp_path.glob(".descriptor-bound.zip.*"))
+        staging.rename(displaced)
+        staging.write_bytes(b"foreign staging archive")
+        foreign_staging = staging
+        return identity
+
+    monkeypatch.setattr(
+        publication_module,
+        "_descriptor_identity",
+        replace_after_descriptor_open,
+    )
+
+    with pytest.raises(OSError, match="staging changed during publication"):
+        Publisher().publish(input_data, ArchiveOutput(destination))
+
+    assert not destination.exists()
+    assert foreign_staging is not None
+    assert foreign_staging.read_bytes() == b"foreign staging archive"
+    assert displaced.read_bytes() != b"foreign staging archive"
+    assert displaced.stat().st_size > 0
+
+
+def test_archive_identity_mismatch_quarantines_only_foreign_inode_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "only-foreign-copy.zip"
+    displaced = tmp_path / "displaced-owned-archive-copy"
+    link = publication_module.os.link
+
+    def link_replacement_then_remove_staging(staging: Path, target: Path) -> None:
+        staging.rename(displaced)
+        staging.write_bytes(b"only foreign inode copy")
+        link(staging, target)
+        staging.unlink()
+
+    monkeypatch.setattr(
+        publication_module.os,
+        "link",
+        link_replacement_then_remove_staging,
+    )
+
+    with pytest.raises(OSError, match="changed during publication"):
+        Publisher().publish(input_data, ArchiveOutput(destination))
+
+    assert not destination.exists()
+    quarantined = list(tmp_path.glob(".only-foreign-copy.zip.quarantine-*"))
+    assert len(quarantined) == 1
+    assert quarantined[0].read_bytes() == b"only foreign inode copy"
+    assert displaced.is_file()
 
 
 def test_archive_publication_preserves_concurrent_in_place_write(
@@ -844,7 +985,13 @@ def test_archive_publication_never_overwrites_or_deletes_foreign_file(
         Publisher().publish(input_data, ArchiveOutput(destination))
 
     expected = f"foreign {replacement_timing.replace('_', ' ')}".encode()
-    assert destination.read_bytes() == expected
+    if replacement_timing == "before_link":
+        assert destination.read_bytes() == expected
+    else:
+        assert not destination.exists()
+        quarantined = list(tmp_path.glob(".raced.zip.quarantine-*"))
+        assert len(quarantined) == 1
+        assert quarantined[0].read_bytes() == expected
 
 
 def test_archive_cleanup_never_removes_a_foreign_staging_replacement(
@@ -1077,6 +1224,7 @@ def test_model_runtime_identities_licences_and_citations_are_published(
 ) -> None:
     store = AssetStore(tmp_path / "model-assets")
     expected_licences: dict[str, bytes] = {}
+    model_payloads: set[bytes] = set()
     for spec in model_asset_specs():
         contents = {
             file.path: (
@@ -1087,6 +1235,9 @@ def test_model_runtime_identities_licences_and_citations_are_published(
             for file in spec.files
         }
         _create_installed_asset(store, spec, contents)
+        model_payloads.update(
+            contents[file.path] for file in spec.files if file.role != "licence"
+        )
         expected_licences[f"licences/{spec.id}-{spec.version}.md"] = next(
             contents[file.path] for file in spec.files if file.role == "licence"
         )
@@ -1123,6 +1274,23 @@ def test_model_runtime_identities_licences_and_citations_are_published(
         "k_distance",
         "metallicity",
     }
+    specs = {spec.id: spec for spec in model_asset_specs()}
+    for identity in input_data.runtime.assets:
+        spec = specs[identity.id]
+        installed = store.verify_spec(spec)
+        assert identity.preparation_fingerprint == spec.preparation_fingerprint
+        assert identity.model in input_data.runtime.models
+        assert identity.files == tuple(
+            {
+                "path": file.path,
+                "role": next(
+                    source.role for source in spec.files if source.path == file.path
+                ),
+                "sha256": file.sha256,
+                "size_bytes": file.size,
+            }
+            for file in installed.files
+        )
     licence_artifacts = {
         item.path: item
         for item in input_data.artifacts
@@ -1133,8 +1301,23 @@ def test_model_runtime_identities_licences_and_citations_are_published(
         isinstance(item.source, InstalledArtifactReference)
         for item in licence_artifacts.values()
     )
-    files = {item.path: item.content for item in Publisher(store).files(input_data)}
+    published_files = Publisher(store).files(input_data)
+    files = {item.path: item.content for item in published_files}
     assert {path: files[path] for path in expected_licences} == expected_licences
+    published_manifest = json.loads(files["goldilocks.json"])
+    assert published_manifest["runtime"]["assets"] == [
+        identity.to_dict() for identity in input_data.runtime.assets
+    ]
+    assert all(
+        "preparation_fingerprint" in identity
+        and identity["model"] in published_manifest["runtime"]["models"]
+        and all(
+            set(file) == {"path", "role", "sha256", "size_bytes"}
+            for file in identity["files"]
+        )
+        for identity in published_manifest["runtime"]["assets"]
+    )
+    assert all(payload not in files["goldilocks.json"] for payload in model_payloads)
     model_citation = (
         "Elena Patyukova et al., Automatic generation of input files with optimised "
         "k-point meshes for Quantum ESPRESSO self-consistent field single-point "
@@ -1152,6 +1335,69 @@ def test_model_runtime_identities_licences_and_citations_are_published(
     assert input_data.citations.count(model_citation) == 1
     assert set(input_data.citations).isdisjoint(licence_urls)
     assert str(store.root) not in str(input_data.to_dict())
+
+
+def test_custom_registry_same_id_version_source_drift_is_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.ml.model_registry as registry_module
+
+    registry = tmp_path / "models.toml"
+    packaged = Path(registry_module.__file__).with_name("registry.toml")
+    registry.write_text(packaged.read_text(encoding="utf-8"), encoding="utf-8")
+    config = registry_module.load_default_qrf_config(registry)
+    store = AssetStore(tmp_path / "drift-assets")
+    for spec in (config.model_asset, config.metallicity_asset):
+        assert spec is not None
+        _create_installed_asset(
+            store,
+            spec,
+            {file.path: f"installed {file.role}\n".encode() for file in spec.files},
+        )
+
+    def predict(self, structure: Structure) -> KPointSelection:
+        del self, structure
+        return KPointSelection(
+            grid=(4, 4, 4),
+            shift=(0, 0, 0),
+            mesh_type="monkhorst-pack",
+            provenance=Provenance(source="model", reason="Fixture prediction."),
+        )
+
+    monkeypatch.setattr("goldilocks_core.advice.kdistance.QrfBackend.__call__", predict)
+    request = _explicit_request(tmp_path, "registry-drift-Si.UPF")
+    request = ComputeRequest(
+        replace(request.draft, hints=CalculationHints(pseudo_type="NC")),
+        request.selection,
+    )
+    with Runtime(asset_store=store, registry_path=registry) as runtime:
+        with Service(runtime) as service:
+            original = service.compute(request).records[DftInputData]
+    original_fingerprints = {
+        asset.id: asset.preparation_fingerprint for asset in original.runtime.assets
+    }
+
+    registry.write_text(
+        registry.read_text(encoding="utf-8").replace(
+            "/75588288f755522e47984b5a31b82824860d6943/QRF95.pkl",
+            "/foreign-registry-revision/QRF95.pkl",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    drifted = registry_module.load_default_qrf_config(registry)
+    assert drifted.model_asset is not None
+    assert drifted.model_asset.id == config.model_asset.id
+    assert drifted.model_asset.version == config.model_asset.version
+    assert (
+        drifted.model_asset.preparation_fingerprint
+        != original_fingerprints[drifted.model_asset.id]
+    )
+
+    with Runtime(asset_store=store, registry_path=registry) as runtime:
+        with Service(runtime) as service:
+            with pytest.raises(ValueError, match="installed preparation differs"):
+                service.compute(request)
 
 
 def test_unidentified_runtime_kmesh_model_is_not_attributed_to_defaults(
@@ -1329,6 +1575,84 @@ def test_custom_kmesh_model_publishes_its_explicit_material_not_defaults(
     serialized_result = json.dumps(result.to_dict())
     assert str(tmp_path) not in serialized_result
     assert licence_text not in serialized_result
+
+
+def test_same_name_version_models_with_different_targets_and_revisions_are_distinct(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from goldilocks_core.runtime.models import MetallicityModel
+
+    monkeypatch.setattr(
+        "goldilocks_core.advice.kindex.predict_kindex",
+        lambda structure, spec: 1.0,
+    )
+    monkeypatch.setattr(
+        MetallicityModel,
+        "__call__",
+        lambda self, structure: ("insulator", "model", 0.91),
+    )
+    common = {
+        "name": "shared-operator-model",
+        "version": "1",
+        "source": "local",
+        "licence": "Operator-Model-Licence-1.0",
+        "licence_text": "Operator model terms.\n",
+    }
+    kmesh_model = ModelSpec(
+        **common,
+        model_type="random_forest",
+        target="k_index",
+        feature_set="kmesh-features",
+        location=str(tmp_path / "kmesh.joblib"),
+        revision="kmesh-revision",
+        citation="K-mesh model citation.",
+    )
+    metallicity_model = ModelSpec(
+        **common,
+        model_type="cgcnn",
+        target="metallicity",
+        feature_set="metallicity-features",
+        location=str(tmp_path / "metallicity.ckpt"),
+        revision="metallicity-revision",
+        citation="Metallicity model citation.",
+    )
+    request = _explicit_request(tmp_path, "same-model-name-Si.UPF")
+    request = ComputeRequest(
+        replace(
+            request.draft,
+            hints=CalculationHints(pseudo_type="NC"),
+            kmesh_model=kmesh_model,
+        ),
+        request.selection,
+    )
+
+    with Runtime(
+        asset_store=AssetStore(tmp_path / "same-name-assets"),
+        metallicity_checkpoint="metallicity.ckpt",
+        metallicity_atom_init="atom-init.json",
+        metallicity_model=metallicity_model,
+    ) as runtime:
+        with Service(runtime) as service:
+            input_data = service.compute(request).records[DftInputData]
+
+    assert [model["target"] for model in input_data.runtime.models] == [
+        "k_index",
+        "metallicity",
+    ]
+    assert [model["revision"] for model in input_data.runtime.models] == [
+        "kmesh-revision",
+        "metallicity-revision",
+    ]
+    licence_paths = {
+        artifact.path for artifact in input_data.artifacts if artifact.role == "licence"
+    }
+    assert {
+        "licences/custom-kmesh-model.txt",
+        "licences/custom-metallicity-model.txt",
+    } <= licence_paths
+    assert {"K-mesh model citation.", "Metallicity model citation."} <= set(
+        input_data.citations
+    )
 
 
 def test_custom_kmesh_model_without_publication_material_fails_clearly(

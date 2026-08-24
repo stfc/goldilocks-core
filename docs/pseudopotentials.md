@@ -28,12 +28,12 @@ uv run goldilocks assets verify default
 You can now run a PBEsol calculation:
 
 ```bash
-uv run goldilocks recommend structure.cif
+uv run goldilocks compute structure.cif --preset recommend --no-out
 ```
 
 ## Choose a different table
 
-Select an exact table ID with `--pseudo-table` or `PresetRequest.pseudo_table`.
+Select an exact table ID with `--pseudo-table` or `CalculationDraft.pseudo_table`.
 The table must agree with the calculation functional, accuracy tier,
 relativistic treatment, and every element in the structure. Core reports all
 disagreements before selection.
@@ -68,23 +68,34 @@ Install the table, then select the same ID:
 
 ```bash
 uv run goldilocks assets install pseudodojo-pbesol-efficiency-fr
-uv run goldilocks recommend structure.cif --spin-orbit-coupling true --pseudo-table pseudodojo-pbesol-efficiency-fr
+uv run goldilocks compute structure.cif --preset recommend --spin-orbit-coupling true --pseudo-table pseudodojo-pbesol-efficiency-fr --no-out
 ```
 
 Python requests carry the ID; Core verifies and loads its installed manifest
 only when Select is required:
 
 ```python
-from goldilocks_core import CalculationHints, Service, PresetRequest
+from goldilocks_core import (
+    CalculationDraft,
+    CalculationHints,
+    ComputeRequest,
+    DirectoryOutput,
+    PathStructureSource,
+    PresetSelection,
+    Service,
+)
 
-request = PresetRequest(
-    structure="structure.cif",
-    hints=CalculationHints(spin_orbit_coupling=True),
-    pseudo_table="pseudodojo-pbesol-efficiency-fr",
+request = ComputeRequest(
+    CalculationDraft(
+        PathStructureSource("structure.cif"),
+        hints=CalculationHints(spin_orbit_coupling=True),
+        pseudo_table="pseudodojo-pbesol-efficiency-fr",
+    ),
+    PresetSelection("generate"),
 )
 
 with Service() as core:
-    result = core.generate(request, output_dir="run")
+    result = core.compute(request, output=DirectoryOutput("run"))
 ```
 
 The default profile contains only an `sr` table. It cannot supply the fully
@@ -145,7 +156,7 @@ to replace a corrupt table transactionally.
 Use `--pseudo-root` to read a directory that you manage:
 
 ```bash
-uv run goldilocks generate structure.cif --pseudo-root pseudos --k-grid 4 4 4 --out run
+uv run goldilocks compute structure.cif --preset generate --pseudo-root pseudos --k-grid 4 4 4 --out run
 ```
 
 Goldilocks reads `.upf` and `.UPF` files recursively. It does not copy or

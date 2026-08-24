@@ -12,17 +12,15 @@ All notable changes to goldilocks-core are documented here.
   `pseudopotentials/` storage prefix (`goldilocks assets install
   pseudodojo-pbesol-efficiency-sr`).
 - Installed example structures for silicon, iron, and platinum.
-- HTTP and MCP operations for recommendations, input generation, record
-  queries, and capability discovery.
+- Canonical Capabilities, Structure Inspection, and Compute operations for
+  Python, CLI, HTTP, and local stdio MCP.
 - CLI controls for van der Waals advice.
 - Exact pseudopotential-table selection on Python, CLI, HTTP, and MCP requests.
 - Provider-normalized PseudoDojo and SSSP installation into verified manifests.
-- Browser Workbench for guided CIF/POSCAR inspection, scientific overrides,
-  recommendation review, and reproducible Quantum ESPRESSO archive download.
+- Canonical HTTP OpenAPI and generated TypeScript contracts, including
+  in-memory ZIP Compute responses.
 - A stateless production image containing matching Core and Workbench builds
   plus the complete verified runtime asset profile.
-- Typed Workbench OpenAPI responses, generated TypeScript contracts, and
-  real-server Chromium coverage.
 
 ### Fixed
 
@@ -44,19 +42,12 @@ All notable changes to goldilocks-core are documented here.
   selection policy.
   `--fetch-missing` installs only the exact missing dependencies reported by
   Core.
-- `recommend`, `generate`, and `compute` use one `Service` interface across
-  Python, CLI, HTTP, and MCP.
-- Public type renames: `CoreService` to `Service`, `CoreRuntime` to `Runtime`,
-  `TaskDispatcher` to `Dispatcher`, `CoreResult` to `Result`, and
-  `CoreJobRequest` split into `PresetRequest` and `QueryRequest`. The root
-  facade re-exports the new names; `BundleRecord` stays importable from the
-  root.
-- Transports accept only the calculation: inline structure content, `intent`,
-  `hints`, and `outputs`. File paths, model overrides, pseudopotential
-  sources, and output locations are deployment configuration resolved by the
-  server, never request data.
+- `recommend` and `generate` are now Preset IDs selected through one Compute
+  operation across Python, CLI, HTTP, and MCP.
 - CLI record queries use the stable output names `analysis`, `advice`,
-  `k_points`, `selection`, and `generated_files`.
+  `k_points`, `selection`, `generated_files`, and `dft_input_data`.
+- CLI and local MCP use shared automatic, directory, archive, and memory output
+  semantics. HTTP archives are never stored on the server.
 - Invalid requests and incomplete Quantum ESPRESSO inputs now fail with
   specific errors.
 - Pseudopotential selection now consumes one normalized metadata interface;
@@ -65,15 +56,17 @@ All notable changes to goldilocks-core are documented here.
 - Installed runtime assets record a source-and-preparer fingerprint so changes
   to normalized contents invalidate stale installations. PseudoDojo and SSSP
   tables retain provider licence material, and model assets retain their pinned
-  CC BY 4.0 model cards. Workbench archives include selected UPFs, every
+  CC BY 4.0 model cards. Ready-to-run publications include selected UPFs, every
   applicable licence notice, provenance, and checksums.
 
 ### Removed
 
 - The `goldilocks-core` and `goldilocks-kmesh` console commands. Use
   `goldilocks`.
-- Top-level Python `recommend` and `generate` functions. Use
-  `Service.recommend`, `Service.generate`, or `run_core_job`.
+- Public recommend/generate methods, commands, HTTP routes, and MCP tools. Use
+  Compute with `PresetSelection("recommend")` or `PresetSelection("generate")`.
+- Separate task, code, and model discovery operations. Use Capabilities.
+- Browser-specific scientific HTTP routes and response contracts.
 - Automatic heuristic k-point spacing. Install the default model or supply
   `--k-grid` or `--k-spacing`.
 - `CalculationIntent.accuracy_level` and `--accuracy-level`, which did not

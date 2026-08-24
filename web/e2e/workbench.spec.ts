@@ -4,7 +4,7 @@ import { posix } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { strFromU8, unzipSync } from "fflate";
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 
 const SILICON_CIF = fileURLToPath(
@@ -32,15 +32,14 @@ test("prepares and downloads a real Core calculation", async ({ page }) => {
 
   await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
   await expect(page.getByLabel("Crystal structure viewer")).toBeVisible();
-  await expect(page.getByText("8 atomic sites")).toBeVisible();
+  await expect(page.getByText("8 atomic sites", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Generate recommendation" }).click();
   await expect(
     page.getByRole("heading", { name: "Recommended setup" }),
   ).toBeVisible();
   await expect(page.getByText("inputs/qe.in", { exact: true })).toBeVisible();
-  const accessibility = await new AxeBuilder({ page }).analyze();
-  expect(accessibility.violations).toEqual([]);
+  await expectNoAxeViolations(page);
 
   const downloadStarted = page.waitForEvent("download");
   await page.getByRole("button", { name: /Download \.zip/ }).click();
@@ -73,6 +72,7 @@ test("keeps an old Result visible until an edited Draft is recomputed", async ({
     page.getByRole("heading", { name: "Recommended setup" }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: /Download \.zip/ })).toBeDisabled();
+  await expectNoAxeViolations(page);
 
   await page.getByRole("button", { name: "Recompute recommendation" }).click();
   await expect(page.getByText("Review out of date")).toBeHidden();
@@ -80,6 +80,180 @@ test("keeps an old Result visible until an edited Draft is recomputed", async ({
     "1 1 1",
   );
   await expect(page.getByRole("button", { name: /Download \.zip/ })).toBeEnabled();
+});
+
+test("has no Axe violations in empty, failure, and viewer fallback states", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Start with a structure" }),
+  ).toBeVisible();
+  await expectNoAxeViolations(page);
+
+  await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
+  await page.route("**/compute", async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: {
+          kind: "server_busy",
+          message: "Another calculation is using the compute slot.",
+          retryable: true,
+          details: {},
+        },
+      }),
+    });
+  }, { times: 1 });
+  await page.getByRole("button", { name: "Generate recommendation" }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expectNoAxeViolations(page);
+
+  await page.addInitScript({
+    content: `
+      const originalGetContext = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (type, ...args) {
+        if (String(type).startsWith("webgl")) return null;
+        return originalGetContext.call(this, type, ...args);
+      };
+    `,
+  });
+  await page.reload();
+  await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
+  await expect(
+    page.getByRole("status", { name: "3D structure preview unavailable" }),
+  ).toBeVisible();
+  await expectNoAxeViolations(page);
+});
+
+test("completes the preparation workflow with keyboard-only activation", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const browse = page.getByRole("button", {
+    name: "Choose a CIF or POSCAR structure",
+  });
+  await browse.waitFor();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(browse).toBeFocused();
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.keyboard.press("Enter");
+  const chooser = await chooserPromise;
+  await chooser.setFiles(SILICON_CIF);
+  await expect(page.getByLabel("Crystal structure viewer")).toBeVisible();
+
+  const generate = page.getByRole("button", { name: "Generate recommendation" });
+  await generate.press("Enter");
+  await expect(
+    page.getByRole("heading", { name: "Recommended setup" }),
+  ).toBeVisible();
+
+  const overrides = page.getByText("Scientific overrides");
+  await overrides.press("Enter");
+  await expect(page.locator(".advanced-controls")).toHaveAttribute("open");
+  const explicitGrid = page.getByRole("checkbox", { name: "Set an explicit grid" });
+  await explicitGrid.press("Space");
+  await expect(explicitGrid).toBeChecked();
+  await expect(
+    page.getByRole("status", { name: "Recommendation status" }),
+  ).toContainText("Review out of date");
+
+  const firstRecord = page.locator(".record-card").first();
+  await firstRecord.locator("summary").press("Enter");
+  await expect(firstRecord).toHaveAttribute("open");
+});
+
+test("keeps keyboard focus visible and primary targets usable", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const browse = page.getByRole("button", {
+    name: "Choose a CIF or POSCAR structure",
+  });
+  await browse.waitFor();
+
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Goldilocks Workbench home" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(browse).toBeFocused();
+  const box = await browse.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box?.height).toBeGreaterThanOrEqual(44);
+  expect(box?.width).toBeGreaterThanOrEqual(44);
+  await expect(browse).toHaveCSS("outline-style", "solid");
+  await expect(browse).toHaveCSS("outline-width", "3px");
+});
+
+test("reflows intermediate widths without horizontal clipping", async ({ page }) => {
+  await page.setViewportSize({ width: 1050, height: 900 });
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
+  await page.getByRole("button", { name: "Generate recommendation" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Recommended setup" }),
+  ).toBeVisible();
+
+  const workspace = await page.getByRole("main").boundingBox();
+  const review = await page
+    .getByRole("region", { name: "Recommendation review" })
+    .boundingBox();
+  expect(workspace).not.toBeNull();
+  expect(review).not.toBeNull();
+  expect((workspace?.x ?? 0) + (workspace?.width ?? 0)).toBeLessThanOrEqual(
+    1050,
+  );
+  expect((review?.x ?? 0) + (review?.width ?? 0)).toBeLessThanOrEqual(1050);
+});
+
+test("keeps the desktop workspace contained to the viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
+  await page.getByRole("button", { name: "Generate recommendation" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Recommended setup" }),
+  ).toBeVisible();
+
+  const header = await page.locator(".app-header").boundingBox();
+  const workspace = await page.getByRole("main").boundingBox();
+  expect(header).not.toBeNull();
+  expect(workspace).not.toBeNull();
+  expect((header?.height ?? 0) + (workspace?.height ?? 0)).toBeLessThanOrEqual(
+    1000,
+  );
+});
+
+test("reflows without an overlaying header at effective 200 percent zoom", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 720, height: 500 });
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Start with a structure" }),
+  ).toBeVisible();
+
+  await expect(page.locator(".app-header")).toHaveCSS("position", "static");
+  const mainBox = await page.getByRole("main").boundingBox();
+  expect(mainBox).not.toBeNull();
+  expect((mainBox?.x ?? 0) + (mainBox?.width ?? 0)).toBeLessThanOrEqual(720);
+});
+
+test("removes nonessential animation when reduced motion is requested", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.route("**/inspect", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    await route.continue();
+  }, { times: 1 });
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
+  const spinner = page.locator(".spinning-icon");
+  await spinner.waitFor();
+
+  await expect(spinner).toHaveCSS("animation-name", "none");
 });
 
 test("prepares a real Core recommendation from POSCAR", async ({ page }) => {
@@ -220,6 +394,11 @@ function entry(
   const payload = entries[name];
   if (payload === undefined) throw new Error(`archive entry missing: ${name}`);
   return payload;
+}
+
+async function expectNoAxeViolations(page: Page): Promise<void> {
+  const accessibility = await new AxeBuilder({ page }).analyze();
+  expect(accessibility.violations).toEqual([]);
 }
 
 function sha256(payload: Uint8Array): string {

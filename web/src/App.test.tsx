@@ -76,6 +76,65 @@ class CoreStub implements CoreClient {
 }
 
 describe("Goldilocks Workbench", () => {
+  it("exposes one named workflow with ordered setup, structure, and review regions", async () => {
+    const workspace = createWorkspace(
+      new CoreStub(Promise.resolve(capabilities)),
+    );
+
+    render(
+      <WorkspaceProvider workspace={workspace}>
+        <App />
+      </WorkspaceProvider>,
+    );
+
+    const main = await screen.findByRole("main", {
+      name: "Goldilocks guided SCF preparation",
+    });
+    expect(main).toContainElement(
+      screen.getByRole("heading", {
+        level: 1,
+        name: "Goldilocks guided SCF preparation",
+      }),
+    );
+    expect(screen.getByRole("region", { name: "Calculation setup" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Structure workspace" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Recommendation review" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Choose a CIF or POSCAR structure",
+      }),
+    ).toHaveAccessibleDescription("CIF or POSCAR · 5 MB maximum file size");
+  });
+
+  it("announces the current Workbench operation in a persistent status", async () => {
+    const core = new CoreStub(Promise.resolve(capabilities));
+    let finishInspection: (value: StructureInspection) => void = () => undefined;
+    core.inspectionResults = [
+      new Promise((resolve) => {
+        finishInspection = resolve;
+      }),
+    ];
+    const workspace = createWorkspace(core);
+    const { container } = render(
+      <WorkspaceProvider workspace={workspace}>
+        <App />
+      </WorkspaceProvider>,
+    );
+    await screen.findByRole("button", {
+      name: "Choose a CIF or POSCAR structure",
+    });
+
+    expect(screen.getByRole("status", { name: "Workbench status" })).toHaveTextContent(
+      "Ready",
+    );
+    await userEvent.upload(structureInput(container), structureFile());
+    expect(screen.getByRole("status", { name: "Workbench status" })).toHaveTextContent(
+      "Inspecting structure",
+    );
+
+    finishInspection(inspection);
+  });
+
   it("recomputes edits before downloading the reviewed Draft", async () => {
     const user = userEvent.setup();
     const archive: ArchiveDownload = {
@@ -118,6 +177,9 @@ describe("Goldilocks Workbench", () => {
     await waitFor(() => {
       expect(saveArchive).toHaveBeenCalledWith(archive);
     });
+    expect(
+      screen.getByRole("status", { name: "Archive status" }),
+    ).toHaveTextContent("goldilocks-inputs.zip is ready");
     expect(core.computeCalls.slice(1)).toEqual([
       {
         request: {
@@ -166,6 +228,9 @@ describe("Goldilocks Workbench", () => {
     await user.selectOptions(screen.getByLabelText("Spin treatment"), "true");
 
     expect(screen.getByText("Review out of date")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Recommendation status" }),
+    ).toHaveTextContent(/Review out of date.*Recompute before creating an archive\./);
     expect(screen.getByText("Recommended setup")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Download \.zip/ })).toBeDisabled();
   });
@@ -191,6 +256,9 @@ describe("Goldilocks Workbench", () => {
     );
 
     expect(await screen.findByText("Recommended setup")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Review state" })).toHaveTextContent(
+      "Current",
+    );
     expect(core.computeCalls[0]).toEqual({
       request: { draft, selection: { preset: "generate" } },
       output: { kind: "memory" },
@@ -200,6 +268,35 @@ describe("Goldilocks Workbench", () => {
     expect(
       screen.getByLabelText("Generated input inputs/qe.in"),
     ).toHaveTextContent("&CONTROL");
+  });
+
+  it("announces scientific warnings returned with a recommendation", async () => {
+    const user = userEvent.setup();
+    const core = new CoreStub(Promise.resolve(capabilities));
+    core.inspectionResults = [Promise.resolve(inspection)];
+    core.memoryResults = [
+      Promise.resolve({
+        ...computationResult,
+        warnings: ["Review smearing before production use."],
+      }),
+    ];
+    const workspace = createWorkspace(core);
+    const { container } = render(
+      <WorkspaceProvider workspace={workspace}>
+        <App />
+      </WorkspaceProvider>,
+    );
+    await screen.findByRole("button", {
+      name: "Choose a CIF or POSCAR structure",
+    });
+    await user.upload(structureInput(container), structureFile());
+    await user.click(
+      await screen.findByRole("button", { name: "Generate recommendation" }),
+    );
+
+    expect(
+      await screen.findByRole("status", { name: "Scientific warnings" }),
+    ).toHaveTextContent("Review smearing before production use.");
   });
 
   it("opens a CIF and builds calculation controls from Capabilities", async () => {

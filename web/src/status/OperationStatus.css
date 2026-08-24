@@ -1,0 +1,127 @@
+.header-status {
+  display: flex;
+  min-width: 12rem;
+  min-height: var(--target-size);
+  padding: 0 var(--space-5);
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.625rem;
+  color: var(--color-text-secondary);
+  border-left: var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.status-light {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--color-success);
+  box-shadow: 0 0 0 0.25rem rgb(138 201 169 / 14%);
+}
+
+.version-badge {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-left: var(--space-1);
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--color-accent-bright);
+  border: var(--border-strong);
+  font-size: var(--text-sm);
+}
+
+.failure-banner {
+  position: relative;
+  z-index: 8;
+  display: flex;
+  width: 100%;
+  min-height: 4.25rem;
+  padding: var(--space-3) var(--space-5);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  color: #ffe0d8;
+  border-bottom: 1px solid #8f594c;
+  background: var(--color-danger-surface);
+  box-shadow: var(--elevation-status);
+}
+
+.failure-banner > div:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.failure-banner strong {
+  font-size: var(--text-base);
+}
+
+.failure-banner span {
+  margin-top: var(--space-1);
+  color: #e6b7aa;
+  font-size: var(--text-sm);
+  line-height: var(--leading-base);
+}
+
+.failure-banner__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--space-2);
+}
+
+.failure-banner button {
+  display: flex;
+  min-width: var(--target-size);
+  min-height: var(--target-size);
+  padding: 0 var(--space-3);
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: #ffd0c3;
+  border: 1px solid #a76a59;
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.failure-banner button:not(:disabled):hover {
+  color: var(--color-canvas);
+  background: var(--color-danger);
+}
+
+@media (max-width: 47.5rem) {
+  .header-status {
+    min-width: 0;
+    padding: 0 var(--space-3);
+    border-left: 0;
+  }
+
+  .version-badge {
+    display: none;
+  }
+
+  .failure-banner {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .failure-banner__actions {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 26rem) {
+  .header-status > span:nth-child(2) {
+    max-width: 6.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

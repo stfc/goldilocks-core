@@ -8,6 +8,13 @@ export interface StructureViewer {
 export type StructureViewerFactory = (element: HTMLElement) => StructureViewer;
 
 export const attachStructureViewer: StructureViewerFactory = (element) => {
+  const probe = document.createElement("canvas");
+  if (
+    probe.getContext("webgl2") === null &&
+    probe.getContext("webgl") === null
+  ) {
+    throw new Error("WebGL is unavailable");
+  }
   const viewer: GLViewer = createViewer(element, {
     antialias: true,
     backgroundColor: "#111a1f",

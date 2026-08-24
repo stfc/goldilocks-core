@@ -1,130 +1,30 @@
-import { type ChangeEvent, type DragEvent, useRef, useState } from "react";
-import { ArrowRight, LoaderCircle, Upload } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import type {
   CalculationDraft,
   Capabilities,
   StructureInspection,
-  StructureSource,
 } from "../api/coreClient";
 import { useWorkspace, useWorkspaceSnapshot } from "../workspace/useWorkspace";
+import { StructureSourceControls } from "./StructureSourceControls";
+import "./GuidedControls.css";
 const K_GRID_AXES = ["x", "y", "z"] as const;
 
 export function GuidedControls() {
   const workspace = useWorkspace();
   const snapshot = useWorkspaceSnapshot();
-  const input = useRef<HTMLInputElement>(null);
-  const selectionEpoch = useRef(0);
-  const [dragging, setDragging] = useState(false);
-  const [readError, setReadError] = useState<string | null>(null);
-
-  async function openFile(file: File): Promise<void> {
-    const selection = ++selectionEpoch.current;
-    setReadError(null);
-    if (file.size > 5 * 1024 * 1024) {
-      setReadError("Structure files must be 5 MB or smaller.");
-      return;
-    }
-    if (file.size === 0) {
-      setReadError("The selected structure file is empty.");
-      return;
-    }
-    try {
-      const content = await file.text();
-      if (selection !== selectionEpoch.current) return;
-      const source: StructureSource = {
-        kind: "inline",
-        name: file.name,
-        format: structureFormat(file.name),
-        content,
-      };
-      await workspace.dispatch({ type: "source.open", source });
-    } catch {
-      if (selection === selectionEpoch.current) {
-        setReadError("The selected file could not be read.");
-      }
-    }
-  }
-
-  function fileSelected(event: ChangeEvent<HTMLInputElement>): void {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-    if (file !== undefined) void openFile(file);
-  }
-
-  function fileDropped(event: DragEvent<HTMLDivElement>): void {
-    event.preventDefault();
-    setDragging(false);
-    const file = event.dataTransfer.files[0];
-    if (file !== undefined) void openFile(file);
-  }
-
   return (
-    <aside className="control-rail" aria-label="Calculation setup">
+    <section className="control-rail" aria-label="Calculation setup">
       <section className="rail-section rail-section--source">
         <SectionHeading number="01" title="Structure" />
-        <div
-          className={`file-drop${dragging ? " file-drop--active" : ""}`}
-          onDragEnter={(event) => {
-            event.preventDefault();
-            setDragging(true);
-          }}
-          onDragOver={(event) => {
-            event.preventDefault();
-          }}
-          onDragLeave={() => {
-            setDragging(false);
-          }}
-          onDrop={fileDropped}
-          aria-busy={snapshot.operation === "inspect"}
-        >
-          <input ref={input} hidden type="file" onChange={fileSelected} />
-          <span className="file-drop__mark" aria-hidden="true">
-            {snapshot.operation === "inspect" ? (
-              <LoaderCircle className="spinning-icon" size={15} />
-            ) : (
-              <Upload size={15} />
-            )}
-          </span>
-          {snapshot.source === null ? (
-            <>
-              <strong>Drop a structure</strong>
-              <span>CIF or POSCAR · 5 MB max</span>
-            </>
-          ) : (
-            <>
-              <strong>{snapshot.source.name}</strong>
-              <span>
-                {snapshot.inspection === null
-                  ? "Inspecting structure"
-                  : `${String(snapshot.inspection.structure.site_count)} sites · parsed`}
-              </span>
-            </>
-          )}
-          <button
-            className="text-button"
-            type="button"
-            aria-label={
-              snapshot.source === null
-                ? "Choose a CIF or POSCAR structure"
-                : "Replace structure file"
-            }
-            onClick={() => {
-              input.current?.click();
-            }}
-            disabled={snapshot.operation === "inspect"}
-          >
-            {snapshot.source === null ? "Browse files" : "Replace file"}
-          </button>
-        </div>
-        {readError === null ? null : (
-          <p className="field-error" role="alert">
-            {readError}
-          </p>
-        )}
-        {snapshot.inspection === null ? null : (
-          <StructureSummary inspection={snapshot.inspection} />
-        )}
+        <StructureSourceControls
+          source={snapshot.source}
+          inspection={snapshot.inspection}
+          inspecting={snapshot.operation === "inspect"}
+          onOpen={(source) =>
+            workspace.dispatch({ type: "source.open", source })
+          }
+        />
       </section>
 
       <section className="rail-section rail-section--calculation">
@@ -143,7 +43,7 @@ export function GuidedControls() {
           />
         )}
       </section>
-    </aside>
+    </section>
   );
 }
 
@@ -153,41 +53,6 @@ function SectionHeading({ number, title }: { number: string; title: string }) {
       <span>{number}</span>
       <h2>{title}</h2>
     </header>
-  );
-}
-
-function StructureSummary({
-  inspection,
-}: {
-  readonly inspection: StructureInspection;
-}) {
-  const structure = inspection.structure;
-  const elements = [
-    ...new Set(
-      structure.sites.flatMap((site) =>
-        site.species.map((species) => species.symbol),
-      ),
-    ),
-  ];
-  return (
-    <dl className="structure-summary">
-      <div>
-        <dt>Formula</dt>
-        <dd>{structure.formula}</dd>
-      </div>
-      <div>
-        <dt>Elements</dt>
-        <dd>{elements.join(" · ")}</dd>
-      </div>
-      <div>
-        <dt>Cell</dt>
-        <dd>{structure.lattice.volume_angstrom3.toFixed(1)} Å³</dd>
-      </div>
-      <div>
-        <dt>Periodic</dt>
-        <dd>{structure.periodicity.every(Boolean) ? "3D" : "Partial"}</dd>
-      </div>
-    </dl>
   );
 }
 
@@ -483,6 +348,3 @@ function compatibleSets(
   );
 }
 
-function structureFormat(name: string): "cif" | "poscar" {
-  return name.toLowerCase().endsWith(".cif") ? "cif" : "poscar";
-}

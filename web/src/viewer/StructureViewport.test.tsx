@@ -47,8 +47,10 @@ describe("StructureViewport", () => {
       <StructureViewport inspection={inspection} createViewer={createViewer} />,
     );
 
-    expect(screen.getByText("3D preview unavailable")).toBeInTheDocument();
-    expect(screen.getByText("Si")).toBeInTheDocument();
+    const fallback = screen.getByRole("status", {
+      name: "3D structure preview unavailable",
+    });
+    expect(fallback).toHaveTextContent("Si · 1 atomic site");
 
     await user.click(screen.getByRole("button", { name: "Retry 3D preview" }));
 

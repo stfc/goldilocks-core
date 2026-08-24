@@ -117,9 +117,25 @@ provenance, and generated inputs.
 Pass `--static-root DIRECTORY` or set
 `GOLDILOCKS_WORKBENCH_STATIC_ROOT` to a directory containing `index.html`.
 Static files are mounted after Core routes, so they cannot shadow the HTTP
-contract. `/health` reports process liveness; `/ready` verifies the configured
-runtime asset profile. The server stores no projects, sessions, archives, or
-run history.
+contract. `/health` reports process liveness; `/ready` verifies every registered
+runtime asset required by Workbench. The server stores no projects, sessions,
+Results, archives, or run history.
+
+Build the production image to compile Workbench and install the complete asset
+profile:
+
+```bash
+docker build --tag goldilocks-workbench .
+docker run --rm --publish 8000:8000 goldilocks-workbench
+```
+
+The container runs as an unprivileged user and serves Workbench and Core from
+`http://127.0.0.1:8000/`. A Ready-to-run Output uses one directory/ZIP layout:
+
+```text
+source/  structure/  inputs/  pseudo/  licences/
+CITATIONS.md  README.md  goldilocks.json  checksums.sha256
+```
 
 ## Documentation
 
@@ -138,6 +154,9 @@ uv run pytest -m integration
 uv run pytest -m physics
 uv run pytest --cov --cov-report=term-missing
 uv run mutmut run --max-children 4
+cd web && npm ci && npm run check && cd ..
+uv build --no-sources
+uv run python scripts/validate_distribution.py dist
 uv run pre-commit run --all-files
 ```
 

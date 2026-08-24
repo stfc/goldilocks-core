@@ -1,198 +1,113 @@
 # Goldilocks workflows
 
-Use these patterns before reading implementation files.
+Use these canonical patterns before reading implementation files.
 
-## Inspect structures
-
-Read candidate periodic files with pymatgen and report parse failures before
-running Core:
+## Inspect a Structure Source
 
 ```python
-from pathlib import Path
-from pymatgen.core import Structure
+from goldilocks_core import PathStructureSource, Service
 
-for path in sorted(Path("structures").glob("*.cif")):
-    try:
-        structure = Structure.from_file(path)
-        elements = sorted(
-            element.symbol for element in structure.composition.elements
-        )
-        print(path, structure.composition.reduced_formula, elements, len(structure))
-    except (OSError, ValueError) as error:
-        print(path, "ERROR", error)
+with Service() as core:
+    inspection = core.inspect_structure(PathStructureSource("structure.cif"))
+
+print(inspection.structure.reduced_formula)
+print(inspection.canonical_cif)
 ```
 
-## Pseudopotential sources
-
-A request with no pseudopotential argument resolves the installed default
-table, including cutoff metadata. Install it first: `goldilocks assets install
-default`.
-
-To use an operator-managed custom library instead, load its metadata and pass
-it explicitly:
-
-```python
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
-
-pseudo_metadata = tuple(load_pseudo_metadata("pseudos"))
-for pseudo in pseudo_metadata:
-    print(
-        pseudo.element,
-        pseudo.filename,
-        pseudo.functional,
-        pseudo.pseudo_type,
-        pseudo.relativistic,
-        pseudo.cutoffs,
-    )
-```
-
-Generation needs a filename and complete `ecutwfc_ry`/`ecutrho_ry` values for
-every selected element. Never invent missing cutoffs; obtain them from a trusted
-library table or explicit operator policy and preserve provenance.
-
-## Complete recommendation
+## Compute a Preset
 
 ```python
 from goldilocks_core import (
+    CalculationDraft,
     CalculationHints,
-    CalculationIntent,
+    ComputeRequest,
+    PathStructureSource,
+    PresetSelection,
     Service,
-    PresetRequest,
 )
 
-request = PresetRequest(
-    structure="structure.cif",
-    intent=CalculationIntent(
-        code="quantum_espresso",
-        task="scf_single_point",
-        functional="PBE",
-        pseudo_accuracy="efficiency",
+request = ComputeRequest(
+    CalculationDraft(
+        PathStructureSource("structure.cif"),
+        hints=CalculationHints(k_grid=(4, 4, 4)),
+        pseudo_table="pseudodojo-pbesol-efficiency-sr",
     ),
-    hints=CalculationHints(
-        k_spacing=0.2,
-        # k_grid=(4, 4, 4),  # explicit grid wins over spacing
-        # pseudo_type="NC",
-        # smearing_type="cold",
-        # smearing_width_ry=0.01,
-    ),
+    PresetSelection("recommend"),
 )
-
 with Service() as core:
-    result = core.recommend(request)
+    result = core.compute(request)
 
-print(result.analysis.reduced_formula)
-print(result.k_points.grid, result.k_points.shift)
-print(result.selection.pseudopotentials)
-print(result.advice.smearing)
-print(result.advice.convergence)
+records = result.records.to_dict()
+print(records["analysis"]["reduced_formula"])
+print(records["k_points"]["grid"])
+print(records["selection"]["pseudopotentials"])
 print(result.warnings)
 ```
 
-To use a custom library instead of the installed table, add
-`pseudo_metadata=tuple(load_pseudo_metadata("pseudos"))` to the request.
+`PresetSelection("generate")` also returns `generated_files` and complete
+`dft_input_data`.
 
-Extract cutoffs from each `PseudopotentialSelection` and use the maxima across
-elements when inspecting a generated calculation.
-
-## Generate files in memory
+## Publish Ready-to-run Output
 
 ```python
-from goldilocks_core import CalculationHints, Service, PresetRequest
-
-request = PresetRequest(
-    structure="structure.cif",
-    hints=CalculationHints(k_grid=(4, 4, 4)),
-)
+from goldilocks_core import DirectoryOutput
 
 with Service() as core:
-    result = core.generate(request)
+    result = core.compute(request, output=DirectoryOutput("run-dir"))
 
-for generated_file in result.generated_files:
-    print(generated_file.path)
-    print(generated_file.content)
+print(result.publication.path)
 ```
 
-## Publish a bundle directory
+The destination must not exist. Use `ArchiveOutput("run.zip")` for ZIP,
+`DirectoryOutput()` for automatic allocation, or `None` for memory-only output.
+Directory and ZIP outputs contain the same logical files: source and canonical
+structures, inputs, selected UPFs, licences, citations, provenance, and
+checksums.
 
-```python
-with Service() as core:
-    result = core.generate(request, output_dir="run-dir")
-
-print(result.bundle.path)
-print(result.bundle.manifest)
-```
-
-CLI equivalent:
+CLI equivalents:
 
 ```bash
-uv run goldilocks generate structure.cif --functional PBE --k-spacing 0.2 --out run-dir --json
+uv run goldilocks compute structure.cif --preset generate --pseudo-table pseudodojo-pbesol-efficiency-sr --k-grid 4 4 4 --out run-dir --json
+uv run goldilocks compute structure.cif --preset generate --pseudo-table pseudodojo-pbesol-efficiency-sr --k-grid 4 4 4 --archive run.zip --json
 ```
 
-Pass `--pseudo-root pseudos` only for a custom operator-managed library.
-
-The destination must not exist. The published layout is:
-
-```text
-run-dir/
-├── manifest.json
-└── inputs/
-    └── qe.in
-```
-
-If the QE file uses `pseudo_dir = './pseudo'`, stage the selected UPFs there
-before running QE; Core does not copy pseudopotential libraries.
-
-## Query selected records
+## Select Records
 
 ```python
-from goldilocks_core import CalculationHints, Service, QueryRequest
+from goldilocks_core import ComputeRequest, RecordSelection, compute
 from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
 
-request = QueryRequest(
-    structure="structure.cif",
-    outputs=(StructureAnalysisRecord, KPointSelection),
-    hints=CalculationHints(k_grid=(4, 4, 4)),
+query = ComputeRequest(
+    request.draft,
+    RecordSelection((StructureAnalysisRecord, KPointSelection)),
 )
-
-with Service() as core:
-    records = core.compute(request)
-
-print(records[StructureAnalysisRecord])
-print(records[KPointSelection])
+result = compute(query)
+print(result.records[StructureAnalysisRecord])
+print(result.records[KPointSelection])
 ```
 
 CLI equivalent:
 
 ```bash
-uv run goldilocks compute structure.cif --outputs analysis,k_points --k-grid 4 4 4
+uv run goldilocks compute structure.cif --outputs analysis,k_points --k-grid 4 4 4 --no-out --json
 ```
 
-## One-call runner
+## Use a local pseudopotential root
 
-Use the convenience entry points only when model reuse and discovery are not
-needed:
-
-```python
-from goldilocks_core import PresetRequest, QueryRequest, query_records, run_core_job
-from goldilocks_core.contracts import StructureAnalysisRecord
-
-result = run_core_job(
-    PresetRequest(structure="structure.cif", mode="recommend")
-)
-records = query_records(
-    QueryRequest(structure="structure.cif", outputs=(StructureAnalysisRecord,))
-)
+```bash
+uv run goldilocks compute structure.cif --preset generate --pseudo-root pseudos --k-grid 4 4 4 --out run-dir
 ```
 
-## Local kmesh model
+`goldilocks-pseudopotentials.json` in the root must identify the real licence
+file and citation before Core can publish local UPFs. Never invent missing
+cutoffs or redistribution terms.
 
-Put the model specification on the request; do not replace a pipeline object:
+## Use a local k-point model
 
 ```python
-from goldilocks_core import Service, PresetRequest
 from goldilocks_core.contracts import ModelSpec
 
-spec = ModelSpec(
+model = ModelSpec(
     name="local-kmesh-model",
     version="v1",
     model_type="random_forest",
@@ -200,14 +115,21 @@ spec = ModelSpec(
     feature_set="cslr",
     source="local",
     location="models/kmesh.joblib",
+    licence="licence-id",
+    licence_text="actual model licence text",
+    citation="model citation",
 )
-
-with Service() as core:
-    result = core.recommend(
-        PresetRequest(structure="structure.cif", kmesh_model=spec)
-    )
-print(result.k_points.grid)
+request = ComputeRequest(
+    CalculationDraft(
+        PathStructureSource("structure.cif"),
+        kmesh_model=model,
+        pseudo_table="pseudodojo-pbesol-efficiency-sr",
+    ),
+    PresetSelection("generate"),
+)
 ```
+
+Publishable model-backed Results require licence and citation identity.
 
 ## Optional transports
 
@@ -217,20 +139,6 @@ uv run goldilocks serve http --host 127.0.0.1 --port 8000
 uv run goldilocks serve mcp
 ```
 
-HTTP exposes `/recommend`, `/generate`, `/compute`, `/tasks`, `/codes`,
-`/models`, and `/health`. MCP exposes matching operation and discovery tools
-over stdio. Both reuse one process-owned `Service`.
-
-## Manual QE writing check
-
-When writing the input yourself after recommendation, include:
-
-- `&CONTROL`: `calculation='scf'`, `pseudo_dir`, `outdir`, stress/force flags;
-- `&SYSTEM`: `ibrav=0`, `nat`, `ntyp`, cutoffs, occupations, spin/SOC;
-- `&ELECTRONS`: convergence threshold, mixing beta, maximum SCF steps;
-- `ATOMIC_SPECIES`: element, mass, selected pseudo filename;
-- `CELL_PARAMETERS angstrom` from the loaded lattice;
-- `ATOMIC_POSITIONS crystal` or `angstrom` from the structure;
-- `K_POINTS automatic` from selected grid and shift.
-
-See `qe-scf-template.md` for a compact template.
+HTTP accepts inline Structure Sources and returns Result JSON or ZIP bytes.
+Local MCP accepts inline content or paths and can publish local outputs. Both
+reuse one process-owned `Service`.

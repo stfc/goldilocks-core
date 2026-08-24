@@ -57,6 +57,7 @@ def install_scientific_routes(
     @app.post(
         "/compute",
         response_model=ComputationResultDocument,
+        response_model_exclude_unset=True,
         responses={200: _ARCHIVE_RESPONSE, **_ERROR_RESPONSES},
     )
     def compute(body: ComputeRequestDocument) -> Any:

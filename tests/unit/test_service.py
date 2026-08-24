@@ -165,6 +165,53 @@ def test_service_serializes_concurrent_computations() -> None:
     assert backend.calls == 2
 
 
+def test_capabilities_and_inspection_do_not_wait_for_computation() -> None:
+    class BlockingBackend:
+        def __init__(self) -> None:
+            self.entered = Event()
+            self.release = Event()
+
+        def __call__(self, structure: Structure) -> KPointSelection:
+            del structure
+            self.entered.set()
+            assert self.release.wait(timeout=2)
+            return KPointSelection(
+                grid=(2, 2, 2),
+                shift=(0, 0, 0),
+                mesh_type="monkhorst-pack",
+                provenance=Provenance(source="model", reason="test"),
+            )
+
+        def close(self) -> None:
+            pass
+
+    backend = BlockingBackend()
+    request = ComputeRequest(
+        draft=CalculationDraft(
+            structure=InMemoryStructureSource(make_structure()),
+            hints=CalculationHints(pseudo_type="NC"),
+            pseudo_metadata=(make_metadata(),),
+        ),
+        selection=PresetSelection("recommend"),
+    )
+
+    with Runtime(kmesh_service=backend) as runtime, Service(runtime) as service:
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            computation = pool.submit(service.compute, request)
+            assert backend.entered.wait(timeout=2)
+            capabilities = pool.submit(service.capabilities)
+            inspection = pool.submit(
+                service.inspect_structure,
+                InMemoryStructureSource(make_structure()),
+            )
+            try:
+                assert capabilities.result(timeout=0.5).tasks
+                assert inspection.result(timeout=0.5).structure.reduced_formula == "Si"
+            finally:
+                backend.release.set()
+            computation.result(timeout=2)
+
+
 def test_one_service_reuses_its_runtime_across_computations() -> None:
     request = make_request()
     with Service() as service:

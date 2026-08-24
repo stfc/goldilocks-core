@@ -254,24 +254,15 @@ export interface components {
         };
         /** ComputationResult */
         readonly ComputationResult: {
-            /** Draft */
-            readonly draft: {
-                readonly [key: string]: components["schemas"]["JsonValue"];
-            };
+            readonly draft: components["schemas"]["SerializedCalculationDraft"];
             readonly publication: components["schemas"]["Publication"] | null;
-            /** Records */
-            readonly records: {
-                readonly [key: string]: components["schemas"]["JsonValue"];
-            };
+            readonly records: components["schemas"]["Records"];
             /**
              * Schema Version
              * @constant
              */
             readonly schema_version: 1;
-            /** Selection */
-            readonly selection: {
-                readonly [key: string]: components["schemas"]["JsonValue"];
-            };
+            readonly selection: components["schemas"]["SelectionDocument"];
             /** Task */
             readonly task: string;
             /** Task Revision */
@@ -286,6 +277,34 @@ export interface components {
             readonly output: components["schemas"]["MemoryOutput"] | components["schemas"]["HttpArchiveOutput"];
             readonly selection: components["schemas"]["SelectionDocument"];
         };
+        /** ConvergenceAdvice */
+        readonly ConvergenceAdvice: {
+            /** Conv Thr */
+            readonly conv_thr: number;
+            /** Electron Maxstep */
+            readonly electron_maxstep: number;
+            /** Mixing Beta */
+            readonly mixing_beta: number;
+            readonly provenance: components["schemas"]["Provenance"];
+        };
+        /** DftInputData */
+        readonly DftInputData: {
+            /** Artifacts */
+            readonly artifacts: readonly components["schemas"]["SerializedInputArtifact"][];
+            /** Citations */
+            readonly citations: readonly string[];
+            /** Manifest */
+            readonly manifest: {
+                readonly [key: string]: unknown;
+            };
+            readonly pseudopotential_set: components["schemas"]["PseudopotentialSetIdentity"];
+            readonly runtime: components["schemas"]["SerializedRuntime"];
+            /**
+             * Schema Version
+             * @constant
+             */
+            readonly schema_version: 1;
+        };
         /** Error */
         readonly Error: {
             /** Asset Id */
@@ -298,16 +317,35 @@ export interface components {
             readonly kind: string;
             /** Message */
             readonly message: string;
+            /** Reason */
+            readonly reason?: string | null;
             /** Retryable */
             readonly retryable?: boolean | null;
-            /** Root */
-            readonly root?: string | null;
             /** Version */
             readonly version?: string | null;
         };
         /** ErrorResponse */
         readonly ErrorResponse: {
             readonly error: components["schemas"]["Error"];
+        };
+        /** GeneratedArtifactSource */
+        readonly GeneratedArtifactSource: {
+            /** Identity */
+            readonly identity: string;
+            /**
+             * Kind
+             * @constant
+             */
+            readonly kind: "generated";
+        };
+        /** GeneratedFile */
+        readonly GeneratedFile: {
+            /** Content */
+            readonly content: string;
+            /** Path */
+            readonly path: string;
+            /** Role */
+            readonly role: string;
         };
         /** HttpArchiveOutput */
         readonly HttpArchiveOutput: {
@@ -332,7 +370,41 @@ export interface components {
             /** Name */
             readonly name: string;
         };
+        /** InstalledArtifactSource */
+        readonly InstalledArtifactSource: {
+            /** Asset Id */
+            readonly asset_id: string;
+            /** Asset Version */
+            readonly asset_version: string;
+            /**
+             * Kind
+             * @constant
+             */
+            readonly kind: "installed";
+            /** Path */
+            readonly path: string;
+            /** Preparation Fingerprint */
+            readonly preparation_fingerprint: string;
+        };
         readonly JsonValue: unknown;
+        /** KPointSelection */
+        readonly KPointSelection: {
+            /** Grid */
+            readonly grid: readonly [
+                number,
+                number,
+                number
+            ];
+            /** Mesh Type */
+            readonly mesh_type: string;
+            readonly provenance: components["schemas"]["Provenance"];
+            /** Shift */
+            readonly shift: readonly [
+                number,
+                number,
+                number
+            ];
+        };
         /** LatticeDocument */
         readonly LatticeDocument: {
             /** Angles Degrees */
@@ -368,6 +440,22 @@ export interface components {
             /** Volume Angstrom3 */
             readonly volume_angstrom3: number;
         };
+        /** LocalPseudoRoot */
+        readonly LocalPseudoRoot: {
+            /**
+             * Kind
+             * @constant
+             */
+            readonly kind: "local_root";
+        };
+        /** MagnetismAdvice */
+        readonly MagnetismAdvice: {
+            /** Magnetic Elements */
+            readonly magnetic_elements: readonly string[];
+            readonly provenance: components["schemas"]["Provenance"];
+            /** Spin Polarized */
+            readonly spin_polarized: boolean;
+        };
         /** MemoryOutput */
         readonly MemoryOutput: {
             /**
@@ -397,6 +485,15 @@ export interface components {
             /** Version */
             readonly version: string;
         };
+        /** ParameterAdvice */
+        readonly ParameterAdvice: {
+            readonly convergence: components["schemas"]["ConvergenceAdvice"];
+            readonly magnetism: components["schemas"]["MagnetismAdvice"];
+            readonly pseudopotential_requirements: components["schemas"]["PseudopotentialRequirements"];
+            readonly smearing: components["schemas"]["SmearingAdvice"];
+            readonly spin_orbit: components["schemas"]["SpinOrbitAdvice"];
+            readonly vdw: components["schemas"]["VdwAdvice"];
+        };
         /** PresetCapability */
         readonly PresetCapability: {
             /** Id */
@@ -410,6 +507,51 @@ export interface components {
         readonly PresetSelection: {
             /** Preset */
             readonly preset: string;
+        };
+        /** Provenance */
+        readonly Provenance: {
+            /** Confidence */
+            readonly confidence: number | null;
+            /** Data Source */
+            readonly data_source: string | null;
+            /** Details */
+            readonly details: {
+                readonly [key: string]: unknown;
+            } | null;
+            /** Reason */
+            readonly reason: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            readonly source: "analysis" | "user_hint" | "default" | "model" | "lookup" | "fallback";
+            /** Warnings */
+            readonly warnings: readonly string[];
+        };
+        /** PseudoCutoffs */
+        readonly PseudoCutoffs: {
+            /** Ecutrho Ry */
+            readonly ecutrho_ry: number | null;
+            /** Ecutwfc Ry */
+            readonly ecutwfc_ry: number | null;
+        };
+        /** PseudopotentialRequirements */
+        readonly PseudopotentialRequirements: {
+            /**
+             * Accuracy
+             * @enum {string}
+             */
+            readonly accuracy: "efficiency" | "precision";
+            /** Functional */
+            readonly functional: string;
+            readonly provenance: components["schemas"]["Provenance"];
+            /** Pseudo Type */
+            readonly pseudo_type: ("NC" | "USPP" | "PAW") | null;
+            /**
+             * Relativistic
+             * @enum {string}
+             */
+            readonly relativistic: "scalar" | "full" | "non-relativistic";
         };
         /** PseudopotentialSetCapability */
         readonly PseudopotentialSetCapability: {
@@ -436,6 +578,29 @@ export interface components {
             /** Version */
             readonly version: string;
         };
+        /** PseudopotentialSetIdentity */
+        readonly PseudopotentialSetIdentity: {
+            /** Accuracy */
+            readonly accuracy: string;
+            /** Citation */
+            readonly citation: string;
+            /** Functional */
+            readonly functional: string;
+            /** Id */
+            readonly id: string;
+            /** Licence */
+            readonly licence: string;
+            /** Policy */
+            readonly policy: {
+                readonly [key: string]: unknown;
+            };
+            /** Provider */
+            readonly provider: string;
+            /** Relativistic */
+            readonly relativistic: string;
+            /** Version */
+            readonly version: string | null;
+        };
         /** Publication */
         readonly Publication: {
             /** Files */
@@ -448,7 +613,7 @@ export interface components {
             /** Manifest Sha256 */
             readonly manifest_sha256: string;
             /** Output Sha256 */
-            readonly output_sha256?: string | null;
+            readonly output_sha256: string | null;
             /** Path */
             readonly path: string;
         };
@@ -457,7 +622,222 @@ export interface components {
             /** Records */
             readonly records: readonly ("analysis" | "advice" | "k_points" | "selection" | "generated_files" | "dft_input_data")[];
         };
+        /** Records */
+        readonly Records: {
+            readonly advice?: components["schemas"]["ParameterAdvice"];
+            readonly analysis?: components["schemas"]["StructureAnalysisRecord"];
+            readonly dft_input_data?: components["schemas"]["DftInputData"];
+            /** Generated Files */
+            readonly generated_files?: readonly components["schemas"]["GeneratedFile"][];
+            readonly k_points?: components["schemas"]["KPointSelection"];
+            readonly selection?: components["schemas"]["SelectionRecord"];
+        };
+        /** RuntimeAssetFile */
+        readonly RuntimeAssetFile: {
+            /** Path */
+            readonly path: string;
+            /** Role */
+            readonly role: string;
+            /** Sha256 */
+            readonly sha256: string;
+            /** Size Bytes */
+            readonly size_bytes: number;
+        };
         readonly SelectionDocument: components["schemas"]["PresetSelection"] | components["schemas"]["RecordSelection"];
+        /** SelectionRecord */
+        readonly SelectionRecord: {
+            /** Pseudopotentials */
+            readonly pseudopotentials: readonly components["schemas"]["SerializedPseudopotentialSelection"][];
+            /** Warnings */
+            readonly warnings: readonly string[];
+        };
+        /** SerializedCalculationDraft */
+        readonly SerializedCalculationDraft: {
+            readonly hints: components["schemas"]["SerializedCalculationHints"];
+            readonly intent: components["schemas"]["SerializedCalculationIntent"];
+            readonly kmesh_model: components["schemas"]["SerializedModel"] | null;
+            /** Pseudo Metadata */
+            readonly pseudo_metadata: readonly components["schemas"]["SerializedPseudoMetadata"][] | null;
+            readonly pseudo_root: components["schemas"]["LocalPseudoRoot"] | null;
+            /** Pseudo Table */
+            readonly pseudo_table: string | null;
+            readonly structure: components["schemas"]["StructureInspection"];
+        };
+        /** SerializedCalculationHints */
+        readonly SerializedCalculationHints: {
+            /** Conv Thr */
+            readonly conv_thr: number | null;
+            /** Electron Maxstep */
+            readonly electron_maxstep: number | null;
+            /** K Grid */
+            readonly k_grid: readonly [
+                number,
+                number,
+                number
+            ] | null;
+            /** K Spacing */
+            readonly k_spacing: number | null;
+            /** Mixing Beta */
+            readonly mixing_beta: number | null;
+            /** Pseudo Accuracy */
+            readonly pseudo_accuracy: ("efficiency" | "precision") | null;
+            /** Pseudo Type */
+            readonly pseudo_type: string | null;
+            /** Relativistic Mode */
+            readonly relativistic_mode: string | null;
+            /** Smearing Type */
+            readonly smearing_type: string | null;
+            /** Smearing Width Ry */
+            readonly smearing_width_ry: number | null;
+            /** Spin Orbit Coupling */
+            readonly spin_orbit_coupling: boolean | null;
+            /** Spin Polarized */
+            readonly spin_polarized: boolean | null;
+            /** Use Vdw */
+            readonly use_vdw: boolean | null;
+            /** Vdw Method */
+            readonly vdw_method: ("d3" | "d3bj" | "ts" | "mbd") | null;
+        };
+        /** SerializedCalculationIntent */
+        readonly SerializedCalculationIntent: {
+            /** Code */
+            readonly code: string;
+            /** Functional */
+            readonly functional: string;
+            /**
+             * Pseudo Accuracy
+             * @enum {string}
+             */
+            readonly pseudo_accuracy: "efficiency" | "precision";
+            /** Task */
+            readonly task: string;
+        };
+        /** SerializedInputArtifact */
+        readonly SerializedInputArtifact: {
+            /** Media Type */
+            readonly media_type: string | null;
+            /** Path */
+            readonly path: string;
+            readonly provenance: components["schemas"]["Provenance"] | null;
+            /** Role */
+            readonly role: string;
+            /** Sha256 */
+            readonly sha256: string;
+            /** Size Bytes */
+            readonly size_bytes: number;
+            /** Source */
+            readonly source: components["schemas"]["GeneratedArtifactSource"] | components["schemas"]["InstalledArtifactSource"];
+        };
+        /** SerializedModel */
+        readonly SerializedModel: {
+            /** Citation */
+            readonly citation: string | null;
+            /** Feature Set */
+            readonly feature_set: string;
+            /** Licence */
+            readonly licence: string | null;
+            /**
+             * Model Type
+             * @enum {string}
+             */
+            readonly model_type: "random_forest" | "cgcnn" | "xgboost";
+            /** Name */
+            readonly name: string;
+            /** Revision */
+            readonly revision: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            readonly source: "huggingface" | "local";
+            /** Target */
+            readonly target: string;
+            /** Version */
+            readonly version: string;
+        };
+        /** SerializedPseudoMetadata */
+        readonly SerializedPseudoMetadata: {
+            /** Accuracy */
+            readonly accuracy: ("efficiency" | "precision") | null;
+            /** Content Sha256 */
+            readonly content_sha256: string | null;
+            /** Content Size Bytes */
+            readonly content_size_bytes: number | null;
+            readonly cutoffs: components["schemas"]["PseudoCutoffs"] | null;
+            /** Element */
+            readonly element: string | null;
+            /** Filename */
+            readonly filename: string;
+            /** Frozen 4F Core */
+            readonly frozen_4f_core: boolean;
+            /** Functional */
+            readonly functional: string | null;
+            /** Header Format */
+            readonly header_format: string;
+            /** Provider */
+            readonly provider: string | null;
+            /** Pseudo Type */
+            readonly pseudo_type: ("NC" | "USPP" | "PAW") | null;
+            /** Relativistic */
+            readonly relativistic: ("scalar" | "full" | "non-relativistic") | null;
+            /** Source Identifier */
+            readonly source_identifier: string | null;
+            /** Table Id */
+            readonly table_id: string | null;
+            /** Warnings */
+            readonly warnings: readonly string[];
+            /** Z Valence */
+            readonly z_valence: number | null;
+        };
+        /** SerializedPseudopotentialSelection */
+        readonly SerializedPseudopotentialSelection: {
+            /** Ecutrho Ry */
+            readonly ecutrho_ry: number | null;
+            /** Ecutwfc Ry */
+            readonly ecutwfc_ry: number | null;
+            /** Element */
+            readonly element: string;
+            /** Filename */
+            readonly filename: string | null;
+            /** Functional */
+            readonly functional: string | null;
+            readonly provenance: components["schemas"]["Provenance"];
+            /** Relativistic */
+            readonly relativistic: ("scalar" | "full" | "non-relativistic") | null;
+            /** Warnings */
+            readonly warnings: readonly string[];
+        };
+        /** SerializedRuntime */
+        readonly SerializedRuntime: {
+            /** Assets */
+            readonly assets: readonly components["schemas"]["SerializedRuntimeAsset"][];
+            /** Core Version */
+            readonly core_version: string;
+            /** Models */
+            readonly models: readonly components["schemas"]["SerializedModel"][];
+        };
+        /** SerializedRuntimeAsset */
+        readonly SerializedRuntimeAsset: {
+            /** Files */
+            readonly files: readonly components["schemas"]["RuntimeAssetFile"][];
+            /** Id */
+            readonly id: string;
+            readonly model: components["schemas"]["SerializedModel"];
+            /** Preparation Fingerprint */
+            readonly preparation_fingerprint: string;
+            /** Role */
+            readonly role: string;
+            /** Version */
+            readonly version: string;
+        };
+        /** SmearingAdvice */
+        readonly SmearingAdvice: {
+            readonly provenance: components["schemas"]["Provenance"];
+            /** Smearing Type */
+            readonly smearing_type: string | null;
+            /** Width Ry */
+            readonly width_ry: number | null;
+        };
         /** SpeciesOccupancy */
         readonly SpeciesOccupancy: {
             /** Label */
@@ -468,6 +848,16 @@ export interface components {
             readonly oxidation_state?: number | null;
             /** Symbol */
             readonly symbol: string;
+        };
+        /** SpinOrbitAdvice */
+        readonly SpinOrbitAdvice: {
+            /** Consider */
+            readonly consider: boolean;
+            /** Enabled */
+            readonly enabled: boolean;
+            /** Heavy Elements */
+            readonly heavy_elements: readonly string[];
+            readonly provenance: components["schemas"]["Provenance"];
         };
         /** StageCapability */
         readonly StageCapability: {
@@ -481,6 +871,57 @@ export interface components {
             readonly name: string;
             /** Output Record Id */
             readonly output_record_id: string;
+        };
+        /** StructureAnalysisRecord */
+        readonly StructureAnalysisRecord: {
+            /** Analysis Warnings */
+            readonly analysis_warnings: readonly string[];
+            /** Contains Actinides */
+            readonly contains_actinides: boolean;
+            /** Contains Heavy Elements */
+            readonly contains_heavy_elements: boolean;
+            /** Contains Lanthanides */
+            readonly contains_lanthanides: boolean;
+            /** Contains Transition Metals */
+            readonly contains_transition_metals: boolean;
+            /** Crystal System */
+            readonly crystal_system: string | number | components["schemas"]["SymmetryUnavailable"] | null;
+            /**
+             * Dimensionality
+             * @enum {string}
+             */
+            readonly dimensionality: "3d" | "2d" | "1d" | "molecule" | "unknown";
+            /** Disorder Warnings */
+            readonly disorder_warnings: readonly string[];
+            /** Disordered Site Count */
+            readonly disordered_site_count: number;
+            /**
+             * Electronic Character
+             * @enum {string}
+             */
+            readonly electronic_character: "metal" | "insulator" | "likely_metal" | "unknown";
+            /** Electronic Character Confidence */
+            readonly electronic_character_confidence: number | null;
+            /** Electronic Character Source */
+            readonly electronic_character_source: string;
+            /** Elements */
+            readonly elements: readonly string[];
+            /** Formula */
+            readonly formula: string;
+            /** Heavy Elements */
+            readonly heavy_elements: readonly string[];
+            /** Low Dimensional */
+            readonly low_dimensional: boolean;
+            /** Magnetic Elements */
+            readonly magnetic_elements: readonly string[];
+            /** Reduced Formula */
+            readonly reduced_formula: string;
+            /** Site Count */
+            readonly site_count: number;
+            /** Space Group Number */
+            readonly space_group_number: string | number | components["schemas"]["SymmetryUnavailable"] | null;
+            /** Space Group Symbol */
+            readonly space_group_symbol: string | number | components["schemas"]["SymmetryUnavailable"] | null;
         };
         /** StructureDocument */
         readonly StructureDocument: {
@@ -552,6 +993,19 @@ export interface components {
             readonly sha256: string | null;
             /** Size Bytes */
             readonly size_bytes: number | null;
+        };
+        /** SymmetryUnavailable */
+        readonly SymmetryUnavailable: {
+            /** Reason */
+            readonly reason: string;
+        };
+        /** VdwAdvice */
+        readonly VdwAdvice: {
+            /** Method */
+            readonly method: ("d3" | "d3bj" | "ts" | "mbd") | null;
+            readonly provenance: components["schemas"]["Provenance"];
+            /** Use Vdw */
+            readonly use_vdw: boolean;
         };
     };
     responses: never;

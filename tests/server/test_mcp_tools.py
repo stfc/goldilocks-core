@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import time
+from pathlib import Path
 
 import pytest
 
@@ -102,7 +102,14 @@ def test_mcp_compute_automatically_publishes_complete_results(
     tmp_path,
     monkeypatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
+    import goldilocks_core.publication as publication_module
+
+    class AutomaticRootPath(type(Path())):
+        @classmethod
+        def cwd(cls):
+            return cls(tmp_path)
+
+    monkeypatch.setattr(publication_module, "Path", AutomaticRootPath)
     result = _call(
         create_server(publishable_service),
         "compute",

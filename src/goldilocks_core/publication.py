@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import io
 import json
@@ -114,30 +116,56 @@ class Publisher:
     ) -> Publication:
         target = destination.expanduser().absolute()
         target.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            target.mkdir()
-        except FileExistsError as error:
-            raise FileExistsError(
-                f"Publication destination already exists: {target}"
-            ) from error
-
+        claim_descriptor, claim_identity = _claim_directory(target)
         staging: Path | None = None
+        staging_descriptor: int | None = None
+        staging_identity: tuple[int, int] | None = None
         try:
             staging = Path(
                 tempfile.mkdtemp(prefix=f".{target.name}.", dir=target.parent)
             )
+            staging_identity = _path_identity(staging)
+            staging_descriptor = os.open(
+                staging,
+                os.O_RDONLY
+                | getattr(os, "O_DIRECTORY", 0)
+                | getattr(os, "O_CLOEXEC", 0),
+            )
+            staging_identity = _descriptor_identity(staging_descriptor)
             for file in files:
                 path = staging.joinpath(*PurePosixPath(file.path).parts)
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(file.content)
             _verify_directory(staging, files)
-            os.replace(staging, target)
+            _release_directory_claim(target, claim_identity)
+            try:
+                _rename_no_replace(staging, target)
+            except FileExistsError as error:
+                raise FileExistsError(
+                    f"Publication destination already exists: {target}"
+                ) from error
+            if not _has_identity(target, staging_identity):
+                raise OSError(
+                    f"Publication destination changed during publication: {target}"
+                )
             _verify_directory(target, files)
-        except BaseException:
-            if staging is not None:
-                shutil.rmtree(staging, ignore_errors=True)
-            shutil.rmtree(target, ignore_errors=True)
-            raise
+        finally:
+            try:
+                if (
+                    staging is not None
+                    and staging_identity is not None
+                    and _has_identity(staging, staging_identity)
+                ):
+                    shutil.rmtree(staging)
+                if _has_identity(target, claim_identity):
+                    try:
+                        target.rmdir()
+                    except OSError:
+                        pass
+            finally:
+                if staging_descriptor is not None:
+                    os.close(staging_descriptor)
+                os.close(claim_descriptor)
         return _publication("directory", target, files)
 
     def _publish_archive(
@@ -147,34 +175,34 @@ class Publisher:
     ) -> Publication:
         target = destination.expanduser().absolute()
         target.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, staging_name = tempfile.mkstemp(
+            prefix=f".{target.name}.", dir=target.parent
+        )
+        staging = Path(staging_name)
+        staging_identity = _descriptor_identity(descriptor)
         try:
-            target.open("xb").close()
-        except FileExistsError as error:
-            raise FileExistsError(
-                f"Publication destination already exists: {target}"
-            ) from error
-        staging: Path | None = None
-        try:
-            descriptor, staging_name = tempfile.mkstemp(
-                prefix=f".{target.name}.", dir=target.parent
-            )
-            os.close(descriptor)
-            staging = Path(staging_name)
             payload = _archive_bytes(files)
             staging.write_bytes(payload)
             if staging.read_bytes() != payload:
                 raise OSError(f"Completed archive write differs: {staging}")
-            os.replace(staging, target)
+            try:
+                os.link(staging, target)
+            except FileExistsError as error:
+                raise FileExistsError(
+                    f"Publication destination already exists: {target}"
+                ) from error
+            if not _has_identity(target, staging_identity):
+                raise OSError(
+                    f"Publication destination changed during publication: {target}"
+                )
             if _sha256(target.read_bytes()) != _sha256(payload):
                 raise OSError(f"Published archive checksum differs: {target}")
-        except BaseException:
-            if staging is not None:
-                staging.unlink(missing_ok=True)
+        finally:
             try:
-                target.unlink()
-            except OSError:
-                pass
-            raise
+                if _has_identity(staging, staging_identity):
+                    staging.unlink()
+            finally:
+                os.close(descriptor)
         return _publication("archive", target, files, _sha256(payload))
 
     def _content(self, artifact: InputArtifact) -> bytes:
@@ -197,6 +225,101 @@ class Publisher:
                 f"Artifact {artifact.path!r} differs from its DFT Input Data descriptor"
             )
         return payload
+
+
+def _path_identity(path: Path) -> tuple[int, int]:
+    status = path.stat(follow_symlinks=False)
+    return status.st_dev, status.st_ino
+
+
+def _descriptor_identity(descriptor: int) -> tuple[int, int]:
+    status = os.fstat(descriptor)
+    return status.st_dev, status.st_ino
+
+
+def _has_identity(path: Path, identity: tuple[int, int]) -> bool:
+    try:
+        return _path_identity(path) == identity
+    except FileNotFoundError:
+        return False
+
+
+def _claim_directory(target: Path) -> tuple[int, tuple[int, int]]:
+    claim = Path(tempfile.mkdtemp(prefix=".goldilocks-claim-", dir=target.parent))
+    identity = _path_identity(claim)
+    try:
+        descriptor = os.open(
+            claim,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0),
+        )
+    except BaseException:
+        if _has_identity(claim, identity):
+            claim.rmdir()
+        raise
+    identity = _descriptor_identity(descriptor)
+    try:
+        _rename_no_replace(claim, target)
+    except BaseException as error:
+        try:
+            if _has_identity(claim, identity):
+                claim.rmdir()
+        finally:
+            os.close(descriptor)
+        if isinstance(error, FileExistsError):
+            raise FileExistsError(
+                f"Publication destination already exists: {target}"
+            ) from error
+        raise
+    return descriptor, identity
+
+
+def _release_directory_claim(target: Path, identity: tuple[int, int]) -> None:
+    if not _has_identity(target, identity):
+        raise FileExistsError(f"Publication destination already exists: {target}")
+    try:
+        target.rmdir()
+    except OSError as error:
+        raise FileExistsError(
+            f"Publication destination already exists: {target}"
+        ) from error
+
+
+def _rename_no_replace(source: Path, destination: Path) -> None:
+    if os.name == "nt":
+        os.rename(source, destination)
+        return
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    try:
+        renameat2 = libc.renameat2
+    except AttributeError as error:
+        raise OSError(
+            errno.ENOTSUP,
+            "Atomic no-replace directory publication is not supported",
+            os.fspath(destination),
+        ) from error
+    renameat2.argtypes = (
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    )
+    renameat2.restype = ctypes.c_int
+    result = renameat2(
+        -100,
+        os.fsencode(source),
+        -100,
+        os.fsencode(destination),
+        1,
+    )
+    if result != 0:
+        error_number = ctypes.get_errno()
+        raise OSError(
+            error_number,
+            os.strerror(error_number),
+            os.fspath(destination),
+        )
 
 
 def _archive_bytes(files: tuple[PublishedFile, ...]) -> bytes:

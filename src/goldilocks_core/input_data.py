@@ -29,7 +29,7 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.contracts.types import JsonDict
 from goldilocks_core.io.structures import NormalizedStructure
-from goldilocks_core.ml.model_registry import load_default_qrf_config
+from goldilocks_core.ml.model_registry import QrfKpointsConfig, load_default_qrf_config
 from goldilocks_core.pseudo.registry import load_tables
 
 
@@ -49,6 +49,8 @@ def assemble_dft_input_data(
     model_registry_path: PathLike | None,
     kmesh_model: ModelSpec | None,
     uses_default_kmesh_model: bool,
+    metallicity_model: ModelSpec | None,
+    uses_default_metallicity_model: bool,
 ) -> DftInputData:
     artifacts: list[InputArtifact] = []
     source = normalized_structure.source
@@ -120,9 +122,11 @@ def assemble_dft_input_data(
         registry_path=model_registry_path,
         custom_kmesh_model=kmesh_model,
         uses_default_kmesh_model=uses_default_kmesh_model,
+        custom_metallicity_model=metallicity_model,
+        uses_default_metallicity_model=uses_default_metallicity_model,
     )
     artifacts.extend(runtime_artifacts)
-    citations = (pseudo_set.citation, *runtime_citations)
+    citations = tuple(dict.fromkeys((pseudo_set.citation, *runtime_citations)))
     manifest = {
         "source": {
             **source.to_dict(),
@@ -220,6 +224,8 @@ def _runtime_material(
     registry_path: PathLike | None,
     custom_kmesh_model: ModelSpec | None,
     uses_default_kmesh_model: bool,
+    custom_metallicity_model: ModelSpec | None,
+    uses_default_metallicity_model: bool,
 ) -> tuple[list[InputArtifact], RuntimeIdentity, tuple[str, ...]]:
     materials = _used_model_material(
         analysis,
@@ -227,6 +233,8 @@ def _runtime_material(
         registry_path=registry_path,
         custom_kmesh_model=custom_kmesh_model,
         uses_default_kmesh_model=uses_default_kmesh_model,
+        custom_metallicity_model=custom_metallicity_model,
+        uses_default_metallicity_model=uses_default_metallicity_model,
     )
     if not materials:
         return [], RuntimeIdentity(core_version=version("goldilocks-core")), ()
@@ -299,16 +307,22 @@ def _used_model_material(
     registry_path: PathLike | None,
     custom_kmesh_model: ModelSpec | None,
     uses_default_kmesh_model: bool,
+    custom_metallicity_model: ModelSpec | None,
+    uses_default_metallicity_model: bool,
 ) -> tuple[_ModelMaterial, ...]:
     kpoints_uses_model = k_points.provenance.source == "model"
     analysis_uses_model = analysis.electronic_character_source == "model"
     if not kpoints_uses_model and not analysis_uses_model:
         return ()
 
-    needs_registered_model = analysis_uses_model or (
+    default_kmesh_used = (
         kpoints_uses_model and custom_kmesh_model is None and uses_default_kmesh_model
     )
-    config = load_default_qrf_config(registry_path) if needs_registered_model else None
+    needs_metallicity = analysis_uses_model or default_kmesh_used
+    needs_registry = default_kmesh_used or (
+        needs_metallicity and uses_default_metallicity_model
+    )
+    config = load_default_qrf_config(registry_path) if needs_registry else None
     materials: list[_ModelMaterial] = []
     if kpoints_uses_model:
         if custom_kmesh_model is not None:
@@ -321,18 +335,11 @@ def _used_model_material(
             )
         elif uses_default_kmesh_model:
             assert config is not None
-            materials.extend(
-                (
-                    _ModelMaterial(
-                        config.model,
-                        config.model_asset,
-                        "licences/k-point-model.txt",
-                    ),
-                    _ModelMaterial(
-                        config.metallicity_model,
-                        config.metallicity_asset,
-                        "licences/metallicity-model.txt",
-                    ),
+            materials.append(
+                _ModelMaterial(
+                    config.model,
+                    config.model_asset,
+                    "licences/k-point-model.txt",
                 )
             )
         else:
@@ -341,21 +348,46 @@ def _used_model_material(
                 "supply a CalculationDraft.kmesh_model with explicit licence and "
                 "citation material"
             )
-    if analysis_uses_model:
-        assert config is not None
-    if analysis_uses_model and not any(
-        item.spec.name == config.metallicity_model.name
-        and item.spec.version == config.metallicity_model.version
-        for item in materials
-    ):
-        materials.append(
-            _ModelMaterial(
-                config.metallicity_model,
-                config.metallicity_asset,
-                "licences/metallicity-model.txt",
-            )
+
+    if needs_metallicity:
+        metallicity = _metallicity_material(
+            config,
+            custom_model=custom_metallicity_model,
+            uses_default_model=uses_default_metallicity_model,
         )
+        if not any(
+            item.spec.name == metallicity.spec.name
+            and item.spec.version == metallicity.spec.version
+            for item in materials
+        ):
+            materials.append(metallicity)
     return tuple(materials)
+
+
+def _metallicity_material(
+    config: QrfKpointsConfig | None,
+    *,
+    custom_model: ModelSpec | None,
+    uses_default_model: bool,
+) -> _ModelMaterial:
+    if uses_default_model:
+        assert config is not None
+        return _ModelMaterial(
+            config.metallicity_model,
+            config.metallicity_asset,
+            "licences/metallicity-model.txt",
+        )
+    if custom_model is None:
+        raise ValueError(
+            "Configured metallicity checkpoint produced a model result without "
+            "identity; supply Runtime(metallicity_model=ModelSpec(...)) with "
+            "explicit licence and citation material"
+        )
+    return _ModelMaterial(
+        custom_model,
+        None,
+        "licences/custom-metallicity-model.txt",
+    )
 
 
 def _published_model_identity(model: ModelSpec) -> JsonDict:

@@ -38,12 +38,16 @@ RUN rm -f /etc/apt/sources.list.d/debian.sources \
 
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
+    MPLCONFIGDIR=/app/.cache/matplotlib \
     GOLDILOCKS_ASSET_ROOT=/opt/goldilocks/assets \
     GOLDILOCKS_WORKBENCH_STATIC_ROOT=/app/workbench \
     GOLDILOCKS_COMPUTE_WAIT_SECONDS=1
 
 WORKDIR /app
 COPY --from=core-build --chown=goldilocks:goldilocks /app/.venv ./.venv
+RUN mkdir -p "$MPLCONFIGDIR" \
+    && /app/.venv/bin/python -c "import matplotlib.font_manager" \
+    && chown -R goldilocks:goldilocks /app/.cache
 COPY --from=core-build --chown=goldilocks:goldilocks /opt/goldilocks/assets /opt/goldilocks/assets
 COPY --from=workbench-build --chown=goldilocks:goldilocks /build/web/dist ./workbench
 COPY --chown=goldilocks:goldilocks LICENSE /usr/share/licenses/goldilocks-core/LICENSE

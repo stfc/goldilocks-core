@@ -241,11 +241,55 @@ describe("Goldilocks Workbench", () => {
     );
   });
 
-  it("presents a typed Capabilities failure with a retry action", async () => {
+  it("opens only the latest file when an earlier read resolves last", async () => {
+    const user = userEvent.setup();
+    let finishFirstRead: (content: string) => void = () => undefined;
+    const firstRead = new Promise<string>((resolve) => {
+      finishFirstRead = resolve;
+    });
+    const first = new File(["A"], "A.cif");
+    Object.defineProperty(first, "text", { value: () => firstRead });
+    const second = new File(["B"], "B.cif");
+    Object.defineProperty(second, "text", {
+      value: () => Promise.resolve("structure B"),
+    });
+    const core = new CoreStub(Promise.resolve(capabilities));
+    core.inspectionResults = [Promise.resolve(inspection)];
+    const workspace = createWorkspace(core);
+    const { container } = render(
+      <WorkspaceProvider workspace={workspace}>
+        <App />
+      </WorkspaceProvider>,
+    );
+    await screen.findByRole("button", {
+      name: "Choose a CIF or POSCAR structure",
+    });
+
+    await user.upload(structureInput(container), first);
+    await user.upload(structureInput(container), second);
+    await waitFor(() => {
+      expect(core.inspectedSources).toEqual([
+        {
+          kind: "inline",
+          name: "B.cif",
+          format: "cif",
+          content: "structure B",
+        },
+      ]);
+    });
+    finishFirstRead("structure A");
+    await firstRead;
+    await Promise.resolve();
+
+    expect(core.inspectedSources).toHaveLength(1);
+    expect(workspace.getSnapshot().source).toMatchObject({ name: "B.cif" });
+  });
+
+  it("keeps retry available and dismiss hidden for a Capabilities failure", async () => {
     const failure = new CoreFailure(
       "assets_unavailable",
       "Runtime assets are unavailable.",
-      true,
+      false,
     );
     const workspace = createWorkspace(new CoreStub(Promise.reject(failure)));
 
@@ -259,6 +303,9 @@ describe("Goldilocks Workbench", () => {
       "Runtime assets unavailable",
     );
     expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: "Dismiss error" }),
+    ).not.toBeInTheDocument();
   });
 
   it("announces Capabilities loading at startup", async () => {

@@ -134,6 +134,65 @@ describe("Workspace", () => {
     });
   });
 
+  it("does not let an obsolete archive clear inspection or pair source B with result A", async () => {
+    const archive = deferred<ArchiveDownload>();
+    const replacementInspection = deferred<StructureInspection>();
+    const obsoleteComputation = deferred<ComputationResult>();
+    const replacement: StructureSource = {
+      kind: "inline",
+      name: "POSCAR",
+      format: "poscar",
+      content: "Silicon B",
+    };
+    const inspectedReplacement: StructureInspection = {
+      ...inspection,
+      canonical_cif: "replacement",
+      source: {
+        ...inspection.source,
+        name: "POSCAR",
+        format: "poscar",
+        content: "Silicon B",
+      },
+    };
+    const core = new CoreStub();
+    core.inspectionResults = [
+      Promise.resolve(inspection),
+      replacementInspection.promise,
+    ];
+    core.memoryResults = [
+      Promise.resolve(computationResult),
+      obsoleteComputation.promise,
+    ];
+    core.archiveResults = [archive.promise];
+    const workspace = createWorkspace(core, vi.fn());
+    await workspace.dispatch({ type: "workspace.start" });
+    await workspace.dispatch({ type: "source.open", source });
+    await workspace.dispatch({ type: "review.compute" });
+
+    const downloading = workspace.dispatch({ type: "review.download" });
+    const replacing = workspace.dispatch({
+      type: "source.open",
+      source: replacement,
+    });
+    archive.resolve({ blob: new Blob(["A"]), filename: "source-a.zip" });
+    await downloading;
+
+    expect(workspace.getSnapshot().operation).toBe("inspect");
+    const computing = workspace.dispatch({ type: "review.compute" });
+    replacementInspection.resolve(inspectedReplacement);
+    await replacing;
+    obsoleteComputation.resolve({ ...computationResult, task_revision: "A" });
+    await computing;
+
+    expect(core.computeCalls).toHaveLength(2);
+    expect(workspace.getSnapshot()).toMatchObject({
+      source: replacement,
+      draft: { structure: replacement },
+      reviewed: null,
+      operation: null,
+    });
+  });
+
   it("downloads by resubmitting the exact reviewed Draft for archive output", async () => {
     const archive: ArchiveDownload = {
       blob: new Blob(["zip"]),
@@ -293,6 +352,27 @@ describe("Workspace", () => {
     });
   });
 
+  it("does not dismiss a Capabilities failure before Capabilities are usable", async () => {
+    const failure = new CoreFailure(
+      "assets_unavailable",
+      "Runtime assets are unavailable.",
+      true,
+    );
+    const core = new CoreStub();
+    core.capabilitiesResult = Promise.reject(failure);
+    const workspace = createWorkspace(core);
+    await workspace.dispatch({ type: "workspace.start" });
+
+    await workspace.dispatch({ type: "failure.dismiss" });
+
+    expect(workspace.getSnapshot()).toMatchObject({
+      capabilities: null,
+      failure,
+      failureOperation: "capabilities",
+      operation: null,
+    });
+  });
+
   it("keeps a typed startup failure retryable", async () => {
     const core = new CoreStub();
     const failure = new CoreFailure(
@@ -321,6 +401,31 @@ describe("Workspace", () => {
     });
   });
 
+  it("retains pending Capabilities ownership across reset and accepts its result", async () => {
+    const pendingCapabilities = deferred<Capabilities>();
+    const core = new CoreStub();
+    core.capabilitiesResult = pendingCapabilities.promise;
+    const workspace = createWorkspace(core);
+
+    const starting = workspace.dispatch({ type: "workspace.start" });
+    await workspace.dispatch({ type: "workspace.reset" });
+
+    expect(workspace.getSnapshot()).toMatchObject({
+      capabilities: null,
+      operation: "capabilities",
+      failure: null,
+    });
+    pendingCapabilities.resolve(capabilities);
+    await starting;
+
+    expect(core.capabilitiesCalls).toBe(1);
+    expect(workspace.getSnapshot()).toMatchObject({
+      capabilities,
+      operation: null,
+      failure: null,
+    });
+  });
+
   it("loads and stores one immutable Capabilities snapshot at startup", async () => {
     const core = new CoreStub();
     const workspace = createWorkspace(core);
@@ -336,3 +441,14 @@ describe("Workspace", () => {
     });
   });
 });
+
+function deferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+} {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((finish) => {
+    resolve = finish;
+  });
+  return { promise, resolve };
+}

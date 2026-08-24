@@ -88,6 +88,7 @@ class Runtime:
         registry_path: PathLike | None = None,
         metallicity_checkpoint: PathLike | None = None,
         metallicity_atom_init: PathLike | None = None,
+        metallicity_model: ModelSpec | None = None,
         kmesh_service: KMeshService | None = None,
         asset_store: AssetStore | None = None,
         pseudo_registry_path: PathLike | None = None,
@@ -95,6 +96,13 @@ class Runtime:
         self._registry_path = registry_path
         self._metallicity_checkpoint = metallicity_checkpoint
         self._metallicity_atom_init = metallicity_atom_init
+        self._metallicity_model_spec = metallicity_model
+        if (metallicity_checkpoint is None) != (metallicity_atom_init is None):
+            raise ValueError(
+                "metallicity_checkpoint and metallicity_atom_init must be configured "
+                "together"
+            )
+        self._uses_default_metallicity_model = metallicity_checkpoint is None
         self._asset_store = asset_store or AssetStore()
         self._pseudo_registry_path = pseudo_registry_path
         self._uses_default_kmesh_model = kmesh_service is None
@@ -126,6 +134,14 @@ class Runtime:
     @property
     def uses_default_kmesh_model(self) -> bool:
         return self._uses_default_kmesh_model
+
+    @property
+    def metallicity_model_spec(self) -> ModelSpec | None:
+        return self._metallicity_model_spec
+
+    @property
+    def uses_default_metallicity_model(self) -> bool:
+        return self._uses_default_metallicity_model
 
     @property
     def metallicity(self) -> MetallicityModel:

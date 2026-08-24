@@ -47,6 +47,8 @@ class ScfContext:
     runtime: Runtime
     runtime_kmesh_model: ModelSpec | None = None
     uses_default_kmesh_model: bool = True
+    runtime_metallicity_model: ModelSpec | None = None
+    uses_default_metallicity_model: bool = True
     intent: CalculationIntent = field(default_factory=CalculationIntent)
     hints: CalculationHints = field(default_factory=CalculationHints)
     pseudo_cache: list[tuple[PseudoMetadata, ...]] = field(
@@ -164,6 +166,8 @@ SCF_TASK = TaskGraph(
                     model_registry_path=ctx.runtime.model_registry_path,
                     kmesh_model=ctx.runtime_kmesh_model,
                     uses_default_kmesh_model=ctx.uses_default_kmesh_model,
+                    metallicity_model=ctx.runtime_metallicity_model,
+                    uses_default_metallicity_model=(ctx.uses_default_metallicity_model),
                 )
             ),
             id="assemble_dft_input_data",
@@ -211,6 +215,8 @@ def build_scf_context(
         runtime=runtime,
         runtime_kmesh_model=draft.kmesh_model,
         uses_default_kmesh_model=runtime.uses_default_kmesh_model,
+        runtime_metallicity_model=runtime.metallicity_model_spec,
+        uses_default_metallicity_model=runtime.uses_default_metallicity_model,
         pseudo_source=source_for_draft(
             draft,
             store=runtime.asset_store,

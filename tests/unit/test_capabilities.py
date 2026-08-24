@@ -16,7 +16,16 @@ from goldilocks_core.contracts import (
     PseudopotentialSetCapability,
     StageCapability,
 )
+from goldilocks_core.contracts.registry import RECORD_TYPE_IDS
 from goldilocks_core.runtime import GraphHandler, Preset, Runtime, Stage, TaskGraph
+
+
+@pytest.fixture
+def isolated_record_registry():
+    registered = dict(RECORD_TYPE_IDS)
+    yield
+    RECORD_TYPE_IDS.clear()
+    RECORD_TYPE_IDS.update(registered)
 
 
 def test_capabilities_contract_is_an_immutable_serializable_domain_value() -> None:
@@ -333,7 +342,9 @@ def test_duplicate_record_producers_are_rejected_at_task_declaration() -> None:
         )
 
 
-def test_registered_future_task_appears_without_a_new_service_method() -> None:
+def test_registered_future_task_appears_without_a_new_service_method(
+    isolated_record_registry,
+) -> None:
     @dataclass(frozen=True, slots=True)
     class FutureRecord:
         value: str

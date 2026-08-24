@@ -33,10 +33,7 @@ from goldilocks_core.contracts import (
     PseudoCutoffs,
     PseudoMetadata,
 )
-from goldilocks_core.ml.model_registry import (
-    load_default_qrf_config,
-    model_asset_specs,
-)
+from goldilocks_core.ml.model_registry import model_asset_specs
 from goldilocks_core.pseudo.registry import load_tables
 from goldilocks_core.publication import Publisher
 
@@ -411,33 +408,210 @@ def test_automatic_directory_allocation_uses_occupancy_and_is_concurrency_safe(
     assert (tmp_path / "goldilocks_out_2").is_symlink()
 
 
-def test_directory_verification_failure_recursively_removes_published_destination(
+@pytest.mark.parametrize("foreign_kind", ("file", "directory"))
+def test_directory_publication_never_replaces_foreign_destination(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    foreign_kind: str,
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "raced-destination"
+    rename_no_replace = publication_module._rename_no_replace
+
+    def race(staging: Path, target: Path) -> None:
+        if staging.name.startswith(".goldilocks-claim-"):
+            rename_no_replace(staging, target)
+            return
+        if foreign_kind == "file":
+            target.write_text("foreign file", encoding="utf-8")
+        else:
+            target.mkdir()
+            (target / "foreign.txt").write_text("foreign directory", encoding="utf-8")
+        rename_no_replace(staging, target)
+
+    monkeypatch.setattr(publication_module, "_rename_no_replace", race)
+
+    with pytest.raises(FileExistsError, match="already exists"):
+        Publisher().publish(input_data, DirectoryOutput(destination))
+
+    if foreign_kind == "file":
+        assert destination.read_text(encoding="utf-8") == "foreign file"
+    else:
+        assert (destination / "foreign.txt").read_text(encoding="utf-8") == (
+            "foreign directory"
+        )
+
+
+@pytest.mark.parametrize("claim_race", ("populated", "replaced_empty"))
+def test_directory_publication_retains_foreign_claim_contents(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    claim_race: str,
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "raced-claim"
+    release_claim = publication_module._release_directory_claim
+
+    def race(target: Path, identity: tuple[int, int]) -> None:
+        if claim_race == "replaced_empty":
+            target.rmdir()
+            target.mkdir()
+        else:
+            (target / "foreign.txt").write_text(claim_race, encoding="utf-8")
+        release_claim(target, identity)
+
+    monkeypatch.setattr(publication_module, "_release_directory_claim", race)
+
+    with pytest.raises(FileExistsError, match="already exists"):
+        Publisher().publish(input_data, DirectoryOutput(destination))
+
+    assert destination.is_dir()
+    if claim_race == "populated":
+        assert (destination / "foreign.txt").read_text(encoding="utf-8") == claim_race
+    else:
+        assert not tuple(destination.iterdir())
+
+
+def test_automatic_directory_publication_preserves_raced_claim_and_advances(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    class AutomaticRootPath(type(Path())):
+        @classmethod
+        def cwd(cls):
+            return cls(tmp_path)
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    release_claim = publication_module._release_directory_claim
+    raced = False
+
+    def race_once(target: Path, identity: tuple[int, int]) -> None:
+        nonlocal raced
+        if not raced:
+            raced = True
+            (target / "foreign.txt").write_text("foreign", encoding="utf-8")
+        release_claim(target, identity)
+
+    monkeypatch.setattr(publication_module, "Path", AutomaticRootPath)
+    monkeypatch.setattr(publication_module, "_release_directory_claim", race_once)
+
+    publication = Publisher().publish(input_data, DirectoryOutput())
+
+    assert Path(publication.path).name == "goldilocks_out_1"
+    assert (tmp_path / "goldilocks_out" / "foreign.txt").read_text() == "foreign"
+
+
+def test_directory_publication_preserves_foreign_file_added_after_install(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import goldilocks_core.publication as publication_module
 
     input_data, _, _ = _explicit_input_data(tmp_path)
-    destination = tmp_path / "verification-failed"
-    verify = publication_module._verify_directory
-    calls = 0
+    destination = tmp_path / "modified-after-install"
+    rename_no_replace = publication_module._rename_no_replace
 
-    def fail_after_rename(root, files) -> None:
-        nonlocal calls
-        calls += 1
-        verify(root, files)
-        if calls == 2:
-            unexpected = root / "unexpected" / "partial.txt"
-            unexpected.parent.mkdir()
-            unexpected.write_text("failed verification", encoding="utf-8")
-            raise OSError("post-rename verification failed")
+    def modify_after_install(staging: Path, target: Path) -> None:
+        rename_no_replace(staging, target)
+        if staging.name.startswith(".goldilocks-claim-"):
+            return
+        (target / "foreign.txt").write_text("foreign", encoding="utf-8")
 
-    monkeypatch.setattr(publication_module, "_verify_directory", fail_after_rename)
+    monkeypatch.setattr(publication_module, "_rename_no_replace", modify_after_install)
 
-    with pytest.raises(OSError, match="post-rename verification failed"):
+    with pytest.raises(OSError, match="Completed directory write differs"):
         Publisher().publish(input_data, DirectoryOutput(destination))
 
-    assert calls == 2
-    assert not destination.exists()
+    assert (destination / "goldilocks.json").is_file()
+    assert (destination / "foreign.txt").read_text(encoding="utf-8") == "foreign"
+
+
+def test_directory_publication_does_not_delete_replacement_after_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "replaced-after-install"
+    displaced = tmp_path / "displaced-publication"
+    rename_no_replace = publication_module._rename_no_replace
+
+    def replace_after_install(staging: Path, target: Path) -> None:
+        rename_no_replace(staging, target)
+        if staging.name.startswith(".goldilocks-claim-"):
+            return
+        target.rename(displaced)
+        target.mkdir()
+        (target / "foreign.txt").write_text("replacement", encoding="utf-8")
+
+    monkeypatch.setattr(publication_module, "_rename_no_replace", replace_after_install)
+
+    with pytest.raises(OSError, match="changed during publication"):
+        Publisher().publish(input_data, DirectoryOutput(destination))
+
+    assert (destination / "foreign.txt").read_text(encoding="utf-8") == "replacement"
+    assert (displaced / "goldilocks.json").is_file()
+
+
+def test_archive_publication_preserves_concurrent_in_place_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "modified.zip"
+    link = publication_module.os.link
+
+    def modify_after_link(staging: Path, target: Path) -> None:
+        link(staging, target)
+        target.write_bytes(b"foreign in-place write")
+
+    monkeypatch.setattr(publication_module.os, "link", modify_after_link)
+
+    with pytest.raises(OSError, match="Published archive checksum differs"):
+        Publisher().publish(input_data, ArchiveOutput(destination))
+
+    assert destination.read_bytes() == b"foreign in-place write"
+
+
+@pytest.mark.parametrize("replacement_timing", ("before_link", "after_link"))
+def test_archive_publication_never_overwrites_or_deletes_foreign_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    replacement_timing: str,
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "raced.zip"
+    link = publication_module.os.link
+
+    def race(staging: Path, target: Path) -> None:
+        if replacement_timing == "before_link":
+            target.write_bytes(b"foreign before link")
+            link(staging, target)
+            return
+        link(staging, target)
+        target.unlink()
+        target.write_bytes(b"foreign after link")
+
+    monkeypatch.setattr(publication_module.os, "link", race)
+
+    error = FileExistsError if replacement_timing == "before_link" else OSError
+    message = (
+        "already exists"
+        if replacement_timing == "before_link"
+        else "changed during publication"
+    )
+    with pytest.raises(error, match=message):
+        Publisher().publish(input_data, ArchiveOutput(destination))
+
+    expected = f"foreign {replacement_timing.replace('_', ' ')}".encode()
+    assert destination.read_bytes() == expected
 
 
 def test_service_compute_applies_output_targets_and_returns_publication_info(
@@ -699,14 +873,13 @@ def test_model_runtime_identities_licences_and_citations_are_published(
     )
     files = {item.path: item.content for item in Publisher(store).files(input_data)}
     assert {path: files[path] for path in expected_licences} == expected_licences
-    expected_citations = {
-        "STFC-SCD, kpoints-goldilocks-QRF QRF95 model source, "
-        "https://huggingface.co/STFC-SCD/kpoints-goldilocks-QRF/tree/"
-        "75588288f755522e47984b5a31b82824860d6943",
-        "Junwen Yin, metallicity-goldilocks-CGCNN model source, "
-        "https://huggingface.co/JunwenYin/metallicity-goldilocks-CGCNN/tree/"
-        "a95dc7d8902c8088f709e13c602864167838cc17",
-    }
+    model_citation = (
+        "Elena Patyukova et al., Automatic generation of input files with optimised "
+        "k-point meshes for Quantum ESPRESSO self-consistent field single-point "
+        "total energy calculations, Digital Discovery (2026), "
+        "DOI 10.1039/D5DD00565E."
+    )
+    expected_citations = {model_citation}
     licence_urls = {
         file.url
         for spec in model_asset_specs()
@@ -714,6 +887,7 @@ def test_model_runtime_identities_licences_and_citations_are_published(
         if file.role == "licence"
     }
     assert set(input_data.citations) >= expected_citations
+    assert input_data.citations.count(model_citation) == 1
     assert set(input_data.citations).isdisjoint(licence_urls)
     assert str(store.root) not in str(input_data.to_dict())
 
@@ -757,38 +931,89 @@ def test_unidentified_runtime_kmesh_model_is_not_attributed_to_defaults(
                 service.compute(request)
 
 
-def test_standalone_metallicity_attributes_only_its_model(
+def test_unidentified_standalone_metallicity_fails_publication(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from goldilocks_core.runtime.models import MetallicityModel
-
-    config = load_default_qrf_config()
-    assert config.metallicity_asset is not None
-    store = AssetStore(tmp_path / "standalone-metallicity-assets")
-    contents = {
-        file.path: f"fixture {file.role}\n".encode()
-        for file in config.metallicity_asset.files
-    }
-    _create_installed_asset(store, config.metallicity_asset, contents)
 
     def classify(self, structure):
         del self, structure
         return "insulator", "model", 0.91
 
     monkeypatch.setattr(MetallicityModel, "__call__", classify)
-    request = _explicit_request(tmp_path, "standalone-metallicity-Si.UPF")
+    request = _explicit_request(tmp_path, "unidentified-metallicity-Si.UPF")
     with Runtime(
-        asset_store=store,
         metallicity_checkpoint="model.ckpt",
         metallicity_atom_init="atom-init.json",
+    ) as runtime:
+        with Service(runtime) as service:
+            with pytest.raises(
+                ValueError,
+                match=(
+                    "Configured metallicity checkpoint produced a model result without "
+                    "identity"
+                ),
+            ):
+                service.compute(request)
+
+
+def test_standalone_metallicity_publishes_only_its_explicit_material(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from goldilocks_core.runtime.models import MetallicityModel
+
+    def classify(self, structure):
+        del self, structure
+        return "insulator", "model", 0.91
+
+    monkeypatch.setattr(MetallicityModel, "__call__", classify)
+    citation = "A. Scientist, Operator metallicity model (2026)."
+    model = ModelSpec(
+        name="operator-metallicity",
+        version="2026.1",
+        model_type="cgcnn",
+        target="metallicity",
+        feature_set="operator-radius-graph",
+        source="local",
+        location=str(tmp_path / "model.ckpt"),
+        licence="Operator-Model-Licence-1.0",
+        licence_text="Operator metallicity model terms.\n",
+        citation=citation,
+    )
+    request = _explicit_request(tmp_path, "identified-metallicity-Si.UPF")
+    with Runtime(
+        asset_store=AssetStore(tmp_path / "empty-assets"),
+        metallicity_checkpoint="model.ckpt",
+        metallicity_atom_init="atom-init.json",
+        metallicity_model=model,
     ) as runtime:
         with Service(runtime) as service:
             result = service.compute(request)
 
     input_data = result.records[DftInputData]
-    assert [item.id for item in input_data.runtime.assets] == ["metallicity-cgcnn"]
-    assert [model["target"] for model in input_data.runtime.models] == ["metallicity"]
-    assert all("qrf" not in citation.lower() for citation in input_data.citations)
+    assert input_data.runtime.assets == ()
+    assert input_data.runtime.models == (
+        {
+            "name": "operator-metallicity",
+            "version": "2026.1",
+            "model_type": "cgcnn",
+            "target": "metallicity",
+            "feature_set": "operator-radius-graph",
+            "source": "local",
+            "revision": None,
+            "licence": "Operator-Model-Licence-1.0",
+            "citation": citation,
+        },
+    )
+    assert input_data.citations == (
+        "Fixture pseudopotential citation.",
+        citation,
+    )
+    files = {item.path: item.content for item in Publisher().files(input_data)}
+    assert files["licences/custom-metallicity-model.txt"] == (
+        b"Operator metallicity model terms.\n"
+    )
+    assert str(tmp_path) not in str(input_data.to_dict())
 
 
 def test_custom_kmesh_model_publishes_its_explicit_material_not_defaults(

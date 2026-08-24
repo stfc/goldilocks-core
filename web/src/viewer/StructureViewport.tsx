@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import type { StructureInspection } from "../api/workbenchClient";
+import type { StructureInspection } from "../api/coreClient";
 import {
   attachStructureViewer,
   type StructureViewer,

@@ -1,16 +1,29 @@
-import type { components, operations } from "./schema";
+import type { operations } from "./schema";
 
-export type Capabilities = components["schemas"]["Capabilities"];
-export type StructureSource = components["schemas"]["InlineStructureSource"];
-export type StructureInspection = components["schemas"]["StructureInspection"];
-export type CalculationDraft = components["schemas"]["CalculationDraft"];
-export type ComputationResult = components["schemas"]["ComputationResult"];
-export type ComputeRequest = Omit<
-  operations["compute_compute_post"]["requestBody"]["content"]["application/json"],
-  "output"
+type CapabilitiesOperation = operations["capabilities_capabilities_get"];
+type InspectOperation = operations["inspect_inspect_post"];
+type ComputeOperation = operations["compute_compute_post"];
+type ComputeDocument =
+  ComputeOperation["requestBody"]["content"]["application/json"];
+
+export type Capabilities =
+  CapabilitiesOperation["responses"][200]["content"]["application/json"];
+export type StructureSource =
+  InspectOperation["requestBody"]["content"]["application/json"]["source"];
+export type StructureInspection =
+  InspectOperation["responses"][200]["content"]["application/json"];
+export type CalculationDraft = ComputeDocument["draft"];
+export type ComputationResult =
+  ComputeOperation["responses"][200]["content"]["application/json"];
+export type ComputeRequest = Omit<ComputeDocument, "output">;
+export type MemoryOutput = Extract<
+  ComputeDocument["output"],
+  { readonly kind: "memory" }
 >;
-export type MemoryOutput = components["schemas"]["MemoryOutput"];
-export type ArchiveOutput = components["schemas"]["HttpArchiveOutput"];
+export type ArchiveOutput = Extract<
+  ComputeDocument["output"],
+  { readonly kind: "archive" }
+>;
 export type ComputeOutput = MemoryOutput | ArchiveOutput;
 
 export interface ArchiveDownload {
@@ -60,7 +73,7 @@ export class HttpCoreClient implements CoreClient {
       headers: { Accept: "application/json" },
       method: "GET",
     });
-    return (await response.json()) as Capabilities;
+    return parseJson<Capabilities>(response);
   }
 
   compute(
@@ -139,10 +152,21 @@ export class HttpCoreClient implements CoreClient {
   }
 }
 
-async function parseVersionedJson<T>(response: Response): Promise<T> {
-  let payload: unknown;
+async function parseJson<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().startsWith("application/json")) {
+    const rawResponse = await decodeResponse(response);
+    throw new CoreFailure(
+      "invalid_response",
+      "Goldilocks Core returned an invalid JSON response.",
+      false,
+      {},
+      response.status,
+      rawResponse,
+    );
+  }
   try {
-    payload = (await response.json()) as unknown;
+    return (await response.json()) as T;
   } catch {
     throw new CoreFailure(
       "invalid_response",
@@ -152,6 +176,10 @@ async function parseVersionedJson<T>(response: Response): Promise<T> {
       response.status,
     );
   }
+}
+
+async function parseVersionedJson<T>(response: Response): Promise<T> {
+  const payload = await parseJson<unknown>(response);
   if (
     payload === null ||
     typeof payload !== "object" ||

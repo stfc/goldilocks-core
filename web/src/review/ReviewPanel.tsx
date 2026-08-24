@@ -1,20 +1,24 @@
 import { useState } from "react";
 import { Download, LoaderCircle } from "lucide-react";
 
-import type { Recommendation } from "../api/workbenchClient";
+import type { ComputationResult } from "../api/coreClient";
 import { useWorkspace, useWorkspaceSnapshot } from "../workspace/useWorkspace";
+
+type InputArtifact = NonNullable<
+  ComputationResult["records"]["dft_input_data"]
+>["artifacts"][number];
 
 export function ReviewPanel() {
   const workspace = useWorkspace();
   const snapshot = useWorkspaceSnapshot();
-  const review = snapshot.review;
+  const result = snapshot.reviewed?.result ?? null;
 
   return (
     <aside
       className="review-panel"
       aria-label="Recommendation review"
       aria-live="polite"
-      aria-busy={snapshot.operation === "review"}
+      aria-busy={snapshot.operation === "compute"}
     >
       <header className="review-heading">
         <div>
@@ -22,20 +26,20 @@ export function ReviewPanel() {
           <h2>Review</h2>
         </div>
         <span
-          className={`review-state${snapshot.reviewStale ? " review-state--stale" : ""}`}
+          className={`review-state${snapshot.outOfDate ? " review-state--stale" : ""}`}
         >
-          {review === null
-            ? snapshot.operation === "review"
+          {result === null
+            ? snapshot.operation === "compute"
               ? "Computing"
               : "Awaiting"
-            : snapshot.reviewStale
-              ? "Stale"
+            : snapshot.outOfDate
+              ? "Out of date"
               : "Current"}
         </span>
       </header>
 
-      {review === null ? (
-        snapshot.operation === "review" ? (
+      {result === null ? (
+        snapshot.operation === "compute" ? (
           <div className="review-empty review-empty--loading" role="status">
             <LoaderCircle
               className="spinning-icon"
@@ -43,7 +47,7 @@ export function ReviewPanel() {
               size={18}
             />
             <strong>Computing recommendation</strong>
-            <p>Evaluating Core records and generating reproducible inputs.</p>
+            <p>Evaluating Core Records and generating reproducible inputs.</p>
           </div>
         ) : (
           <div className="review-empty">
@@ -54,27 +58,27 @@ export function ReviewPanel() {
             </div>
             <strong>No recommendation yet</strong>
             <p>
-              Inspect a structure, review the scientific defaults, then generate
-              a reproducible calculation.
+              Inspect a structure, review the scientific defaults, then compute
+              reproducible DFT Input Data.
             </p>
           </div>
         )
       ) : (
         <>
-          {snapshot.reviewStale ? (
+          {snapshot.outOfDate ? (
             <div className="stale-banner">
               <strong>Review out of date</strong>
               <span>Recompute before creating an archive.</span>
             </div>
           ) : null}
-          <RecommendationSummary review={review} />
-          <RecordReview review={review} />
-          <PseudoReview review={review} />
-          <GeneratedInputReview review={review} />
-          <Warnings review={review} />
+          <RecommendationSummary result={result} />
+          <RecordReview result={result} />
+          <PseudoReview result={result} />
+          <GeneratedInputReview result={result} />
+          <Warnings result={result} />
           <section className="archive-card">
             <div>
-              <span className="archive-card__label">Reproducible bundle</span>
+              <span className="archive-card__label">Ready-to-run Output</span>
               <h3>Calculation archive</h3>
               <p>
                 Inputs, selected UPFs, checksums, citations, and provenance.
@@ -83,15 +87,15 @@ export function ReviewPanel() {
             <button
               className="archive-action"
               type="button"
-              disabled={snapshot.reviewStale || snapshot.operation !== null}
+              disabled={snapshot.outOfDate || snapshot.operation !== null}
               onClick={() =>
-                void workspace.dispatch({ type: "archive.download" })
+                void workspace.dispatch({ type: "review.download" })
               }
             >
-              {snapshot.operation === "archive"
+              {snapshot.operation === "download"
                 ? "Building archive"
                 : "Download .zip"}
-              {snapshot.operation === "archive" ? (
+              {snapshot.operation === "download" ? (
                 <LoaderCircle
                   className="spinning-icon"
                   aria-hidden="true"
@@ -101,13 +105,13 @@ export function ReviewPanel() {
                 <Download aria-hidden="true" size={13} />
               )}
             </button>
-            {snapshot.archive === null ? null : (
+            {snapshot.lastDownload === null ? null : (
               <p
-                className={`archive-receipt${snapshot.archiveStale ? " archive-receipt--stale" : ""}`}
+                className={`archive-receipt${snapshot.downloadOutOfDate ? " archive-receipt--stale" : ""}`}
               >
-                {snapshot.archiveStale
-                  ? "Previous archive is stale"
-                  : snapshot.archive.filename}
+                {snapshot.downloadOutOfDate
+                  ? "Previous archive is out of date"
+                  : snapshot.lastDownload.filename}
               </p>
             )}
           </section>
@@ -118,29 +122,29 @@ export function ReviewPanel() {
 }
 
 function RecommendationSummary({
-  review,
+  result,
 }: {
-  readonly review: Recommendation;
+  readonly result: ComputationResult;
 }) {
+  const selected = result.records.selection?.pseudopotentials ?? [];
   const wavefunction = maximum(
-    review.selection.files.map((file) => file.ecutwfc_ry),
+    selected.map((item) => item.ecutwfc_ry),
   );
-  const density = maximum(
-    review.selection.files.map((file) => file.ecutrho_ry),
-  );
+  const density = maximum(selected.map((item) => item.ecutrho_ry));
+  const intent = result.draft.intent;
   return (
     <section className="review-section recommendation-summary">
       <header>
         <span className="review-section__index">A</span>
         <div>
           <h3>Recommended setup</h3>
-          <p>{review.intent.functional} · Quantum ESPRESSO</p>
+          <p>{intent.functional} · Quantum ESPRESSO</p>
         </div>
       </header>
       <dl className="recommendation-metrics">
         <div>
           <dt>K-grid</dt>
-          <dd>{review.decisions.k_grid.join(" × ")}</dd>
+          <dd>{result.records.k_points?.grid.join(" × ") ?? "Not returned"}</dd>
         </div>
         <div>
           <dt>Wavefunction</dt>
@@ -159,7 +163,9 @@ function RecommendationSummary({
         <div>
           <dt>Spin</dt>
           <dd>
-            {review.decisions.spin_polarized ? "Polarized" : "Unpolarized"}
+            {result.records.advice?.magnetism.spin_polarized
+              ? "Polarized"
+              : "Unpolarized"}
           </dd>
         </div>
       </dl>
@@ -167,8 +173,8 @@ function RecommendationSummary({
   );
 }
 
-function RecordReview({ review }: { readonly review: Recommendation }) {
-  const records = Object.entries(review.records);
+function RecordReview({ result }: { readonly result: ComputationResult }) {
+  const records = Object.entries(result.records);
   return (
     <section className="review-section record-review">
       <header>
@@ -212,37 +218,41 @@ function RecordValue({ value }: { readonly value: unknown }) {
   );
 }
 
-function PseudoReview({ review }: { readonly review: Recommendation }) {
-  const table = review.selection.table;
+function PseudoReview({ result }: { readonly result: ComputationResult }) {
+  const inputData = result.records.dft_input_data;
+  const selection = result.records.selection;
+  if (inputData === undefined || selection === undefined) return null;
+  const table = inputData.pseudopotential_set;
   return (
     <section className="review-section pseudo-review">
       <header>
         <span className="review-section__index">C</span>
         <div>
           <h3>Pseudopotentials</h3>
-          <p>
-            {table.provider} · {table.version}
-          </p>
+          <p>{table.provider} · {table.version ?? "unversioned"}</p>
         </div>
       </header>
       <div className="pseudo-table-id">
-        <span>{table.upstream_table}</span>
+        <span>{table.functional} · {table.accuracy}</span>
         <code>{table.id}</code>
       </div>
       <ul className="pseudo-files">
-        {review.selection.files.map((file) => (
-          <li key={file.sha256}>
-            <span className="element-badge">{file.element}</span>
-            <div>
-              <strong>{file.filename}</strong>
-              <span>
-                {file.relativistic ?? "unknown"} · {file.ecutwfc_ry ?? "—"} /{" "}
-                {file.ecutrho_ry ?? "—"} Ry
-              </span>
-            </div>
-            <code title={file.sha256}>{file.sha256.slice(0, 8)}</code>
-          </li>
-        ))}
+        {selection.pseudopotentials.map((item) => {
+          const digest = artifactDigest(inputData.artifacts, item.filename);
+          return (
+            <li key={item.element}>
+              <span className="element-badge">{item.element}</span>
+              <div>
+                <strong>{item.filename ?? "Filename unavailable"}</strong>
+                <span>
+                  {item.relativistic ?? "unknown"} · {item.ecutwfc_ry ?? "—"} /{" "}
+                  {item.ecutrho_ry ?? "—"} Ry
+                </span>
+              </div>
+              {digest === null ? null : <code title={digest}>{digest.slice(0, 8)}</code>}
+            </li>
+          );
+        })}
       </ul>
       <p className="licence-line">
         <span>Licence</span>
@@ -256,38 +266,35 @@ function PseudoReview({ review }: { readonly review: Recommendation }) {
   );
 }
 
-function GeneratedInputReview({ review }: { readonly review: Recommendation }) {
+function GeneratedInputReview({
+  result,
+}: {
+  readonly result: ComputationResult;
+}) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const files = result.records.generated_files ?? [];
   const file =
-    review.generated_files.find(
-      (candidate) => candidate.path === selectedPath,
-    ) ?? review.generated_files[0];
+    files.find((candidate) => candidate.path === selectedPath) ?? files[0];
   return (
     <section className="review-section generated-review">
       <header>
         <span className="review-section__index">D</span>
         <div>
           <h3>Generated inputs</h3>
-          <p>{review.generated_files.length} deterministic files</p>
+          <p>{files.length} deterministic files</p>
         </div>
       </header>
       {file === undefined ? (
         <p className="no-files">No generated input files.</p>
       ) : (
         <>
-          <div
-            className="file-tabs"
-            role="group"
-            aria-label="Generated input files"
-          >
-            {review.generated_files.map((candidate) => (
+          <div className="file-tabs" role="group" aria-label="Generated input files">
+            {files.map((candidate) => (
               <button
                 key={candidate.path}
                 type="button"
                 aria-pressed={candidate.path === file.path}
-                onClick={() => {
-                  setSelectedPath(candidate.path);
-                }}
+                onClick={() => { setSelectedPath(candidate.path); }}
               >
                 {candidate.path.split("/").at(-1)}
               </button>
@@ -296,7 +303,14 @@ function GeneratedInputReview({ review }: { readonly review: Recommendation }) {
           <div className="code-frame">
             <div>
               <span>{file.path}</span>
-              <code>{file.sha256.slice(0, 10)}</code>
+              {result.records.dft_input_data === undefined ? null : (
+                <code>
+                  {artifactDigest(
+                    result.records.dft_input_data.artifacts,
+                    file.path,
+                  )?.slice(0, 10) ?? "unlisted"}
+                </code>
+              )}
             </div>
             <pre aria-label={`Generated input ${file.path}`} tabIndex={0}>
               {file.content}
@@ -308,12 +322,13 @@ function GeneratedInputReview({ review }: { readonly review: Recommendation }) {
   );
 }
 
-function Warnings({ review }: { readonly review: Recommendation }) {
+function Warnings({ result }: { readonly result: ComputationResult }) {
+  const selection = result.records.selection;
   const warnings = [
     ...new Set([
-      ...review.warnings,
-      ...review.selection.warnings,
-      ...review.selection.files.flatMap((file) => file.warnings),
+      ...result.warnings,
+      ...(selection?.warnings ?? []),
+      ...(selection?.pseudopotentials.flatMap((item) => item.warnings) ?? []),
     ]),
   ];
   if (warnings.length === 0) return null;
@@ -326,6 +341,19 @@ function Warnings({ review }: { readonly review: Recommendation }) {
         ))}
       </ul>
     </section>
+  );
+}
+
+function artifactDigest(
+  artifacts: readonly InputArtifact[],
+  filename: string | null,
+): string | null {
+  if (filename === null) return null;
+  return (
+    artifacts.find(
+      (artifact) =>
+        artifact.path === filename || artifact.path.endsWith(`/${filename}`),
+    )?.sha256 ?? null
   );
 }
 
@@ -342,8 +370,9 @@ function readableName(value: string): string {
 
 function formatFact(value: unknown): string {
   if (value === null) return "—";
-  if (typeof value === "string" || typeof value === "number")
+  if (typeof value === "string" || typeof value === "number") {
     return String(value);
+  }
   if (typeof value === "boolean") return value ? "Yes" : "No";
   return JSON.stringify(value);
 }

@@ -2,12 +2,12 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
-import { HttpWorkbenchClient } from "./api/workbenchClient";
+import { HttpCoreClient } from "./api/coreClient";
 import "./styles.css";
 import { WorkspaceProvider } from "./workspace/WorkspaceProvider";
 import { createWorkspace } from "./workspace/workspace";
 
-const workspace = createWorkspace(new HttpWorkbenchClient());
+const workspace = createWorkspace(new HttpCoreClient());
 const root = document.querySelector("#root");
 
 if (root === null) {

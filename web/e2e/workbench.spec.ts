@@ -55,6 +55,33 @@ test("prepares and downloads a real Core calculation", async ({ page }) => {
   });
 });
 
+test("keeps an old Result visible until an edited Draft is recomputed", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
+  await page.getByRole("button", { name: "Generate recommendation" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Recommended setup" }),
+  ).toBeVisible();
+
+  await page.getByText("Scientific overrides").click();
+  await page.getByRole("checkbox", { name: "Set an explicit grid" }).check();
+
+  await expect(page.getByText("Review out of date")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Recommended setup" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /Download \.zip/ })).toBeDisabled();
+
+  await page.getByRole("button", { name: "Recompute recommendation" }).click();
+  await expect(page.getByText("Review out of date")).toBeHidden();
+  await expect(page.getByLabel("Generated input inputs/qe.in")).toContainText(
+    "1 1 1",
+  );
+  await expect(page.getByRole("button", { name: /Download \.zip/ })).toBeEnabled();
+});
+
 test("prepares a real Core recommendation from POSCAR", async ({ page }) => {
   await page.goto("/");
   await page.locator('input[type="file"]').setInputFiles({

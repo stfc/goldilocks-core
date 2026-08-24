@@ -3,6 +3,8 @@ from __future__ import annotations
 import threading
 
 from goldilocks_core.contracts import (
+    CalculationTaskCapability,
+    Capabilities,
     CodeName,
     ComputationResult,
     ComputeRequest,
@@ -11,9 +13,10 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.generation.registry import available_codes
 from goldilocks_core.io.structures import normalize_structure
+from goldilocks_core.runtime.capabilities import build_capabilities
 from goldilocks_core.runtime.dispatch import Dispatcher
-from goldilocks_core.runtime.graph import GraphInfo
 from goldilocks_core.runtime.models import Runtime
+from goldilocks_core.runtime.task import GraphHandler
 
 __all__ = ["Service"]
 
@@ -21,10 +24,17 @@ __all__ = ["Service"]
 class Service:
     __slots__ = ("_runtime", "_dispatcher", "_lock", "_owns_runtime", "_closed")
 
-    def __init__(self, runtime: Runtime | None = None) -> None:
+    def __init__(
+        self,
+        runtime: Runtime | None = None,
+        *,
+        task_handlers: tuple[GraphHandler, ...] = (),
+    ) -> None:
         self._owns_runtime = runtime is None
         self._runtime = runtime if runtime is not None else Runtime()
         self._dispatcher = Dispatcher(self._runtime)
+        for handler in task_handlers:
+            self._dispatcher.register(handler)
         self._lock = threading.RLock()
         self._closed = False
 
@@ -48,12 +58,17 @@ class Service:
             self._ensure_open()
             return self._dispatcher.compute(request)
 
+    def capabilities(self) -> Capabilities:
+        with self._lock:
+            self._ensure_open()
+            return build_capabilities(self._dispatcher, self._runtime)
+
     def inspect_structure(self, source: StructureSource) -> StructureInspection:
         with self._lock:
             self._ensure_open()
             return normalize_structure(source).inspection
 
-    def describe_tasks(self) -> tuple[GraphInfo, ...]:
+    def describe_tasks(self) -> tuple[CalculationTaskCapability, ...]:
         with self._lock:
             self._ensure_open()
             return self._dispatcher.describe_tasks()

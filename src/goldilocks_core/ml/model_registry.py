@@ -36,6 +36,13 @@ class QrfFeatureSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class RegisteredModel:
+    id: str
+    role: str
+    spec: ModelSpec
+
+
+@dataclass(frozen=True, slots=True)
 class QrfKpointsConfig:
     model: ModelSpec
     model_asset: AssetSpec | None
@@ -100,6 +107,26 @@ def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
         metallicity_asset=metallicity_asset,
         metallicity_checkpoint_file=checkpoint_file,
         metallicity_atom_init_file=atom_init_file,
+    )
+
+
+def registered_models(path: PathLike | None = None) -> tuple[RegisteredModel, ...]:
+    config = load_default_qrf_config(path)
+    return (
+        RegisteredModel(
+            id=config.model_asset.id if config.model_asset else config.model.name,
+            role="k_point_advisor",
+            spec=config.model,
+        ),
+        RegisteredModel(
+            id=(
+                config.metallicity_asset.id
+                if config.metallicity_asset
+                else config.metallicity_model.name
+            ),
+            role="metallicity_classifier",
+            spec=config.metallicity_model,
+        ),
     )
 
 

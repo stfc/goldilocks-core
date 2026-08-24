@@ -4,7 +4,6 @@ from goldilocks_core.runtime.dispatch import (
     UnknownTask,
 )
 from goldilocks_core.runtime.graph import (
-    GraphInfo,
     Preset,
     Stage,
     TaskGraph,
@@ -26,7 +25,6 @@ __all__ = [
     "UnavailableRecord",
     "UnknownPreset",
     "UnknownTask",
-    "GraphInfo",
     "GraphHandler",
     "TaskGraph",
     "compute",

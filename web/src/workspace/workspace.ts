@@ -2,44 +2,54 @@ import { createStore } from "zustand/vanilla";
 
 import type {
   ArchiveDownload,
-  GuidedRequest,
-  Recommendation,
+  CalculationDraft,
+  Capabilities,
+  ComputationResult,
+  CoreClient,
   StructureInspection,
   StructureSource,
-  WorkbenchClient,
-} from "../api/workbenchClient";
-import { WorkbenchFailure } from "../api/workbenchClient";
+} from "../api/coreClient";
+import { CoreFailure } from "../api/coreClient";
 
-type Operation = "inspect" | "review" | "archive";
-type Intent = GuidedRequest["intent"];
-type Hints = GuidedRequest["hints"];
+export type WorkspaceOperation =
+  | "capabilities"
+  | "inspect"
+  | "compute"
+  | "download";
+
+export interface ReviewedComputation {
+  readonly draft: CalculationDraft;
+  readonly result: ComputationResult;
+}
 
 export interface WorkspaceSnapshot {
+  readonly capabilities: Capabilities | null;
   readonly source: StructureSource | null;
   readonly attemptedSource: StructureSource | null;
   readonly inspection: StructureInspection | null;
-  readonly draft: GuidedRequest | null;
-  readonly review: Recommendation | null;
-  readonly reviewStale: boolean;
-  readonly archive: ArchiveDownload | null;
-  readonly archiveStale: boolean;
-  readonly operation: Operation | null;
-  readonly failure: WorkbenchFailure | null;
-  readonly failureOperation: Operation | null;
+  readonly draft: CalculationDraft | null;
+  readonly reviewed: ReviewedComputation | null;
+  readonly outOfDate: boolean;
+  readonly lastDownload: ArchiveDownload | null;
+  readonly downloadOutOfDate: boolean;
+  readonly operation: WorkspaceOperation | null;
+  readonly failure: CoreFailure | null;
+  readonly failureOperation: WorkspaceOperation | null;
 }
 
 export type WorkspaceAction =
+  | { readonly type: "workspace.start" }
   | { readonly type: "source.open"; readonly source: StructureSource }
   | {
       readonly type: "draft.patch";
-      readonly intent?: Partial<Intent>;
-      readonly hints?: Partial<Hints>;
-      readonly pseudoTableId?: string | null;
+      readonly intent?: Partial<NonNullable<CalculationDraft["intent"]>>;
+      readonly hints?: Partial<NonNullable<CalculationDraft["hints"]>>;
+      readonly pseudoTable?: string | null;
     }
-  | { readonly type: "review.recompute" }
-  | { readonly type: "archive.download" }
-  | { readonly type: "failure.dismiss" }
+  | { readonly type: "review.compute" }
+  | { readonly type: "review.download" }
   | { readonly type: "failure.retry" }
+  | { readonly type: "failure.dismiss" }
   | { readonly type: "workspace.reset" };
 
 export interface Workspace {
@@ -51,28 +61,68 @@ export interface Workspace {
 type ArchiveSink = (archive: ArchiveDownload) => void;
 
 const EMPTY_SNAPSHOT: WorkspaceSnapshot = {
+  capabilities: null,
   source: null,
   attemptedSource: null,
   inspection: null,
   draft: null,
-  review: null,
-  reviewStale: false,
-  archive: null,
-  archiveStale: false,
+  reviewed: null,
+  outOfDate: false,
+  lastDownload: null,
+  downloadOutOfDate: false,
   operation: null,
   failure: null,
   failureOperation: null,
 };
 
 export function createWorkspace(
-  client: WorkbenchClient,
+  core: CoreClient,
   saveArchive: ArchiveSink = saveArchiveToBrowser,
 ): Workspace {
   const store = createStore<WorkspaceSnapshot>(() => EMPTY_SNAPSHOT);
+  let startup: Promise<void> | null = null;
   let sourceEpoch = 0;
   let draftRevision = 0;
 
+  function start(): Promise<void> {
+    if (store.getState().capabilities !== null) return Promise.resolve();
+    if (startup !== null) return startup;
+    const epoch = sourceEpoch;
+    store.setState({
+      operation: "capabilities",
+      failure: null,
+      failureOperation: null,
+    });
+    startup = core.capabilities().then(
+      (capabilities) => {
+        if (epoch !== sourceEpoch) return;
+        store.setState({
+          capabilities,
+          operation: null,
+          failure: null,
+          failureOperation: null,
+        });
+      },
+      (error: unknown) => {
+        startup = null;
+        if (epoch !== sourceEpoch) return;
+        if (!(error instanceof CoreFailure)) {
+          store.setState({ operation: null });
+          throw error;
+        }
+        store.setState({
+          operation: null,
+          failure: error,
+          failureOperation: "capabilities",
+        });
+      },
+    );
+    return startup;
+  }
+
   async function openSource(source: StructureSource): Promise<void> {
+    const capabilities = store.getState().capabilities;
+    if (capabilities === null) return;
     sourceEpoch += 1;
     const epoch = sourceEpoch;
     store.setState({
@@ -82,26 +132,29 @@ export function createWorkspace(
       failureOperation: null,
     });
     try {
-      const inspection = await client.inspect(source);
+      const inspection = await core.inspectStructure(source);
       if (epoch !== sourceEpoch) return;
       draftRevision = 0;
-      const draft = initialDraft(source, inspection);
       store.setState({
         source,
         attemptedSource: null,
         inspection,
-        draft,
-        review: null,
-        reviewStale: false,
-        archive: null,
-        archiveStale: false,
+        draft: {
+          structure: source,
+          intent: { ...capabilities.default_intent },
+          hints: { ...capabilities.default_hints },
+        },
+        reviewed: null,
+        outOfDate: false,
+        lastDownload: null,
+        downloadOutOfDate: false,
         operation: null,
         failure: null,
         failureOperation: null,
       });
     } catch (error) {
       if (epoch !== sourceEpoch) return;
-      if (!(error instanceof WorkbenchFailure)) {
+      if (!(error instanceof CoreFailure)) {
         store.setState({ operation: null });
         throw error;
       }
@@ -115,170 +168,170 @@ export function createWorkspace(
 
   function patchDraft(
     action: Extract<WorkspaceAction, { type: "draft.patch" }>,
-  ) {
+  ): void {
     const snapshot = store.getState();
+    const currentDraft = snapshot.draft;
     if (
-      snapshot.draft === null ||
-      snapshot.inspection === null ||
+      currentDraft?.intent === null ||
+      currentDraft?.intent === undefined ||
+      currentDraft.hints === null ||
+      currentDraft.hints === undefined ||
       snapshot.operation === "inspect"
     ) {
       return;
     }
     draftRevision += 1;
-    const intent: Intent = { ...snapshot.draft.intent, ...action.intent };
-    const compatible = compatibleTables(snapshot.inspection, intent);
-    const selectedTable =
-      "pseudoTableId" in action
-        ? compatible.find((table) => table.id === action.pseudoTableId)
-        : compatible.find(
-            (table) => table.id === snapshot.draft?.pseudo_table_id,
-          );
-    const draft: GuidedRequest = {
-      source: snapshot.draft.source,
-      intent,
-      hints: { ...snapshot.draft.hints, ...action.hints },
-      ...(selectedTable === undefined
-        ? {}
-        : { pseudo_table_id: selectedTable.id }),
+    const draft: CalculationDraft = {
+      ...currentDraft,
+      intent: { ...currentDraft.intent, ...action.intent },
+      hints: { ...currentDraft.hints, ...action.hints },
+      ...("pseudoTable" in action
+        ? { pseudo_table: action.pseudoTable }
+        : {}),
     };
     store.setState({
       draft,
-      reviewStale: snapshot.review !== null,
-      archiveStale: snapshot.archive !== null,
+      outOfDate: snapshot.reviewed !== null,
+      downloadOutOfDate: snapshot.lastDownload !== null,
       failure: null,
       failureOperation: null,
     });
   }
 
-  async function recompute(): Promise<void> {
+  async function computeReview(): Promise<void> {
     const snapshot = store.getState();
     if (snapshot.draft === null || snapshot.operation !== null) return;
     const epoch = sourceEpoch;
     const revision = draftRevision;
-    const request = snapshot.draft;
+    const submittedDraft = snapshot.draft;
     store.setState({
-      operation: "review",
+      operation: "compute",
       failure: null,
       failureOperation: null,
     });
     try {
-      const review = await client.review(request);
+      const result = await core.compute(
+        {
+          draft: submittedDraft,
+          selection: { preset: "generate" },
+        },
+        { kind: "memory" },
+      );
       if (epoch !== sourceEpoch) return;
-      const stale = revision !== draftRevision;
-      const current = store.getState();
       store.setState({
-        review,
-        reviewStale: stale,
-        archiveStale:
-          current.archive === null ||
-          current.review?.review_digest === review.review_digest
-            ? current.archiveStale
-            : true,
+        reviewed: { draft: submittedDraft, result },
+        outOfDate: revision !== draftRevision,
         operation: null,
         failure: null,
         failureOperation: null,
       });
     } catch (error) {
       if (epoch !== sourceEpoch) return;
-      if (!(error instanceof WorkbenchFailure)) {
+      if (!(error instanceof CoreFailure)) {
         store.setState({ operation: null });
         throw error;
       }
       store.setState({
         operation: null,
         failure: error,
-        failureOperation: "review",
+        failureOperation: "compute",
       });
     }
   }
 
-  async function downloadArchive(): Promise<void> {
+  async function downloadReviewed(): Promise<void> {
     const snapshot = store.getState();
     if (
-      snapshot.draft === null ||
-      snapshot.review === null ||
-      snapshot.reviewStale ||
+      snapshot.reviewed === null ||
+      snapshot.outOfDate ||
       snapshot.operation !== null
     ) {
       return;
     }
     const epoch = sourceEpoch;
     const revision = draftRevision;
-    const digest = snapshot.review.review_digest;
+    const reviewedDraft = snapshot.reviewed.draft;
     store.setState({
-      operation: "archive",
+      operation: "download",
       failure: null,
       failureOperation: null,
     });
     try {
-      const archive = await client.archive(snapshot.draft, digest);
-      if (epoch !== sourceEpoch) return;
-      if (revision !== draftRevision) {
+      const archive = await core.compute(
+        {
+          draft: reviewedDraft,
+          selection: { preset: "generate" },
+        },
+        { kind: "archive" },
+      );
+      if (epoch !== sourceEpoch || revision !== draftRevision) {
         store.setState({ operation: null });
         return;
       }
       store.setState({
-        archive,
-        archiveStale: false,
+        lastDownload: archive,
+        downloadOutOfDate: false,
         operation: null,
         failure: null,
         failureOperation: null,
       });
       saveArchive(archive);
     } catch (error) {
-      if (epoch !== sourceEpoch) return;
-      if (revision !== draftRevision) {
+      if (epoch !== sourceEpoch || revision !== draftRevision) {
         store.setState({ operation: null });
         return;
       }
-      if (!(error instanceof WorkbenchFailure)) {
+      if (!(error instanceof CoreFailure)) {
         store.setState({ operation: null });
         throw error;
       }
       store.setState({
         operation: null,
         failure: error,
-        failureOperation: "archive",
+        failureOperation: "download",
       });
-    }
-  }
-
-  async function retryFailure(): Promise<void> {
-    const snapshot = store.getState();
-    switch (snapshot.failureOperation) {
-      case "inspect":
-        if (snapshot.attemptedSource !== null) {
-          await openSource(snapshot.attemptedSource);
-        }
-        return;
-      case "review":
-        await recompute();
-        return;
-      case "archive":
-        await downloadArchive();
-        return;
-      case null:
-        return;
     }
   }
 
   async function dispatch(action: WorkspaceAction): Promise<void> {
     switch (action.type) {
+      case "workspace.start":
+        await start();
+        return;
       case "source.open":
         await openSource(action.source);
         return;
       case "draft.patch":
         patchDraft(action);
         return;
-      case "review.recompute":
-        await recompute();
+      case "review.compute":
+        await computeReview();
         return;
-      case "archive.download":
-        await downloadArchive();
+      case "review.download":
+        await downloadReviewed();
         return;
-      case "failure.retry":
-        await retryFailure();
+      case "failure.retry": {
+        const snapshot = store.getState();
+        switch (snapshot.failureOperation) {
+          case "capabilities":
+            await start();
+            return;
+          case "inspect":
+            if (snapshot.attemptedSource !== null) {
+              await openSource(snapshot.attemptedSource);
+            }
+            return;
+          case "compute":
+            await computeReview();
+            return;
+          case "download":
+            await downloadReviewed();
+            return;
+          case null:
+            return;
+        }
         return;
+      }
       case "failure.dismiss":
         store.setState({
           attemptedSource: null,
@@ -289,8 +342,8 @@ export function createWorkspace(
       case "workspace.reset":
         sourceEpoch += 1;
         draftRevision = 0;
+        startup = null;
         store.setState(EMPTY_SNAPSHOT, true);
-        return;
     }
   }
 
@@ -301,36 +354,6 @@ export function createWorkspace(
     },
     dispatch,
   };
-}
-
-function initialDraft(
-  source: StructureSource,
-  inspection: StructureInspection,
-): GuidedRequest {
-  return {
-    source,
-    intent: inspection.defaults.intent,
-    hints: inspection.defaults.hints,
-  };
-}
-
-type PseudoTable = StructureInspection["pseudo_tables"][number];
-
-function compatibleTables(
-  inspection: StructureInspection,
-  intent: Intent,
-): readonly PseudoTable[] {
-  const elements = new Set(
-    inspection.structure.sites.flatMap((site) =>
-      site.species.map((species) => species.symbol),
-    ),
-  );
-  return inspection.pseudo_tables.filter(
-    (table) =>
-      table.functional === intent.functional &&
-      table.accuracy === intent.pseudo_accuracy &&
-      [...elements].every((element) => table.elements.includes(element)),
-  );
 }
 
 export function saveArchiveToBrowser(archive: ArchiveDownload): void {

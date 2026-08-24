@@ -2,187 +2,337 @@ import { describe, expect, it, vi } from "vitest";
 
 import type {
   ArchiveDownload,
-  GuidedRequest,
-  Recommendation,
-  WorkbenchClient,
-} from "../api/workbenchClient";
-import { WorkbenchFailure } from "../api/workbenchClient";
-import { inspection, recommendation, source } from "../test/workbenchFixtures";
+  ArchiveOutput,
+  Capabilities,
+  ComputationResult,
+  ComputeRequest,
+  CoreClient,
+  MemoryOutput,
+  StructureInspection,
+  StructureSource,
+} from "../api/coreClient";
+import { CoreFailure } from "../api/coreClient";
+import {
+  capabilities,
+  computationResult,
+  draft,
+  inspection,
+  source,
+} from "../test/workbenchFixtures";
 import { createWorkspace } from "./workspace";
 
-describe("Workspace", () => {
-  it("retains stale trustworthy outputs across overrides and retryable failures", async () => {
-    const download: ArchiveDownload = {
-      blob: new Blob(["zip"]),
-      filename: "goldilocks.zip",
-    };
-    const archiveRequest = vi
-      .fn<
-        (
-          request: GuidedRequest,
-          reviewDigest: string,
-        ) => Promise<ArchiveDownload>
-      >()
-      .mockResolvedValue(download);
-    const reviewRequest = vi
-      .fn<(request: GuidedRequest) => Promise<Recommendation>>()
-      .mockResolvedValueOnce(recommendation)
-      .mockRejectedValueOnce(
-        new WorkbenchFailure("server_busy", "Server busy", true),
-      )
-      .mockResolvedValueOnce({
-        ...recommendation,
-        review_digest: "e".repeat(64),
-      });
-    const client: WorkbenchClient = {
-      inspect: vi.fn().mockResolvedValue(inspection),
-      review: reviewRequest,
-      archive: archiveRequest,
-    };
-    const saveArchive = vi.fn<(archive: ArchiveDownload) => void>();
-    const workspace = createWorkspace(client, saveArchive);
-    const updates = vi.fn();
-    const unsubscribe = workspace.subscribe(updates);
+class CoreStub implements CoreClient {
+  capabilitiesResult: Promise<Capabilities> = Promise.resolve(capabilities);
+  capabilitiesCalls = 0;
+  inspectionResults: Promise<StructureInspection>[] = [
+    Promise.resolve(inspection),
+  ];
+  inspectedSources: StructureSource[] = [];
+  memoryResults: Promise<ComputationResult>[] = [];
+  archiveResults: Promise<ArchiveDownload>[] = [];
+  computeCalls: { request: ComputeRequest; output: MemoryOutput | ArchiveOutput }[] = [];
 
-    await workspace.dispatch({ type: "source.open", source });
-    expect(workspace.getSnapshot()).toMatchObject({
-      source,
-      operation: null,
-      inspection,
-      review: null,
-      failure: null,
-    });
-    expect(workspace.getSnapshot().draft).not.toHaveProperty("pseudo_table_id");
+  capabilities(): Promise<Capabilities> {
+    this.capabilitiesCalls += 1;
+    return this.capabilitiesResult;
+  }
 
-    await workspace.dispatch({ type: "review.recompute" });
-    expect(reviewRequest.mock.calls[0]?.[0]).not.toHaveProperty(
-      "pseudo_table_id",
+  inspectStructure(sourceToInspect: StructureSource): Promise<StructureInspection> {
+    this.inspectedSources.push(sourceToInspect);
+    return (
+      this.inspectionResults.shift() ??
+      Promise.reject(new Error("inspection not configured"))
     );
-    expect(workspace.getSnapshot()).toMatchObject({
-      review: recommendation,
-      reviewStale: false,
-    });
+  }
 
+  compute(
+    _request: ComputeRequest,
+    _output: MemoryOutput,
+  ): Promise<ComputationResult>;
+  compute(
+    _request: ComputeRequest,
+    _output: ArchiveOutput,
+  ): Promise<ArchiveDownload>;
+  compute(
+    request: ComputeRequest,
+    output: MemoryOutput | ArchiveOutput,
+  ): Promise<ComputationResult | ArchiveDownload> {
+    this.computeCalls.push({ request, output });
+    if (output.kind === "archive") {
+      return (
+        this.archiveResults.shift() ??
+        Promise.reject(new Error("archive not configured"))
+      );
+    }
+    return (
+      this.memoryResults.shift() ??
+      Promise.reject(new Error("memory compute not configured"))
+    );
+  }
+}
+
+describe("Workspace", () => {
+  it("retries a failed recomputation and replaces the reviewed snapshot", async () => {
+    const failure = new CoreFailure("server_busy", "Core is busy.", true);
+    const replacementResult: ComputationResult = {
+      ...computationResult,
+      task_revision: "2",
+    };
+    const core = new CoreStub();
+    core.memoryResults = [
+      Promise.resolve(computationResult),
+      Promise.reject(failure),
+      Promise.resolve(replacementResult),
+    ];
+    const workspace = createWorkspace(core);
+    await workspace.dispatch({ type: "workspace.start" });
+    await workspace.dispatch({ type: "source.open", source });
+    await workspace.dispatch({ type: "review.compute" });
     await workspace.dispatch({
       type: "draft.patch",
       hints: { k_grid: [5, 5, 5] },
     });
-    expect(workspace.getSnapshot()).toMatchObject({
-      review: recommendation,
-      reviewStale: true,
-    });
+    await workspace.dispatch({ type: "review.compute" });
 
-    await workspace.dispatch({ type: "review.recompute" });
-    expect(workspace.getSnapshot()).toMatchObject({
-      review: recommendation,
-      reviewStale: true,
-      operation: null,
-      failure: { kind: "server_busy", retryable: true },
-    });
+    await workspace.dispatch({ type: "failure.retry" });
 
-    await workspace.dispatch({ type: "review.recompute" });
+    expect(core.computeCalls).toHaveLength(3);
     expect(workspace.getSnapshot()).toMatchObject({
-      review: { review_digest: "e".repeat(64) },
-      reviewStale: false,
+      reviewed: {
+        draft: { hints: { k_grid: [5, 5, 5] } },
+        result: replacementResult,
+      },
+      outOfDate: false,
       failure: null,
     });
-
-    await workspace.dispatch({ type: "archive.download" });
-    expect(archiveRequest).toHaveBeenCalledWith(
-      expect.objectContaining({ hints: { k_grid: [5, 5, 5] } }),
-      "e".repeat(64),
-    );
-    expect(saveArchive).toHaveBeenCalledWith(download);
-    expect(workspace.getSnapshot()).toMatchObject({
-      archive: download,
-      archiveStale: false,
-    });
-
-    await workspace.dispatch({
-      type: "draft.patch",
-      intent: { pseudo_accuracy: "precision" },
-    });
-    expect(workspace.getSnapshot()).toMatchObject({
-      archive: download,
-      archiveStale: true,
-      reviewStale: true,
-    });
-    expect(updates).toHaveBeenCalled();
-    unsubscribe();
   });
 
-  it("retains the valid workspace when replacement inspection fails", async () => {
-    const replacement = {
-      name: "broken.cif",
-      format: "cif" as const,
-      content: "not a structure",
-    };
-    const download: ArchiveDownload = {
-      blob: new Blob(["zip"]),
-      filename: "goldilocks.zip",
-    };
-    const failure = new WorkbenchFailure(
-      "invalid_request",
-      "Could not parse replacement.",
-      false,
-    );
-    const client: WorkbenchClient = {
-      inspect: vi
-        .fn()
-        .mockResolvedValueOnce(inspection)
-        .mockRejectedValueOnce(failure),
-      review: vi.fn().mockResolvedValue(recommendation),
-      archive: vi.fn().mockResolvedValue(download),
-    };
-    const workspace = createWorkspace(client, vi.fn());
-    await workspace.dispatch({ type: "source.open", source });
-    await workspace.dispatch({ type: "review.recompute" });
-    await workspace.dispatch({ type: "archive.download" });
+  it("reset ignores obsolete source work and clears the Workspace", async () => {
+    let finishInspection: (value: StructureInspection) => void = () => undefined;
+    const pendingInspection = new Promise<StructureInspection>((resolve) => {
+      finishInspection = resolve;
+    });
+    const core = new CoreStub();
+    core.inspectionResults = [pendingInspection];
+    const workspace = createWorkspace(core);
+    await workspace.dispatch({ type: "workspace.start" });
 
-    await workspace.dispatch({ type: "source.open", source: replacement });
+    const opening = workspace.dispatch({ type: "source.open", source });
+    await workspace.dispatch({ type: "workspace.reset" });
+    finishInspection(inspection);
+    await opening;
 
     expect(workspace.getSnapshot()).toMatchObject({
-      source,
-      attemptedSource: replacement,
-      inspection,
-      review: recommendation,
-      archive: download,
+      capabilities: null,
+      source: null,
+      attemptedSource: null,
+      inspection: null,
+      draft: null,
+      reviewed: null,
+      operation: null,
+      failure: null,
+    });
+  });
+
+  it("downloads by resubmitting the exact reviewed Draft for archive output", async () => {
+    const archive: ArchiveDownload = {
+      blob: new Blob(["zip"]),
+      filename: "goldilocks-inputs.zip",
+    };
+    const core = new CoreStub();
+    core.memoryResults = [Promise.resolve(computationResult)];
+    core.archiveResults = [Promise.resolve(archive)];
+    const saveArchive = vi.fn<(download: ArchiveDownload) => void>();
+    const workspace = createWorkspace(core, saveArchive);
+    await workspace.dispatch({ type: "workspace.start" });
+    await workspace.dispatch({ type: "source.open", source });
+    await workspace.dispatch({ type: "review.compute" });
+
+    await workspace.dispatch({ type: "review.download" });
+
+    expect(core.computeCalls[1]).toEqual({
+      request: { draft, selection: { preset: "generate" } },
+      output: { kind: "archive" },
+    });
+    expect(saveArchive).toHaveBeenCalledWith(archive);
+    expect(workspace.getSnapshot()).toMatchObject({
+      lastDownload: archive,
+      downloadOutOfDate: false,
+      operation: null,
+      failure: null,
+    });
+  });
+
+  it("preserves the old Result when recomputation fails", async () => {
+    const failure = new CoreFailure("server_busy", "Core is busy.", true);
+    const core = new CoreStub();
+    core.memoryResults = [
+      Promise.resolve(computationResult),
+      Promise.reject(failure),
+    ];
+    const workspace = createWorkspace(core);
+    await workspace.dispatch({ type: "workspace.start" });
+    await workspace.dispatch({ type: "source.open", source });
+    await workspace.dispatch({ type: "review.compute" });
+    await workspace.dispatch({
+      type: "draft.patch",
+      hints: { k_grid: [5, 5, 5] },
+    });
+
+    await workspace.dispatch({ type: "review.compute" });
+
+    expect(workspace.getSnapshot()).toMatchObject({
+      reviewed: { draft, result: computationResult },
+      outOfDate: true,
       operation: null,
       failure,
-      failureOperation: "inspect",
+      failureOperation: "compute",
     });
   });
-  it("discards an archive response when the draft changes in flight", async () => {
-    let resolveArchive: ((archive: ArchiveDownload) => void) | undefined;
-    const archivePending = new Promise<ArchiveDownload>((resolve) => {
-      resolveArchive = resolve;
-    });
-    const client: WorkbenchClient = {
-      inspect: vi.fn().mockResolvedValue(inspection),
-      review: vi.fn().mockResolvedValue(recommendation),
-      archive: vi.fn().mockReturnValue(archivePending),
-    };
-    const saveArchive = vi.fn<(archive: ArchiveDownload) => void>();
-    const workspace = createWorkspace(client, saveArchive);
-    await workspace.dispatch({ type: "source.open", source });
-    await workspace.dispatch({ type: "review.recompute" });
 
-    const download = workspace.dispatch({ type: "archive.download" });
+  it("preserves the reviewed Result and marks it out of date after a Draft edit", async () => {
+    const core = new CoreStub();
+    core.memoryResults = [Promise.resolve(computationResult)];
+    const workspace = createWorkspace(core);
+    await workspace.dispatch({ type: "workspace.start" });
+    await workspace.dispatch({ type: "source.open", source });
+    await workspace.dispatch({ type: "review.compute" });
+
     await workspace.dispatch({
       type: "draft.patch",
       hints: { k_grid: [5, 5, 5] },
     });
-    resolveArchive?.({
-      blob: new Blob(["stale zip"]),
-      filename: "stale.zip",
-    });
-    await download;
 
-    expect(saveArchive).not.toHaveBeenCalled();
     expect(workspace.getSnapshot()).toMatchObject({
+      draft: { hints: { k_grid: [5, 5, 5] } },
+      reviewed: { draft, result: computationResult },
+      outOfDate: true,
+    });
+  });
+
+  it("stores the exact submitted Draft with a generation Result", async () => {
+    const core = new CoreStub();
+    core.memoryResults = [Promise.resolve(computationResult)];
+    const workspace = createWorkspace(core);
+    await workspace.dispatch({ type: "workspace.start" });
+    await workspace.dispatch({ type: "source.open", source });
+
+    await workspace.dispatch({ type: "review.compute" });
+
+    expect(core.computeCalls).toEqual([
+      {
+        request: { draft, selection: { preset: "generate" } },
+        output: { kind: "memory" },
+      },
+    ]);
+    expect(workspace.getSnapshot()).toMatchObject({
+      reviewed: { draft, result: computationResult },
+      outOfDate: false,
       operation: null,
-      archive: null,
-      reviewStale: true,
+      failure: null,
+    });
+  });
+
+  it("ignores an obsolete inspection after rapid source replacement", async () => {
+    let finishFirst: (value: StructureInspection) => void = () => undefined;
+    const firstInspection = new Promise<StructureInspection>((resolve) => {
+      finishFirst = resolve;
+    });
+    const replacement: StructureSource = {
+      kind: "inline",
+      name: "POSCAR",
+      format: "poscar",
+      content: "Silicon",
+    };
+    const replacementInspection: StructureInspection = {
+      ...inspection,
+      canonical_cif: "replacement",
+      source: {
+        ...inspection.source,
+        name: "POSCAR",
+        format: "poscar",
+        content: "Silicon",
+      },
+    };
+    const core = new CoreStub();
+    core.inspectionResults = [
+      firstInspection,
+      Promise.resolve(replacementInspection),
+    ];
+    const workspace = createWorkspace(core);
+    await workspace.dispatch({ type: "workspace.start" });
+
+    const first = workspace.dispatch({ type: "source.open", source });
+    await workspace.dispatch({ type: "source.open", source: replacement });
+    finishFirst(inspection);
+    await first;
+
+    expect(workspace.getSnapshot()).toMatchObject({
+      source: replacement,
+      inspection: replacementInspection,
+      draft: { structure: replacement },
+      operation: null,
+    });
+  });
+
+  it("opens an inline Structure Source and initializes a canonical Draft", async () => {
+    const core = new CoreStub();
+    const workspace = createWorkspace(core);
+    await workspace.dispatch({ type: "workspace.start" });
+
+    await workspace.dispatch({ type: "source.open", source });
+
+    expect(core.inspectedSources).toEqual([source]);
+    expect(workspace.getSnapshot()).toMatchObject({
+      source,
+      attemptedSource: null,
+      inspection,
+      draft,
+      operation: null,
+      failure: null,
+    });
+  });
+
+  it("keeps a typed startup failure retryable", async () => {
+    const core = new CoreStub();
+    const failure = new CoreFailure(
+      "assets_unavailable",
+      "Runtime assets are unavailable.",
+      true,
+    );
+    core.capabilitiesResult = Promise.reject(failure);
+    const workspace = createWorkspace(core);
+
+    await workspace.dispatch({ type: "workspace.start" });
+
+    expect(workspace.getSnapshot()).toMatchObject({
+      capabilities: null,
+      operation: null,
+      failure,
+      failureOperation: "capabilities",
+    });
+
+    core.capabilitiesResult = Promise.resolve(capabilities);
+    await workspace.dispatch({ type: "failure.retry" });
+    expect(workspace.getSnapshot()).toMatchObject({
+      capabilities,
+      failure: null,
+      failureOperation: null,
+    });
+  });
+
+  it("loads and stores one immutable Capabilities snapshot at startup", async () => {
+    const core = new CoreStub();
+    const workspace = createWorkspace(core);
+
+    await workspace.dispatch({ type: "workspace.start" });
+    await workspace.dispatch({ type: "workspace.start" });
+
+    expect(core.capabilitiesCalls).toBe(1);
+    expect(workspace.getSnapshot()).toMatchObject({
+      capabilities,
+      operation: null,
+      failure: null,
     });
   });
 });

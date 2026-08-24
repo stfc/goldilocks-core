@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Literal
 
-from goldilocks_core.contracts.advice import ParameterAdvice
-from goldilocks_core.contracts.analysis import StructureAnalysisRecord
-from goldilocks_core.contracts.hints import CalculationIntent
-from goldilocks_core.contracts.kpoints import KPointSelection
-from goldilocks_core.contracts.selection import SelectionRecord
 from goldilocks_core.contracts.serial import to_jsonable
 from goldilocks_core.contracts.types import JsonDict
+
+if TYPE_CHECKING:
+    from goldilocks_core.contracts.requests import (
+        CalculationDraft,
+        ComputationSelection,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,23 +63,33 @@ class Records(Mapping[type, Any]):
 
 
 @dataclass(frozen=True, slots=True)
-class Result:
-    """Complete record set from one Core job.
-
-    ``generated_files`` is empty for recommend jobs and populated for
-    generate jobs; ``bundle`` is set only when a generate job requested an
-    ``output_dir``. ``warnings`` aggregates every stage's warnings and is
-    the authoritative place to check for incomplete or degraded results.
-    """
-
-    intent: CalculationIntent
-    analysis: StructureAnalysisRecord
-    advice: ParameterAdvice
-    k_points: KPointSelection
-    selection: SelectionRecord
-    generated_files: GeneratedFiles = ()
-    warnings: tuple[str, ...] = ()
-    bundle: BundleRecord | None = None
+class Publication:
+    kind: Literal["directory", "archive"]
+    path: str | None = None
 
     def to_dict(self) -> JsonDict:
         return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class ComputationResult:
+    draft: CalculationDraft
+    task: str
+    task_revision: str
+    selection: ComputationSelection
+    records: Records
+    warnings: tuple[str, ...] = ()
+    publication: Publication | None = None
+    schema_version: int = field(default=1, init=False)
+
+    def to_dict(self) -> JsonDict:
+        return {
+            "schema_version": self.schema_version,
+            "draft": self.draft.to_dict(),
+            "task": self.task,
+            "task_revision": self.task_revision,
+            "selection": self.selection.to_dict(),
+            "records": self.records.to_dict(),
+            "warnings": list(self.warnings),
+            "publication": to_jsonable(self.publication),
+        }

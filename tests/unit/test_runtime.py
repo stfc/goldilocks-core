@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import gc
 import hashlib
-import json
 import weakref
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -11,24 +10,31 @@ import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
+    CalculationDraft,
     CalculationHints,
+    ComputeRequest,
     Dispatcher,
-    PresetRequest,
-    QueryRequest,
+    PresetSelection,
+    RecordSelection,
     Runtime,
 )
 from goldilocks_core.assets import AssetFile, AssetSpec, AssetStore
 from goldilocks_core.contracts import (
     CalculationIntent,
+    GeneratedFiles,
     KPointSelection,
     ParameterAdvice,
     Provenance,
     PseudoCutoffs,
     PseudoMetadata,
     PseudopotentialRequirements,
-    Result,
     SelectionRecord,
     StructureAnalysisRecord,
+    resolve_output_types,
+)
+from goldilocks_core.contracts.registry import (
+    RECORD_TYPE_IDS,
+    register_record_types,
 )
 from goldilocks_core.pseudo.installed import write_table_manifest
 from goldilocks_core.pseudo.registry import PseudoTable
@@ -42,6 +48,14 @@ from goldilocks_core.runtime import (
     Stage,
     TaskGraph,
 )
+
+
+@pytest.fixture
+def isolated_record_registry():
+    registered = dict(RECORD_TYPE_IDS)
+    yield
+    RECORD_TYPE_IDS.clear()
+    RECORD_TYPE_IDS.update(registered)
 
 
 def make_structure() -> Structure:
@@ -159,25 +173,29 @@ def table_fixture(
     )
 
 
-def make_request(*, mode: str = "recommend") -> PresetRequest:
-    return PresetRequest(
-        structure=make_structure(),
-        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
-        pseudo_metadata=(make_metadata(),),
-        mode=mode,
+def make_request(*, preset: str = "recommend") -> ComputeRequest:
+    return ComputeRequest(
+        draft=CalculationDraft(
+            structure=make_structure(),
+            hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+            pseudo_metadata=(make_metadata(),),
+        ),
+        selection=PresetSelection(preset),
     )
 
 
-def make_query_request(outputs, **kw) -> QueryRequest:
-    request = QueryRequest(
-        structure=kw.pop("structure", make_structure()),
-        outputs=outputs,
-        intent=kw.pop("intent", CalculationIntent()),
-        hints=kw.pop("hints", CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC")),
-        pseudo_metadata=kw.pop("pseudo_metadata", (make_metadata(),)),
-        pseudo_root=kw.pop("pseudo_root", None),
-        pseudo_table=kw.pop("pseudo_table", None),
-        kmesh_model=kw.pop("kmesh_model", None),
+def make_query_request(outputs, **kw) -> ComputeRequest:
+    request = ComputeRequest(
+        draft=CalculationDraft(
+            structure=kw.pop("structure", make_structure()),
+            intent=kw.pop("intent", CalculationIntent()),
+            hints=kw.pop("hints", CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC")),
+            pseudo_metadata=kw.pop("pseudo_metadata", (make_metadata(),)),
+            pseudo_root=kw.pop("pseudo_root", None),
+            pseudo_table=kw.pop("pseudo_table", None),
+            kmesh_model=kw.pop("kmesh_model", None),
+        ),
+        selection=RecordSelection(outputs),
     )
     if kw:
         raise TypeError(f"unsupported test request fields: {sorted(kw)}")
@@ -209,17 +227,15 @@ class TrackingBackend:
         self.closes += 1
 
 
-def test_recommend_returns_complete_result_without_generated_files() -> None:
+def test_recommendation_preset_returns_complete_selected_records() -> None:
     with Runtime() as runtime:
-        dispatcher = Dispatcher(runtime)
-        result = dispatcher.recommend(make_request())
+        result = Dispatcher(runtime).compute(make_request())
 
-    assert isinstance(result, Result)
-    assert isinstance(result.analysis, StructureAnalysisRecord)
-    assert isinstance(result.advice, ParameterAdvice)
-    assert isinstance(result.k_points, KPointSelection)
-    assert isinstance(result.selection, SelectionRecord)
-    assert result.generated_files == ()
+    assert isinstance(result.records[StructureAnalysisRecord], StructureAnalysisRecord)
+    assert isinstance(result.records[ParameterAdvice], ParameterAdvice)
+    assert isinstance(result.records[KPointSelection], KPointSelection)
+    assert isinstance(result.records[SelectionRecord], SelectionRecord)
+    assert GeneratedFiles not in result.records
 
 
 def test_analyze_uses_heuristic_without_configured_metallicity_model(
@@ -228,9 +244,9 @@ def test_analyze_uses_heuristic_without_configured_metallicity_model(
 
     with Runtime() as runtime:
         dispatcher = Dispatcher(runtime)
-        records = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
+        result = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
 
-    analysis = records[StructureAnalysisRecord]
+    analysis = result.records[StructureAnalysisRecord]
     assert analysis.electronic_character == "unknown"
     assert analysis.electronic_character_source == "heuristic"
     assert analysis.electronic_character_confidence is None
@@ -254,9 +270,9 @@ def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
         metallicity_atom_init="atom-init.json",
     ) as runtime:
         dispatcher = Dispatcher(runtime)
-        records = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
+        result = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
 
-    analysis = records[StructureAnalysisRecord]
+    analysis = result.records[StructureAnalysisRecord]
     assert analysis.electronic_character == "metal"
     assert analysis.electronic_character_source == "model"
     assert analysis.electronic_character_confidence == 0.92
@@ -264,29 +280,12 @@ def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
     assert calls[0][1:3] == (model, "atom-init.json")
 
 
-def test_generate_returns_generated_files() -> None:
+def test_generation_preset_returns_generated_files() -> None:
     with Runtime() as runtime:
-        dispatcher = Dispatcher(runtime)
-        result = dispatcher.generate(make_request(mode="generate"))
+        result = Dispatcher(runtime).compute(make_request(preset="generate"))
 
-    assert result.generated_files
-    assert result.generated_files[0].path == "inputs/qe.in"
-
-
-def test_generate_with_output_dir_writes_bundle(tmp_path) -> None:
-    output_dir = tmp_path / "bundle"
-
-    with Runtime() as runtime:
-        dispatcher = Dispatcher(runtime)
-        result = dispatcher.generate(
-            make_request(mode="generate"), output_dir=str(output_dir)
-        )
-
-    assert result.bundle is not None
-    assert result.bundle.path == str(output_dir)
-    assert (output_dir / "inputs" / "qe.in").is_file()
-    manifest = json.loads((output_dir / "manifest.json").read_text())
-    assert manifest == result.bundle.manifest
+    assert result.records[GeneratedFiles]
+    assert result.records[GeneratedFiles][0].path == "inputs/qe.in"
 
 
 @pytest.mark.parametrize(
@@ -301,10 +300,10 @@ def test_generate_with_output_dir_writes_bundle(tmp_path) -> None:
 def test_compute_returns_each_requested_record_type(record_type: type) -> None:
     with Runtime() as runtime:
         dispatcher = Dispatcher(runtime)
-        records = dispatcher.compute(make_query_request((record_type,)))
+        result = dispatcher.compute(make_query_request((record_type,)))
 
-    assert tuple(records) == (record_type,)
-    assert isinstance(records[record_type], record_type)
+    assert tuple(result.records) == (record_type,)
+    assert isinstance(result.records[record_type], record_type)
 
 
 def test_select_only_compute_does_not_invoke_kmesh(monkeypatch) -> None:
@@ -312,9 +311,9 @@ def test_select_only_compute_does_not_invoke_kmesh(monkeypatch) -> None:
 
     with Runtime(kmesh_service=backend) as runtime:
         dispatcher = Dispatcher(runtime)
-        records = dispatcher.compute(make_query_request((SelectionRecord,)))
+        result = dispatcher.compute(make_query_request((SelectionRecord,)))
 
-    assert isinstance(records[SelectionRecord], SelectionRecord)
+    assert isinstance(result.records[SelectionRecord], SelectionRecord)
     assert backend.calls == 0
 
 
@@ -326,9 +325,9 @@ def test_analysis_query_does_not_resolve_pseudopotential_source(tmp_path) -> Non
     )
 
     with Runtime(asset_store=AssetStore(tmp_path / "empty")) as runtime:
-        records = Dispatcher(runtime).compute(request)
+        result = Dispatcher(runtime).compute(request)
 
-    assert records[StructureAnalysisRecord].reduced_formula == "Si"
+    assert result.records[StructureAnalysisRecord].reduced_formula == "Si"
 
 
 def test_explicit_metadata_selection_does_not_read_registry(
@@ -343,9 +342,9 @@ def test_explicit_metadata_selection_does_not_read_registry(
     )
 
     with Runtime() as runtime:
-        records = Dispatcher(runtime).compute(make_query_request((SelectionRecord,)))
+        result = Dispatcher(runtime).compute(make_query_request((SelectionRecord,)))
 
-    assert records[SelectionRecord].pseudopotentials[0].filename == "Si.UPF"
+    assert result.records[SelectionRecord].pseudopotentials[0].filename == "Si.UPF"
 
 
 def test_runtime_resolves_one_explicit_installed_table(
@@ -356,16 +355,19 @@ def test_runtime_resolves_one_explicit_installed_table(
 
     store, table = installed_pseudo_table(tmp_path)
     monkeypatch.setattr(source, "load_tables", lambda path: {table.id: table})
-    request = PresetRequest(
-        structure=make_structure(),
-        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
-        pseudo_table=table.id,
+    request = ComputeRequest(
+        draft=CalculationDraft(
+            structure=make_structure(),
+            hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+            pseudo_table=table.id,
+        ),
+        selection=PresetSelection("recommend"),
     )
 
     with Runtime(asset_store=store) as runtime:
-        result = Dispatcher(runtime).recommend(request)
+        result = Dispatcher(runtime).compute(request)
 
-    selected = result.selection.pseudopotentials[0]
+    selected = result.records[SelectionRecord].pseudopotentials[0]
     assert selected.filename == "Si.upf"
     assert selected.provenance.data_source == table.id
 
@@ -378,18 +380,21 @@ def test_explicit_table_must_satisfy_scientific_requirements(
 
     store, table = installed_pseudo_table(tmp_path)
     monkeypatch.setattr(source, "load_tables", lambda path: {table.id: table})
-    request = PresetRequest(
-        structure=make_structure(),
-        intent=CalculationIntent(functional="PBE"),
-        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
-        pseudo_table=table.id,
+    request = ComputeRequest(
+        draft=CalculationDraft(
+            structure=make_structure(),
+            intent=CalculationIntent(functional="PBE"),
+            hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+            pseudo_table=table.id,
+        ),
+        selection=PresetSelection("recommend"),
     )
 
     with (
         Runtime(asset_store=store) as runtime,
         pytest.raises(PseudoTableMismatch, match="functional is PBEsol"),
     ):
-        Dispatcher(runtime).recommend(request)
+        Dispatcher(runtime).compute(request)
 
 
 def test_automatic_table_selection_prefers_pseudodojo_for_ordinary_elements() -> None:
@@ -498,10 +503,13 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
 
     monkeypatch.setattr(metallicity, "load_metallicity_model", load)
     monkeypatch.setattr(metallicity, "classify_metallicity", classify)
-    request = PresetRequest(
-        structure=make_structure(),
-        hints=CalculationHints(pseudo_type="NC"),
-        pseudo_metadata=(make_metadata(),),
+    request = ComputeRequest(
+        draft=CalculationDraft(
+            structure=make_structure(),
+            hints=CalculationHints(pseudo_type="NC"),
+            pseudo_metadata=(make_metadata(),),
+        ),
+        selection=PresetSelection("recommend"),
     )
     runtime = Runtime(
         kmesh_service=backend,
@@ -510,12 +518,12 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     )
     dispatcher = Dispatcher(runtime)
 
-    first = dispatcher.recommend(request)
-    second = dispatcher.recommend(request)
+    first = dispatcher.compute(request)
+    second = dispatcher.compute(request)
 
-    assert first.k_points == second.k_points
-    assert first.analysis.electronic_character == "metal"
-    assert second.analysis.electronic_character == "metal"
+    assert first.records[KPointSelection] == second.records[KPointSelection]
+    assert first.records[StructureAnalysisRecord].electronic_character == "metal"
+    assert second.records[StructureAnalysisRecord].electronic_character == "metal"
     assert backend.calls == 2
     assert model_loads == 1
     assert classifications == 2
@@ -526,7 +534,7 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     assert backend.resets == 1
     assert model_refs[0]() is None
 
-    dispatcher.recommend(request)
+    dispatcher.compute(request)
     assert backend.calls == 3
     assert model_loads == 2
     assert classifications == 3
@@ -538,10 +546,99 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     assert model_refs[1]() is None
     assert runtime.is_closed is True
     with pytest.raises(RuntimeError, match="Runtime is closed"):
-        dispatcher.recommend(request)
+        dispatcher.compute(request)
 
 
-def test_runtime_dispatches_a_registered_task_via_compute(monkeypatch) -> None:
+def test_record_registration_is_atomic_when_an_id_conflicts() -> None:
+    @dataclass
+    class FirstRecord:
+        value: str = "first"
+
+    @dataclass
+    class ConflictingRecord:
+        value: str = "conflict"
+
+    registered = dict(RECORD_TYPE_IDS)
+    with pytest.raises(ValueError, match="'analysis' is already registered"):
+        register_record_types(
+            (
+                (FirstRecord, "atomic_fixture"),
+                (ConflictingRecord, "analysis"),
+            )
+        )
+
+    assert RECORD_TYPE_IDS == registered
+
+
+def test_task_registration_rejects_duplicate_record_ids() -> None:
+    @dataclass
+    class FirstRecord:
+        value: str = "first"
+
+    @dataclass
+    class SecondRecord:
+        value: str = "second"
+
+    with pytest.raises(ValueError, match="record ids must be unique"):
+        TaskGraph(
+            task="stub_task",
+            stages=(
+                Stage(FirstRecord, (), lambda *, ctx: FirstRecord()),
+                Stage(SecondRecord, (), lambda *, ctx: SecondRecord()),
+            ),
+            presets=(Preset("both", (FirstRecord, SecondRecord)),),
+            record_ids=((FirstRecord, "duplicate"), (SecondRecord, "duplicate")),
+        )
+
+
+def test_task_registration_rejects_empty_record_ids() -> None:
+    @dataclass
+    class StubRecord:
+        value: str = "stub"
+
+    with pytest.raises(ValueError, match="record ids must be non-empty strings"):
+        TaskGraph(
+            task="stub_task",
+            stages=(Stage(StubRecord, (), lambda *, ctx: StubRecord()),),
+            presets=(Preset("only", (StubRecord,)),),
+            record_ids=((StubRecord, " "),),
+        )
+
+
+def test_task_registration_requires_stable_ids_for_custom_records(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(Runtime, "_build_backend", lambda self: TrackingBackend())
+
+    @dataclass
+    class StubRecord:
+        value: str = "stub"
+
+    handler = GraphHandler(
+        spec=TaskGraph(
+            task="stub_task",
+            stages=(Stage(StubRecord, (), lambda *, ctx: StubRecord()),),
+            presets=(Preset("only", (StubRecord,)),),
+            selectable_outputs=(StubRecord,),
+        ),
+        build_context=lambda request, runtime: SimpleNamespace(),
+    )
+
+    with (
+        Runtime() as runtime,
+        pytest.raises(
+            ValueError,
+            match="stable record id.*StubRecord",
+        ),
+    ):
+        Dispatcher(runtime).register(handler)
+
+
+def test_runtime_dispatches_a_registered_task_via_compute(
+    monkeypatch,
+    isolated_record_registry,
+    tmp_path,
+) -> None:
     monkeypatch.setattr(Runtime, "_build_backend", lambda self: TrackingBackend())
 
     @dataclass
@@ -556,27 +653,39 @@ def test_runtime_dispatches_a_registered_task_via_compute(monkeypatch) -> None:
             task="stub_task",
             stages=(Stage(StubRecord, (), make_stub),),
             presets=(Preset("only", (StubRecord,)),),
+            selectable_outputs=(StubRecord,),
+            record_ids=((StubRecord, "stub"),),
         ),
         build_context=lambda request, runtime: SimpleNamespace(),
-        assemble_result=lambda request, records: records,
     )
 
+    structure_path = tmp_path / "Si.cif"
+    make_structure().to(filename=structure_path)
+    request = ComputeRequest(
+        draft=CalculationDraft(
+            structure_path,
+            intent=CalculationIntent(task="stub_task"),
+        ),
+        selection=RecordSelection((StubRecord,)),
+    )
     with Runtime() as runtime:
         dispatcher = Dispatcher(runtime)
         dispatcher.register(handler)
-        records = dispatcher.compute(
-            QueryRequest(
-                structure=make_structure(),
-                outputs=(StubRecord,),
-                intent=CalculationIntent(task="stub_task"),
-            ),
-        )
+        document = request.to_dict()
+        result = dispatcher.compute(request)
 
-    assert isinstance(records[StubRecord], StubRecord)
-    assert records[StubRecord].value == "ran"
+    assert document["selection"] == {"records": ["stub"]}
+    assert resolve_output_types(["stub"]) == (StubRecord,)
+    assert isinstance(result.draft.structure, Structure)
+    assert isinstance(result.records[StubRecord], StubRecord)
+    assert result.records[StubRecord].value == "ran"
+    assert result.to_dict()["records"] == {"stub": {"value": "ran"}}
 
 
-def test_runtime_recommend_dispatches_a_registered_task_preset(monkeypatch) -> None:
+def test_runtime_recommend_dispatches_a_registered_task_preset(
+    monkeypatch,
+    isolated_record_registry,
+) -> None:
     monkeypatch.setattr(Runtime, "_build_backend", lambda self: TrackingBackend())
 
     @dataclass
@@ -586,25 +695,27 @@ def test_runtime_recommend_dispatches_a_registered_task_preset(monkeypatch) -> N
     def make_stub(*, ctx) -> StubRecord:
         return StubRecord("ran")
 
-    assembled = object()
     handler = GraphHandler(
         spec=TaskGraph(
             task="stub_task",
             stages=(Stage(StubRecord, (), make_stub),),
             presets=(Preset("recommend", (StubRecord,)),),
+            record_ids=((StubRecord, "stub_preset"),),
         ),
         build_context=lambda request, runtime: SimpleNamespace(),
-        assemble_result=lambda request, records: assembled,
     )
 
     with Runtime() as runtime:
         dispatcher = Dispatcher(runtime)
         dispatcher.register(handler)
-        result = dispatcher.recommend(
-            PresetRequest(
-                structure=make_structure(),
-                intent=CalculationIntent(task="stub_task"),
+        result = dispatcher.compute(
+            ComputeRequest(
+                draft=CalculationDraft(
+                    make_structure(),
+                    intent=CalculationIntent(task="stub_task"),
+                ),
+                selection=PresetSelection("recommend"),
             )
         )
 
-    assert result is assembled
+    assert result.records[StubRecord] == StubRecord("ran")

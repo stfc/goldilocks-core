@@ -33,13 +33,20 @@ from goldilocks_core.contracts.outputs import (
 from goldilocks_core.contracts.protocols import KMeshAdvisor, KMeshService
 from goldilocks_core.contracts.provenance import Provenance
 from goldilocks_core.contracts.registry import RECORD_TYPE_IDS, record_type_id
-from goldilocks_core.contracts.requests import PresetRequest, QueryRequest
+from goldilocks_core.contracts.requests import (
+    CalculationDraft,
+    ComputationSelection,
+    ComputeRequest,
+    PresetSelection,
+    RecordSelection,
+)
 from goldilocks_core.contracts.result import (
     BundleRecord,
+    ComputationResult,
     GeneratedFile,
     GeneratedFiles,
+    Publication,
     Records,
-    Result,
 )
 from goldilocks_core.contracts.selection import (
     PseudoCutoffs,
@@ -60,7 +67,6 @@ from goldilocks_core.contracts.types import (
     CodeName,
     Dimensionality,
     ElectronicCharacter,
-    JobMode,
     JsonDict,
     KPointGrid,
     KPointShift,
@@ -82,18 +88,20 @@ from goldilocks_core.contracts.types import (
 __all__ = [
     "BundleRecord",
     "CalcTask",
+    "CalculationDraft",
     "CalculationHints",
     "CalculationIntent",
     "CodeName",
     "ConvergenceAdvice",
     "ConvergenceHints",
+    "ComputationResult",
+    "ComputationSelection",
+    "ComputeRequest",
     "Records",
-    "Result",
     "Dimensionality",
     "ElectronicCharacter",
     "GeneratedFile",
     "GeneratedFiles",
-    "JobMode",
     "JsonDict",
     "KMeshAdvisor",
     "KMeshEntry",
@@ -111,8 +119,9 @@ __all__ = [
     "OUTPUT_TYPES_BY_ID",
     "ParameterAdvice",
     "PathLike",
-    "PresetRequest",
+    "PresetSelection",
     "Provenance",
+    "Publication",
     "ProvenanceSource",
     "PseudoAccuracy",
     "PseudoCutoffs",
@@ -121,7 +130,7 @@ __all__ = [
     "PseudoType",
     "PseudopotentialRequirements",
     "PseudopotentialSelection",
-    "QueryRequest",
+    "RecordSelection",
     "RECORD_TYPE_IDS",
     "RecordId",
     "RelativisticTreatment",

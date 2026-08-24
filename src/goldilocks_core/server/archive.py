@@ -8,7 +8,12 @@ from importlib.metadata import version
 from pathlib import Path, PurePosixPath
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
-from goldilocks_core.contracts import JsonDict, Result
+from goldilocks_core.contracts import (
+    ComputationResult,
+    GeneratedFiles,
+    JsonDict,
+    SelectionRecord,
+)
 from goldilocks_core.pseudo.registry import PseudoTable
 
 ARCHIVE_SCHEMA_VERSION = 1
@@ -28,7 +33,7 @@ class WorkbenchArchive:
     source_content: str
     canonical_cif: str
     review: JsonDict
-    result: Result
+    result: ComputationResult
     table: PseudoTable
     licence_path: Path
     runtime_licences: tuple[RuntimeAssetLicence, ...]
@@ -38,9 +43,9 @@ def build_workbench_archive(material: WorkbenchArchive) -> bytes:
     files: dict[str, bytes] = {}
     _add(files, f"source/{material.source_name}", material.source_content.encode())
     _add(files, "structure/canonical.cif", material.canonical_cif.encode())
-    for generated in material.result.generated_files:
+    for generated in material.result.records[GeneratedFiles]:
         _add(files, generated.path, generated.content.encode())
-    for pseudo in material.result.selection.pseudopotentials:
+    for pseudo in material.result.records[SelectionRecord].pseudopotentials:
         if pseudo.filepath is None or pseudo.filename is None:
             raise ValueError(
                 f"Cannot archive unresolved pseudopotential for {pseudo.element}."

@@ -1,26 +1,15 @@
-"""MCP tools over one process-owned Core service.
-
-A thin transport: each tool builds the shared parser's mapping from typed
-pydantic arguments, dispatches through one
-:class:`~goldilocks_core.runtime.service.Service` held for the process
-lifetime, and returns the result's JSON form. Tool input schemas are derived
-from the contract types so agents get constrained choices. Tools accept only
-the calculation itself — inline structure content, intent, and hints. Models,
-pseudopotentials, and output locations are resolved by the server process
-from its own environment. Behind the optional
-``[mcp]`` extra; importing :mod:`goldilocks_core` never imports the MCP SDK.
-"""
-
 from __future__ import annotations
 
-import asyncio
 from contextlib import asynccontextmanager
 from typing import Any, Literal
 
 from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled
+from goldilocks_core.bundle import write_bundle_directory
 from goldilocks_core.contracts import (
     PseudoAccuracy,
-    QueryRequest,
+    PseudoType,
+    RecordSelection,
+    RelativisticTreatment,
     SmearingType,
     VdwMethod,
 )
@@ -51,8 +40,6 @@ _OutputName = Literal[
 
 
 class _StrictMCPServer(MCPServer):
-    """MCP server that enforces each published root input schema."""
-
     async def list_tools(self) -> list[Any]:
         tools = await super().list_tools()
         for tool in tools:
@@ -76,18 +63,14 @@ class _StrictMCPServer(MCPServer):
 
 
 class _InlineStructure(BaseModel):
-    """Inline CIF or POSCAR content."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid")
 
     content: str
     format: Literal["cif", "poscar"] | None = None
 
 
 class _Intent(BaseModel):
-    """Calculation intent fields."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid")
 
     code: str = "quantum_espresso"
     task: str = "scf_single_point"
@@ -96,12 +79,10 @@ class _Intent(BaseModel):
 
 
 class _Hints(BaseModel):
-    """Operator hint fields."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid")
 
     k_spacing: float | None = None
-    k_grid: list[int] | None = None
+    k_grid: tuple[int, int, int] | None = None
     smearing_type: SmearingType | None = None
     smearing_width_ry: float | None = None
     spin_polarized: bool | None = None
@@ -116,12 +97,52 @@ class _Hints(BaseModel):
     vdw_method: VdwMethod | None = None
 
 
+class _PseudoCutoffs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ecutwfc_ry: float | None = None
+    ecutrho_ry: float | None = None
+
+
+class _PseudoMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filepath: str
+    filename: str
+    header_format: str
+    provider: str | None = None
+    accuracy: PseudoAccuracy | None = None
+    element: str | None = None
+    pseudo_type: PseudoType | None = None
+    functional: str | None = None
+    relativistic: RelativisticTreatment | None = None
+    z_valence: float | None = None
+    table_id: str | None = None
+    cutoffs: _PseudoCutoffs | None = None
+    source_identifier: str | None = None
+    frozen_4f_core: bool = False
+    pseudo_info: dict[str, Any] = Field(default_factory=dict)
+    warnings: tuple[str, ...] = ()
+
+
+class _KmeshModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    version: str
+    model_type: ModelType
+    target: str
+    feature_set: str
+    source: ModelSource
+    location: str
+    revision: str | None = None
+
+
 def _body(
     structure: str | _InlineStructure,
     intent: _Intent | None,
     hints: _Hints | None,
 ) -> dict[str, Any]:
-    """Build the shared parser's mapping from typed MCP arguments."""
     body: dict[str, Any] = {
         "structure": (
             structure.model_dump(exclude_none=True)
@@ -137,17 +158,29 @@ def _body(
 
 
 def _run(body: dict[str, Any], service: Service) -> dict[str, Any]:
-    """Parse, dispatch, and serialize one MCP call.
-
-    Stage ValueError subclasses that carry operator-facing diagnostics are
-    mapped to ToolError so the MCP client sees a structured tool failure, not
-    an unhandled exception. Internal defects remain unhandled.
-    """
-    request = from_dict(body)
+    raw = dict(body)
+    output_dir = raw.pop("output_dir", None)
+    if output_dir is not None and (
+        not isinstance(output_dir, str) or not output_dir.strip()
+    ):
+        raise ToolError("Field 'output_dir' must be a non-empty string.")
+    selection = raw.pop("selection")
+    request = from_dict({"draft": raw, "selection": selection})
     try:
-        if isinstance(request, QueryRequest):
-            return service.compute(request).to_dict()
-        return service.run_preset(request).to_dict()
+        result = service.compute(request)
+        if isinstance(request.selection, RecordSelection):
+            return result.records.to_dict()
+        records = result.records.to_dict()
+        records.setdefault("generated_files", [])
+        rendered = {
+            "intent": result.draft.intent.to_dict(),
+            **records,
+            "warnings": list(result.warnings),
+            "bundle": None,
+        }
+        if output_dir is not None:
+            rendered["bundle"] = write_bundle_directory(result, output_dir).to_dict()
+        return rendered
     except (
         PseudoTableMismatch,
         PseudoImportError,
@@ -160,7 +193,6 @@ def _run(body: dict[str, Any], service: Service) -> dict[str, Any]:
 def create_server(
     service: Service | None = None, *, name: str = "goldilocks-core"
 ) -> MCPServer:
-    """Create an MCP server, optionally using a caller-owned service."""
     owns_service = service is None
     state = service if service is not None else Service()
 
@@ -200,9 +232,17 @@ def create_server(
         intent: _Intent | None = None,
         hints: _Hints | None = None,
     ) -> dict[str, Any]:
-        body = _body(structure, intent, hints)
-        body["mode"] = "recommend"
-        return await asyncio.to_thread(_run, body, state)
+        body = _body(
+            structure,
+            intent,
+            hints,
+            pseudo_metadata,
+            pseudo_root,
+            pseudo_table,
+            kmesh_model,
+        )
+        body["selection"] = {"preset": "recommend"}
+        return _run(body, state)
 
     @server.tool(description="Run the generate preset and return Result JSON.")
     async def generate(
@@ -210,9 +250,19 @@ def create_server(
         intent: _Intent | None = None,
         hints: _Hints | None = None,
     ) -> dict[str, Any]:
-        body = _body(structure, intent, hints)
-        body["mode"] = "generate"
-        return await asyncio.to_thread(_run, body, state)
+        body = _body(
+            structure,
+            intent,
+            hints,
+            pseudo_metadata,
+            pseudo_root,
+            pseudo_table,
+            kmesh_model,
+        )
+        body["selection"] = {"preset": "generate"}
+        if output_dir is not None:
+            body["output_dir"] = output_dir
+        return _run(body, state)
 
     @server.tool(description="Compute selected Core record types.")
     async def compute(
@@ -221,13 +271,20 @@ def create_server(
         intent: _Intent | None = None,
         hints: _Hints | None = None,
     ) -> dict[str, Any]:
-        body = _body(structure, intent, hints)
-        body["outputs"] = outputs
-        return await asyncio.to_thread(_run, body, state)
+        body = _body(
+            structure,
+            intent,
+            hints,
+            pseudo_metadata,
+            pseudo_root,
+            pseudo_table,
+            kmesh_model,
+        )
+        body["selection"] = {"records": outputs}
+        return _run(body, state)
 
     return server
 
 
 def serve() -> None:
-    """Run the MCP server over stdio."""
     create_server().run("stdio")

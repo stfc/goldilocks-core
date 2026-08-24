@@ -6,11 +6,10 @@ from pymatgen.core import Element, Structure
 
 from goldilocks_core.assets import AssetStore
 from goldilocks_core.contracts import (
+    CalculationDraft,
     PathLike,
-    PresetRequest,
     PseudoMetadata,
     PseudopotentialRequirements,
-    QueryRequest,
 )
 from goldilocks_core.pseudo.installed import load_installed_table
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
@@ -25,19 +24,19 @@ class PseudoTableMismatch(ValueError):
     pass
 
 
-def source_for_request(
-    request: PresetRequest | QueryRequest,
+def source_for_draft(
+    draft: CalculationDraft,
     *,
     store: AssetStore,
     registry_path: PathLike | None = None,
 ) -> PseudoSource:
-    if request.pseudo_metadata is not None:
-        metadata = request.pseudo_metadata
+    if draft.pseudo_metadata is not None:
+        metadata = draft.pseudo_metadata
         return lambda structure, requirements: tuple(metadata)
-    if request.pseudo_root is not None:
-        root = request.pseudo_root
+    if draft.pseudo_root is not None:
+        root = draft.pseudo_root
         return lambda structure, requirements: tuple(load_pseudo_metadata(root))
-    table_id = request.pseudo_table
+    table_id = draft.pseudo_table
     return lambda structure, requirements: _resolve_installed(
         store, table_id, registry_path, structure, requirements
     )

@@ -1,27 +1,26 @@
-import json
 from dataclasses import replace
-from pathlib import Path
 
 import numpy as np
 import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
+    CalculationDraft,
     CalculationHints,
     CalculationIntent,
-    PresetRequest,
-    QueryRequest,
+    ComputeRequest,
+    PresetSelection,
+    RecordSelection,
     Runtime,
-    query_records,
-    run_core_job,
+    UnknownTask,
+    compute,
 )
 from goldilocks_core.advice.kdistance import QrfBackend
 from goldilocks_core.contracts import (
+    GeneratedFiles,
     ParameterAdvice,
     PseudoCutoffs,
     PseudoMetadata,
-    Records,
-    Result,
     StructureAnalysisRecord,
     StructureFeatureVector,
 )
@@ -29,11 +28,7 @@ from goldilocks_core.ml.model_registry import load_default_qrf_config
 
 
 def make_structure() -> Structure:
-    return Structure(
-        lattice=Lattice.cubic(4.0),
-        species=["Si"],
-        coords=[[0.0, 0.0, 0.0]],
-    )
+    return Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
 
 
 def make_metadata() -> PseudoMetadata:
@@ -47,98 +42,62 @@ def make_metadata() -> PseudoMetadata:
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        cutoffs=PseudoCutoffs(
-            ecutwfc_ry=35,
-            ecutrho_ry=140,
-        ),
+        cutoffs=PseudoCutoffs(ecutwfc_ry=35, ecutrho_ry=140),
         source_identifier="synthetic/Si.UPF",
     )
 
 
-def test_run_core_job_recommend_matches_public_recommendation_shape() -> None:
-    result = run_core_job(
-        PresetRequest(
-            structure=make_structure(),
-            hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
-            pseudo_metadata=(make_metadata(),),
-        )
+def make_request(selection=None, **changes) -> ComputeRequest:
+    draft_values = {
+        "structure": make_structure(),
+        "hints": CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+        "pseudo_metadata": (make_metadata(),),
+    }
+    draft_values.update(changes)
+    return ComputeRequest(
+        draft=CalculationDraft(**draft_values),
+        selection=selection or PresetSelection("recommend"),
     )
 
-    assert isinstance(result, Result)
-    assert result.k_points.grid == (2, 2, 1)
-    assert result.selection.pseudopotentials[0].filename == "Si.UPF"
-    assert result.generated_files == ()
-    assert result.bundle is None
+
+def test_compute_recommendation_returns_selected_records() -> None:
+    result = compute(make_request())
+
+    assert result.records[StructureAnalysisRecord].reduced_formula == "Si"
+    assert result.records[ParameterAdvice].pseudopotential_requirements.functional == (
+        "PBEsol"
+    )
+    assert GeneratedFiles not in result.records
 
 
-def test_query_records_returns_only_requested_records() -> None:
-    request = QueryRequest(
-        structure=make_structure(),
-        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
-        outputs=(StructureAnalysisRecord, ParameterAdvice),
+def test_compute_returns_only_explicitly_selected_records() -> None:
+    request = make_request(
+        RecordSelection((StructureAnalysisRecord, ParameterAdvice)),
     )
 
-    records = query_records(request)
+    result = compute(request)
 
-    assert request.to_dict()["outputs"] == [
-        "analysis",
-        "advice",
-    ]
-    assert isinstance(records, Records)
-    assert tuple(records) == (StructureAnalysisRecord, ParameterAdvice)
-    assert isinstance(records[StructureAnalysisRecord], StructureAnalysisRecord)
-    assert isinstance(records[ParameterAdvice], ParameterAdvice)
+    assert request.to_dict()["selection"] == {
+        "records": ["analysis", "advice"],
+    }
+    assert tuple(result.records) == (StructureAnalysisRecord, ParameterAdvice)
 
 
-def test_query_records_reuses_caller_owned_runtime() -> None:
-    request = QueryRequest(
-        structure=make_structure(),
-        outputs=(StructureAnalysisRecord, ParameterAdvice),
+def test_compute_reuses_caller_owned_runtime() -> None:
+    request = make_request(
+        RecordSelection((StructureAnalysisRecord, ParameterAdvice)),
     )
 
     with Runtime() as runtime:
-        first = query_records(request, runtime=runtime)
-        second = query_records(request, runtime=runtime)
+        first = compute(request, runtime=runtime)
+        second = compute(request, runtime=runtime)
         assert runtime.is_closed is False
 
-    assert isinstance(first, Records)
     assert first.to_dict() == second.to_dict()
     assert runtime.is_closed is True
 
 
-def test_run_core_job_aggregates_kmesh_warnings() -> None:
-    result = run_core_job(
-        PresetRequest(
-            structure=make_structure(),
-            hints=CalculationHints(
-                k_grid=(2, 2, 1),
-                k_spacing=0.2,
-                pseudo_type="NC",
-            ),
-            pseudo_metadata=(make_metadata(),),
-        )
-    )
-
-    warning = "Both k_grid and k_spacing were provided; explicit grid wins."
-    assert warning in result.warnings
-
-
-def test_run_core_job_aggregates_advice_warnings() -> None:
-    result = run_core_job(
-        PresetRequest(
-            structure=make_structure(),
-            hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
-            pseudo_metadata=(make_metadata(),),
-        )
-    )
-
-    warning = "Verify smearing manually for likely metallic systems."
-    assert warning in result.warnings
-    assert result.warnings.count(warning) == 1
-
-
-def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> None:
-
+def test_compute_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> None:
     class FakeQRF:
         q = [0.05, 0.5, 0.95]
 
@@ -183,93 +142,26 @@ def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> 
             metallicity_atom_init=str(atom_table),
         ),
     ) as runtime:
-        result = run_core_job(
-            PresetRequest(
-                structure=make_structure(),
-                hints=CalculationHints(pseudo_type="NC"),
-                pseudo_metadata=(make_metadata(),),
-            ),
+        result = compute(
+            make_request(hints=CalculationHints(pseudo_type="NC")),
             runtime=runtime,
         )
 
-    assert result.k_points.provenance.source == "model"
-    assert result.k_points.provenance.confidence == 0.9
+    assert result.records[StructureAnalysisRecord].electronic_character == "insulator"
 
 
-def test_run_core_job_rejects_unknown_task() -> None:
+def test_compute_rejects_unknown_task() -> None:
+    request = make_request(intent=CalculationIntent(task="magnetic_nscf"))
+
     with pytest.raises(
-        ValueError, match="No Core task registered for task='magnetic_nscf'"
+        UnknownTask,
+        match="No Core task registered for task='magnetic_nscf'",
     ):
-        run_core_job(
-            PresetRequest(
-                structure=make_structure(),
-                intent=CalculationIntent(task="magnetic_nscf"),
-                hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
-                pseudo_metadata=(make_metadata(),),
-            )
-        )
+        compute(request)
 
 
-def test_run_core_job_reuses_caller_owned_runtime() -> None:
-    request = PresetRequest(
-        structure=make_structure(),
-        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
-        pseudo_metadata=(make_metadata(),),
-    )
+def test_compute_generation_preset_produces_generated_inputs() -> None:
+    result = compute(make_request(PresetSelection("generate")))
 
-    with Runtime() as runtime:
-        first = run_core_job(request, runtime=runtime)
-        second = run_core_job(request, runtime=runtime)
-        assert runtime.is_closed is False
-
-    assert first.k_points == second.k_points
-    assert runtime.is_closed is True
-
-
-def test_run_core_job_generate_adds_generated_files() -> None:
-    result = run_core_job(
-        PresetRequest(
-            structure=make_structure(),
-            hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
-            pseudo_metadata=(make_metadata(),),
-            mode="generate",
-        )
-    )
-
-    assert result.generated_files[0].path == "inputs/qe.in"
-    assert "2  2  1  0  0  0" in result.generated_files[0].content
-
-
-def test_run_core_job_generate_with_caller_owned_runtime() -> None:
-    request = PresetRequest(
-        structure=make_structure(),
-        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
-        pseudo_metadata=(make_metadata(),),
-        mode="generate",
-    )
-
-    with Runtime() as runtime:
-        result = run_core_job(request, runtime=runtime)
-        assert runtime.is_closed is False
-
-    assert result.generated_files[0].path == "inputs/qe.in"
-
-
-def test_run_core_job_generate_with_output_dir_writes_bundle(tmp_path: Path) -> None:
-    output_dir = tmp_path / "bundle"
-    result = run_core_job(
-        PresetRequest(
-            structure=make_structure(),
-            hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
-            pseudo_metadata=(make_metadata(),),
-            mode="generate",
-            output_dir=str(output_dir),
-        )
-    )
-
-    assert result.bundle is not None
-    assert result.bundle.path == str(output_dir)
-    assert (output_dir / "inputs" / "qe.in").exists()
-    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["k_points"]["grid"] == [2, 2, 1]
-    assert result.bundle.manifest == manifest
+    assert result.records[GeneratedFiles][0].path == "inputs/qe.in"
+    assert "2  2  1  0  0  0" in result.records[GeneratedFiles][0].content

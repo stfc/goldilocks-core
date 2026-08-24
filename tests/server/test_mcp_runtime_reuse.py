@@ -13,11 +13,11 @@ create_server = pytest.importorskip("goldilocks_core.server.mcp").create_server
 class _CountingService(Service):
     def __init__(self) -> None:
         super().__init__()
-        self.preset_calls = 0
+        self.computation_calls = 0
 
-    def run_preset(self, request):
-        self.preset_calls += 1
-        return super().run_preset(request)
+    def compute(self, request):
+        self.computation_calls += 1
+        return super().compute(request)
 
 
 def test_mcp_reuses_one_service_across_tool_calls(request_body) -> None:
@@ -32,7 +32,7 @@ def test_mcp_reuses_one_service_across_tool_calls(request_body) -> None:
 
     try:
         asyncio.run(call_twice())
-        assert service.preset_calls == 2
+        assert service.computation_calls == 2
         assert not service.is_closed
     finally:
         service.close()

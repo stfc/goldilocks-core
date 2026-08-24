@@ -83,6 +83,8 @@ only_mutate = [
     "src/goldilocks_core/generation/registry.py",
     "src/goldilocks_core/generation/qe/scf.py",
     "src/goldilocks_core/kmesh/math.py",
+    "src/goldilocks_core/runtime/dispatch.py",
+    "src/goldilocks_core/runtime/graph.py",
     "src/goldilocks_core/selection.py",
 ]
 mutate_only_covered_lines = false

@@ -9,18 +9,15 @@ from goldilocks_core.advice import ml_kmesh_advisor
 from goldilocks_core.advice.parameters import advise_parameters
 from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.contracts import (
-    OUTPUT_RECORD_TYPES,
     CalculationHints,
     CalculationIntent,
+    ComputeRequest,
     ElectronicCharacter,
     GeneratedFiles,
     KMeshAdvisor,
     KPointSelection,
     ParameterAdvice,
-    PresetRequest,
-    QueryRequest,
     Records,
-    Result,
     SelectionRecord,
     StructureAnalysisRecord,
     StructureInput,
@@ -28,7 +25,7 @@ from goldilocks_core.contracts import (
 from goldilocks_core.generation.registry import generate_inputs
 from goldilocks_core.io.structures import load_structure
 from goldilocks_core.kmesh.resolve import resolve_kpoints
-from goldilocks_core.pseudo.source import PseudoSource, source_for_request
+from goldilocks_core.pseudo.source import PseudoSource, source_for_draft
 from goldilocks_core.runtime.graph import Preset, Stage, TaskGraph
 from goldilocks_core.runtime.models import Runtime
 from goldilocks_core.runtime.task import GraphHandler
@@ -51,7 +48,13 @@ SCF_TASK = TaskGraph(
     task="scf_single_point",
     name="Single-point SCF",
     description=("Recommend and generate inputs for a single-point SCF calculation."),
-    selectable_outputs=OUTPUT_RECORD_TYPES,
+    selectable_outputs=(
+        StructureAnalysisRecord,
+        ParameterAdvice,
+        KPointSelection,
+        SelectionRecord,
+        GeneratedFiles,
+    ),
     stages=(
         Stage(
             output=Structure,
@@ -142,50 +145,42 @@ SCF_TASK = TaskGraph(
 
 
 def build_scf_context(
-    request: PresetRequest | QueryRequest,
+    request: ComputeRequest,
     runtime: Runtime,
 ) -> ScfContext:
+    draft = request.draft
     backend: KMeshAdvisor = runtime.kmesh_service
-    if request.kmesh_model is not None:
-        backend = ml_kmesh_advisor(request.kmesh_model)
+    if draft.kmesh_model is not None:
+        backend = ml_kmesh_advisor(draft.kmesh_model)
     return ScfContext(
-        structure_input=request.structure,
+        structure_input=draft.structure,
         kmesh_advisor=backend,
-        pseudo_source=source_for_request(
-            request,
+        pseudo_source=source_for_draft(
+            draft,
             store=runtime.asset_store,
             registry_path=runtime.pseudo_registry_path,
         ),
         metallicity_classifier=runtime.metallicity,
-        intent=request.intent,
-        hints=request.hints,
+        intent=draft.intent,
+        hints=draft.hints,
     )
 
 
-def assemble_core_result(
-    request: PresetRequest,
-    records: Records,
-) -> Result:
-    analysis = records[StructureAnalysisRecord]
-    advice = records[ParameterAdvice]
-    k_points = records[KPointSelection]
-    selection = records[SelectionRecord]
-    warnings = _unique_warnings(
-        analysis.disorder_warnings,
-        analysis.analysis_warnings,
-        _advice_warnings(advice),
-        k_points.provenance.warnings,
-        selection.warnings,
-    )
-    return Result(
-        intent=request.intent,
-        analysis=analysis,
-        advice=advice,
-        k_points=k_points,
-        selection=selection,
-        generated_files=records.get(GeneratedFiles, ()),
-        warnings=warnings,
-    )
+def collect_scf_warnings(records: Records) -> tuple[str, ...]:
+    groups: list[tuple[str, ...]] = []
+    analysis = records.get(StructureAnalysisRecord)
+    if analysis is not None:
+        groups.extend((analysis.disorder_warnings, analysis.analysis_warnings))
+    advice = records.get(ParameterAdvice)
+    if advice is not None:
+        groups.append(_advice_warnings(advice))
+    k_points = records.get(KPointSelection)
+    if k_points is not None:
+        groups.append(k_points.provenance.warnings)
+    selection = records.get(SelectionRecord)
+    if selection is not None:
+        groups.append(selection.warnings)
+    return _unique_warnings(*groups)
 
 
 def _advice_warnings(advice: ParameterAdvice) -> tuple[str, ...]:
@@ -206,5 +201,5 @@ def _unique_warnings(*groups: tuple[str, ...]) -> tuple[str, ...]:
 SCF_HANDLER = GraphHandler(
     spec=SCF_TASK,
     build_context=build_scf_context,
-    assemble_result=assemble_core_result,
+    collect_warnings=collect_scf_warnings,
 )

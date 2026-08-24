@@ -19,102 +19,204 @@ loadable artifacts.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import fields
-from typing import Any
-
-from pymatgen.core import Structure
+from dataclasses import dataclass, fields
+from typing import Any, Literal
 
 from goldilocks_core.contracts import (
     CalculationDraft,
     CalculationHints,
     CalculationIntent,
     ComputeRequest,
+    DirectoryOutput,
     InlineStructureSource,
-    InMemoryStructureSource,
-    ModelSource,
-    ModelSpec,
-    ModelType,
+    OutputTarget,
     PathStructureSource,
     PresetSelection,
-    PseudoMetadata,
     RecordSelection,
     StructureSource,
     resolve_output_types,
 )
 
-__all__ = ["RequestError", "from_dict"]
+__all__ = [
+    "RequestError",
+    "TransportOutput",
+    "compute_from_dict",
+    "http_output_from_dict",
+    "inspection_source_from_dict",
+    "local_output_from_dict",
+]
 
-_ALLOWED_TOP_LEVEL = frozenset({"draft", "selection"})
-_ALLOWED_DRAFT = frozenset(
-    {
-        "structure",
-        "intent",
-        "hints",
-        "pseudo_metadata",
-        "pseudo_root",
-        "pseudo_table",
-        "kmesh_model",
-    }
-)
 _INTENT_FIELDS = frozenset(field.name for field in fields(CalculationIntent))
 _HINT_FIELDS = frozenset(field.name for field in fields(CalculationHints))
-_PSEUDO_FIELDS = frozenset(field.name for field in fields(PseudoMetadata))
-_MODEL_FIELDS = frozenset(field.name for field in fields(ModelSpec))
-_MODEL_REQUIRED = _MODEL_FIELDS - {
-    "revision",
-    "licence",
-    "licence_text",
-    "citation",
-}
-_STRING_HINTS = {
-    "smearing_type",
-    "pseudo_accuracy",
-    "pseudo_type",
-    "relativistic_mode",
-    "vdw_method",
-}
-_FLOAT_HINTS = {
-    "k_spacing",
-    "smearing_width_ry",
-    "conv_thr",
-    "mixing_beta",
-}
-_BOOL_HINTS = {"spin_polarized", "spin_orbit_coupling", "use_vdw"}
+_DRAFT_FIELDS = frozenset({"structure", "intent", "hints", "pseudo_table"})
+_LOCAL_DRAFT_FIELDS = _DRAFT_FIELDS | {"pseudo_root"}
 
 
 class RequestError(ValueError):
     """A malformed transport request."""
 
 
-def from_dict(data: Mapping[str, Any]) -> ComputeRequest:
-    if not isinstance(data, Mapping):
-        raise RequestError("Request body must be a JSON object.")
-    _reject_unknown(data, _ALLOWED_TOP_LEVEL, "request")
-    if "draft" not in data or data["draft"] is None:
+@dataclass(frozen=True, slots=True)
+class TransportOutput:
+    kind: Literal["memory", "archive", "directory", "automatic"]
+    target: OutputTarget | None
+
+
+def inspection_source_from_dict(
+    data: Mapping[str, Any], *, allow_path: bool = False
+) -> StructureSource:
+    body = _mapping(data, "Request body")
+    _reject_unknown(body, frozenset({"source"}), "request")
+    if "source" not in body:
+        raise RequestError("Request body requires 'source'.")
+    return _structure_source(body["source"], allow_path=allow_path)
+
+
+def compute_from_dict(
+    data: Mapping[str, Any],
+    *,
+    allow_path: bool = False,
+    allow_local_assets: bool = False,
+) -> ComputeRequest:
+    body = _mapping(data, "Request body")
+    _reject_unknown(body, frozenset({"draft", "selection"}), "request")
+    if "draft" not in body:
         raise RequestError("Request body requires 'draft'.")
-    if "selection" not in data or data["selection"] is None:
+    if "selection" not in body:
         raise RequestError("Request body requires 'selection'.")
-    draft_data = data["draft"]
-    if not isinstance(draft_data, Mapping):
-        raise RequestError("Field 'draft' must be a JSON object.")
-    _reject_unknown(draft_data, _ALLOWED_DRAFT, "draft")
-    if "structure" not in draft_data or draft_data["structure"] is None:
+
+    draft_data = _mapping(body["draft"], "Field 'draft'")
+    allowed_draft = _LOCAL_DRAFT_FIELDS if allow_local_assets else _DRAFT_FIELDS
+    _reject_unknown(draft_data, allowed_draft, "draft")
+    if "structure" not in draft_data:
         raise RequestError("Field 'draft' requires 'structure'.")
 
-    pseudo_metadata, pseudo_root, pseudo_table = _parse_pseudo_source(draft_data)
-    draft = CalculationDraft(
-        structure=_parse_structure(draft_data["structure"]),
-        intent=_parse_intent(draft_data.get("intent")),
-        hints=_parse_hints(draft_data.get("hints")),
-        pseudo_metadata=pseudo_metadata,
-        pseudo_root=pseudo_root,
-        pseudo_table=pseudo_table,
-        kmesh_model=_parse_kmesh_model(draft_data.get("kmesh_model")),
+    try:
+        intent = _contract(CalculationIntent, draft_data.get("intent"), "intent")
+        hints = _contract(CalculationHints, draft_data.get("hints"), "hints")
+        draft = CalculationDraft(
+            structure=_structure_source(draft_data["structure"], allow_path=allow_path),
+            intent=intent,
+            hints=hints,
+            pseudo_root=draft_data.get("pseudo_root"),
+            pseudo_table=draft_data.get("pseudo_table"),
+        )
+        return ComputeRequest(draft=draft, selection=_selection(body["selection"]))
+    except TypeError as error:
+        raise RequestError(str(error)) from error
+
+
+def http_output_from_dict(data: Mapping[str, Any]) -> TransportOutput:
+    output = _mapping(data, "Field 'output'")
+    _reject_unknown(output, frozenset({"kind"}), "output")
+    kind = output.get("kind")
+    if kind not in {"memory", "archive"}:
+        raise RequestError("Field 'output.kind' must be memory or archive.")
+    return TransportOutput(kind, None)
+
+
+def local_output_from_dict(
+    data: Mapping[str, Any] | None, *, default_automatic: bool
+) -> TransportOutput:
+    if data is None:
+        return TransportOutput(
+            "automatic" if default_automatic else "memory",
+            DirectoryOutput() if default_automatic else None,
+        )
+    output = _mapping(data, "Field 'output'")
+    _reject_unknown(output, frozenset({"kind", "path"}), "output")
+    kind = output.get("kind")
+    if kind == "memory":
+        if "path" in output:
+            raise RequestError("Memory output does not accept 'path'.")
+        return TransportOutput("memory", None)
+    if kind in {"directory", "archive"}:
+        path = output.get("path")
+        if path is None:
+            raise RequestError(f"{kind.title()} output requires 'path'.")
+        if kind == "directory":
+            return TransportOutput("directory", DirectoryOutput(path))
+        from goldilocks_core.contracts import ArchiveOutput
+
+        return TransportOutput("archive", ArchiveOutput(path))
+    if kind == "automatic":
+        if "path" in output:
+            raise RequestError("Automatic output does not accept 'path'.")
+        return TransportOutput("automatic", DirectoryOutput())
+    raise RequestError(
+        "Field 'output.kind' must be memory, directory, archive, or automatic."
     )
-    return ComputeRequest(
-        draft=draft,
-        selection=_parse_selection(data["selection"]),
-    )
+
+
+def _contract(contract_type: type, value: Any, name: str):
+    if value is None:
+        return contract_type()
+    document = _mapping(value, f"Field '{name}'")
+    allowed = _INTENT_FIELDS if contract_type is CalculationIntent else _HINT_FIELDS
+    _reject_unknown(document, allowed, name)
+    return contract_type(**document)
+
+
+def _structure_source(value: Any, *, allow_path: bool) -> StructureSource:
+    if isinstance(value, str):
+        if not allow_path:
+            raise RequestError("HTTP Structure Sources must use inline content.")
+        return PathStructureSource(value)
+    source = _mapping(value, "Field 'source'")
+    _reject_unknown(source, frozenset({"kind", "name", "content", "format"}), "source")
+    kind = source.get("kind", "inline")
+    if kind != "inline":
+        if kind == "path" and allow_path:
+            _reject_unknown(source, frozenset({"kind", "path"}), "source")
+            if "path" not in source:
+                raise RequestError("Path Structure Source requires 'path'.")
+            return PathStructureSource(source["path"])
+        raise RequestError(f"Unsupported Structure Source kind: {kind!r}.")
+    missing = [name for name in ("name", "content") if name not in source]
+    if missing:
+        raise RequestError(
+            "Inline Structure Source requires "
+            + " and ".join(repr(name) for name in missing)
+            + "."
+        )
+    try:
+        return InlineStructureSource(
+            name=source["name"],
+            content=source["content"],
+            format=source.get("format"),
+        )
+    except TypeError as error:
+        raise RequestError(str(error)) from error
+
+
+def _selection(value: Any) -> PresetSelection | RecordSelection:
+    selection = _mapping(value, "Field 'selection'")
+    _reject_unknown(selection, frozenset({"preset", "records"}), "selection")
+    choices = [name for name in ("preset", "records") if name in selection]
+    if len(choices) != 1:
+        raise RequestError(
+            "Field 'selection' requires exactly one of 'preset' or 'records'."
+        )
+    if choices[0] == "preset":
+        return PresetSelection(selection["preset"])
+    record_ids = selection["records"]
+    if not _sequence(record_ids) or any(
+        not isinstance(record_id, str) for record_id in record_ids
+    ):
+        raise RequestError("Field 'selection.records' must be a list of record ids.")
+    return RecordSelection(resolve_output_types(tuple(record_ids)))
+
+
+def _mapping(value: Any, label: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise RequestError(f"{label} must be a JSON object.")
+    if any(not isinstance(key, str) for key in value):
+        raise RequestError(f"{label} keys must be strings.")
+    return value
+
+
+def _sequence(value: Any) -> bool:
+    return isinstance(value, Sequence) and not isinstance(value, (str, bytes))
 
 
 def _reject_unknown(
@@ -123,248 +225,3 @@ def _reject_unknown(
     unknown = sorted(set(data) - allowed)
     if unknown:
         raise RequestError(f"Unknown {section} fields: {', '.join(unknown)}")
-
-
-def _parse_structure(value: Any) -> StructureSource:
-    if isinstance(value, str):
-        try:
-            return PathStructureSource(value)
-        except ValueError as error:
-            raise RequestError(str(error)) from error
-    if not isinstance(value, Mapping):
-        raise RequestError(
-            "Field 'structure' must be an inline, path, or in-memory "
-            "Structure Source object."
-        )
-
-    kind = value.get("kind", "inline")
-    try:
-        if kind == "inline":
-            _reject_unknown(
-                value,
-                frozenset({"kind", "name", "content", "format"}),
-                "structure",
-            )
-            name = value.get("name")
-            content = value.get("content")
-            fmt = value.get("format")
-            if not isinstance(name, str):
-                raise RequestError("Inline 'structure' requires a 'name' string.")
-            if not isinstance(content, str):
-                raise RequestError("Inline 'structure' requires a 'content' string.")
-            if fmt is not None and not isinstance(fmt, str):
-                raise RequestError("Field 'structure.format' must be a string or null.")
-            return InlineStructureSource(name=name, content=content, format=fmt)
-        if kind == "path":
-            _reject_unknown(value, frozenset({"kind", "path"}), "structure")
-            path = value.get("path")
-            if not isinstance(path, str):
-                raise RequestError("Path 'structure' requires a 'path' string.")
-            return PathStructureSource(path)
-        if kind == "in_memory":
-            _reject_unknown(value, frozenset({"kind", "structure"}), "structure")
-            document = value.get("structure")
-            if not isinstance(document, Mapping):
-                raise RequestError(
-                    "In-memory 'structure' requires a pymatgen structure object."
-                )
-            return InMemoryStructureSource(Structure.from_dict(dict(document)))
-    except (KeyError, TypeError, ValueError) as error:
-        if isinstance(error, RequestError):
-            raise
-        raise RequestError(str(error)) from error
-    raise RequestError(f"Unknown Structure Source kind: {kind!r}.")
-
-
-def _parse_intent(value: Any) -> CalculationIntent:
-    if value is None:
-        return CalculationIntent()
-    if not isinstance(value, Mapping):
-        raise RequestError("Field 'intent' must be a JSON object or null.")
-    _reject_unknown(value, _INTENT_FIELDS, "intent")
-    for name, item in value.items():
-        if not isinstance(item, str):
-            raise RequestError(f"Field 'intent.{name}' must be a string.")
-    try:
-        return CalculationIntent(**value)
-    except (TypeError, ValueError) as error:
-        raise RequestError(str(error)) from error
-
-
-def _parse_hints(value: Any) -> CalculationHints:
-    if value is None:
-        return CalculationHints()
-    if not isinstance(value, Mapping):
-        raise RequestError("Field 'hints' must be a JSON object or null.")
-    _reject_unknown(value, _HINT_FIELDS, "hints")
-    parsed = {
-        name: _parse_hint(name, item)
-        for name, item in value.items()
-        if item is not None
-    }
-    try:
-        return CalculationHints(**parsed)
-    except (TypeError, ValueError) as error:
-        raise RequestError(str(error)) from error
-
-
-def _parse_hint(name: str, value: Any) -> Any:
-    if name == "k_grid":
-        if not _is_sequence(value) or len(value) != 3:
-            raise RequestError("Field 'hints.k_grid' must be a list of three integers.")
-        if any(not isinstance(item, int) or isinstance(item, bool) for item in value):
-            raise RequestError("Field 'hints.k_grid' must be a list of three integers.")
-        return tuple(value)
-    if name in _STRING_HINTS and not isinstance(value, str):
-        raise RequestError(f"Field 'hints.{name}' must be a string or null.")
-    if name in _FLOAT_HINTS and (
-        not isinstance(value, (int, float)) or isinstance(value, bool)
-    ):
-        raise RequestError(f"Field 'hints.{name}' must be a number or null.")
-    if name in _BOOL_HINTS and not isinstance(value, bool):
-        raise RequestError(f"Field 'hints.{name}' must be a boolean or null.")
-    if name == "electron_maxstep" and (
-        not isinstance(value, int) or isinstance(value, bool)
-    ):
-        raise RequestError("Field 'hints.electron_maxstep' must be an integer or null.")
-    return value
-
-
-def _parse_selection(value: Any) -> PresetSelection | RecordSelection:
-    if not isinstance(value, Mapping):
-        raise RequestError("Field 'selection' must be a JSON object.")
-    _reject_unknown(value, frozenset({"preset", "records"}), "selection")
-    choices = [name for name in ("preset", "records") if name in value]
-    if len(choices) != 1:
-        raise RequestError(
-            "Field 'selection' requires exactly one of 'preset' or 'records'."
-        )
-
-    if choices[0] == "preset":
-        preset = value["preset"]
-        if not isinstance(preset, str) or not preset.strip():
-            raise RequestError("Field 'selection.preset' must be a non-empty string.")
-        return PresetSelection(preset)
-
-    records = value["records"]
-    if not _is_sequence(records) or any(not isinstance(item, str) for item in records):
-        raise RequestError(
-            "Field 'selection.records' must be a list of record type names."
-        )
-    try:
-        return RecordSelection(resolve_output_types(list(records)))
-    except ValueError as error:
-        raise RequestError(str(error)) from error
-
-
-def _parse_pseudo_source(
-    data: Mapping[str, Any],
-) -> tuple[tuple[PseudoMetadata, ...] | None, str | None, str | None]:
-    metadata: tuple[PseudoMetadata, ...] | None = None
-    if "pseudo_metadata" in data and data["pseudo_metadata"] is not None:
-        value = data["pseudo_metadata"]
-        if not _is_sequence(value):
-            raise RequestError("Field 'pseudo_metadata' must be a list or null.")
-        metadata = tuple(_parse_pseudo(item) for item in value)
-
-    root = data.get("pseudo_root")
-    if root is not None and (not isinstance(root, str) or not root.strip()):
-        raise RequestError(
-            "Field 'pseudo_root' must be a non-empty path string or null."
-        )
-    table = data.get("pseudo_table")
-    if table is not None and (not isinstance(table, str) or not table.strip()):
-        raise RequestError("Field 'pseudo_table' must be a non-empty string or null.")
-    if (
-        sum(
-            (
-                metadata is not None,
-                root is not None,
-                table is not None,
-            )
-        )
-        > 1
-    ):
-        raise RequestError(
-            "Request accepts only one of 'pseudo_metadata', 'pseudo_root', "
-            "or 'pseudo_table'."
-        )
-    return metadata, root, table
-
-
-def _parse_pseudo(value: Any) -> PseudoMetadata:
-    if not isinstance(value, Mapping):
-        raise RequestError("Each 'pseudo_metadata' entry must be a JSON object.")
-    _reject_unknown(value, _PSEUDO_FIELDS, "pseudo_metadata")
-    string_fields = _PSEUDO_FIELDS - {
-        "z_valence",
-        "content_size_bytes",
-        "cutoffs",
-        "frozen_4f_core",
-        "pseudo_info",
-        "warnings",
-    }
-    for name in string_fields:
-        item = value.get(name)
-        if item is not None and not isinstance(item, str):
-            raise RequestError(
-                f"Field 'pseudo_metadata.{name}' must be a string or null."
-            )
-    z_valence = value.get("z_valence")
-    if z_valence is not None and (
-        not isinstance(z_valence, (int, float)) or isinstance(z_valence, bool)
-    ):
-        raise RequestError(
-            "Field 'pseudo_metadata.z_valence' must be a number or null."
-        )
-    pseudo_info = value.get("pseudo_info", {})
-    if not isinstance(pseudo_info, Mapping):
-        raise RequestError("Field 'pseudo_metadata.pseudo_info' must be an object.")
-    cutoffs = value.get("cutoffs")
-    if cutoffs is not None and not isinstance(cutoffs, Mapping):
-        raise RequestError("Field 'pseudo_metadata.cutoffs' must be an object or null.")
-    frozen_4f_core = value.get("frozen_4f_core", False)
-    if not isinstance(frozen_4f_core, bool):
-        raise RequestError("Field 'pseudo_metadata.frozen_4f_core' must be a boolean.")
-    warnings = value.get("warnings", ())
-    if not _is_sequence(warnings) or any(
-        not isinstance(warning, str) for warning in warnings
-    ):
-        raise RequestError(
-            "Field 'pseudo_metadata.warnings' must be a list of strings."
-        )
-    normalized = dict(value)
-    normalized["pseudo_info"] = dict(pseudo_info)
-    normalized["warnings"] = tuple(warnings)
-    try:
-        return PseudoMetadata(**normalized)
-    except (TypeError, ValueError) as error:
-        raise RequestError(str(error)) from error
-
-
-def _parse_kmesh_model(value: Any) -> ModelSpec | None:
-    if value is None:
-        return None
-    if not isinstance(value, Mapping):
-        raise RequestError("Field 'kmesh_model' must be a JSON object or null.")
-    _reject_unknown(value, _MODEL_FIELDS, "kmesh_model")
-    missing = sorted(_MODEL_REQUIRED - set(value))
-    if missing:
-        raise RequestError(
-            f"Field 'kmesh_model' is missing required keys: {', '.join(missing)}"
-        )
-    for name, item in value.items():
-        if item is not None and not isinstance(item, str):
-            raise RequestError(f"Field 'kmesh_model.{name}' must be a string.")
-    if value["model_type"] not in get_args(ModelType):
-        raise RequestError(f"Unsupported model type: {value['model_type']!r}")
-    if value["source"] not in get_args(ModelSource):
-        raise RequestError(f"Unsupported model source: {value['source']!r}")
-    try:
-        return ModelSpec(**value)
-    except (TypeError, ValueError) as error:
-        raise RequestError(str(error)) from error
-
-
-def _is_sequence(value: Any) -> bool:
-    return isinstance(value, Sequence) and not isinstance(value, (str, bytes))

@@ -14,7 +14,7 @@ uv run goldilocks assets install default
 Run the silicon example:
 
 ```bash
-uv run goldilocks recommend "$(uv run goldilocks examples path)/Si.cif"
+uv run goldilocks compute "$(uv run goldilocks examples path)/Si.cif" --preset recommend --no-out
 ```
 
 From Python:

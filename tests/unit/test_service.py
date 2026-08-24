@@ -85,34 +85,25 @@ def test_compute_after_close_raises() -> None:
         service.compute(make_request())
 
 
-def test_discovery_after_close_raises() -> None:
+def test_capabilities_after_close_raises() -> None:
     service = Service()
     service.close()
     with pytest.raises(RuntimeError, match="Service is closed."):
-        service.describe_tasks()
+        service.capabilities()
 
 
-def test_describe_tasks_returns_the_scf_task() -> None:
-    service = Service()
-    try:
-        tasks = service.describe_tasks()
-        assert len(tasks) == 1
-        assert tasks[0].id == "scf_single_point"
-        assert tasks[0].name == "Single-point SCF"
-    finally:
-        service.close()
+def test_capabilities_unifies_task_code_and_model_discovery() -> None:
+    with Service() as service:
+        capabilities = service.capabilities()
 
-
-def test_describe_codes_and_models() -> None:
-    service = Service()
-    try:
-        assert "quantum_espresso" in service.describe_codes()
-        models = service.describe_models()
-        assert len(models) == 2
-        targets = {model["target"] for model in models}
-        assert targets == {"k_distance", "metallicity"}
-    finally:
-        service.close()
+    assert len(capabilities.tasks) == 1
+    assert capabilities.tasks[0].id == "scf_single_point"
+    assert capabilities.tasks[0].name == "Single-point SCF"
+    assert "quantum_espresso" in capabilities.target_codes
+    assert {model.target for model in capabilities.models} == {
+        "k_distance",
+        "metallicity",
+    }
 
 
 def test_memory_output_is_an_explicit_stable_compute_option() -> None:

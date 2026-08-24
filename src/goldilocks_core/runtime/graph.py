@@ -45,6 +45,15 @@ class TaskGraph:
     record_ids: tuple[tuple[type, str], ...] = ()
 
     def __post_init__(self) -> None:
+        produced: set[type] = set()
+        for stage in self.stages:
+            if stage.output in produced:
+                raise ValueError(
+                    "TaskGraph must define exactly one producer for each Record type; "
+                    f"multiple stages produce {stage.output.__name__}"
+                )
+            produced.add(stage.output)
+
         ids = tuple(record_id for _, record_id in self.record_ids)
         if any(
             not isinstance(record_id, str) or not record_id.strip() for record_id in ids

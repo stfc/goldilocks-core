@@ -299,6 +299,37 @@ def test_custom_model_registry_rejects_path_like_source_labels(
             Service(runtime).capabilities()
 
 
+def test_duplicate_record_producers_are_rejected_at_task_declaration() -> None:
+    @dataclass(frozen=True, slots=True)
+    class DuplicateRecord:
+        value: str
+
+    with pytest.raises(
+        ValueError,
+        match="exactly one producer.*DuplicateRecord",
+    ):
+        TaskGraph(
+            task="duplicate_producers",
+            stages=(
+                Stage(
+                    output=DuplicateRecord,
+                    inputs=(),
+                    call=lambda *, ctx: DuplicateRecord("first"),
+                    id="first",
+                ),
+                Stage(
+                    output=DuplicateRecord,
+                    inputs=(),
+                    call=lambda *, ctx: DuplicateRecord("second"),
+                    id="second",
+                ),
+            ),
+            presets=(Preset("review", (DuplicateRecord,)),),
+            selectable_outputs=(DuplicateRecord,),
+            record_ids=((DuplicateRecord, "duplicate"),),
+        )
+
+
 def test_registered_future_task_appears_without_a_new_service_method() -> None:
     @dataclass(frozen=True, slots=True)
     class FutureRecord:

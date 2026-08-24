@@ -25,6 +25,7 @@ from goldilocks_core.contracts import (
     CalculationIntent,
     GeneratedFiles,
     KPointSelection,
+    ModelSpec,
     ParameterAdvice,
     Provenance,
     PseudoCutoffs,
@@ -62,6 +63,18 @@ def isolated_record_registry():
 
 def make_structure() -> Structure:
     return Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
+
+
+def make_metallicity_model() -> ModelSpec:
+    return ModelSpec(
+        name="operator-metallicity",
+        version="1",
+        model_type="cgcnn",
+        target="metallicity",
+        feature_set="test-features",
+        source="local",
+        location="metal.ckpt",
+    )
 
 
 def make_metadata() -> PseudoMetadata:
@@ -259,6 +272,27 @@ def test_analyze_uses_heuristic_without_configured_metallicity_model(
     assert analysis.electronic_character_confidence is None
 
 
+@pytest.mark.parametrize(
+    "configuration",
+    (
+        {
+            "metallicity_checkpoint": "metal.ckpt",
+            "metallicity_atom_init": "atom-init.json",
+        },
+        {"metallicity_model": make_metallicity_model()},
+    ),
+)
+def test_runtime_rejects_incomplete_metallicity_configuration(configuration) -> None:
+    with pytest.raises(
+        ValueError,
+        match=(
+            "metallicity_checkpoint, metallicity_atom_init, and metallicity_model "
+            "must be configured together"
+        ),
+    ):
+        Runtime(**configuration)
+
+
 def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
     from goldilocks_core.ml.qrf import metallicity
 
@@ -275,6 +309,7 @@ def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
     with Runtime(
         metallicity_checkpoint="metal.ckpt",
         metallicity_atom_init="atom-init.json",
+        metallicity_model=make_metallicity_model(),
     ) as runtime:
         dispatcher = Dispatcher(runtime)
         result = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
@@ -540,6 +575,7 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
         kmesh_service=backend,
         metallicity_checkpoint="metal.ckpt",
         metallicity_atom_init="atom-init.json",
+        metallicity_model=make_metallicity_model(),
     )
     dispatcher = Dispatcher(runtime)
 

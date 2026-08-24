@@ -93,16 +93,22 @@ class Runtime:
         asset_store: AssetStore | None = None,
         pseudo_registry_path: PathLike | None = None,
     ) -> None:
+        metallicity_configuration = (
+            metallicity_checkpoint,
+            metallicity_atom_init,
+            metallicity_model,
+        )
+        configured = tuple(item is not None for item in metallicity_configuration)
+        if any(configured) and not all(configured):
+            raise ValueError(
+                "metallicity_checkpoint, metallicity_atom_init, and "
+                "metallicity_model must be configured together"
+            )
         self._registry_path = registry_path
         self._metallicity_checkpoint = metallicity_checkpoint
         self._metallicity_atom_init = metallicity_atom_init
         self._metallicity_model_spec = metallicity_model
-        if (metallicity_checkpoint is None) != (metallicity_atom_init is None):
-            raise ValueError(
-                "metallicity_checkpoint and metallicity_atom_init must be configured "
-                "together"
-            )
-        self._uses_default_metallicity_model = metallicity_checkpoint is None
+        self._uses_default_metallicity_model = not any(configured)
         self._asset_store = asset_store or AssetStore()
         self._pseudo_registry_path = pseudo_registry_path
         self._uses_default_kmesh_model = kmesh_service is None

@@ -65,9 +65,11 @@ keys as stable IDs: `analysis`, `advice`, `k_points`, `selection`,
 
 `output=None` keeps the canonical Result in memory. `DirectoryOutput(path)` and
 `ArchiveOutput(path)` atomically publish complete DFT Input Data and refuse an
-existing destination. `DirectoryOutput()` allocates `goldilocks_out`, then
-`goldilocks_out_1`, and so on. Automatic output leaves a Result without DFT
-Input Data in memory rather than failing.
+existing destination. Directory publication uses descriptor-anchored writes on
+Linux and macOS and verified private staging on Windows; Unix platforms without
+a native exclusive rename fail before installation. `DirectoryOutput()`
+allocates `goldilocks_out`, then `goldilocks_out_1`, and so on. Automatic output
+leaves a Result without DFT Input Data in memory rather than failing.
 
 Directory and ZIP publication use the same extracted layout:
 

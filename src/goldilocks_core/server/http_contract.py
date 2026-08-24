@@ -16,10 +16,10 @@ from goldilocks_core.server.request import (
     inspection_source_from_dict,
 )
 from goldilocks_core.server.wire import (
-    ComputationResultDocument,
     ComputeRequestDocument,
     ErrorResponseDocument,
     InspectRequestDocument,
+    computation_result_document,
 )
 
 _ERROR_RESPONSES = {
@@ -36,6 +36,8 @@ def install_scientific_routes(
     service: Service,
     capacity: ComputationCapacity,
 ) -> None:
+    result_document = computation_result_document(service.capabilities().tasks)
+
     @app.get("/capabilities", response_model=Capabilities)
     def capabilities() -> dict[str, Any]:
         return service.capabilities().to_dict()
@@ -56,7 +58,7 @@ def install_scientific_routes(
 
     @app.post(
         "/compute",
-        response_model=ComputationResultDocument,
+        response_model=result_document,
         response_model_exclude_unset=True,
         responses={200: _ARCHIVE_RESPONSE, **_ERROR_RESPONSES},
     )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import io
 import json
@@ -631,6 +632,176 @@ def test_publisher_atomically_writes_explicit_destinations_without_overwrite(
         )
     assert not failed_destination.exists()
     assert not list(tmp_path.glob(".failed.*"))
+
+
+def test_directory_publication_uses_windows_private_path_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "windows-ready"
+    calls: list[tuple[Path, Path]] = []
+
+    def move_no_replace(source: Path, target: Path) -> None:
+        calls.append((source, target))
+        if target.exists(follow_symlinks=False):
+            raise FileExistsError(target)
+        source.rename(target)
+
+    monkeypatch.setattr(publication_module, "_publication_platform", lambda: "windows")
+    monkeypatch.setattr(
+        publication_module,
+        "_windows_rename_no_replace",
+        move_no_replace,
+    )
+
+    publication = Publisher().publish(input_data, DirectoryOutput(destination))
+
+    assert publication.path == str(destination)
+    assert len(calls) == 1
+    assert calls[0][1] == destination
+    assert (destination / "goldilocks.json").is_file()
+    assert not list(tmp_path.glob(".windows-ready.*"))
+
+
+@pytest.mark.parametrize(
+    ("platform", "implementation"),
+    (("linux", "_linux_rename_no_replace"), ("darwin", "_darwin_rename_no_replace")),
+)
+def test_native_no_replace_dispatches_to_supported_unix_implementation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    platform: str,
+    implementation: str,
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    calls: list[tuple[Path, Path]] = []
+    monkeypatch.setattr(publication_module, "_publication_platform", lambda: platform)
+    monkeypatch.setattr(
+        publication_module,
+        implementation,
+        lambda actual_source, actual_destination: calls.append(
+            (actual_source, actual_destination)
+        ),
+    )
+
+    publication_module._native_rename_no_replace(source, destination)
+
+    assert calls == [(source, destination)]
+
+
+def test_windows_native_install_uses_move_without_replace_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    calls: list[tuple[str, str, int]] = []
+
+    class NativeMove:
+        def __call__(self, source: str, destination: str, flags: int) -> int:
+            calls.append((source, destination, flags))
+            return 1
+
+    class Kernel32:
+        MoveFileExW = NativeMove()
+
+    monkeypatch.setattr(
+        publication_module.ctypes,
+        "WinDLL",
+        lambda name, use_last_error: Kernel32(),
+        raising=False,
+    )
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+
+    publication_module._windows_rename_no_replace(source, destination)
+
+    assert calls == [(str(source), str(destination), 0)]
+
+
+def test_windows_native_install_reports_existing_destination(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    class NativeMove:
+        def __call__(self, source: str, destination: str, flags: int) -> int:
+            del source, destination, flags
+            return 0
+
+    class Kernel32:
+        MoveFileExW = NativeMove()
+
+    monkeypatch.setattr(
+        publication_module.ctypes,
+        "WinDLL",
+        lambda name, use_last_error: Kernel32(),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        publication_module.ctypes,
+        "get_last_error",
+        lambda: 183,
+        raising=False,
+    )
+
+    with pytest.raises(FileExistsError):
+        publication_module._windows_rename_no_replace(
+            tmp_path / "source", tmp_path / "destination"
+        )
+
+
+def test_macos_native_install_requests_exclusive_rename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    calls: list[tuple[bytes, bytes, int]] = []
+
+    class NativeRename:
+        def __call__(self, source: bytes, destination: bytes, flags: int) -> int:
+            calls.append((source, destination, flags))
+            return 0
+
+    class LibC:
+        renamex_np = NativeRename()
+
+    monkeypatch.setattr(
+        publication_module.ctypes,
+        "CDLL",
+        lambda library, use_errno: LibC(),
+    )
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+
+    publication_module._darwin_rename_no_replace(source, destination)
+
+    assert calls == [(bytes(source), bytes(destination), 0x00000004)]
+
+
+def test_directory_publication_rejects_unsupported_unix_before_staging(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    input_data, _, _ = _explicit_input_data(tmp_path)
+    destination = tmp_path / "unsupported"
+    monkeypatch.setattr(
+        publication_module,
+        "_publication_platform",
+        lambda: "unsupported_unix",
+    )
+
+    with pytest.raises(OSError) as raised:
+        Publisher().publish(input_data, DirectoryOutput(destination))
+
+    assert raised.value.errno == errno.ENOTSUP
+    assert not destination.exists(follow_symlinks=False)
+    assert not list(tmp_path.glob(".unsupported.*"))
 
 
 def test_automatic_directory_allocation_uses_occupancy_and_is_concurrency_safe(
@@ -1586,32 +1757,6 @@ def test_unidentified_runtime_kmesh_model_is_not_attributed_to_defaults(
             with pytest.raises(
                 ValueError,
                 match="Custom KMeshService produced a model result without identity",
-            ):
-                service.compute(request)
-
-
-def test_unidentified_standalone_metallicity_fails_publication(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from goldilocks_core.runtime.models import MetallicityModel
-
-    def classify(self, structure):
-        del self, structure
-        return "insulator", "model", 0.91
-
-    monkeypatch.setattr(MetallicityModel, "__call__", classify)
-    request = _explicit_request(tmp_path, "unidentified-metallicity-Si.UPF")
-    with Runtime(
-        metallicity_checkpoint="model.ckpt",
-        metallicity_atom_init="atom-init.json",
-    ) as runtime:
-        with Service(runtime) as service:
-            with pytest.raises(
-                ValueError,
-                match=(
-                    "Configured metallicity checkpoint produced a model result without "
-                    "identity"
-                ),
             ):
                 service.compute(request)
 

@@ -1627,14 +1627,6 @@
         "properties": {
           "records": {
             "items": {
-              "enum": [
-                "analysis",
-                "advice",
-                "k_points",
-                "selection",
-                "generated_files",
-                "dft_input_data"
-              ],
               "type": "string"
             },
             "title": "Records",

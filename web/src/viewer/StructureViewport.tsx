@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { StructureInspection } from "../api/coreClient";
+import { StructureFallback } from "./StructureFallback";
+import "./StructureViewport.css";
 import {
   attachStructureViewer,
   type StructureViewer,
@@ -48,26 +50,22 @@ export function StructureViewport({
   return (
     <section className="viewport" aria-label="Crystal structure viewer">
       <div className="viewport__canvas" ref={host} />
-      <div ref={fallback} className="viewport__fallback" role="status" hidden>
-        <span>3D preview unavailable</span>
-        <small>The parsed structure and recommendation remain available.</small>
-        <button
-          type="button"
-          onClick={() => {
-            setViewerRevision((revision) => revision + 1);
-          }}
-        >
-          Retry 3D preview
-        </button>
-      </div>
+      <StructureFallback
+        structure={inspection.structure}
+        containerRef={fallback}
+        hidden
+        onRetry={() => {
+          setViewerRevision((revision) => revision + 1);
+        }}
+      />
       <div className="viewport__eyebrow">
         <span className="status-light" aria-hidden="true" />
         Canonical structure
       </div>
-      <h1 className="viewport__title">
+      <h2 className="viewport__title">
         <strong>{inspection.structure.reduced_formula}</strong>
         <span>{inspection.structure.site_count} atomic sites</span>
-      </h1>
+      </h2>
       <dl className="viewport__metrics">
         <div>
           <dt>a</dt>

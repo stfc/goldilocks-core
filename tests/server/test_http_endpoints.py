@@ -86,7 +86,7 @@ def test_recommend_treats_null_outputs_as_omitted(test_service, request_body) ->
     assert response.json()["analysis"]["reduced_formula"] == "Si"
 
 
-def test_generate_publishes_bundle_and_returns_core_result_json(
+def test_generate_uses_core_publication_and_returns_result_json(
     test_service, request_body, tmp_path
 ) -> None:
     """Return generated files; output locations are server-managed."""
@@ -96,20 +96,10 @@ def test_generate_publishes_bundle_and_returns_core_result_json(
     assert response.status_code == 200
     data = response.json()
     assert data["generated_files"][0]["path"] == "inputs/qe.in"
-    assert data["bundle"] is None
-
-
-def test_path_form_structure_maps_to_422(test_service, tmp_path) -> None:
-    """Reject a file-path structure; transports require inline content."""
-    with TestClient(create_app(test_service)) as client:
-        response = client.post(
-            "/compute",
-            json={"structure": str(tmp_path / "Si.cif"), "outputs": ["analysis"]},
-        )
-
-    assert response.status_code == 422
-    assert response.json()["error"]["kind"] == "invalid_request"
-    assert "do not accept file paths" in response.json()["error"]["message"]
+    assert data["bundle"]["path"] == str(output_dir)
+    assert (output_dir / "inputs" / "qe.in").is_file()
+    assert (output_dir / "goldilocks.json").is_file()
+    assert not (output_dir / "manifest.json").exists()
 
 
 def test_compute_returns_only_requested_records(test_service, request_body) -> None:
@@ -154,8 +144,8 @@ def test_asset_corrupt_maps_to_424(test_service, request_body, monkeypatch) -> N
     """Expose a corrupt installed asset as a deployment integrity error."""
     from goldilocks_core.assets import AssetCorrupt
 
-    def raise_corrupt(service, request):
-        del service, request
+    def raise_corrupt(service, request, *, output=None):
+        del service, request, output
         raise AssetCorrupt("installed pseudopotential manifest is invalid")
 
     monkeypatch.setattr(type(test_service), "compute", raise_corrupt)

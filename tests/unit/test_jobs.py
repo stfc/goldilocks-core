@@ -45,6 +45,11 @@ def make_metadata() -> PseudoMetadata:
         relativistic="scalar",
         cutoffs=PseudoCutoffs(ecutwfc_ry=35, ecutrho_ry=140),
         source_identifier="synthetic/Si.UPF",
+        pseudo_info={
+            "licence": "CC-BY-4.0",
+            "licence_text": "Synthetic fixture licence\n",
+            "citation": "Synthetic fixture pseudopotential.",
+        },
     )
 
 
@@ -161,8 +166,16 @@ def test_compute_rejects_unknown_task() -> None:
         compute(request)
 
 
-def test_compute_generation_preset_produces_generated_inputs() -> None:
-    result = compute(make_request(PresetSelection("generate")))
+def test_compute_generation_preset_produces_generated_inputs(tmp_path) -> None:
+    pseudo_path = tmp_path / "Si.UPF"
+    pseudo_path.write_bytes(b"<UPF version='2.0.1'>Si fixture</UPF>\n")
+    metadata = replace(make_metadata(), filepath=str(pseudo_path))
+    result = compute(
+        make_request(
+            PresetSelection("generate"),
+            pseudo_metadata=(metadata,),
+        )
+    )
 
     assert result.records[GeneratedFiles][0].path == "inputs/qe.in"
     assert "2  2  1  0  0  0" in result.records[GeneratedFiles][0].content

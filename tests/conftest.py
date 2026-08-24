@@ -36,8 +36,14 @@ def pseudo_metadata_factory() -> Callable[..., PseudoMetadata]:
         relativistic: str = "scalar",
         accuracy: str | None = "efficiency",
         root: Path = Path("/pseudo"),
+        materialize: bool = False,
     ) -> PseudoMetadata:
         filename = f"{element}.UPF"
+        if materialize:
+            root.mkdir(parents=True, exist_ok=True)
+            (root / filename).write_bytes(
+                f"<UPF version='2.0.1'>{element} fixture</UPF>\n".encode()
+            )
         return PseudoMetadata(
             filepath=str(root / filename),
             filename=filename,
@@ -53,6 +59,11 @@ def pseudo_metadata_factory() -> Callable[..., PseudoMetadata]:
                 ecutrho_ry=ecutrho_ry,
             ),
             source_identifier=f"synthetic/{filename}",
+            pseudo_info={
+                "licence": "CC-BY-4.0",
+                "licence_text": "Synthetic test pseudopotential licence\n",
+                "citation": "Synthetic test pseudopotentials.",
+            },
         )
 
     return make_metadata

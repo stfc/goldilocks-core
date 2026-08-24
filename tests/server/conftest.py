@@ -5,10 +5,8 @@ from collections.abc import Iterator
 import pytest
 from pymatgen.core import Structure
 
-from goldilocks_core.assets import AssetStore
-from goldilocks_core.contracts import PseudoCutoffs, PseudoMetadata
 from goldilocks_core.examples import structure
-from goldilocks_core.runtime import Runtime, Service
+from goldilocks_core.runtime import Service
 
 
 @pytest.fixture
@@ -44,28 +42,54 @@ def installed_pseudos(
 
 @pytest.fixture
 def sample_structure_path() -> str:
-    """Return the bundled silicon structure path."""
     return str(structure("Si.cif"))
 
 
 @pytest.fixture
 def sample_structure_text(sample_structure_path: str) -> str:
-    """Return the bundled silicon structure as inline CIF text."""
     return Structure.from_file(sample_structure_path).to(fmt="cif")
 
 
 @pytest.fixture
-def request_body(sample_structure_text: str) -> dict[str, object]:
-    """Return a transport request body carrying only the calculation."""
+def pseudo_metadata(tmp_path) -> dict[str, object]:
+    pseudo_path = tmp_path / "Si.UPF"
+    pseudo_path.write_bytes(b"<UPF version='2.0.1'>server fixture</UPF>\n")
     return {
-        "structure": sample_structure_text,
+        "filepath": str(pseudo_path),
+        "filename": "Si.UPF",
+        "header_format": "attr",
+        "provider": "sssp",
+        "accuracy": "efficiency",
+        "element": "Si",
+        "pseudo_type": "NC",
+        "functional": "PBEsol",
+        "relativistic": "scalar",
+        "z_valence": 4.0,
+        "cutoffs": {
+            "ecutwfc_ry": 30.0,
+            "ecutrho_ry": 120.0,
+        },
+        "source_identifier": "synthetic/Si.UPF",
+        "pseudo_info": {
+            "licence": "CC-BY-4.0",
+            "licence_text": "Synthetic server fixture licence\n",
+            "citation": "Synthetic server fixture pseudopotential.",
+        },
+    }
+
+
+@pytest.fixture
+def request_body(
+    sample_structure_path: str, pseudo_metadata: dict[str, object]
+) -> dict[str, object]:
+    return {
+        "structure": sample_structure_path,
         "hints": {"k_grid": [3, 3, 3]},
     }
 
 
 @pytest.fixture
-def test_service(tmp_path) -> Iterator[Service]:
-    """Yield a hermetic service over an empty explicit asset store."""
-    service = Service(runtime=Runtime(asset_store=AssetStore(tmp_path / "assets")))
+def test_service() -> Iterator[Service]:
+    service = Service()
     yield service
     service.close()

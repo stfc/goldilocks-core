@@ -4,8 +4,10 @@ from contextlib import asynccontextmanager
 from typing import Any, Literal
 
 from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled
-from goldilocks_core.bundle import write_bundle_directory
 from goldilocks_core.contracts import (
+    DirectoryOutput,
+    ModelSource,
+    ModelType,
     PseudoAccuracy,
     PseudoType,
     RecordSelection,
@@ -168,7 +170,8 @@ def _run(body: dict[str, Any], service: Service) -> dict[str, Any]:
     selection = raw.pop("selection")
     request = from_dict({"draft": raw, "selection": selection})
     try:
-        result = service.compute(request)
+        target = DirectoryOutput(output_dir) if output_dir is not None else None
+        result = service.compute(request, output=target)
         if isinstance(request.selection, RecordSelection):
             return result.records.to_dict()
         records = result.records.to_dict()
@@ -179,8 +182,8 @@ def _run(body: dict[str, Any], service: Service) -> dict[str, Any]:
             "warnings": list(result.warnings),
             "bundle": None,
         }
-        if output_dir is not None:
-            rendered["bundle"] = write_bundle_directory(result, output_dir).to_dict()
+        if result.publication is not None:
+            rendered["bundle"] = result.publication.to_dict()
         return rendered
     except (
         PseudoTableMismatch,

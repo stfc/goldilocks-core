@@ -13,9 +13,9 @@ class _CountingService(Service):
         super().__init__()
         self.computation_calls = 0
 
-    def compute(self, request):
+    def compute(self, request, *, output=None):
         self.computation_calls += 1
-        return super().compute(request)
+        return super().compute(request, output=output)
 
 
 def test_http_reuses_one_service_across_requests(request_body) -> None:

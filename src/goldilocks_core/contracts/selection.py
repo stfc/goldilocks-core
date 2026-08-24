@@ -109,7 +109,9 @@ class PseudoMetadata:
             raise ValueError("PseudoMetadata.warnings must contain non-empty strings")
 
     def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
+        document = to_jsonable(self)
+        document.pop("filepath")
+        return document
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,7 +167,9 @@ class PseudopotentialSelection:
             )
 
     def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
+        document = to_jsonable(self)
+        document.pop("filepath")
+        return document
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,4 +178,7 @@ class SelectionRecord:
     warnings: tuple[str, ...] = ()
 
     def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
+        return {
+            "pseudopotentials": [item.to_dict() for item in self.pseudopotentials],
+            "warnings": list(self.warnings),
+        }

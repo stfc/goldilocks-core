@@ -4,6 +4,7 @@ from pymatgen.core import Structure
 
 from goldilocks_core.contracts.advice import ParameterAdvice
 from goldilocks_core.contracts.analysis import StructureAnalysisRecord
+from goldilocks_core.contracts.input_data import DftInputData
 from goldilocks_core.contracts.kpoints import KPointSelection
 from goldilocks_core.contracts.result import GeneratedFiles
 from goldilocks_core.contracts.selection import SelectionRecord
@@ -15,6 +16,7 @@ RECORD_TYPE_IDS: dict[type, str] = {
     KPointSelection: "k_points",
     SelectionRecord: "selection",
     GeneratedFiles: "generated_files",
+    DftInputData: "dft_input_data",
 }
 
 

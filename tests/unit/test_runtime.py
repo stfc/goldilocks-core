@@ -3,7 +3,7 @@ from __future__ import annotations
 import gc
 import hashlib
 import weakref
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import SimpleNamespace
 
 import pytest
@@ -80,6 +80,11 @@ def make_metadata() -> PseudoMetadata:
             ecutrho_ry=140,
         ),
         source_identifier="synthetic/Si.UPF",
+        pseudo_info={
+            "licence": "CC-BY-4.0",
+            "licence_text": "Synthetic fixture licence\n",
+            "citation": "Synthetic fixture pseudopotential.",
+        },
     )
 
 
@@ -282,9 +287,19 @@ def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
     assert calls[0][1:3] == (model, "atom-init.json")
 
 
-def test_generation_preset_returns_generated_files() -> None:
+def test_generation_preset_returns_generated_files(tmp_path) -> None:
+    pseudo_path = tmp_path / "Si.UPF"
+    pseudo_path.write_bytes(b"<UPF version='2.0.1'>Si fixture</UPF>\n")
+    request = make_request(preset="generate")
+    request = replace(
+        request,
+        draft=replace(
+            request.draft,
+            pseudo_metadata=(replace(make_metadata(), filepath=str(pseudo_path)),),
+        ),
+    )
     with Runtime() as runtime:
-        result = Dispatcher(runtime).compute(make_request(preset="generate"))
+        result = Dispatcher(runtime).compute(request)
 
     assert result.records[GeneratedFiles]
     assert result.records[GeneratedFiles][0].path == "inputs/qe.in"

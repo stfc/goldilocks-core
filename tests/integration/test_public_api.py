@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
@@ -24,9 +26,12 @@ def _make_si_structure() -> Structure:
     return Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
 
 
-def _make_si_metadata() -> PseudoMetadata:
+def _make_si_metadata(root: Path = Path("/pseudo")) -> PseudoMetadata:
+    path = root / "Si.UPF"
+    if root != Path("/pseudo"):
+        path.write_bytes(b"<UPF version='2.0.1'>Si fixture</UPF>\n")
     return PseudoMetadata(
-        filepath="/pseudo/Si.UPF",
+        filepath=str(path),
         filename="Si.UPF",
         header_format="attr",
         provider="sssp",
@@ -37,15 +42,20 @@ def _make_si_metadata() -> PseudoMetadata:
         relativistic="scalar",
         cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
         source_identifier="synthetic/Si.UPF",
+        pseudo_info={
+            "licence": "CC-BY-4.0",
+            "licence_text": "Synthetic fixture licence\n",
+            "citation": "Synthetic fixture pseudopotential.",
+        },
     )
 
 
-def _request(selection) -> ComputeRequest:
+def _request(selection, pseudo_root: Path = Path("/pseudo")) -> ComputeRequest:
     return ComputeRequest(
         draft=CalculationDraft(
             structure=InMemoryStructureSource(_make_si_structure()),
             hints=CalculationHints(k_grid=(3, 3, 3), pseudo_type="NC"),
-            pseudo_metadata=(_make_si_metadata(),),
+            pseudo_metadata=(_make_si_metadata(pseudo_root),),
         ),
         selection=selection,
     )
@@ -60,8 +70,10 @@ def test_recommendation_preset_runs_staged_core_pipeline() -> None:
     assert GeneratedFiles not in result.records
 
 
-def test_generation_preset_runs_pipeline_through_generated_files() -> None:
-    result = compute(_request(PresetSelection("generate")))
+def test_generation_preset_runs_pipeline_through_generated_files(
+    tmp_path: Path,
+) -> None:
+    result = compute(_request(PresetSelection("generate"), tmp_path))
 
     assert result.records[GeneratedFiles][0].path == "inputs/qe.in"
     assert "3  3  3  0  0  0" in result.records[GeneratedFiles][0].content

@@ -12,16 +12,20 @@ from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
     ComputeRequest,
+    DftInputData,
     ElectronicCharacter,
     GeneratedFiles,
     KMeshAdvisor,
     KPointSelection,
     ParameterAdvice,
+    PseudoMetadata,
+    PseudopotentialRequirements,
     Records,
     SelectionRecord,
     StructureAnalysisRecord,
 )
 from goldilocks_core.generation.registry import generate_inputs
+from goldilocks_core.input_data import assemble_dft_input_data
 from goldilocks_core.io.structures import NormalizedStructure
 from goldilocks_core.kmesh.resolve import resolve_kpoints
 from goldilocks_core.pseudo.source import PseudoSource, source_for_draft
@@ -39,8 +43,21 @@ class ScfContext:
         [Structure], tuple[ElectronicCharacter, str, float | None]
     ]
     pseudo_source: PseudoSource
+    runtime: Runtime
     intent: CalculationIntent = field(default_factory=CalculationIntent)
     hints: CalculationHints = field(default_factory=CalculationHints)
+    pseudo_cache: list[tuple[PseudoMetadata, ...]] = field(
+        default_factory=list, repr=False, compare=False
+    )
+
+    def resolve_pseudos(
+        self,
+        structure: Structure,
+        requirements: PseudopotentialRequirements,
+    ) -> tuple[PseudoMetadata, ...]:
+        if not self.pseudo_cache:
+            self.pseudo_cache.append(self.pseudo_source(structure, requirements))
+        return self.pseudo_cache[0]
 
 
 SCF_TASK = TaskGraph(
@@ -53,6 +70,7 @@ SCF_TASK = TaskGraph(
         KPointSelection,
         SelectionRecord,
         GeneratedFiles,
+        DftInputData,
     ),
     stages=(
         Stage(
@@ -99,7 +117,7 @@ SCF_TASK = TaskGraph(
             call=lambda structure, advice, *, ctx: select_pseudopotentials(
                 structure,
                 advice.pseudopotential_requirements,
-                ctx.pseudo_source(structure, advice.pseudopotential_requirements),
+                ctx.resolve_pseudos(structure, advice.pseudopotential_requirements),
             ),
             id="select_pseudopotentials",
             name="Select pseudopotentials",
@@ -117,6 +135,41 @@ SCF_TASK = TaskGraph(
             id="generate_inputs",
             name="Generate inputs",
             description="Produce target-code input files.",
+        ),
+        Stage(
+            output=DftInputData,
+            inputs=(
+                StructureAnalysisRecord,
+                ParameterAdvice,
+                KPointSelection,
+                SelectionRecord,
+                GeneratedFiles,
+            ),
+            call=lambda analysis, advice, k_points, selection, generated, *, ctx: (
+                assemble_dft_input_data(
+                    ctx.normalized_structure,
+                    ctx.intent,
+                    ctx.hints,
+                    analysis,
+                    advice,
+                    k_points,
+                    selection,
+                    generated,
+                    tuple(ctx.pseudo_cache[0]),
+                    asset_store=ctx.runtime.asset_store,
+                    pseudo_registry_path=ctx.runtime.pseudo_registry_path,
+                    model_registry_path=ctx.runtime.model_registry_path,
+                    runtime_models=(
+                        tuple(ctx.runtime.describe_models())
+                        if k_points.provenance.source == "model"
+                        or analysis.electronic_character_source == "model"
+                        else ()
+                    ),
+                )
+            ),
+            id="assemble_dft_input_data",
+            name="Assemble DFT Input Data",
+            description="Assemble complete trusted calculation input data.",
         ),
     ),
     presets=(
@@ -137,6 +190,7 @@ SCF_TASK = TaskGraph(
                 KPointSelection,
                 SelectionRecord,
                 GeneratedFiles,
+                DftInputData,
             ),
         ),
     ),
@@ -155,6 +209,7 @@ def build_scf_context(
     return ScfContext(
         normalized_structure=normalized_structure,
         kmesh_advisor=backend,
+        runtime=runtime,
         pseudo_source=source_for_draft(
             draft,
             store=runtime.asset_store,

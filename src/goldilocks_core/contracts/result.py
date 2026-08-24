@@ -27,15 +27,6 @@ class GeneratedFile:
 type GeneratedFiles = tuple[GeneratedFile, ...]
 
 
-@dataclass(frozen=True, slots=True)
-class BundleRecord:
-    path: str
-    manifest: JsonDict
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
-
-
 class Records(Mapping[type, Any]):
     __slots__ = ("_records",)
 
@@ -54,18 +45,21 @@ class Records(Mapping[type, Any]):
     def to_dict(self) -> JsonDict:
         from goldilocks_core.contracts.registry import record_type_id
 
-        return to_jsonable(
-            {
-                record_type_id(record_type): record
-                for record_type, record in self._records.items()
-            }
-        )
+        return {
+            record_type_id(record_type): (
+                record.to_dict() if hasattr(record, "to_dict") else to_jsonable(record)
+            )
+            for record_type, record in self._records.items()
+        }
 
 
 @dataclass(frozen=True, slots=True)
 class Publication:
     kind: Literal["directory", "archive"]
-    path: str | None = None
+    path: str
+    files: tuple[str, ...]
+    manifest_sha256: str
+    output_sha256: str | None = None
 
     def to_dict(self) -> JsonDict:
         return to_jsonable(self)

@@ -25,7 +25,7 @@ from typing import Any
 
 from goldilocks_core.analysis import DimensionalityClassificationError
 from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled
-from goldilocks_core.bundle import write_bundle_directory
+from goldilocks_core.contracts import DirectoryOutput
 from goldilocks_core.generation import GenerationError
 from goldilocks_core.io.structures import StructureInputError
 from goldilocks_core.pseudo.source import PseudoTableMismatch
@@ -359,7 +359,10 @@ def _execute(endpoint: str, body: dict[str, Any], service: Service) -> dict[str,
         raw["selection"] = {"preset": endpoint}
 
     selection = raw.pop("selection")
-    result = service.compute(from_dict({"draft": raw, "selection": selection}))
+    target = DirectoryOutput(output_dir) if output_dir is not None else None
+    result = service.compute(
+        from_dict({"draft": raw, "selection": selection}), output=target
+    )
     if endpoint == "compute":
         return result.records.to_dict()
     records = result.records.to_dict()
@@ -370,8 +373,8 @@ def _execute(endpoint: str, body: dict[str, Any], service: Service) -> dict[str,
         "warnings": list(result.warnings),
         "bundle": None,
     }
-    if output_dir is not None:
-        rendered["bundle"] = write_bundle_directory(result, output_dir).to_dict()
+    if result.publication is not None:
+        rendered["bundle"] = result.publication.to_dict()
     return rendered
 
 

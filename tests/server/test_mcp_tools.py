@@ -158,35 +158,37 @@ def test_mcp_generate_returns_core_result_and_files(test_service, request_body) 
     """Return generated files; output locations are server-managed."""
     server = create_server(test_service)
 
-    data = _call(server, "generate", request_body)
+    with pytest.raises(ToolError, match="functional"):
+        asyncio.run(server.call_tool("recommend", body))
+
+
+def test_mcp_missing_asset_maps_to_tool_error(test_service, request_body) -> None:
+    server = create_server(test_service)
+    body = {
+        name: value for name, value in request_body.items() if name != "pseudo_metadata"
+    }
+
+    with pytest.raises(ToolError, match="is not installed"):
+        asyncio.run(server.call_tool("recommend", body))
+
+
+def test_mcp_generate_uses_core_publication(
+    test_service, request_body, tmp_path
+) -> None:
+    server = create_server(test_service)
+    output_dir = tmp_path / "bundle"
+
+    data = _call(
+        server,
+        "generate",
+        {**request_body, "output_dir": str(output_dir)},
+    )
 
     assert data["generated_files"][0]["path"] == "inputs/qe.in"
-    assert data["bundle"] is None
-
-
-def test_mcp_rejects_deployment_configuration_arguments(
-    test_service, request_body
-) -> None:
-    """Reject client-supplied model and filesystem configuration."""
-    server = create_server(test_service)
-
-    with pytest.raises(ToolError, match="Unknown recommend arguments: kmesh_model"):
-        _call(
-            server,
-            "recommend",
-            {
-                **request_body,
-                "kmesh_model": {
-                    "name": "m",
-                    "version": "1",
-                    "model_type": "random_forest",
-                    "target": "k_index",
-                    "feature_set": "cslr",
-                    "source": "local",
-                    "location": "/tmp/model.pkl",
-                },
-            },
-        )
+    assert data["bundle"]["path"] == str(output_dir)
+    assert (output_dir / "inputs" / "qe.in").is_file()
+    assert (output_dir / "goldilocks.json").is_file()
+    assert not (output_dir / "manifest.json").exists()
 
 
 def test_mcp_rejects_empty_output_directory(test_service, request_body) -> None:

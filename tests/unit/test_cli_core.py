@@ -1,6 +1,6 @@
 import json
 import sys
-from dataclasses import fields
+from dataclasses import fields, replace
 from types import SimpleNamespace
 
 import pytest
@@ -9,16 +9,17 @@ from goldilocks_core.advice import advise_parameters
 from goldilocks_core.assets import AssetNotInstalled, AssetReference
 from goldilocks_core.cli import core as cli_core
 from goldilocks_core.contracts import (
-    BundleRecord,
     CalculationHints,
     CalculationIntent,
     ComputationResult,
     ComputeRequest,
+    DirectoryOutput,
     KPointSelection,
     ParameterAdvice,
     PathStructureSource,
     PresetSelection,
     Provenance,
+    Publication,
     Records,
     RecordSelection,
     SelectionRecord,
@@ -218,7 +219,8 @@ def test_main_rejects_invalid_options_before_computation(monkeypatch, capsys) ->
 def test_main_compute_prints_only_selected_records(monkeypatch, capsys) -> None:
     captured: dict[str, ComputeRequest] = {}
 
-    def fake_compute(request: ComputeRequest, *, runtime=None):
+    def fake_compute(request: ComputeRequest, *, runtime=None, output=None):
+        del output
         captured["request"] = request
         return make_result(request, runtime=runtime)
 
@@ -239,7 +241,8 @@ def test_main_compute_prints_only_selected_records(monkeypatch, capsys) -> None:
 def test_main_preserves_preset_json_until_cli_migration(monkeypatch, capsys) -> None:
     captured: dict[str, ComputeRequest] = {}
 
-    def fake_compute(request: ComputeRequest, *, runtime=None):
+    def fake_compute(request: ComputeRequest, *, runtime=None, output=None):
+        del output
         captured["request"] = request
         return make_result(request, runtime=runtime)
 
@@ -263,13 +266,22 @@ def test_main_preserves_preset_json_until_cli_migration(monkeypatch, capsys) -> 
     assert output["request"]["mode"] == "recommend"
 
 
-def test_main_generate_publishes_requested_bundle(monkeypatch, capsys) -> None:
-    monkeypatch.setattr(cli_core, "compute", make_result)
-    monkeypatch.setattr(
-        cli_core,
-        "write_bundle_directory",
-        lambda result, path: BundleRecord(path=path, manifest={}),
-    )
+def test_main_generate_publishes_requested_directory(monkeypatch, capsys) -> None:
+    captured = {}
+
+    def fake_compute(request, *, runtime, output=None):
+        captured["output"] = output
+        return replace(
+            make_result(request, runtime=runtime),
+            publication=Publication(
+                kind="directory",
+                path="/absolute/run",
+                files=("goldilocks.json",),
+                manifest_sha256="a" * 64,
+            ),
+        )
+
+    monkeypatch.setattr(cli_core, "compute", fake_compute)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -278,7 +290,8 @@ def test_main_generate_publishes_requested_bundle(monkeypatch, capsys) -> None:
 
     cli_core.main()
 
-    assert "bundle: run" in capsys.readouterr().out
+    assert captured["output"] == DirectoryOutput("run")
+    assert "published: /absolute/run" in capsys.readouterr().out
 
 
 def test_main_fetches_only_the_missing_asset_then_retries(
@@ -288,8 +301,9 @@ def test_main_fetches_only_the_missing_asset_then_retries(
     installed: list[str] = []
     calls = 0
 
-    def fake_compute(request, *, runtime):
+    def fake_compute(request, *, runtime, output=None):
         nonlocal calls
+        del output
         calls += 1
         if calls == 1:
             raise AssetNotInstalled(

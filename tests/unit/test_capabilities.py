@@ -182,6 +182,7 @@ def test_service_capabilities_describes_the_complete_core_catalog() -> None:
         "advise",
         "select_pseudopotentials",
         "generate_inputs",
+        "assemble_dft_input_data",
     )
     assert {preset.id: preset.output_record_ids for preset in task.presets} == {
         "recommend": ("analysis", "advice", "k_points", "selection"),
@@ -191,6 +192,7 @@ def test_service_capabilities_describes_the_complete_core_catalog() -> None:
             "k_points",
             "selection",
             "generated_files",
+            "dft_input_data",
         ),
     }
     assert task.selectable_record_ids == (
@@ -199,6 +201,7 @@ def test_service_capabilities_describes_the_complete_core_catalog() -> None:
         "k_points",
         "selection",
         "generated_files",
+        "dft_input_data",
     )
 
     assert {

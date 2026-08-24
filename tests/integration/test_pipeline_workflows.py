@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from pathlib import Path
 
 from pymatgen.core import Structure
 
@@ -9,12 +10,12 @@ from goldilocks_core import (
     CalculationDraft,
     CalculationHints,
     ComputeRequest,
+    DirectoryOutput,
     InMemoryStructureSource,
     PathStructureSource,
     PresetSelection,
     compute,
 )
-from goldilocks_core.bundle import write_bundle_directory
 from goldilocks_core.contracts import (
     GeneratedFiles,
     KPointSelection,
@@ -27,10 +28,23 @@ from goldilocks_core.contracts import (
 def test_generate_crosses_every_in_memory_stage_with_real_backends(
     sodium_chloride_structure: Structure,
     pseudo_metadata_factory: Callable[..., PseudoMetadata],
+    tmp_path: Path,
 ) -> None:
     pseudos = (
-        pseudo_metadata_factory("Na", ecutwfc_ry=35.0, ecutrho_ry=140.0),
-        pseudo_metadata_factory("Cl", ecutwfc_ry=45.0, ecutrho_ry=180.0),
+        pseudo_metadata_factory(
+            "Na",
+            ecutwfc_ry=35.0,
+            ecutrho_ry=140.0,
+            root=tmp_path,
+            materialize=True,
+        ),
+        pseudo_metadata_factory(
+            "Cl",
+            ecutwfc_ry=45.0,
+            ecutrho_ry=180.0,
+            root=tmp_path,
+            materialize=True,
+        ),
     )
 
     result = compute(
@@ -60,17 +74,29 @@ def test_generate_crosses_every_in_memory_stage_with_real_backends(
     assert "4  4  4  0  0  0" in qe_input
 
 
-def test_structure_file_to_bundle_preserves_generated_files_and_provenance(
+def test_structure_file_to_publication_preserves_inputs_and_provenance(
     tmp_path,
     sodium_chloride_structure: Structure,
     pseudo_metadata_factory: Callable[..., PseudoMetadata],
 ) -> None:
     structure_path = tmp_path / "NaCl.cif"
     sodium_chloride_structure.to(filename=structure_path)
-    output_dir = tmp_path / "bundle"
+    output_dir = tmp_path / "published"
     pseudos = (
-        pseudo_metadata_factory("Na", ecutwfc_ry=35.0, ecutrho_ry=140.0),
-        pseudo_metadata_factory("Cl", ecutwfc_ry=45.0, ecutrho_ry=180.0),
+        pseudo_metadata_factory(
+            "Na",
+            ecutwfc_ry=35.0,
+            ecutrho_ry=140.0,
+            root=tmp_path,
+            materialize=True,
+        ),
+        pseudo_metadata_factory(
+            "Cl",
+            ecutwfc_ry=45.0,
+            ecutrho_ry=180.0,
+            root=tmp_path,
+            materialize=True,
+        ),
     )
     result = compute(
         ComputeRequest(
@@ -80,20 +106,21 @@ def test_structure_file_to_bundle_preserves_generated_files_and_provenance(
                 pseudo_metadata=pseudos,
             ),
             selection=PresetSelection("generate"),
-        )
+        ),
+        output=DirectoryOutput(output_dir),
     )
 
-    bundle = write_bundle_directory(result, output_dir)
     generated_path = output_dir / "inputs" / "qe.in"
-    manifest = json.loads((output_dir / "manifest.json").read_text())
+    manifest = json.loads((output_dir / "goldilocks.json").read_text())
 
     assert generated_path.read_bytes() == result.records[GeneratedFiles][
         0
     ].content.encode("utf-8")
-    assert manifest["generated_files"][0] == {
+    assert manifest["records"]["generated_files"][0] == {
         "path": "inputs/qe.in",
         "role": "input",
     }
-    assert manifest == bundle.manifest
-    assert manifest["k_points"]["grid"] == [3, 5, 7]
-    assert manifest["k_points"]["provenance"]["source"] == "user_hint"
+    assert manifest["records"]["k_points"]["grid"] == [3, 5, 7]
+    assert manifest["records"]["k_points"]["provenance"]["source"] == "user_hint"
+    assert result.publication is not None
+    assert result.publication.path == str(output_dir.resolve())

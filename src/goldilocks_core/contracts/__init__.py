@@ -31,6 +31,16 @@ from goldilocks_core.contracts.hints import (
     SpinHints,
     VdwHints,
 )
+from goldilocks_core.contracts.input_data import (
+    ArtifactSource,
+    DftInputData,
+    GeneratedContent,
+    InputArtifact,
+    InstalledArtifactReference,
+    PseudopotentialSetIdentity,
+    RuntimeAssetIdentity,
+    RuntimeIdentity,
+)
 from goldilocks_core.contracts.kpoints import KMeshEntry, KPointSelection
 from goldilocks_core.contracts.models import ModelSpec, StructureFeatureVector
 from goldilocks_core.contracts.outputs import (
@@ -40,6 +50,11 @@ from goldilocks_core.contracts.outputs import (
 )
 from goldilocks_core.contracts.protocols import KMeshAdvisor, KMeshService
 from goldilocks_core.contracts.provenance import Provenance
+from goldilocks_core.contracts.publication import (
+    ArchiveOutput,
+    DirectoryOutput,
+    OutputTarget,
+)
 from goldilocks_core.contracts.registry import RECORD_TYPE_IDS, record_type_id
 from goldilocks_core.contracts.requests import (
     CalculationDraft,
@@ -49,7 +64,6 @@ from goldilocks_core.contracts.requests import (
     RecordSelection,
 )
 from goldilocks_core.contracts.result import (
-    BundleRecord,
     ComputationResult,
     GeneratedFile,
     GeneratedFiles,
@@ -99,7 +113,8 @@ from goldilocks_core.contracts.types import (
 )
 
 __all__ = [
-    "BundleRecord",
+    "ArchiveOutput",
+    "ArtifactSource",
     "CalcTask",
     "CalculationDraft",
     "CalculationHints",
@@ -113,10 +128,15 @@ __all__ = [
     "ComputationSelection",
     "ComputeRequest",
     "Records",
+    "DftInputData",
+    "DirectoryOutput",
     "Dimensionality",
     "ElectronicCharacter",
+    "GeneratedContent",
     "GeneratedFile",
     "GeneratedFiles",
+    "InputArtifact",
+    "InstalledArtifactReference",
     "InMemoryStructureSource",
     "InlineStructureSource",
     "JsonDict",
@@ -134,6 +154,7 @@ __all__ = [
     "ModelSpec",
     "ModelType",
     "OUTPUT_RECORD_TYPES",
+    "OutputTarget",
     "OUTPUT_TYPES_BY_ID",
     "ParameterAdvice",
     "PathLike",
@@ -149,12 +170,15 @@ __all__ = [
     "PseudoMetadata",
     "PseudoType",
     "PseudopotentialRequirements",
+    "PseudopotentialSetIdentity",
     "PseudopotentialSetCapability",
     "PseudopotentialSelection",
     "RecordSelection",
     "RECORD_TYPE_IDS",
     "RecordId",
     "RelativisticTreatment",
+    "RuntimeAssetIdentity",
+    "RuntimeIdentity",
     "SelectionRecord",
     "SmearingAdvice",
     "SmearingHints",

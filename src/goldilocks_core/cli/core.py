@@ -9,14 +9,13 @@ from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled, AssetStore
 from goldilocks_core.assets.runtime import install as install_assets
 from goldilocks_core.assets.runtime import statuses as asset_statuses
 from goldilocks_core.assets.runtime import verify as verify_assets
-from goldilocks_core.bundle import write_bundle_directory
 from goldilocks_core.contracts import (
-    BundleRecord,
     CalculationDraft,
     CalculationHints,
     CalculationIntent,
     ComputationResult,
     ComputeRequest,
+    DirectoryOutput,
     GeneratedFiles,
     KPointSelection,
     ModelSpec,
@@ -127,10 +126,15 @@ def main() -> None:
     try:
         _validate_backend_options(args)
         request = _request_from_args(args)
+        target = (
+            DirectoryOutput(args.out)
+            if args.command == "generate" and args.out is not None
+            else None
+        )
         while True:
             try:
                 with Runtime(asset_store=store) as runtime:
-                    output = compute(request, runtime=runtime)
+                    output = compute(request, runtime=runtime, output=target)
                 break
             except AssetNotInstalled as error:
                 key = (error.reference.id, error.reference.version)
@@ -148,9 +152,7 @@ def main() -> None:
         return
 
     result = output
-    bundle = None
-    if args.command == "generate" and args.out is not None:
-        bundle = write_bundle_directory(result, args.out)
+    publication = result.publication
     if args.json:
         request_document = request.draft.to_dict()
         request_document["mode"] = args.command
@@ -162,12 +164,12 @@ def main() -> None:
             "intent": result.draft.intent.to_dict(),
             **records,
             "warnings": list(result.warnings),
-            "bundle": bundle.to_dict() if bundle is not None else None,
+            "bundle": publication.to_dict() if publication is not None else None,
         }
         print(json.dumps(rendered, indent=2, sort_keys=True))
         return
 
-    _print_human_summary(result, bundle)
+    _print_human_summary(result)
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
@@ -383,10 +385,7 @@ def _parse_optional_bool(value: str | None) -> bool | None:
     return value == "true"
 
 
-def _print_human_summary(
-    result: ComputationResult,
-    bundle: BundleRecord | None = None,
-) -> None:
+def _print_human_summary(result: ComputationResult) -> None:
     grid = result.records[KPointSelection].grid
     print(f"formula: {result.records[StructureAnalysisRecord].reduced_formula}")
     print(f"code: {result.draft.intent.code}")
@@ -397,8 +396,8 @@ def _print_human_summary(
         print("generated files:")
         for generated_file in generated_files:
             print(f"  {generated_file.path}")
-    if bundle is not None:
-        print(f"bundle: {bundle.path}")
+    if result.publication is not None:
+        print(f"published: {result.publication.path}")
     if result.warnings:
         print("warnings:")
         for warning in result.warnings:

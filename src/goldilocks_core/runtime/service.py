@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 import threading
+from dataclasses import replace
 
 from goldilocks_core.contracts import (
+    ArchiveOutput,
     CalculationTaskCapability,
     Capabilities,
     CodeName,
     ComputationResult,
     ComputeRequest,
+    DftInputData,
+    DirectoryOutput,
+    OutputTarget,
     StructureInspection,
     StructureSource,
 )
 from goldilocks_core.generation.registry import available_codes
 from goldilocks_core.io.structures import normalize_structure
+from goldilocks_core.publication import Publisher
 from goldilocks_core.runtime.capabilities import build_capabilities
 from goldilocks_core.runtime.dispatch import Dispatcher
 from goldilocks_core.runtime.models import Runtime
@@ -50,13 +56,26 @@ class Service:
         self,
         request: ComputeRequest,
         *,
-        output: None = None,
+        output: OutputTarget | None = None,
     ) -> ComputationResult:
-        if output is not None:
-            raise ValueError("P1 supports memory output only")
+        if output is not None and not isinstance(
+            output, DirectoryOutput | ArchiveOutput
+        ):
+            raise ValueError("output must be a DirectoryOutput, ArchiveOutput, or None")
         with self._lock:
             self._ensure_open()
-            return self._dispatcher.compute(request)
+            result = self._dispatcher.compute(request)
+            if output is None:
+                return result
+            input_data = result.records.get(DftInputData)
+            if input_data is None:
+                raise ValueError(
+                    "The Computation Result does not contain DFT Input Data to publish"
+                )
+            publication = Publisher(self._runtime.asset_store).publish(
+                input_data, output
+            )
+            return replace(result, publication=publication)
 
     def capabilities(self) -> Capabilities:
         with self._lock:

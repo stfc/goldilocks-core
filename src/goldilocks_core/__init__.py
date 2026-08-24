@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from goldilocks_core.contracts import (
+    ArchiveOutput,
     CalculationDraft,
     CalculationHints,
     CalculationIntent,
     ComputationResult,
     ComputeRequest,
+    DirectoryOutput,
     InlineStructureSource,
     InMemoryStructureSource,
     PathStructureSource,
@@ -26,11 +28,13 @@ from goldilocks_core.runtime import (
 )
 
 __all__ = [
+    "ArchiveOutput",
     "CalculationDraft",
     "CalculationHints",
     "CalculationIntent",
     "ComputationResult",
     "ComputeRequest",
+    "DirectoryOutput",
     "Dispatcher",
     "InMemoryStructureSource",
     "InlineStructureSource",

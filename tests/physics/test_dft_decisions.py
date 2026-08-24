@@ -26,6 +26,7 @@ from goldilocks_core.contracts import (
 
 def test_elemental_metal_uses_modest_cold_smearing_in_qe_rydberg_units(
     pseudo_metadata_factory: Callable[..., PseudoMetadata],
+    tmp_path: Path,
 ) -> None:
     aluminium = Structure(Lattice.cubic(4.05), ["Al"], [[0.0, 0.0, 0.0]])
     result = compute(
@@ -33,7 +34,9 @@ def test_elemental_metal_uses_modest_cold_smearing_in_qe_rydberg_units(
             draft=CalculationDraft(
                 structure=InMemoryStructureSource(aluminium),
                 hints=CalculationHints(k_grid=(8, 8, 8)),
-                pseudo_metadata=(pseudo_metadata_factory("Al"),),
+                pseudo_metadata=(
+                    pseudo_metadata_factory("Al", root=tmp_path, materialize=True),
+                ),
             ),
             selection=PresetSelection("generate"),
         )
@@ -75,6 +78,7 @@ def test_heavy_element_prompts_for_soc_without_silently_enabling_it() -> None:
 
 def test_explicit_soc_couples_fully_relativistic_pseudos_to_qe_noncollinear_flags(
     pseudo_metadata_factory: Callable[..., PseudoMetadata],
+    tmp_path: Path,
 ) -> None:
     iodine = Structure(Lattice.cubic(7.0), ["I"], [[0.0, 0.0, 0.0]])
     result = compute(
@@ -82,7 +86,14 @@ def test_explicit_soc_couples_fully_relativistic_pseudos_to_qe_noncollinear_flag
             draft=CalculationDraft(
                 structure=InMemoryStructureSource(iodine),
                 hints=CalculationHints(k_grid=(2, 2, 2), spin_orbit_coupling=True),
-                pseudo_metadata=(pseudo_metadata_factory("I", relativistic="full"),),
+                pseudo_metadata=(
+                    pseudo_metadata_factory(
+                        "I",
+                        relativistic="full",
+                        root=tmp_path,
+                        materialize=True,
+                    ),
+                ),
             ),
             selection=PresetSelection("generate"),
         )

@@ -100,7 +100,11 @@ class CalculationDraft:
             "structure": self.structure.to_dict(),
             "intent": to_jsonable(self.intent),
             "hints": to_jsonable(self.hints),
-            "pseudo_metadata": to_jsonable(self.pseudo_metadata),
+            "pseudo_metadata": (
+                [item.to_dict() for item in self.pseudo_metadata]
+                if self.pseudo_metadata is not None
+                else None
+            ),
             "pseudo_root": self.pseudo_root,
             "pseudo_table": self.pseudo_table,
             "kmesh_model": to_jsonable(self.kmesh_model),

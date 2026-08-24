@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from goldilocks_core.contracts import ComputationResult, ComputeRequest
+from goldilocks_core.contracts import ComputationResult, ComputeRequest, OutputTarget
 from goldilocks_core.runtime.models import Runtime
 from goldilocks_core.runtime.service import Service
 
@@ -9,7 +9,7 @@ def compute(
     request: ComputeRequest,
     *,
     runtime: Runtime | None = None,
-    output: None = None,
+    output: OutputTarget | None = None,
 ) -> ComputationResult:
     if runtime is None:
         with Service() as service:

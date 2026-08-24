@@ -572,6 +572,140 @@ def test_record_registration_is_atomic_when_an_id_conflicts() -> None:
     assert RECORD_TYPE_IDS == registered
 
 
+def test_task_registration_rejects_empty_stage_ids(monkeypatch) -> None:
+    monkeypatch.setattr(Runtime, "_build_backend", lambda self: TrackingBackend())
+    handler = GraphHandler(
+        spec=TaskGraph(
+            task="stub_task",
+            stages=(
+                Stage(
+                    StructureAnalysisRecord,
+                    (),
+                    lambda *, ctx: None,
+                    id=" ",
+                ),
+            ),
+            presets=(),
+        ),
+        build_context=lambda request, runtime: SimpleNamespace(),
+    )
+
+    with (
+        Runtime() as runtime,
+        pytest.raises(
+            ValueError,
+            match="stage ids must be non-empty strings",
+        ),
+    ):
+        Dispatcher(runtime).register(handler)
+
+
+def test_task_registration_rejects_duplicate_stage_ids(monkeypatch) -> None:
+    monkeypatch.setattr(Runtime, "_build_backend", lambda self: TrackingBackend())
+    handler = GraphHandler(
+        spec=TaskGraph(
+            task="stub_task",
+            stages=(
+                Stage(
+                    StructureAnalysisRecord,
+                    (),
+                    lambda *, ctx: None,
+                    id="duplicate",
+                ),
+                Stage(
+                    ParameterAdvice,
+                    (),
+                    lambda *, ctx: None,
+                    id="duplicate",
+                ),
+            ),
+            presets=(),
+        ),
+        build_context=lambda request, runtime: SimpleNamespace(),
+    )
+
+    with (
+        Runtime() as runtime,
+        pytest.raises(
+            ValueError,
+            match="stage ids must be unique",
+        ),
+    ):
+        Dispatcher(runtime).register(handler)
+
+
+def test_task_registration_rejects_empty_preset_names(monkeypatch) -> None:
+    monkeypatch.setattr(Runtime, "_build_backend", lambda self: TrackingBackend())
+    handler = GraphHandler(
+        spec=TaskGraph(
+            task="stub_task",
+            stages=(),
+            presets=(Preset(" ", (StructureAnalysisRecord,)),),
+        ),
+        build_context=lambda request, runtime: SimpleNamespace(),
+    )
+
+    with (
+        Runtime() as runtime,
+        pytest.raises(
+            ValueError,
+            match="preset names must be non-empty strings",
+        ),
+    ):
+        Dispatcher(runtime).register(handler)
+
+
+def test_task_registration_rejects_duplicate_preset_names(monkeypatch) -> None:
+    monkeypatch.setattr(Runtime, "_build_backend", lambda self: TrackingBackend())
+    handler = GraphHandler(
+        spec=TaskGraph(
+            task="stub_task",
+            stages=(),
+            presets=(
+                Preset("duplicate", (StructureAnalysisRecord,)),
+                Preset("duplicate", (ParameterAdvice,)),
+            ),
+        ),
+        build_context=lambda request, runtime: SimpleNamespace(),
+    )
+
+    with (
+        Runtime() as runtime,
+        pytest.raises(
+            ValueError,
+            match="preset names must be unique",
+        ),
+    ):
+        Dispatcher(runtime).register(handler)
+
+
+@pytest.mark.parametrize("field", ("task", "revision"))
+def test_task_registration_rejects_empty_task_identity(
+    monkeypatch,
+    field: str,
+) -> None:
+    monkeypatch.setattr(Runtime, "_build_backend", lambda self: TrackingBackend())
+    identity = {"task": "stub_task", "revision": "1"}
+    identity[field] = " "
+    handler = GraphHandler(
+        spec=TaskGraph(
+            **identity,
+            stages=(),
+            presets=(),
+        ),
+        build_context=lambda request, runtime: SimpleNamespace(),
+    )
+
+    with (
+        Runtime() as runtime,
+        pytest.raises(
+            ValueError,
+            match=f"{field} must be a non-empty string",
+        ),
+    ):
+        Dispatcher(runtime).register(handler)
+
+
 def test_task_registration_rejects_duplicate_record_ids() -> None:
     @dataclass
     class FirstRecord:
@@ -619,7 +753,14 @@ def test_task_registration_requires_stable_ids_for_custom_records(
     handler = GraphHandler(
         spec=TaskGraph(
             task="stub_task",
-            stages=(Stage(StubRecord, (), lambda *, ctx: StubRecord()),),
+            stages=(
+                Stage(
+                    StubRecord,
+                    (),
+                    lambda *, ctx: StubRecord(),
+                    id="produce_stub",
+                ),
+            ),
             presets=(Preset("only", (StubRecord,)),),
             selectable_outputs=(StubRecord,),
         ),
@@ -653,7 +794,7 @@ def test_runtime_dispatches_a_registered_task_via_compute(
     handler = GraphHandler(
         spec=TaskGraph(
             task="stub_task",
-            stages=(Stage(StubRecord, (), make_stub),),
+            stages=(Stage(StubRecord, (), make_stub, id="produce_stub"),),
             presets=(Preset("only", (StubRecord,)),),
             selectable_outputs=(StubRecord,),
             record_ids=((StubRecord, "stub"),),
@@ -700,7 +841,7 @@ def test_runtime_recommend_dispatches_a_registered_task_preset(
     handler = GraphHandler(
         spec=TaskGraph(
             task="stub_task",
-            stages=(Stage(StubRecord, (), make_stub),),
+            stages=(Stage(StubRecord, (), make_stub, id="produce_stub"),),
             presets=(Preset("recommend", (StubRecord,)),),
             record_ids=((StubRecord, "stub_preset"),),
         ),

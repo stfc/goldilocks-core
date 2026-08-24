@@ -125,6 +125,64 @@ def test_environment_selects_registry(monkeypatch, tmp_path: Path) -> None:
     assert load_default_qrf_config().model.name == "environment"
 
 
+def test_registry_rejects_unknown_model_types(tmp_path: Path) -> None:
+    registry = tmp_path / "models.toml"
+    write_registry(registry)
+    registry.write_text(
+        registry.read_text(encoding="utf-8").replace(
+            'model_type = "random_forest"',
+            'model_type = "neural_oracle"',
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="model type must be one of"):
+        load_default_qrf_config(registry)
+
+
+@pytest.mark.parametrize("field", ("name", "version", "target", "feature_set"))
+def test_registry_rejects_empty_model_identity_fields(
+    tmp_path: Path,
+    field: str,
+) -> None:
+    registry = tmp_path / "models.toml"
+    write_registry(registry)
+    original_values = {
+        "name": "replacement-qrf",
+        "version": "v2",
+        "target": "k_distance",
+        "feature_set": "qrf_comp_struct_soap_lattice_metal",
+    }
+    registry.write_text(
+        registry.read_text(encoding="utf-8").replace(
+            f'{field} = "{original_values[field]}"',
+            f'{field} = " "',
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=f"model {field} must be a non-empty string"):
+        load_default_qrf_config(registry)
+
+
+def test_registry_rejects_empty_model_revision(tmp_path: Path) -> None:
+    registry = tmp_path / "models.toml"
+    write_registry(registry)
+    registry.write_text(
+        registry.read_text(encoding="utf-8").replace(
+            'revision = "model-revision"',
+            'revision = " "',
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="model revision must be a non-empty string"):
+        load_default_qrf_config(registry)
+
+
 def test_model_assets_reject_non_sha256_checksums(tmp_path: Path) -> None:
     registry = tmp_path / "models.toml"
     write_registry(registry)

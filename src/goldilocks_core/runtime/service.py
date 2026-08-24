@@ -69,6 +69,8 @@ class Service:
                 return result
             input_data = result.records.get(DftInputData)
             if input_data is None:
+                if isinstance(output, DirectoryOutput) and output.path is None:
+                    return result
                 raise ValueError(
                     "The Computation Result does not contain DFT Input Data to publish"
                 )

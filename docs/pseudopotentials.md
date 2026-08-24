@@ -183,7 +183,6 @@ and publishes that file verbatim with the selected UPFs. It does not infer a
 licence from a provider name, UPF filename, or cutoff sidecar. Recommendation
 can inspect a root without this publication sidecar, but generation fails
 clearly until complete legal and citation material is supplied.
->>>>>>> 1b037eab (fix(publication): bind outputs to exact scientific sources)
 
 `pseudo_metadata`, `pseudo_root`, and `pseudo_table` are mutually exclusive.
 Explicit metadata is useful for in-memory callers; an explicit root remains

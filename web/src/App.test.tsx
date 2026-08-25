@@ -1,16 +1,15 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import type {
   ArchiveDownload,
-  ArchiveOutput,
   Capabilities,
   ComputationResult,
   ComputeRequest,
   CoreClient,
-  MemoryOutput,
+  PreparedComputation,
   StructureInspection,
   StructureSource,
 } from "./api/coreClient";
@@ -32,13 +31,9 @@ vi.mock("./viewer/StructureViewport", () => ({
 
 class CoreStub implements CoreClient {
   inspectionResults: Promise<StructureInspection>[] = [];
-  memoryResults: Promise<ComputationResult>[] = [];
-  archiveResults: Promise<ArchiveDownload>[] = [];
+  preparedResults: Promise<PreparedComputation>[] = [];
   inspectedSources: StructureSource[] = [];
-  computeCalls: {
-    request: ComputeRequest;
-    output: MemoryOutput | ArchiveOutput;
-  }[] = [];
+  computeCalls: ComputeRequest[] = [];
 
   constructor(readonly capabilitiesResult: Promise<Capabilities>) {}
 
@@ -54,25 +49,23 @@ class CoreStub implements CoreClient {
     );
   }
 
-  compute(
-    _request: ComputeRequest,
-    _output: MemoryOutput,
-  ): Promise<ComputationResult>;
-  compute(
-    _request: ComputeRequest,
-    _output: ArchiveOutput,
-  ): Promise<ArchiveDownload>;
-  compute(
-    request: ComputeRequest,
-    output: MemoryOutput | ArchiveOutput,
-  ): Promise<ComputationResult | ArchiveDownload> {
-    this.computeCalls.push({ request, output });
-    return output.kind === "archive"
-      ? (this.archiveResults.shift() ??
-          Promise.reject(new Error("archive not configured")))
-      : (this.memoryResults.shift() ??
-          Promise.reject(new Error("memory compute not configured")));
+  compute(request: ComputeRequest): Promise<PreparedComputation> {
+    this.computeCalls.push(request);
+    return (
+      this.preparedResults.shift() ??
+      Promise.reject(new Error("prepared computation not configured"))
+    );
   }
+}
+
+function prepared(
+  result: ComputationResult = computationResult,
+  archive: ArchiveDownload | null = {
+    blob: new Blob(["zip"]),
+    filename: "goldilocks-inputs.zip",
+  },
+): PreparedComputation {
+  return { result, archive };
 }
 
 describe("Goldilocks Workbench", () => {
@@ -143,11 +136,10 @@ describe("Goldilocks Workbench", () => {
     };
     const core = new CoreStub(Promise.resolve(capabilities));
     core.inspectionResults = [Promise.resolve(inspection)];
-    core.memoryResults = [
-      Promise.resolve(computationResult),
-      Promise.resolve(computationResult),
+    core.preparedResults = [
+      Promise.resolve(prepared(computationResult, archive)),
+      Promise.resolve(prepared(computationResult, archive)),
     ];
-    core.archiveResults = [Promise.resolve(archive)];
     const saveArchive = vi.fn<(download: ArchiveDownload) => void>();
     const workspace = createWorkspace(core, saveArchive);
     const { container } = render(
@@ -182,33 +174,58 @@ describe("Goldilocks Workbench", () => {
     ).toHaveTextContent("goldilocks-inputs.zip is ready");
     expect(core.computeCalls.slice(1)).toEqual([
       {
-        request: {
-          draft: {
-            ...draft,
-            hints: { spin_polarized: true },
-          },
-          selection: { preset: "generate" },
+        draft: {
+          ...draft,
+          hints: { spin_polarized: true },
         },
-        output: { kind: "memory" },
-      },
-      {
-        request: {
-          draft: {
-            ...draft,
-            hints: { spin_polarized: true },
-          },
-          selection: { preset: "generate" },
-        },
-        output: { kind: "archive" },
+        selection: { preset: "generate" },
       },
     ]);
+  });
+
+  it("submits smearing treatment and width as one valid override", async () => {
+    const user = userEvent.setup();
+    const core = new CoreStub(Promise.resolve(capabilities));
+    core.inspectionResults = [Promise.resolve(inspection)];
+    core.preparedResults = [Promise.resolve(prepared())];
+    const workspace = createWorkspace(core);
+    const { container } = render(
+      <WorkspaceProvider workspace={workspace}>
+        <App />
+      </WorkspaceProvider>,
+    );
+    await screen.findByRole("button", {
+      name: "Choose a CIF or POSCAR structure",
+    });
+    await user.upload(structureInput(container), structureFile());
+    await user.click(screen.getByText("Scientific overrides"));
+    await user.selectOptions(screen.getByLabelText("Smearing treatment"), "cold");
+    const width = screen.getByLabelText("Smearing width · Ry");
+    expect(width).toBeEnabled();
+    expect(width).toHaveValue(0.01);
+    fireEvent.change(width, { target: { value: "0.02" } });
+
+    await user.click(
+      screen.getByRole("button", { name: "Generate recommendation" }),
+    );
+
+    expect(core.computeCalls[0]).toEqual({
+      draft: {
+        ...draft,
+        hints: {
+          smearing_type: "cold",
+          smearing_width_ry: 0.02,
+        },
+      },
+      selection: { preset: "generate" },
+    });
   });
 
   it("keeps the old Result visible and disables download after an edit", async () => {
     const user = userEvent.setup();
     const core = new CoreStub(Promise.resolve(capabilities));
     core.inspectionResults = [Promise.resolve(inspection)];
-    core.memoryResults = [Promise.resolve(computationResult)];
+    core.preparedResults = [Promise.resolve(prepared())];
     const workspace = createWorkspace(core, vi.fn());
     const { container } = render(
       <WorkspaceProvider workspace={workspace}>
@@ -239,7 +256,7 @@ describe("Goldilocks Workbench", () => {
     const user = userEvent.setup();
     const core = new CoreStub(Promise.resolve(capabilities));
     core.inspectionResults = [Promise.resolve(inspection)];
-    core.memoryResults = [Promise.resolve(computationResult)];
+    core.preparedResults = [Promise.resolve(prepared())];
     const workspace = createWorkspace(core);
     const { container } = render(
       <WorkspaceProvider workspace={workspace}>
@@ -260,8 +277,8 @@ describe("Goldilocks Workbench", () => {
       "Current",
     );
     expect(core.computeCalls[0]).toEqual({
-      request: { draft, selection: { preset: "generate" } },
-      output: { kind: "memory" },
+      draft,
+      selection: { preset: "generate" },
     });
     expect(screen.getByText("K Points")).toBeInTheDocument();
     expect(screen.getByText("Si.upf")).toBeInTheDocument();
@@ -274,11 +291,13 @@ describe("Goldilocks Workbench", () => {
     const user = userEvent.setup();
     const core = new CoreStub(Promise.resolve(capabilities));
     core.inspectionResults = [Promise.resolve(inspection)];
-    core.memoryResults = [
-      Promise.resolve({
-        ...computationResult,
-        warnings: ["Review smearing before production use."],
-      }),
+    core.preparedResults = [
+      Promise.resolve(
+        prepared({
+          ...computationResult,
+          warnings: ["Review smearing before production use."],
+        }),
+      ),
     ];
     const workspace = createWorkspace(core);
     const { container } = render(

@@ -48,12 +48,18 @@ consideration.
 
 ## Electronic character classification
 
-The electronic character heuristic is intentionally conservative:
+Runtime uses the installed metallicity classifier for ordered structures and
+records `model` provenance, confidence, and either `metal` or `insulator`.
+Without that asset, or for a disordered structure the model cannot represent,
+Core falls back to a conservative composition heuristic:
 
-- **`likely_metal`**: all composition elements are metallic according to pymatgen. This is a structure-only heuristic; the character is "likely" because metallicity depends on electronic structure, not just composition. A warning always accompanies this classification.
-- **`unknown`**: composition includes non-metallic elements, or the classification is ambiguous. Callers should verify manually.
+- **`likely_metal`**: all composition elements are metallic according to
+  pymatgen. A warning records that this is not confirmed by electronic-structure
+  data.
+- **`unknown`**: composition alone cannot determine electronic character.
+  Callers should verify manually.
 
-The heuristic never returns `metal` or `insulator` — those require electronic-structure data that Core does not have.
+The heuristic never returns `metal` or `insulator`; only the model does.
 
 ## Spin-orbit coupling policy
 

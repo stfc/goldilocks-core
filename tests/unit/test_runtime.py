@@ -258,11 +258,10 @@ def test_recommendation_preset_returns_complete_selected_records() -> None:
     assert GeneratedFiles not in result.records
 
 
-def test_analyze_uses_heuristic_without_configured_metallicity_model(
-    monkeypatch,
+def test_analyze_uses_heuristic_without_an_installed_metallicity_model(
+    tmp_path,
 ) -> None:
-
-    with Runtime() as runtime:
+    with Runtime(asset_store=AssetStore(tmp_path / "empty-assets")) as runtime:
         dispatcher = Dispatcher(runtime)
         result = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
 
@@ -270,6 +269,63 @@ def test_analyze_uses_heuristic_without_configured_metallicity_model(
     assert analysis.electronic_character == "unknown"
     assert analysis.electronic_character_source == "heuristic"
     assert analysis.electronic_character_confidence is None
+
+
+def test_analyze_uses_the_installed_default_metallicity_model(
+    tmp_path, monkeypatch
+) -> None:
+    from goldilocks_core.ml import model_registry
+    from goldilocks_core.ml.qrf import metallicity
+
+    checkpoint = tmp_path / "checkpoint-source"
+    checkpoint.write_bytes(b"checkpoint")
+    atom_init = tmp_path / "atom-init-source"
+    atom_init.write_text("{}", encoding="utf-8")
+    licence = tmp_path / "licence-source"
+    licence.write_text("Model terms\n", encoding="utf-8")
+    spec = AssetSpec(
+        id="metallicity-fixture",
+        version="1",
+        files=(
+            AssetFile("checkpoint", "is_metal.ckpt", checkpoint.as_uri()),
+            AssetFile("atom_init", "atom_init.json", atom_init.as_uri()),
+            AssetFile("licence", "MODEL_CARD.md", licence.as_uri()),
+        ),
+    )
+    store = AssetStore(tmp_path / "assets")
+    installed = store.install(spec)
+    config = replace(
+        model_registry.load_default_qrf_config(),
+        metallicity_asset=spec,
+        metallicity_checkpoint_file="is_metal.ckpt",
+        metallicity_atom_init_file="atom_init.json",
+    )
+    monkeypatch.setattr(model_registry, "load_default_qrf_config", lambda path: config)
+    model = object()
+    monkeypatch.setattr(metallicity, "load_metallicity_model", lambda path: model)
+    calls = []
+
+    def classify(structure, actual_model, atom_init_path, **settings):
+        calls.append((structure, actual_model, atom_init_path, settings))
+        return "insulator", 0.94
+
+    monkeypatch.setattr(metallicity, "classify_metallicity", classify)
+
+    with Runtime(asset_store=store) as runtime:
+        result = Dispatcher(runtime).compute(
+            make_query_request((StructureAnalysisRecord,))
+        )
+
+    analysis = result.records[StructureAnalysisRecord]
+    assert analysis.electronic_character == "insulator"
+    assert analysis.electronic_character_source == "model"
+    assert analysis.electronic_character_confidence == 0.94
+    assert analysis.analysis_warnings == ()
+    assert len(calls) == 1
+    assert calls[0][1:3] == (
+        model,
+        str(installed.path("atom_init.json")),
+    )
 
 
 @pytest.mark.parametrize(

@@ -13,22 +13,19 @@ export type StructureSource =
 export type StructureInspection =
   InspectOperation["responses"][200]["content"]["application/json"];
 export type CalculationDraft = ComputeDocument["draft"];
-export type ComputationResult =
-  ComputeOperation["responses"][200]["content"]["application/json"];
-export type ComputeRequest = Omit<ComputeDocument, "output">;
-export type MemoryOutput = Extract<
-  ComputeDocument["output"],
-  { readonly kind: "memory" }
->;
-export type ArchiveOutput = Extract<
-  ComputeDocument["output"],
-  { readonly kind: "archive" }
->;
-export type ComputeOutput = MemoryOutput | ArchiveOutput;
+type ComputeResponse =
+  ComputeOperation["responses"][200]["content"]["multipart/form-data"];
+export type ComputationResult = ComputeResponse["result"];
+export type ComputeRequest = ComputeDocument;
 
 export interface ArchiveDownload {
   readonly blob: Blob;
   readonly filename: string;
+}
+
+export interface PreparedComputation {
+  readonly result: ComputationResult;
+  readonly archive: ArchiveDownload | null;
 }
 
 export class CoreFailure extends Error {
@@ -48,14 +45,7 @@ export class CoreFailure extends Error {
 export interface CoreClient {
   capabilities(): Promise<Capabilities>;
   inspectStructure(source: StructureSource): Promise<StructureInspection>;
-  compute(
-    request: ComputeRequest,
-    output: MemoryOutput,
-  ): Promise<ComputationResult>;
-  compute(
-    request: ComputeRequest,
-    output: ArchiveOutput,
-  ): Promise<ArchiveDownload>;
+  compute(request: ComputeRequest): Promise<PreparedComputation>;
 }
 
 export class HttpCoreClient implements CoreClient {
@@ -76,48 +66,16 @@ export class HttpCoreClient implements CoreClient {
     return parseJson<Capabilities>(response);
   }
 
-  compute(
-    request: ComputeRequest,
-    output: MemoryOutput,
-  ): Promise<ComputationResult>;
-  compute(
-    request: ComputeRequest,
-    output: ArchiveOutput,
-  ): Promise<ArchiveDownload>;
-  async compute(
-    request: ComputeRequest,
-    output: ComputeOutput,
-  ): Promise<ComputationResult | ArchiveDownload> {
+  async compute(request: ComputeRequest): Promise<PreparedComputation> {
     const response = await this.request("/compute", {
-      body: JSON.stringify({ ...request, output }),
+      body: JSON.stringify(request),
       headers: {
-        Accept:
-          output.kind === "archive" ? "application/zip" : "application/json",
+        Accept: "multipart/form-data",
         "Content-Type": "application/json",
       },
       method: "POST",
     });
-    if (output.kind === "archive") {
-      const contentType = response.headers.get("content-type") ?? "";
-      if (!contentType.toLowerCase().startsWith("application/zip")) {
-        const rawResponse = await decodeResponse(response);
-        throw new CoreFailure(
-          "invalid_response",
-          "Goldilocks Core returned an invalid archive response.",
-          false,
-          {},
-          response.status,
-          rawResponse,
-        );
-      }
-      return {
-        blob: await response.blob(),
-        filename: archiveFilename(
-          response.headers.get("content-disposition"),
-        ),
-      };
-    }
-    return parseVersionedJson<ComputationResult>(response);
+    return parsePreparedComputation(response);
   }
 
   async inspectStructure(
@@ -255,16 +213,100 @@ function isErrorEnvelope(
   );
 }
 
-function archiveFilename(disposition: string | null): string {
-  const match = /filename=(?:"([^"]+)"|([^;]+))/i.exec(disposition ?? "");
-  const candidate = (match?.[1] ?? match?.[2] ?? "goldilocks-inputs.zip").trim();
-  if (
-    candidate.length === 0 ||
-    candidate.includes("/") ||
-    candidate.includes("\\") ||
-    !candidate.toLowerCase().endsWith(".zip")
-  ) {
-    return "goldilocks-inputs.zip";
+async function parsePreparedComputation(
+  response: Response,
+): Promise<PreparedComputation> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().startsWith("multipart/form-data")) {
+    throw new CoreFailure(
+      "invalid_response",
+      "Goldilocks Core returned an invalid computation response.",
+      false,
+      {},
+      response.status,
+    );
   }
-  return candidate;
+
+  let form: FormData;
+  try {
+    form = await response.formData();
+  } catch {
+    throw new CoreFailure(
+      "invalid_response",
+      "Goldilocks Core returned unreadable computation data.",
+      false,
+      {},
+      response.status,
+    );
+  }
+
+  const resultPart = form.get("result");
+  if (!(resultPart instanceof Blob)) {
+    throw new CoreFailure(
+      "invalid_response",
+      "Goldilocks Core omitted the reviewed computation.",
+      false,
+      {},
+      response.status,
+    );
+  }
+
+  let result: ComputationResult;
+  try {
+    const payload = JSON.parse(await resultPart.text()) as unknown;
+    if (
+      payload === null ||
+      typeof payload !== "object" ||
+      !("schema_version" in payload) ||
+      payload.schema_version !== 1
+    ) {
+      throw new CoreFailure(
+        "invalid_response",
+        "Goldilocks Core returned an incompatible schema version.",
+        false,
+        {},
+        response.status,
+        payload,
+      );
+    }
+    result = payload as ComputationResult;
+  } catch (error) {
+    if (error instanceof CoreFailure) throw error;
+    throw new CoreFailure(
+      "invalid_response",
+      "Goldilocks Core returned unreadable result JSON.",
+      false,
+      {},
+      response.status,
+    );
+  }
+
+  const archivePart = form.get("archive");
+  if (archivePart === null) return { result, archive: null };
+  if (!(archivePart instanceof Blob) || archivePart.type !== "application/zip") {
+    throw new CoreFailure(
+      "invalid_response",
+      "Goldilocks Core returned an invalid prepared archive.",
+      false,
+      {},
+      response.status,
+    );
+  }
+  const filename =
+    "name" in archivePart && typeof archivePart.name === "string"
+      ? safeArchiveFilename(archivePart.name)
+      : "goldilocks-inputs.zip";
+  return {
+    result,
+    archive: { blob: archivePart, filename },
+  };
+}
+
+function safeArchiveFilename(candidate: string): string {
+  return candidate.length > 0 &&
+    !candidate.includes("/") &&
+    !candidate.includes("\\") &&
+    candidate.toLowerCase().endsWith(".zip")
+    ? candidate
+    : "goldilocks-inputs.zip";
 }

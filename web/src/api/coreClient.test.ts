@@ -106,6 +106,31 @@ const computationResult: ComputationResult = {
   },
 };
 
+function preparedResponse(
+  result: unknown,
+  archive?: string,
+  filename = "goldilocks-inputs.zip",
+): Response {
+  const form = new FormData();
+  form.set(
+    "result",
+    new Blob([JSON.stringify(result)], { type: "application/json" }),
+    "result.json",
+  );
+  if (archive !== undefined) {
+    form.set(
+      "archive",
+      new Blob([archive], { type: "application/zip" }),
+      filename,
+    );
+  }
+  const response = new Response(null, {
+    headers: { "Content-Type": "multipart/form-data; boundary=test" },
+  });
+  vi.spyOn(response, "formData").mockResolvedValue(form);
+  return response;
+}
+
 describe("HttpCoreClient", () => {
   it("rejects JSON operations with the wrong content type", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
@@ -180,16 +205,14 @@ describe("HttpCoreClient", () => {
     });
   });
 
-  it("rejects an incompatible top-level result schema version", async () => {
+  it("rejects an incompatible reviewed result schema version", async () => {
     const incompatible = { ...computationResult, schema_version: 2 };
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      Response.json(incompatible),
-    );
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(preparedResponse(incompatible));
     const client = new HttpCoreClient("", fetcher);
 
-    await expect(
-      client.compute(request, { kind: "memory" }),
-    ).rejects.toMatchObject({
+    await expect(client.compute(request)).rejects.toMatchObject({
       kind: "invalid_response",
       message: "Goldilocks Core returned an incompatible schema version.",
       retryable: false,
@@ -198,66 +221,52 @@ describe("HttpCoreClient", () => {
     });
   });
 
-  it("rejects a successful archive response with the wrong content type", async () => {
-    const payload = { error: { kind: "unexpected", message: "not a zip" } };
+  it("rejects a computation response with the wrong content type", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      Response.json(payload),
+      Response.json({ error: { kind: "unexpected", message: "not multipart" } }),
     );
     const client = new HttpCoreClient("", fetcher);
 
-    await expect(
-      client.compute(request, { kind: "archive" }),
-    ).rejects.toMatchObject({
+    await expect(client.compute(request)).rejects.toMatchObject({
       kind: "invalid_response",
+      message: "Goldilocks Core returned an invalid computation response.",
       retryable: false,
-      rawResponse: payload,
     });
   });
 
-  it("returns a ZIP download with its response filename", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response("zip bytes", {
-        headers: {
-          "Content-Disposition": 'attachment; filename="silicon-inputs.zip"',
-          "Content-Type": "application/zip",
-        },
-      }),
-    );
+  it("returns one reviewed result with its exact ZIP", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        preparedResponse(computationResult, "zip bytes", "silicon-inputs.zip"),
+      );
     const client = new HttpCoreClient("", fetcher);
 
-    const archive = await client.compute(request, { kind: "archive" });
+    const prepared = await client.compute(request);
 
-    expect(archive.filename).toBe("silicon-inputs.zip");
-    await expect(archive.blob.text()).resolves.toBe("zip bytes");
-    expect(fetcher.mock.calls[0]).toEqual([
-      "/compute",
-      {
-        body: JSON.stringify({ ...request, output: { kind: "archive" } }),
-        headers: {
-          Accept: "application/zip",
-          "Content-Type": "application/json",
-        },
-        method: "POST",
-      },
-    ]);
-  });
-
-  it("computes the generation Preset as memory JSON", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      Response.json(computationResult),
-    );
-    const client = new HttpCoreClient("", fetcher);
-
-    await expect(
-      client.compute(request, { kind: "memory" }),
-    ).resolves.toEqual(computationResult);
+    expect(prepared.result).toEqual(computationResult);
+    expect(prepared.archive?.filename).toBe("silicon-inputs.zip");
+    await expect(prepared.archive?.blob.text()).resolves.toBe("zip bytes");
+    expect(fetcher).toHaveBeenCalledOnce();
     expect(fetcher).toHaveBeenCalledWith("/compute", {
-      body: JSON.stringify({ ...request, output: { kind: "memory" } }),
+      body: JSON.stringify(request),
       headers: {
-        Accept: "application/json",
+        Accept: "multipart/form-data",
         "Content-Type": "application/json",
       },
       method: "POST",
+    });
+  });
+
+  it("accepts a selected-record result without an archive", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(preparedResponse(computationResult));
+    const client = new HttpCoreClient("", fetcher);
+
+    await expect(client.compute(request)).resolves.toEqual({
+      result: computationResult,
+      archive: null,
     });
   });
 

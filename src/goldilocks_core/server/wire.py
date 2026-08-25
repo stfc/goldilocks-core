@@ -46,15 +46,12 @@ _IntentBase = _model_from_dataclass(CalculationIntent, "CalculationIntentBase")
 IntentDocument = create_model(
     "CalculationIntent",
     __base__=_IntentBase,
-    pseudo_accuracy=(str, "efficiency"),
 )
 _HintsBase = _model_from_dataclass(CalculationHints, "CalculationHintsBase")
 HintsDocument = create_model(
     "CalculationHints",
     __base__=_HintsBase,
     k_grid=(list[int] | None, None),
-    pseudo_accuracy=(str | None, None),
-    vdw_method=(str | None, None),
 )
 InlineStructureDocument = create_model(
     "InlineStructureSource",
@@ -96,9 +93,6 @@ type SelectionDocument = PresetSelectionDocument | RecordSelectionDocument
 MemoryOutputDocument = create_model(
     "MemoryOutput", __config__=_STRICT, kind=(Literal["memory"], ...)
 )
-HttpArchiveOutputDocument = create_model(
-    "HttpArchiveOutput", __config__=_STRICT, kind=(Literal["archive"], ...)
-)
 DirectoryOutputDocument = create_model(
     "DirectoryOutput",
     __config__=_STRICT,
@@ -119,7 +113,6 @@ ComputeRequestDocument = create_model(
     __config__=_STRICT,
     draft=(DraftDocument, ...),
     selection=(SelectionDocument, ...),
-    output=(MemoryOutputDocument | HttpArchiveOutputDocument, ...),
 )
 _SERIALIZED = ConfigDict(extra="forbid")
 _SERIALIZED_MODELS: dict[type | TypeAliasType, Any] = {}
@@ -305,6 +298,17 @@ def computation_result_document(
         records=(records_document, ...),
         warnings=(list[str], ...),
         publication=(_serialized_annotation(Publication) | None, ...),
+    )
+
+
+def prepared_computation_document(
+    tasks: tuple[CalculationTaskCapability, ...],
+) -> type[BaseModel]:
+    return create_model(
+        "PreparedComputation",
+        __config__=_STRICT,
+        result=(computation_result_document(tasks), ...),
+        archive=(bytes | None, None),
     )
 
 

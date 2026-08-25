@@ -239,6 +239,8 @@ def test_cli_human_advice_summary_uses_the_normalized_draft_formula() -> None:
         str(structure("Si.cif")),
         "--outputs",
         "advice",
+        "--smearing-type",
+        "fixed",
         "--no-out",
     )
 

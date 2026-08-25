@@ -43,7 +43,5 @@ function operationMessage(
       return "Inspecting structure";
     case "compute":
       return "Computing recommendation";
-    case "download":
-      return "Building archive";
   }
 }

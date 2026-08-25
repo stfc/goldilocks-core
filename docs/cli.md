@@ -116,7 +116,8 @@ uv run goldilocks serve mcp
 
 HTTP exposes `GET /capabilities`, `POST /inspect`, `POST /compute`,
 `GET /health`, and `GET /ready`. HTTP accepts inline structure content only.
-Compute output is either canonical JSON or an unstored ZIP response.
+Compute returns one multipart response with canonical JSON and the exact
+optional unstored ZIP produced by that execution.
 
 Local stdio MCP exposes exactly `capabilities`, `inspect_structure`, and
 `compute`. MCP accepts local paths or inline sources. Omitted Compute output

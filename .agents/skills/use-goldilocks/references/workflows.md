@@ -139,6 +139,7 @@ uv run goldilocks serve http --host 127.0.0.1 --port 8000
 uv run goldilocks serve mcp
 ```
 
-HTTP accepts inline Structure Sources and returns Result JSON or ZIP bytes.
-Local MCP accepts inline content or paths and can publish local outputs. Both
-reuse one process-owned `Service`.
+HTTP accepts inline Structure Sources and returns one multipart response with
+reviewed Result JSON and its exact optional ZIP. Local MCP accepts inline
+content or paths and can publish local outputs. Both reuse one process-owned
+`Service`.

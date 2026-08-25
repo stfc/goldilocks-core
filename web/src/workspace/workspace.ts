@@ -4,23 +4,16 @@ import type {
   ArchiveDownload,
   CalculationDraft,
   Capabilities,
-  ComputationResult,
   CoreClient,
+  PreparedComputation,
   StructureInspection,
   StructureSource,
 } from "../api/coreClient";
 import { CoreFailure } from "../api/coreClient";
 
-export type WorkspaceOperation =
-  | "capabilities"
-  | "inspect"
-  | "compute"
-  | "download";
+export type WorkspaceOperation = "capabilities" | "inspect" | "compute";
 
-export interface ReviewedComputation {
-  readonly draft: CalculationDraft;
-  readonly result: ComputationResult;
-}
+export type ReviewedComputation = PreparedComputation;
 
 export interface WorkspaceSnapshot {
   readonly capabilities: Capabilities | null;
@@ -31,7 +24,6 @@ export interface WorkspaceSnapshot {
   readonly reviewed: ReviewedComputation | null;
   readonly outOfDate: boolean;
   readonly lastDownload: ArchiveDownload | null;
-  readonly downloadOutOfDate: boolean;
   readonly operation: WorkspaceOperation | null;
   readonly failure: CoreFailure | null;
   readonly failureOperation: WorkspaceOperation | null;
@@ -73,7 +65,6 @@ const EMPTY_SNAPSHOT: WorkspaceSnapshot = {
   reviewed: null,
   outOfDate: false,
   lastDownload: null,
-  downloadOutOfDate: false,
   operation: null,
   failure: null,
   failureOperation: null,
@@ -163,7 +154,6 @@ export function createWorkspace(
         reviewed: null,
         outOfDate: false,
         lastDownload: null,
-        downloadOutOfDate: false,
         failure: null,
         failureOperation: null,
       });
@@ -206,7 +196,6 @@ export function createWorkspace(
     store.setState({
       draft,
       outOfDate: snapshot.reviewed !== null,
-      downloadOutOfDate: snapshot.lastDownload !== null,
       failure: null,
       failureOperation: null,
     });
@@ -219,16 +208,14 @@ export function createWorkspace(
     const submittedDraft = snapshot.draft;
     const owner = beginOperation("compute");
     try {
-      const result = await core.compute(
-        {
-          draft: submittedDraft,
-          selection: { preset: "generate" },
-        },
-        { kind: "memory" },
-      );
+      const prepared = await core.compute({
+        draft: submittedDraft,
+        selection: { preset: "generate" },
+      });
       completeOperation(owner, {
-        reviewed: { draft: submittedDraft, result },
+        reviewed: prepared,
         outOfDate: revision !== draftRevision,
+        lastDownload: null,
         failure: null,
         failureOperation: null,
       });
@@ -245,53 +232,12 @@ export function createWorkspace(
     }
   }
 
-  async function downloadReviewed(): Promise<void> {
+  function downloadReviewed(): void {
     const snapshot = store.getState();
-    if (
-      snapshot.reviewed === null ||
-      snapshot.outOfDate ||
-      snapshot.operation !== null
-    ) {
-      return;
-    }
-    const revision = draftRevision;
-    const reviewedDraft = snapshot.reviewed.draft;
-    const owner = beginOperation("download");
-    try {
-      const archive = await core.compute(
-        {
-          draft: reviewedDraft,
-          selection: { preset: "generate" },
-        },
-        { kind: "archive" },
-      );
-      if (activeOperation !== owner) return;
-      if (revision !== draftRevision) {
-        completeOperation(owner);
-        return;
-      }
-      completeOperation(owner, {
-        lastDownload: archive,
-        downloadOutOfDate: false,
-        failure: null,
-        failureOperation: null,
-      });
-      saveArchive(archive);
-    } catch (error) {
-      if (activeOperation !== owner) return;
-      if (revision !== draftRevision) {
-        completeOperation(owner);
-        return;
-      }
-      if (!(error instanceof CoreFailure)) {
-        completeOperation(owner);
-        throw error;
-      }
-      completeOperation(owner, {
-        failure: error,
-        failureOperation: "download",
-      });
-    }
+    const archive = snapshot.reviewed?.archive;
+    if (archive === null || archive === undefined || snapshot.outOfDate) return;
+    store.setState({ lastDownload: archive });
+    saveArchive(archive);
   }
 
   async function dispatch(action: WorkspaceAction): Promise<void> {
@@ -309,7 +255,7 @@ export function createWorkspace(
         await computeReview();
         return;
       case "review.download":
-        await downloadReviewed();
+        downloadReviewed();
         return;
       case "failure.retry": {
         const snapshot = store.getState();
@@ -324,9 +270,6 @@ export function createWorkspace(
             return;
           case "compute":
             await computeReview();
-            return;
-          case "download":
-            await downloadReviewed();
             return;
           case null:
             return;

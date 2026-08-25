@@ -1541,9 +1541,24 @@ url = "{licence_source.as_uri()}"
     assert pseudo.source.preparation_fingerprint == table.asset.preparation_fingerprint
 
 
+def _stub_metallicity(
+    monkeypatch: pytest.MonkeyPatch, *, source: str = "model"
+) -> None:
+    result = (
+        ("insulator", "model", 0.9)
+        if source == "model"
+        else ("unknown", "heuristic", None)
+    )
+    monkeypatch.setattr(
+        "goldilocks_core.runtime.models.MetallicityModel.__call__",
+        lambda self, structure: result,
+    )
+
+
 def test_model_runtime_identities_licences_and_citations_are_published(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _stub_metallicity(monkeypatch)
     store = AssetStore(tmp_path / "model-assets")
     expected_licences: dict[str, bytes] = {}
     model_payloads: set[bytes] = set()
@@ -1663,6 +1678,8 @@ def test_custom_registry_same_id_version_source_drift_is_rejected(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import goldilocks_core.ml.model_registry as registry_module
+
+    _stub_metallicity(monkeypatch)
 
     registry = tmp_path / "models.toml"
     packaged = Path(registry_module.__file__).with_name("registry.toml")
@@ -1823,6 +1840,7 @@ def test_standalone_metallicity_publishes_only_its_explicit_material(
 def test_custom_kmesh_model_publishes_its_explicit_material_not_defaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _stub_metallicity(monkeypatch, source="heuristic")
     monkeypatch.setattr(
         "goldilocks_core.advice.kindex.predict_kindex",
         lambda structure, spec: 1.0,

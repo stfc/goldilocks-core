@@ -1,13 +1,16 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { inspection } from "../test/workbenchFixtures";
 import { StructureViewport } from "./StructureViewport";
-import type { StructureViewerFactory } from "./structureViewer";
+import type {
+  StructureViewer,
+  StructureViewerFactory,
+} from "./structureViewer";
 
 describe("StructureViewport", () => {
-  it("owns the viewer lifecycle and updates canonical structure content", () => {
+  it("owns the viewer lifecycle and updates canonical structure content", async () => {
     const show = vi.fn();
     const dispose = vi.fn();
     const createViewer: StructureViewerFactory = vi.fn(() => ({
@@ -18,8 +21,10 @@ describe("StructureViewport", () => {
       <StructureViewport inspection={inspection} createViewer={createViewer} />,
     );
 
-    expect(createViewer).toHaveBeenCalledOnce();
-    expect(show).toHaveBeenLastCalledWith("data_Si");
+    await waitFor(() => {
+      expect(createViewer).toHaveBeenCalledOnce();
+      expect(show).toHaveBeenLastCalledWith("data_Si");
+    });
 
     rerender(
       <StructureViewport
@@ -27,10 +32,36 @@ describe("StructureViewport", () => {
         createViewer={createViewer}
       />,
     );
-    expect(show).toHaveBeenLastCalledWith("data_Si_updated");
+    await waitFor(() => {
+      expect(show).toHaveBeenLastCalledWith("data_Si_updated");
+    });
 
     unmount();
     expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it("disposes a lazily loaded viewer that resolves after unmount", async () => {
+    const show = vi.fn();
+    const dispose = vi.fn();
+    let resolveViewer: (viewer: StructureViewer) => void = () => undefined;
+    const createViewer: StructureViewerFactory = vi.fn(
+      () =>
+        new Promise<StructureViewer>((resolve) => {
+          resolveViewer = resolve;
+        }),
+    );
+    const { unmount } = render(
+      <StructureViewport inspection={inspection} createViewer={createViewer} />,
+    );
+
+    unmount();
+    await act(async () => {
+      resolveViewer({ show, dispose });
+      await Promise.resolve();
+    });
+
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(show).not.toHaveBeenCalled();
   });
 
   it("retries viewer initialization without losing the workspace", async () => {

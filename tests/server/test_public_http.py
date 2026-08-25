@@ -4,12 +4,14 @@ import io
 import json
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
+from email.parser import BytesParser
+from email.policy import default
 from pathlib import Path
 from threading import Event
 
 import pytest
 
-from goldilocks_core.assets import AssetNotInstalled, AssetReference
+from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled, AssetReference
 from goldilocks_core.contracts import KPointSelection, Provenance
 from goldilocks_core.runtime import Runtime, Service
 from goldilocks_core.server.http import create_app
@@ -54,7 +56,7 @@ def test_http_inspect_returns_canonical_structure_inspection(
     assert inspection["canonical_cif"].startswith("# generated using pymatgen")
 
 
-def test_http_compute_memory_returns_the_canonical_result(
+def test_http_compute_returns_one_reviewed_result_without_an_unrequested_archive(
     test_service,
     sample_structure_text: str,
 ) -> None:
@@ -71,12 +73,14 @@ def test_http_compute_memory_returns_the_canonical_result(
                     "hints": {"k_grid": [3, 3, 3]},
                 },
                 "selection": {"records": ["k_points"]},
-                "output": {"kind": "memory"},
             },
         )
 
     assert response.status_code == 200
-    result = response.json()
+    parts = _multipart_parts(response)
+    assert set(parts) == {"result"}
+    assert parts["result"][0] == "application/json"
+    result = json.loads(parts["result"][2])
     assert result["schema_version"] == 1
     assert result["selection"] == {"records": ["k_points"]}
     assert result["records"]["k_points"]["grid"] == [3, 3, 3]
@@ -101,13 +105,13 @@ def test_http_selects_and_returns_custom_registered_records(
                     "intent": {"task": "custom_task"},
                 },
                 "selection": {"records": ["custom_summary"]},
-                "output": {"kind": "memory"},
             },
         )
         schema = client.get("/openapi.json").json()
 
     assert response.status_code == 200, response.text
-    assert response.json()["records"] == {"custom_summary": {"value": "custom result"}}
+    result = json.loads(_multipart_parts(response)["result"][2])
+    assert result["records"] == {"custom_summary": {"value": "custom result"}}
     records = schema["components"]["schemas"]["Records"]
     assert "custom_summary" in records["properties"]
     custom_ref = records["properties"]["custom_summary"]["$ref"].rsplit("/", 1)[-1]
@@ -121,12 +125,13 @@ def test_http_selects_and_returns_custom_registered_records(
     )
 
 
-def test_http_compute_archive_returns_an_unstored_zip(
+def test_http_returns_the_exact_archive_with_its_reviewed_result(
     publishable_service,
     sample_structure_text: str,
     tmp_path,
 ) -> None:
-    with TestClient(create_app(publishable_service)) as client:
+    service = _CountingService(publishable_service)
+    with TestClient(create_app(service)) as client:
         response = client.post(
             "/compute",
             json={
@@ -140,18 +145,22 @@ def test_http_compute_archive_returns_an_unstored_zip(
                     "pseudo_table": "fixture-table",
                 },
                 "selection": {"preset": "generate"},
-                "output": {"kind": "archive"},
             },
         )
 
     assert response.status_code == 200, response.text
-    assert response.headers["content-type"] == "application/zip"
-    assert response.headers["content-disposition"] == (
-        'attachment; filename="goldilocks-inputs.zip"'
+    assert service.compute_calls == 1
+    parts = _multipart_parts(response)
+    assert set(parts) == {"result", "archive"}
+    assert parts["archive"][:2] == (
+        "application/zip",
+        "goldilocks-inputs.zip",
     )
-    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+    reviewed = json.loads(parts["result"][2])
+    with zipfile.ZipFile(io.BytesIO(parts["archive"][2])) as archive:
         assert "inputs/qe.in" in archive.namelist()
-        assert "goldilocks.json" in archive.namelist()
+        manifest = json.loads(archive.read("goldilocks.json"))
+    assert manifest["records"]["k_points"] == reviewed["records"]["k_points"]
     assert not list(tmp_path.rglob("goldilocks-inputs.zip"))
     assert not list(tmp_path.rglob("goldilocks_out"))
 
@@ -171,7 +180,6 @@ def test_http_capacity_guards_only_compute(
             },
         },
         "selection": {"records": ["k_points"]},
-        "output": {"kind": "memory"},
     }
     try:
         with (
@@ -221,7 +229,6 @@ def test_http_lets_core_report_unknown_domain_values(
                     "hints": {"k_grid": [3, 3, 3]},
                 },
                 "selection": {"records": ["k_points"]},
-                "output": {"kind": "memory"},
             },
         )
 
@@ -267,7 +274,6 @@ def test_http_does_not_relabel_unexpected_core_defects(
                         "hints": {"k_grid": [3, 3, 3]},
                     },
                     "selection": {"records": ["k_points"]},
-                    "output": {"kind": "memory"},
                 },
             )
     finally:
@@ -286,7 +292,6 @@ def test_http_rejects_non_inline_sources_and_unknown_fields(test_service) -> Non
             json={
                 "draft": {"structure": {"name": "Si.cif", "content": ""}},
                 "selection": {"records": ["analysis"]},
-                "output": {"kind": "memory"},
                 "unexpected": True,
             },
         )
@@ -331,7 +336,6 @@ def test_http_asset_not_installed_error_omits_server_paths(
                         }
                     },
                     "selection": {"records": ["analysis"]},
-                    "output": {"kind": "memory"},
                 },
             )
     finally:
@@ -348,6 +352,64 @@ def test_http_asset_not_installed_error_omits_server_paths(
         }
     }
     assert "/srv/goldilocks/secret-assets" not in response.text
+
+
+def test_http_does_not_expose_internal_filesystem_failures(
+    sample_structure_text: str,
+) -> None:
+    secret = "/srv/goldilocks/private/runtime-secret.bin"
+    service = _MissingInternalFileService(secret)
+    try:
+        with TestClient(create_app(service), raise_server_exceptions=False) as client:
+            response = client.post(
+                "/compute",
+                json={
+                    "draft": {
+                        "structure": {
+                            "name": "Si.cif",
+                            "content": sample_structure_text,
+                        }
+                    },
+                    "selection": {"records": ["analysis"]},
+                },
+            )
+    finally:
+        service.close()
+
+    assert response.status_code == 500
+    assert secret not in response.text
+
+
+def test_http_sanitizes_corrupt_asset_failures(
+    sample_structure_text: str,
+) -> None:
+    secret = "/opt/goldilocks/assets/private/model.pt"
+    service = _CorruptAssetService(secret)
+    try:
+        with TestClient(create_app(service), raise_server_exceptions=False) as client:
+            response = client.post(
+                "/compute",
+                json={
+                    "draft": {
+                        "structure": {
+                            "name": "Si.cif",
+                            "content": sample_structure_text,
+                        }
+                    },
+                    "selection": {"records": ["analysis"]},
+                },
+            )
+    finally:
+        service.close()
+
+    assert response.status_code == 424
+    assert response.json() == {
+        "error": {
+            "kind": "asset_corrupt",
+            "message": "A required runtime asset failed integrity verification.",
+        }
+    }
+    assert secret not in response.text
 
 
 def test_openapi_describes_canonical_json_and_archive_contracts(test_service) -> None:
@@ -376,18 +438,39 @@ def test_openapi_describes_canonical_json_and_archive_contracts(test_service) ->
     assert compute["requestBody"]["content"]["application/json"]["schema"][
         "$ref"
     ].endswith("/ComputeRequest")
-    assert compute["responses"]["200"]["content"]["application/json"]["schema"][
+    assert compute["responses"]["200"]["content"]["multipart/form-data"]["schema"][
         "$ref"
-    ].endswith("/ComputationResult")
-    assert compute["responses"]["200"]["content"]["application/zip"]["schema"] == {
-        "type": "string",
-        "format": "binary",
-    }
+    ].endswith("/PreparedComputation")
     assert compute["responses"]["422"]["content"]["application/json"]["schema"][
         "$ref"
     ].endswith("/ErrorResponse")
 
     schemas = schema["components"]["schemas"]
+    prepared = schemas["PreparedComputation"]["properties"]
+    assert prepared["result"]["$ref"].endswith("/ComputationResult")
+    assert prepared["archive"]["anyOf"][0] == {
+        "type": "string",
+        "contentMediaType": "application/octet-stream",
+    }
+    request = schemas["ComputeRequest"]
+    assert set(request["properties"]) == {"draft", "selection"}
+    intent = schemas["CalculationIntent-Input"]["properties"]
+    assert intent["pseudo_accuracy"]["enum"] == ["efficiency", "precision"]
+    hints = schemas["CalculationHints-Input"]["properties"]
+    assert hints["smearing_type"]["anyOf"][0]["enum"] == [
+        "fixed",
+        "gaussian",
+        "mp",
+        "cold",
+    ]
+    assert hints["pseudo_type"]["anyOf"][0]["enum"] == ["NC", "USPP", "PAW"]
+    assert hints["relativistic_mode"]["anyOf"][0]["enum"] == [
+        "scalar",
+        "full",
+        "non-relativistic",
+    ]
+    assert hints["vdw_method"]["anyOf"][0]["enum"] == ["d3", "d3bj", "ts", "mbd"]
+
     result = schemas["ComputationResult"]["properties"]
     assert result["draft"]["$ref"].endswith("/SerializedCalculationDraft")
     selection_document = schemas[result["selection"]["$ref"].rsplit("/", 1)[-1]]
@@ -426,11 +509,47 @@ def test_generated_openapi_and_typescript_match_the_public_contract(
     assert committed == generated
     typescript = (root / "web" / "src" / "api" / "schema.d.ts").read_text()
     assert "readonly ComputeRequest:" in typescript
+    assert "readonly PreparedComputation:" in typescript
     assert "readonly ComputationResult:" in typescript
     assert "readonly StructureInspection:" in typescript
     assert 'readonly records: components["schemas"]["Records"];' in typescript
     assert "readonly Records:" in typescript
     assert "readonly analysis?:" in typescript
+
+
+def _multipart_parts(response) -> dict[str, tuple[str, str | None, bytes]]:
+    message = BytesParser(policy=default).parsebytes(
+        (
+            f"Content-Type: {response.headers['content-type']}\r\n"
+            "MIME-Version: 1.0\r\n\r\n"
+        ).encode("ascii")
+        + response.content
+    )
+    return {
+        part.get_param("name", header="content-disposition"): (
+            part.get_content_type(),
+            part.get_filename(),
+            part.get_payload(decode=True),
+        )
+        for part in message.iter_parts()
+    }
+
+
+class _CountingService:
+    def __init__(self, service: Service) -> None:
+        self._service = service
+        self.runtime = service.runtime
+        self.compute_calls = 0
+
+    def capabilities(self):
+        return self._service.capabilities()
+
+    def inspect_structure(self, source):
+        return self._service.inspect_structure(source)
+
+    def compute(self, request, *, output=None):
+        self.compute_calls += 1
+        return self._service.compute(request, output=output)
 
 
 class _DefectiveService(Service):
@@ -467,3 +586,23 @@ class _MissingAssetService(Service):
             AssetReference("model-fixture", "7"),
             Path("/srv/goldilocks/secret-assets"),
         )
+
+
+class _MissingInternalFileService(Service):
+    def __init__(self, path: str) -> None:
+        super().__init__()
+        self.path = path
+
+    def compute(self, request, *, output=None):
+        del request, output
+        raise FileNotFoundError(self.path)
+
+
+class _CorruptAssetService(Service):
+    def __init__(self, path: str) -> None:
+        super().__init__()
+        self.path = path
+
+    def compute(self, request, *, output=None):
+        del request, output
+        raise AssetCorrupt(f"installed file changed: {self.path}")

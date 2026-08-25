@@ -2,12 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import type {
   ArchiveDownload,
-  ArchiveOutput,
   Capabilities,
   ComputationResult,
   ComputeRequest,
   CoreClient,
-  MemoryOutput,
+  PreparedComputation,
   StructureInspection,
   StructureSource,
 } from "../api/coreClient";
@@ -28,9 +27,8 @@ class CoreStub implements CoreClient {
     Promise.resolve(inspection),
   ];
   inspectedSources: StructureSource[] = [];
-  memoryResults: Promise<ComputationResult>[] = [];
-  archiveResults: Promise<ArchiveDownload>[] = [];
-  computeCalls: { request: ComputeRequest; output: MemoryOutput | ArchiveOutput }[] = [];
+  preparedResults: Promise<PreparedComputation>[] = [];
+  computeCalls: ComputeRequest[] = [];
 
   capabilities(): Promise<Capabilities> {
     this.capabilitiesCalls += 1;
@@ -45,30 +43,23 @@ class CoreStub implements CoreClient {
     );
   }
 
-  compute(
-    _request: ComputeRequest,
-    _output: MemoryOutput,
-  ): Promise<ComputationResult>;
-  compute(
-    _request: ComputeRequest,
-    _output: ArchiveOutput,
-  ): Promise<ArchiveDownload>;
-  compute(
-    request: ComputeRequest,
-    output: MemoryOutput | ArchiveOutput,
-  ): Promise<ComputationResult | ArchiveDownload> {
-    this.computeCalls.push({ request, output });
-    if (output.kind === "archive") {
-      return (
-        this.archiveResults.shift() ??
-        Promise.reject(new Error("archive not configured"))
-      );
-    }
+  compute(request: ComputeRequest): Promise<PreparedComputation> {
+    this.computeCalls.push(request);
     return (
-      this.memoryResults.shift() ??
-      Promise.reject(new Error("memory compute not configured"))
+      this.preparedResults.shift() ??
+      Promise.reject(new Error("prepared computation not configured"))
     );
   }
+}
+
+function prepared(
+  result: ComputationResult = computationResult,
+  archive: ArchiveDownload | null = {
+    blob: new Blob(["zip"]),
+    filename: "goldilocks-inputs.zip",
+  },
+): PreparedComputation {
+  return { result, archive };
 }
 
 describe("Workspace", () => {
@@ -79,10 +70,10 @@ describe("Workspace", () => {
       task_revision: "2",
     };
     const core = new CoreStub();
-    core.memoryResults = [
-      Promise.resolve(computationResult),
+    core.preparedResults = [
+      Promise.resolve(prepared()),
       Promise.reject(failure),
-      Promise.resolve(replacementResult),
+      Promise.resolve(prepared(replacementResult)),
     ];
     const workspace = createWorkspace(core);
     await workspace.dispatch({ type: "workspace.start" });
@@ -98,10 +89,7 @@ describe("Workspace", () => {
 
     expect(core.computeCalls).toHaveLength(3);
     expect(workspace.getSnapshot()).toMatchObject({
-      reviewed: {
-        draft: { hints: { k_grid: [5, 5, 5] } },
-        result: replacementResult,
-      },
+      reviewed: { result: replacementResult },
       outOfDate: false,
       failure: null,
     });
@@ -134,10 +122,8 @@ describe("Workspace", () => {
     });
   });
 
-  it("does not let an obsolete archive clear inspection or pair source B with result A", async () => {
-    const archive = deferred<ArchiveDownload>();
-    const replacementInspection = deferred<StructureInspection>();
-    const obsoleteComputation = deferred<ComputationResult>();
+  it("does not pair an obsolete computation with a replacement source", async () => {
+    const obsoleteComputation = deferred<PreparedComputation>();
     const replacement: StructureSource = {
       kind: "inline",
       name: "POSCAR",
@@ -157,32 +143,27 @@ describe("Workspace", () => {
     const core = new CoreStub();
     core.inspectionResults = [
       Promise.resolve(inspection),
-      replacementInspection.promise,
+      Promise.resolve(inspectedReplacement),
     ];
-    core.memoryResults = [
-      Promise.resolve(computationResult),
+    core.preparedResults = [
+      Promise.resolve(prepared()),
       obsoleteComputation.promise,
     ];
-    core.archiveResults = [archive.promise];
     const workspace = createWorkspace(core, vi.fn());
     await workspace.dispatch({ type: "workspace.start" });
     await workspace.dispatch({ type: "source.open", source });
     await workspace.dispatch({ type: "review.compute" });
 
-    const downloading = workspace.dispatch({ type: "review.download" });
+    const computing = workspace.dispatch({ type: "review.compute" });
     const replacing = workspace.dispatch({
       type: "source.open",
       source: replacement,
     });
-    archive.resolve({ blob: new Blob(["A"]), filename: "source-a.zip" });
-    await downloading;
-
-    expect(workspace.getSnapshot().operation).toBe("inspect");
-    const computing = workspace.dispatch({ type: "review.compute" });
-    replacementInspection.resolve(inspectedReplacement);
-    await replacing;
-    obsoleteComputation.resolve({ ...computationResult, task_revision: "A" });
+    obsoleteComputation.resolve(
+      prepared({ ...computationResult, task_revision: "obsolete" }),
+    );
     await computing;
+    await replacing;
 
     expect(core.computeCalls).toHaveLength(2);
     expect(workspace.getSnapshot()).toMatchObject({
@@ -193,14 +174,13 @@ describe("Workspace", () => {
     });
   });
 
-  it("downloads by resubmitting the exact reviewed Draft for archive output", async () => {
+  it("downloads the archive paired with the reviewed computation", async () => {
     const archive: ArchiveDownload = {
       blob: new Blob(["zip"]),
       filename: "goldilocks-inputs.zip",
     };
     const core = new CoreStub();
-    core.memoryResults = [Promise.resolve(computationResult)];
-    core.archiveResults = [Promise.resolve(archive)];
+    core.preparedResults = [Promise.resolve(prepared(computationResult, archive))];
     const saveArchive = vi.fn<(download: ArchiveDownload) => void>();
     const workspace = createWorkspace(core, saveArchive);
     await workspace.dispatch({ type: "workspace.start" });
@@ -209,14 +189,12 @@ describe("Workspace", () => {
 
     await workspace.dispatch({ type: "review.download" });
 
-    expect(core.computeCalls[1]).toEqual({
-      request: { draft, selection: { preset: "generate" } },
-      output: { kind: "archive" },
-    });
+    expect(core.computeCalls).toEqual([
+      { draft, selection: { preset: "generate" } },
+    ]);
     expect(saveArchive).toHaveBeenCalledWith(archive);
     expect(workspace.getSnapshot()).toMatchObject({
       lastDownload: archive,
-      downloadOutOfDate: false,
       operation: null,
       failure: null,
     });
@@ -225,8 +203,8 @@ describe("Workspace", () => {
   it("preserves the old Result when recomputation fails", async () => {
     const failure = new CoreFailure("server_busy", "Core is busy.", true);
     const core = new CoreStub();
-    core.memoryResults = [
-      Promise.resolve(computationResult),
+    core.preparedResults = [
+      Promise.resolve(prepared()),
       Promise.reject(failure),
     ];
     const workspace = createWorkspace(core);
@@ -241,7 +219,7 @@ describe("Workspace", () => {
     await workspace.dispatch({ type: "review.compute" });
 
     expect(workspace.getSnapshot()).toMatchObject({
-      reviewed: { draft, result: computationResult },
+      reviewed: { result: computationResult },
       outOfDate: true,
       operation: null,
       failure,
@@ -251,7 +229,7 @@ describe("Workspace", () => {
 
   it("preserves the reviewed Result and marks it out of date after a Draft edit", async () => {
     const core = new CoreStub();
-    core.memoryResults = [Promise.resolve(computationResult)];
+    core.preparedResults = [Promise.resolve(prepared())];
     const workspace = createWorkspace(core);
     await workspace.dispatch({ type: "workspace.start" });
     await workspace.dispatch({ type: "source.open", source });
@@ -264,14 +242,14 @@ describe("Workspace", () => {
 
     expect(workspace.getSnapshot()).toMatchObject({
       draft: { hints: { k_grid: [5, 5, 5] } },
-      reviewed: { draft, result: computationResult },
+      reviewed: { result: computationResult },
       outOfDate: true,
     });
   });
 
-  it("stores the exact submitted Draft with a generation Result", async () => {
+  it("submits the exact Draft and stores its prepared computation", async () => {
     const core = new CoreStub();
-    core.memoryResults = [Promise.resolve(computationResult)];
+    core.preparedResults = [Promise.resolve(prepared())];
     const workspace = createWorkspace(core);
     await workspace.dispatch({ type: "workspace.start" });
     await workspace.dispatch({ type: "source.open", source });
@@ -279,13 +257,10 @@ describe("Workspace", () => {
     await workspace.dispatch({ type: "review.compute" });
 
     expect(core.computeCalls).toEqual([
-      {
-        request: { draft, selection: { preset: "generate" } },
-        output: { kind: "memory" },
-      },
+      { draft, selection: { preset: "generate" } },
     ]);
     expect(workspace.getSnapshot()).toMatchObject({
-      reviewed: { draft, result: computationResult },
+      reviewed: { result: computationResult },
       outOfDate: false,
       operation: null,
       failure: null,

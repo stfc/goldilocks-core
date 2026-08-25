@@ -39,13 +39,33 @@ class AssetReadiness:
             WORKBENCH_PROFILE, entries
         )
         self._lock = threading.Lock()
+        self._state: tuple[tuple[str, int, int, int], ...] | None = None
         self._report: ReadinessReport | None = None
 
     def check(self) -> ReadinessReport:
         with self._lock:
-            if self._report is None:
+            state = self._filesystem_state()
+            if state != self._state:
                 self._report = self._verify_profile()
+                self._state = self._filesystem_state()
+            assert self._report is not None
             return self._report
+
+    def _filesystem_state(self) -> tuple[tuple[str, int, int, int], ...]:
+        state: list[tuple[str, int, int, int]] = []
+        for installation in self._installations:
+            spec = installation.spec
+            root = self._store.root / spec.id / spec.version
+            paths = (root, *sorted(root.rglob("*"))) if root.exists() else (root,)
+            for path in paths:
+                try:
+                    status = path.lstat()
+                    state.append(
+                        (str(path), status.st_mode, status.st_size, status.st_mtime_ns)
+                    )
+                except OSError:
+                    state.append((str(path), -1, -1, -1))
+        return tuple(state)
 
     def _verify_profile(self) -> ReadinessReport:
         installations = self._installations

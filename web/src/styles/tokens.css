@@ -1,39 +1,52 @@
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family: Inter, "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  color: #eef2ef;
-  background: #0d1418;
+  color: #1e272b;
+  background: #f0eee8;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 
   --font-sans: Inter, "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
-  --text-xs: 0.75rem;
-  --text-sm: 0.8125rem;
-  --text-base: 0.9375rem;
+  --text-xs: 0.8125rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
   --text-lg: 1.125rem;
   --leading-tight: 1.25;
   --leading-base: 1.55;
-  --leading-relaxed: 1.7;
+  --leading-relaxed: 1.65;
 
-  --color-canvas: #0d1418;
-  --color-surface: #111a1f;
-  --color-surface-raised: #172328;
-  --color-surface-soft: #1c292e;
-  --color-surface-deep: #0a1215;
-  --color-text: #eef2ef;
-  --color-text-secondary: #bac5c3;
-  --color-text-muted: #97a5a4;
-  --color-line: #334347;
-  --color-line-strong: #4b5d60;
-  --color-accent: #dfb451;
-  --color-accent-bright: #f5cd6b;
-  --color-accent-ink: #211b0c;
-  --color-focus: #9bd4ff;
-  --color-danger: #f0a18c;
-  --color-danger-surface: #2b1c18;
-  --color-success: #8ac9a9;
-  --color-info: #8fc4ed;
+  --color-canvas: #f0eee8;
+  --color-header: #fffdf8;
+  --color-surface: #fbfaf6;
+  --color-surface-raised: #ffffff;
+  --color-surface-soft: #e9e6de;
+  --color-surface-deep: #e4e2dc;
+  --color-control: #ffffff;
+  --color-viewer-background: #dfe5e3;
+  --color-unit-cell: #6f5200;
+  --color-overlay: rgb(255 253 248 / 92%);
+  --color-grid: #d9ddd8;
+  --color-text: #1e272b;
+  --color-text-secondary: #435159;
+  --color-text-muted: #5b686e;
+  --color-line: #c5c3ba;
+  --color-line-strong: #77858a;
+  --color-accent: #d5a62b;
+  --color-accent-hover: #e7bd52;
+  --color-accent-text: #745000;
+  --color-accent-text-hover: #4f3700;
+  --color-accent-border: #94701b;
+  --color-accent-surface: #fff6d8;
+  --color-accent-ink: #241b05;
+  --color-focus: #006da8;
+  --color-danger: #9b321f;
+  --color-danger-text: #792719;
+  --color-danger-muted: #854537;
+  --color-danger-surface: #fff0eb;
+  --color-danger-border: #ad5543;
+  --color-success: #176b48;
+  --color-code-text: #263338;
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -46,11 +59,10 @@
   --target-size: 2.75rem;
   --border-subtle: 1px solid var(--color-line);
   --border-strong: 1px solid var(--color-line-strong);
-  --elevation-status: 0 0.75rem 2.5rem rgb(0 0 0 / 32%);
+  --elevation-status: 0 0.75rem 2.5rem rgb(29 37 41 / 18%);
   --motion-fast: 160ms;
   --motion-slow: 3s;
 
-  /* Domain aliases keep feature styles concise. */
   --ink: var(--color-text);
   --muted: var(--color-text-secondary);
   --faint: var(--color-text-muted);
@@ -60,9 +72,48 @@
   --line: var(--color-line);
   --line-strong: var(--color-line-strong);
   --accent: var(--color-accent);
-  --accent-bright: var(--color-accent-bright);
+  --accent-bright: var(--color-accent-text);
   --accent-ink: var(--color-accent-ink);
   --danger: var(--color-danger);
   --success: var(--color-success);
   --mono: var(--font-mono);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  color: #f3f7f6;
+  background: #10171b;
+
+  --color-canvas: #10171b;
+  --color-header: #151e22;
+  --color-surface: #192328;
+  --color-surface-raised: #223036;
+  --color-surface-soft: #29383e;
+  --color-surface-deep: #0c1316;
+  --color-control: #111a1e;
+  --color-viewer-background: #192328;
+  --color-unit-cell: #e4b94f;
+  --color-overlay: rgb(12 19 22 / 92%);
+  --color-grid: #2b3a40;
+  --color-text: #f3f7f6;
+  --color-text-secondary: #d1dcda;
+  --color-text-muted: #afbcbb;
+  --color-line: #475a60;
+  --color-line-strong: #74868b;
+  --color-accent: #e4b94f;
+  --color-accent-hover: #f1ca68;
+  --color-accent-text: #ffd979;
+  --color-accent-text-hover: #ffe8ad;
+  --color-accent-border: #b29043;
+  --color-accent-surface: #2c281b;
+  --color-accent-ink: #211806;
+  --color-focus: #8bd1ff;
+  --color-danger: #ffb5a3;
+  --color-danger-text: #ffd8cf;
+  --color-danger-muted: #efb7aa;
+  --color-danger-surface: #3b231e;
+  --color-danger-border: #c87966;
+  --color-success: #9de0bc;
+  --color-code-text: #e0e8e6;
+  --elevation-status: 0 0.75rem 2.5rem rgb(0 0 0 / 38%);
 }

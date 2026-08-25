@@ -18,7 +18,7 @@ export function GeneratedInputReview({
         <span className="review-section__index">D</span>
         <div>
           <h3>Generated inputs</h3>
-          <p>{files.length} deterministic files</p>
+          <p>{files.length} files</p>
         </div>
       </header>
       {file === undefined ? (

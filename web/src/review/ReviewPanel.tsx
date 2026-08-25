@@ -13,6 +13,7 @@ export function ReviewPanel() {
 
   return (
     <section
+      id="review-panel"
       className="review-panel"
       aria-label="Recommendation review"
       aria-busy={snapshot.operation === "compute"}
@@ -48,7 +49,6 @@ export function ReviewPanel() {
               size={18}
             />
             <strong>Computing recommendation</strong>
-            <p>Evaluating Core Records and generating reproducible inputs.</p>
           </div>
         ) : (
           <div className="review-empty">
@@ -57,11 +57,7 @@ export function ReviewPanel() {
               <span />
               <span />
             </div>
-            <strong>No recommendation yet</strong>
-            <p>
-              Inspect a structure, review the scientific defaults, then compute
-              reproducible DFT Input Data.
-            </p>
+            <strong>No recommendation</strong>
           </div>
         )
       ) : (
@@ -87,9 +83,6 @@ export function ReviewPanel() {
             <div>
               <span className="archive-card__label">Ready-to-run Output</span>
               <h3>Calculation archive</h3>
-              <p>
-                Inputs, selected UPFs, checksums, citations, and provenance.
-              </p>
             </div>
             <button
               className="archive-action"
@@ -185,7 +178,7 @@ function RecordReview({ result }: { readonly result: ComputationResult }) {
         <span className="review-section__index">B</span>
         <div>
           <h3>Scientific records</h3>
-          <p>{records.length} immutable results from Core</p>
+          <p>{records.length} records</p>
         </div>
       </header>
       <div className="record-list">

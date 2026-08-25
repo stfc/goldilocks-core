@@ -1,12 +1,9 @@
 .control-rail {
   min-width: 0;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  min-height: 100dvh;
+  overflow: visible;
   border-right: var(--border-strong);
-  background: #11191d;
-  scrollbar-color: var(--color-line-strong) transparent;
-  scrollbar-width: thin;
+  background: var(--color-surface);
 }
 
 .rail-section {
@@ -18,11 +15,18 @@
   display: flex;
   margin-bottom: var(--space-5);
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-3);
 }
 
-.section-heading span {
-  color: var(--color-accent-bright);
+.section-heading > div {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.section-heading > div > span {
+  color: var(--color-accent-text);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   letter-spacing: 0.1em;
@@ -36,6 +40,33 @@
   text-transform: uppercase;
 }
 
+.theme-toggle {
+  display: flex;
+  min-width: var(--target-size);
+  min-height: var(--target-size);
+  padding: 0 var(--space-3);
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  border: var(--border-strong);
+  border-radius: 0;
+  background: var(--color-surface-raised);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.theme-toggle[aria-pressed="true"] {
+  color: var(--color-accent-text);
+  border-color: var(--color-accent-border);
+  background: var(--color-accent-surface);
+}
+
+.theme-toggle:not(:disabled):hover {
+  color: var(--color-text);
+  background: var(--color-surface-soft);
+}
+
 .file-drop {
   display: flex;
   min-height: 10rem;
@@ -44,14 +75,14 @@
   flex-direction: column;
   justify-content: center;
   border: 1px dashed var(--color-line-strong);
-  background: #0e1619;
+  background: var(--color-control);
   text-align: center;
-  transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease;
+  transition: border-color var(--motion-fast) ease;
 }
 
 .file-drop--active {
-  border-color: var(--color-accent-bright);
-  background: #191d17;
+  border-color: var(--color-accent-text);
+  background: var(--color-accent-surface);
 }
 
 .file-drop__mark {
@@ -60,8 +91,8 @@
   height: 2.25rem;
   margin-bottom: var(--space-3);
   place-items: center;
-  color: var(--color-accent-bright);
-  border: 1px solid #806c38;
+  color: var(--color-accent-text);
+  border: 1px solid var(--color-accent-border);
 }
 
 .file-drop strong {
@@ -93,12 +124,12 @@
   font-size: var(--text-xs);
   letter-spacing: 0.04em;
   text-decoration: underline;
-  text-decoration-color: #927839;
+  text-decoration-color: var(--color-accent-border);
   text-underline-offset: 0.25rem;
 }
 
 .text-button:not(:disabled):hover {
-  color: #ffe49e;
+  color: var(--color-accent-text-hover);
 }
 
 .field-error,
@@ -143,24 +174,6 @@
   text-overflow: ellipsis;
 }
 
-.rail-placeholder {
-  padding: var(--space-4) 0 var(--space-2);
-  color: var(--color-text-secondary);
-}
-
-.rail-placeholder span {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.rail-placeholder p {
-  margin: var(--space-2) 0 0;
-  font-size: var(--text-sm);
-  line-height: var(--leading-relaxed);
-}
-
 .calculation-form {
   display: grid;
   gap: var(--space-4);
@@ -197,7 +210,7 @@
   color: var(--color-text);
   border: var(--border-strong);
   border-radius: 0;
-  background: #0e1619;
+  background: var(--color-control);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
 }
@@ -208,7 +221,7 @@
 
 .advanced-controls {
   border: var(--border-subtle);
-  background: #0e1619;
+  background: var(--color-control);
 }
 
 .advanced-controls summary {
@@ -309,7 +322,7 @@
   align-items: center;
   justify-content: space-between;
   color: var(--color-accent-ink);
-  border: 1px solid var(--color-accent);
+  border: 1px solid var(--color-accent-border);
   border-radius: 0;
   background: var(--color-accent);
   font-family: var(--font-mono);
@@ -320,12 +333,12 @@
 }
 
 .primary-action:not(:disabled):hover {
-  background: var(--color-accent-bright);
+  background: var(--color-accent-hover);
 }
 
 @media (max-width: 70rem) {
   .control-rail {
-    overflow: visible;
+    min-height: 0;
   }
 }
 

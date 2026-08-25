@@ -1,9 +1,11 @@
 .viewport {
   position: relative;
+  width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--color-surface);
+  background: var(--color-viewer-background);
 }
 
 .viewport__canvas {
@@ -56,8 +58,8 @@
   min-height: var(--target-size);
   margin: var(--space-4) auto 0;
   padding: 0 var(--space-4);
-  color: var(--color-accent-bright);
-  border: 1px solid #92783d;
+  color: var(--color-accent-text);
+  border: 1px solid var(--color-accent-border);
   border-radius: 0;
   background: transparent;
   font-family: var(--font-mono);
@@ -66,32 +68,17 @@
 
 .viewport__fallback button:hover {
   color: var(--color-accent-ink);
-  background: var(--color-accent-bright);
+  background: var(--color-accent-hover);
 }
 
-.viewport__eyebrow,
 .viewport__title,
-.viewport__metrics,
-.viewport__hint {
+.viewport__metrics {
   position: absolute;
   z-index: 4;
 }
 
-.viewport__eyebrow {
-  top: var(--space-5);
-  left: var(--space-5);
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  color: var(--color-text-secondary);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
 .viewport__title {
-  top: 2.875rem;
+  top: var(--space-5);
   left: var(--space-5);
   display: flex;
   margin: 0;
@@ -120,7 +107,7 @@
   margin: 0;
   border-top: var(--border-strong);
   border-left: var(--border-strong);
-  background: rgb(10 18 21 / 90%);
+  background: var(--color-overlay);
   backdrop-filter: blur(0.625rem);
 }
 
@@ -146,15 +133,6 @@
   font-size: var(--text-xs);
 }
 
-.viewport__hint {
-  bottom: var(--space-5);
-  left: var(--space-5);
-  color: var(--color-text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  letter-spacing: 0.04em;
-}
-
 @media (max-width: 47.5rem) {
   .viewport__title strong {
     font-size: 1.75rem;
@@ -165,13 +143,9 @@
     bottom: var(--space-3);
   }
 
-  .viewport__hint {
-    display: none;
-  }
 }
 
 @media (max-width: 24rem) {
-  .viewport__eyebrow,
   .viewport__title {
     left: var(--space-4);
   }

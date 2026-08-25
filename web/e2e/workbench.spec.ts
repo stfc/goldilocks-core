@@ -45,6 +45,40 @@ test("prepares and downloads a real Core calculation", async ({ page }) => {
     page.getByRole("heading", { name: "Recommended setup" }),
   ).toBeVisible();
   await expect(page.getByText("inputs/qe.in", { exact: true })).toBeVisible();
+  const generatedInput = page.getByLabel("Generated input inputs/qe.in");
+  await expect(generatedInput).toBeInViewport();
+  await expect(
+    page.getByRole("button", { name: "Download input files (.zip)" }),
+  ).toBeInViewport();
+
+  const inputResize = page.getByRole("separator", {
+    name: "Resize generated input",
+  });
+  const initialInput = await generatedInput.boundingBox();
+  const resizeBox = await inputResize.boundingBox();
+  expect(initialInput).not.toBeNull();
+  expect(resizeBox).not.toBeNull();
+  await page.mouse.move(
+    (resizeBox?.x ?? 0) + (resizeBox?.width ?? 0) / 2,
+    (resizeBox?.y ?? 0) + (resizeBox?.height ?? 0) / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    (resizeBox?.x ?? 0) + (resizeBox?.width ?? 0) / 2,
+    (resizeBox?.y ?? 0) + (resizeBox?.height ?? 0) / 2 + 64,
+    { steps: 4 },
+  );
+  await page.mouse.up();
+  const resizedInput = await generatedInput.boundingBox();
+  expect((resizedInput?.height ?? 0) - (initialInput?.height ?? 0)).toBeGreaterThan(
+    40,
+  );
+
+  await inputResize.press("End");
+  await expect(inputResize).toHaveAttribute(
+    "aria-valuetext",
+    "Full input file visible",
+  );
   await expect(
     page.getByText(
       "Electronic character could not be inferred from structure facts alone.",
@@ -54,11 +88,24 @@ test("prepares and downloads a real Core calculation", async ({ page }) => {
     page.getByText("Metallicity was inferred from structure-only heuristics."),
   ).toHaveCount(0);
   await expectNoAxeViolations(page);
-  await page.getByRole("button", { name: "Dark mode" }).click();
+  await expect(page.locator(".review-state")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Back to structure" }).click();
+  await expect(page.getByLabel("Crystal structure viewer")).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Recommendation results" }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Recommendation", exact: true })
+    .click();
+
+  await page.getByRole("button", { name: "Switch to dark mode" }).click();
   await expectNoAxeViolations(page);
 
   const downloadStarted = page.waitForEvent("download");
-  await page.getByRole("button", { name: /Download \.zip/ }).click();
+  await page
+    .getByRole("button", { name: "Download input files (.zip)" })
+    .click();
   const download = await downloadStarted;
   expect(download.suggestedFilename()).toMatch(/\.zip$/);
   const path = await download.path();
@@ -98,19 +145,29 @@ test("keeps an old Result visible until an edited Draft is recomputed", async ({
   await page.getByText("Scientific overrides").click();
   await page.getByRole("checkbox", { name: "Set an explicit grid" }).check();
 
-  await expect(page.getByText("Review out of date")).toBeVisible();
+  await expect(
+    page.getByRole("status", { name: "Recommendation notice" }),
+  ).toContainText(
+    "Your settings changed. Update the recommendation before downloading.",
+  );
   await expect(
     page.getByRole("heading", { name: "Recommended setup" }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: /Download \.zip/ })).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Download input files (.zip)" }),
+  ).toBeDisabled();
   await expectNoAxeViolations(page);
 
-  await page.getByRole("button", { name: "Recompute recommendation" }).click();
-  await expect(page.getByText("Review out of date")).toBeHidden();
+  await page.getByRole("button", { name: "Update recommendation" }).click();
+  await expect(
+    page.getByRole("status", { name: "Recommendation notice" }),
+  ).toBeHidden();
   await expect(page.getByLabel("Generated input inputs/qe.in")).toContainText(
     "1 1 1",
   );
-  await expect(page.getByRole("button", { name: /Download \.zip/ })).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Download input files (.zip)" }),
+  ).toBeEnabled();
 });
 
 test("has no Axe violations in empty, failure, and viewer fallback states", async ({
@@ -123,12 +180,16 @@ test("has no Axe violations in empty, failure, and viewer fallback states", asyn
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expectNoAxeViolations(page);
 
-  const themeToggle = page.getByRole("button", { name: "Dark mode" });
+  const themeToggle = page.getByRole("button", {
+    name: "Switch to dark mode",
+  });
+  await expect(themeToggle.locator(".lucide-sun")).toBeVisible();
   await themeToggle.click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(themeToggle).toHaveAttribute("aria-pressed", "true");
+  const lightMode = page.getByRole("button", { name: "Switch to light mode" });
+  await expect(lightMode.locator(".lucide-moon")).toBeVisible();
   await expectNoAxeViolations(page);
-  await themeToggle.click();
+  await lightMode.click();
 
   await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
   await page.route("**/compute", async (route) => {
@@ -204,8 +265,10 @@ test("completes the preparation workflow with keyboard-only activation", async (
   await explicitGrid.press("Space");
   await expect(explicitGrid).toBeChecked();
   await expect(
-    page.getByRole("status", { name: "Recommendation status" }),
-  ).toContainText("Review out of date");
+    page.getByRole("status", { name: "Recommendation notice" }),
+  ).toContainText(
+    "Your settings changed. Update the recommendation before downloading.",
+  );
 
   const firstRecord = page.locator(".record-card").first();
   await firstRecord.locator("summary").press("Enter");
@@ -222,7 +285,9 @@ test("keeps keyboard focus visible and primary targets usable", async ({
   await browse.waitFor();
 
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("button", { name: "Dark mode" })).toBeFocused();
+  await expect(
+    page.getByRole("button", { name: "Switch to dark mode" }),
+  ).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(browse).toBeFocused();
   const box = await browse.boundingBox();
@@ -233,7 +298,7 @@ test("keeps keyboard focus visible and primary targets usable", async ({
   await expect(browse).toHaveCSS("outline-width", "3px");
 });
 
-test("resizes desktop sidebars with pointer and keyboard input", async ({
+test("resizes the two-panel layout with pointer and keyboard input", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -264,18 +329,21 @@ test("resizes desktop sidebars with pointer and keyboard input", async ({
   expect((resizedControls?.width ?? 0) - (initialControls?.width ?? 0)).toBeGreaterThan(80);
   expect((initialStructure?.width ?? 0) - (resizedStructure?.width ?? 0)).toBeGreaterThan(80);
 
-  const reviewHandle = page.getByRole("separator", {
-    name: "Resize review panel",
-  });
-  await reviewHandle.press("ArrowLeft");
-  await expect(reviewHandle).toHaveAttribute("aria-valuenow", "34");
+  expect(await page.getByRole("separator").count()).toBe(1);
+  await controlsHandle.press("Home");
+  await expect(controlsHandle).toHaveAttribute("aria-valuenow", "24");
 });
 
-test("provides a document scrollbar when desktop panes exceed the viewport", async ({
+test("constrains resized desktop panes without clipping", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1180, height: 700 });
+  await page.setViewportSize({ width: 920, height: 700 });
   await page.goto("/");
+  const resize = page.getByRole("separator", {
+    name: "Resize calculation setup",
+  });
+  await resize.press("End");
+  await expect(resize).toHaveAttribute("aria-valuenow", "42");
 
   const dimensions = await page.evaluate<{
     readonly scrollWidth: number;
@@ -284,9 +352,7 @@ test("provides a document scrollbar when desktop panes exceed the viewport", asy
     scrollWidth: document.documentElement.scrollWidth,
     viewportWidth: window.innerWidth,
   })`);
-  expect(dimensions.scrollWidth).toBeGreaterThan(dimensions.viewportWidth);
-  await page.evaluate("window.scrollTo(document.body.scrollWidth, 0)");
-  expect(await page.evaluate<number>("window.scrollX")).toBeGreaterThan(0);
+  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.viewportWidth);
 });
 
 test("reflows intermediate widths without horizontal clipping", async ({ page }) => {
@@ -300,7 +366,7 @@ test("reflows intermediate widths without horizontal clipping", async ({ page })
 
   const workspace = await page.getByRole("main").boundingBox();
   const review = await page
-    .getByRole("region", { name: "Recommendation review" })
+    .getByRole("region", { name: "Recommendation results" })
     .boundingBox();
   expect(workspace).not.toBeNull();
   expect(review).not.toBeNull();
@@ -333,7 +399,7 @@ test("uses the document scrollbar for long desktop content", async ({ page }) =>
     documentScrolls.viewportHeight,
   );
   await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
-  await expect(page.getByRole("button", { name: /Download \.zip/ })).toBeVisible();
+  await expect(page.locator(".record-card").last()).toBeInViewport();
 });
 
 test("reflows at effective 200 percent zoom without clipping", async ({
@@ -388,7 +454,9 @@ test("prepares a real Core recommendation from POSCAR", async ({ page }) => {
     "sssp-pbesol-efficiency-sr",
   );
   const downloadStarted = page.waitForEvent("download");
-  await page.getByRole("button", { name: /Download \.zip/ }).click();
+  await page
+    .getByRole("button", { name: "Download input files (.zip)" })
+    .click();
   const download = await downloadStarted;
   const path = await download.path();
   const entries = unzipSync(new Uint8Array(await readFile(path)));

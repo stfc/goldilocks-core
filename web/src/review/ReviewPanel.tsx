@@ -1,4 +1,4 @@
-import { Download, LoaderCircle } from "lucide-react";
+import { ArrowLeft, Download, LoaderCircle } from "lucide-react";
 
 import type { ComputationResult } from "../api/coreClient";
 import { useWorkspace, useWorkspaceSnapshot } from "../workspace/useWorkspace";
@@ -6,38 +6,36 @@ import { GeneratedInputReview } from "./GeneratedInputReview";
 import { PseudopotentialReview } from "./PseudopotentialReview";
 import "./ReviewPanel.css";
 
-export function ReviewPanel() {
+export function ReviewPanel({
+  onShowStructure,
+}: {
+  readonly onShowStructure: () => void;
+}) {
   const workspace = useWorkspace();
   const snapshot = useWorkspaceSnapshot();
   const result = snapshot.reviewed?.result ?? null;
 
   return (
     <section
-      id="review-panel"
+      id="recommendation-panel"
       className="review-panel"
-      aria-label="Recommendation review"
+      aria-label="Recommendation results"
       aria-busy={snapshot.operation === "compute"}
     >
       <header className="review-heading">
         <div>
           <span>03</span>
-          <h2>Review</h2>
+          <h2>Recommendation</h2>
         </div>
-        <span
-          className={`review-state${snapshot.outOfDate ? " review-state--stale" : ""}`}
-          role="status"
-          aria-label="Review state"
-          aria-live="polite"
-          aria-atomic="true"
+        <button
+          className="panel-navigation"
+          type="button"
+          aria-label="Back to structure"
+          onClick={onShowStructure}
         >
-          {result === null
-            ? snapshot.operation === "compute"
-              ? "Computing"
-              : "Awaiting"
-            : snapshot.outOfDate
-              ? "Out of date"
-              : "Current"}
-        </span>
+          <ArrowLeft aria-hidden="true" size={15} />
+          Structure
+        </button>
       </header>
 
       {result === null ? (
@@ -66,26 +64,19 @@ export function ReviewPanel() {
             <div
               className="stale-banner"
               role="status"
-              aria-label="Recommendation status"
+              aria-label="Recommendation notice"
               aria-live="polite"
               aria-atomic="true"
             >
-              <strong>Review out of date</strong>
-              <span>Recompute before creating an archive.</span>
+              <p>
+                Your settings changed. Update the recommendation before
+                downloading.
+              </p>
             </div>
           ) : null}
-          <RecommendationSummary result={result} />
-          <RecordReview result={result} />
-          <PseudopotentialReview result={result} />
-          <GeneratedInputReview result={result} />
-          <Warnings result={result} />
-          <section className="archive-card">
-            <div>
-              <span className="archive-card__label">Ready-to-run Output</span>
-              <h3>Calculation archive</h3>
-            </div>
+          <div className="download-bar">
             <button
-              className="archive-action"
+              className="download-action"
               type="button"
               disabled={
                 snapshot.reviewed?.archive == null ||
@@ -96,22 +87,25 @@ export function ReviewPanel() {
                 void workspace.dispatch({ type: "review.download" })
               }
             >
-              Download .zip
-              <Download aria-hidden="true" size={13} />
+              Download input files (.zip)
+              <Download aria-hidden="true" size={14} />
             </button>
-            {snapshot.lastDownload === null ? null : (
+            {snapshot.lastDownload === null || snapshot.outOfDate ? null : (
               <p
-                className={`archive-receipt${snapshot.outOfDate ? " archive-receipt--stale" : ""}`}
+                className="archive-receipt"
                 role="status"
                 aria-label="Archive status"
                 aria-live="polite"
               >
-                {snapshot.outOfDate
-                  ? "Previous archive is out of date"
-                  : `${snapshot.lastDownload.filename} is ready`}
+                {snapshot.lastDownload.filename} is ready
               </p>
             )}
-          </section>
+          </div>
+          <GeneratedInputReview result={result} />
+          <RecommendationSummary result={result} />
+          <PseudopotentialReview result={result} />
+          <RecordReview result={result} />
+          <Warnings result={result} />
         </>
       )}
     </section>
@@ -132,7 +126,7 @@ function RecommendationSummary({
   return (
     <section className="review-section recommendation-summary">
       <header>
-        <span className="review-section__index">A</span>
+        <span className="review-section__index">B</span>
         <div>
           <h3>Recommended setup</h3>
           <p>{intent.functional} · Quantum ESPRESSO</p>
@@ -175,7 +169,7 @@ function RecordReview({ result }: { readonly result: ComputationResult }) {
   return (
     <section className="review-section record-review">
       <header>
-        <span className="review-section__index">B</span>
+        <span className="review-section__index">D</span>
         <div>
           <h3>Scientific records</h3>
           <p>{records.length} records</p>
@@ -233,7 +227,7 @@ function Warnings({ result }: { readonly result: ComputationResult }) {
       aria-live="polite"
       aria-atomic="true"
     >
-      <h3>Review warnings</h3>
+      <h3>Warnings</h3>
       <ul>
         {warnings.map((warning) => (
           <li key={warning}>{warning}</li>

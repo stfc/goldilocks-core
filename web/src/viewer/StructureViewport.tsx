@@ -72,10 +72,6 @@ export function StructureViewport({
           setViewerRevision((revision) => revision + 1);
         }}
       />
-      <div className="viewport__eyebrow">
-        <span className="status-light" aria-hidden="true" />
-        Canonical structure
-      </div>
       <h2 className="viewport__title">
         <strong>{inspection.structure.reduced_formula}</strong>
         <span>{inspection.structure.site_count} atomic sites</span>
@@ -98,7 +94,6 @@ export function StructureViewport({
           <dd>{lattice.volume_angstrom3.toFixed(2)} Å³</dd>
         </div>
       </dl>
-      <div className="viewport__hint">Drag to orbit · Scroll to zoom</div>
     </section>
   );
 }

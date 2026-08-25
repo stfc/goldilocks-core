@@ -1,6 +1,8 @@
-import { ArrowRight } from "lucide-react";
+import type { ReactNode } from "react";
+import { ArrowRight, Moon } from "lucide-react";
 
 import type { CalculationDraft, Capabilities } from "../api/coreClient";
+import type { Theme } from "../theme";
 import { useWorkspace, useWorkspaceSnapshot } from "../workspace/useWorkspace";
 import { StructureSourceControls } from "./StructureSourceControls";
 import "./GuidedControls.css";
@@ -10,13 +12,38 @@ type SmearingType = NonNullable<
 >;
 type PseudoAccuracy = NonNullable<CalculationDraft["intent"]>["pseudo_accuracy"];
 
-export function GuidedControls() {
+export function GuidedControls({
+  theme,
+  onToggleTheme,
+}: {
+  readonly theme: Theme;
+  readonly onToggleTheme: () => void;
+}) {
   const workspace = useWorkspace();
   const snapshot = useWorkspaceSnapshot();
   return (
-    <section className="control-rail" aria-label="Calculation setup">
+    <section
+      id="calculation-panel"
+      className="control-rail"
+      aria-label="Calculation setup"
+    >
       <section className="rail-section rail-section--source">
-        <SectionHeading number="01" title="Structure" />
+        <SectionHeading
+          number="01"
+          title="Structure"
+          action={
+            <button
+              className="theme-toggle"
+              type="button"
+              aria-label="Dark mode"
+              aria-pressed={theme === "dark"}
+              onClick={onToggleTheme}
+            >
+              <Moon aria-hidden="true" size={15} />
+              <span>Dark</span>
+            </button>
+          }
+        />
         <StructureSourceControls
           source={snapshot.source}
           inspection={snapshot.inspection}
@@ -31,12 +58,7 @@ export function GuidedControls() {
         <SectionHeading number="02" title="Calculation" />
         {snapshot.draft === null ||
         snapshot.inspection === null ||
-        snapshot.capabilities === null ? (
-          <div className="rail-placeholder">
-            <span>Waiting for a structure</span>
-            <p>Core defaults and the asset catalog appear after inspection.</p>
-          </div>
-        ) : (
+        snapshot.capabilities === null ? null : (
           <CalculationForm capabilities={snapshot.capabilities} />
         )}
       </section>
@@ -44,11 +66,22 @@ export function GuidedControls() {
   );
 }
 
-function SectionHeading({ number, title }: { number: string; title: string }) {
+function SectionHeading({
+  number,
+  title,
+  action,
+}: {
+  readonly number: string;
+  readonly title: string;
+  readonly action?: ReactNode;
+}) {
   return (
     <header className="section-heading">
-      <span>{number}</span>
-      <h2>{title}</h2>
+      <div>
+        <span>{number}</span>
+        <h2>{title}</h2>
+      </div>
+      {action}
     </header>
   );
 }
@@ -171,7 +204,7 @@ function CalculationForm({
             })
           }
         >
-          <option value="">Selected by Core</option>
+          <option value="">Automatic</option>
           {capabilities.pseudopotential_sets.map((table) => (
             <option key={table.id} value={table.id}>
               {table.id} · {table.relativistic_treatment}
@@ -184,9 +217,8 @@ function CalculationForm({
         <summary>Scientific overrides</summary>
         <p className="advanced-controls__summary">
           {explicitKGrid ? `${kGrid.join("×")} k grid` : "automatic k grid"} ·{" "}
-          {smearingSummary(smearingType, smearingWidth)} {" "}
-          · spin {spinSetting} · vdW {vdwSetting}
-          <span> Changes require recomputation.</span>
+          {smearingSummary(smearingType, smearingWidth)} · spin {spinSetting} ·
+          vdW {vdwSetting}
         </p>
         <div className="advanced-controls__body">
           <fieldset className="k-grid-field">

@@ -18,9 +18,14 @@ export const attachStructureViewer: StructureViewerFactory = async (element) => 
     throw new Error("WebGL is unavailable");
   }
   const { createViewer } = await import("3dmol");
+  const rootStyle = getComputedStyle(document.documentElement);
+  const backgroundColor = rootStyle
+    .getPropertyValue("--color-viewer-background")
+    .trim();
+  const unitCellColor = rootStyle.getPropertyValue("--color-unit-cell").trim();
   const viewer: GLViewer = createViewer(element, {
     antialias: true,
-    backgroundColor: "#111a1f",
+    backgroundColor,
   });
   const observer = new ResizeObserver(() => {
     viewer.resize();
@@ -40,7 +45,7 @@ export const attachStructureViewer: StructureViewerFactory = async (element) => 
         },
       );
       viewer.addUnitCell(model, {
-        box: { color: "#d7aa4a", linewidth: 1.5 },
+        box: { color: unitCellColor, linewidth: 1.5 },
       });
       viewer.zoomTo();
       viewer.render();

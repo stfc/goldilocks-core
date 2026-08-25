@@ -81,22 +81,112 @@ describe("Goldilocks Workbench", () => {
     );
 
     const main = await screen.findByRole("main", {
-      name: "Goldilocks guided SCF preparation",
+      name: "Goldilocks SCF setup",
     });
     expect(main).toContainElement(
       screen.getByRole("heading", {
         level: 1,
-        name: "Goldilocks guided SCF preparation",
+        name: "Goldilocks SCF setup",
       }),
     );
-    expect(screen.getByRole("region", { name: "Calculation setup" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Structure workspace" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Recommendation review" })).toBeInTheDocument();
+    expect(document.querySelector(".app-header")).toBeNull();
+    expect(
+      screen.getByRole("region", { name: "Calculation setup" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Structure workspace" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Recommendation review" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("separator", { name: "Resize calculation setup" }),
+    ).toHaveAttribute("aria-valuenow", "27");
+    expect(
+      screen.getByRole("separator", { name: "Resize review panel" }),
+    ).toHaveAttribute("aria-valuenow", "32");
     expect(
       screen.getByRole("button", {
         name: "Choose a CIF or POSCAR structure",
       }),
     ).toHaveAccessibleDescription("CIF or POSCAR · 5 MB maximum file size");
+    for (const removedCopy of [
+      "Guided SCF preparation",
+      "Scientific decisions by Core",
+      "Records remain immutable",
+      "Core defaults and the asset catalog appear after inspection.",
+    ]) {
+      expect(screen.queryByText(removedCopy)).not.toBeInTheDocument();
+    }
+    expect(
+      screen.queryByText(/Load a CIF or POSCAR to inspect/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Inspect a structure, review/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses light mode by default and persists an explicit dark mode", async () => {
+    const user = userEvent.setup();
+    const workspace = createWorkspace(
+      new CoreStub(Promise.resolve(capabilities)),
+    );
+    const { unmount } = render(
+      <WorkspaceProvider workspace={workspace}>
+        <App />
+      </WorkspaceProvider>,
+    );
+    const toggle = await screen.findByRole("button", { name: "Dark mode" });
+
+    expect(document.documentElement.dataset.theme).toBe("light");
+    expect(document.documentElement.style.colorScheme).toBe("light");
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(toggle);
+
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(document.documentElement.style.colorScheme).toBe("dark");
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(window.localStorage.getItem("goldilocks-theme")).toBe("dark");
+
+    unmount();
+    const restoredWorkspace = createWorkspace(
+      new CoreStub(Promise.resolve(capabilities)),
+    );
+    render(
+      <WorkspaceProvider workspace={restoredWorkspace}>
+        <App />
+      </WorkspaceProvider>,
+    );
+    expect(
+      await screen.findByRole("button", { name: "Dark mode" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("resizes both sidebars from the keyboard", async () => {
+    const user = userEvent.setup();
+    const workspace = createWorkspace(
+      new CoreStub(Promise.resolve(capabilities)),
+    );
+    render(
+      <WorkspaceProvider workspace={workspace}>
+        <App />
+      </WorkspaceProvider>,
+    );
+    const controls = await screen.findByRole("separator", {
+      name: "Resize calculation setup",
+    });
+    const review = screen.getByRole("separator", {
+      name: "Resize review panel",
+    });
+
+    controls.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(controls).toHaveAttribute("aria-valuenow", "29");
+
+    review.focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(review).toHaveAttribute("aria-valuenow", "34");
   });
 
   it("announces the current Workbench operation in a persistent status", async () => {
@@ -444,7 +534,7 @@ describe("Goldilocks Workbench", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: "Loading Core capabilities" }),
+      await screen.findByRole("heading", { name: "Loading Workbench" }),
     ).toBeInTheDocument();
   });
 });

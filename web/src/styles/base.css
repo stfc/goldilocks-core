@@ -20,7 +20,7 @@ html {
 body {
   min-height: 100vh;
   min-height: 100dvh;
-  overflow: hidden;
+  overflow: auto;
   color: var(--color-text);
   background: var(--color-canvas);
   font-family: var(--font-sans);
@@ -49,14 +49,14 @@ input:disabled {
   opacity: 0.58;
 }
 
-:where(button, input, select, summary, a):focus-visible {
+:where(button, input, select, summary, a, [role="separator"]):focus-visible {
   z-index: 2;
   outline: 3px solid var(--color-focus);
   outline-offset: 3px;
   box-shadow: 0 0 0 1px var(--color-canvas);
 }
 
-:where(button, input, select, summary, a) {
+:where(button, input, select, summary, a, [role="separator"]) {
   scroll-margin: var(--space-6);
 }
 
@@ -116,7 +116,7 @@ pre {
 }
 
 @media (forced-colors: active) {
-  :where(button, input, select, summary, a):focus-visible {
+  :where(button, input, select, summary, a, [role="separator"]):focus-visible {
     outline-color: Highlight;
   }
 }

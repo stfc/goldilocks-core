@@ -10,21 +10,13 @@ export function OperationStatus({
 }) {
   return (
     <div
-      className={`header-status${hasFailure ? " header-status--failure" : ""}`}
+      className="visually-hidden"
+      role="status"
+      aria-label="Workbench status"
+      aria-live="polite"
+      aria-atomic="true"
     >
-      <div
-        className="header-status__message"
-        role="status"
-        aria-label="Workbench status"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        <span className="status-light" aria-hidden="true" />
-        <span>{operationMessage(operation, hasFailure)}</span>
-      </div>
-      <span className="version-badge" aria-label="Beta">
-        β
-      </span>
+      {operationMessage(operation, hasFailure)}
     </div>
   );
 }

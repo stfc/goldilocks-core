@@ -33,7 +33,7 @@ test("prepares and downloads a real Core calculation", async ({ page }) => {
   });
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Start with a structure" }),
+    page.getByRole("heading", { name: "No structure selected" }),
   ).toBeVisible();
 
   await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
@@ -53,6 +53,8 @@ test("prepares and downloads a real Core calculation", async ({ page }) => {
   await expect(
     page.getByText("Metallicity was inferred from structure-only heuristics."),
   ).toHaveCount(0);
+  await expectNoAxeViolations(page);
+  await page.getByRole("button", { name: "Dark mode" }).click();
   await expectNoAxeViolations(page);
 
   const downloadStarted = page.waitForEvent("download");
@@ -116,9 +118,17 @@ test("has no Axe violations in empty, failure, and viewer fallback states", asyn
 }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Start with a structure" }),
+    page.getByRole("heading", { name: "No structure selected" }),
   ).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expectNoAxeViolations(page);
+
+  const themeToggle = page.getByRole("button", { name: "Dark mode" });
+  await themeToggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(themeToggle).toHaveAttribute("aria-pressed", "true");
+  await expectNoAxeViolations(page);
+  await themeToggle.click();
 
   await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
   await page.route("**/compute", async (route) => {
@@ -145,10 +155,6 @@ test("has no Axe violations in empty, failure, and viewer fallback states", asyn
   await expect(status).toHaveText("Needs attention");
   await expect(status).not.toContainText("Ready");
   await expect(status).not.toContainText("Another calculation");
-  await expect(status.locator(".status-light")).toHaveCSS(
-    "background-color",
-    "rgb(240, 161, 140)",
-  );
   await expectNoAxeViolations(page);
 
   await page.addInitScript({
@@ -216,7 +222,7 @@ test("keeps keyboard focus visible and primary targets usable", async ({
   await browse.waitFor();
 
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("link", { name: "Goldilocks Workbench home" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Dark mode" })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(browse).toBeFocused();
   const box = await browse.boundingBox();
@@ -225,6 +231,62 @@ test("keeps keyboard focus visible and primary targets usable", async ({
   expect(box?.width).toBeGreaterThanOrEqual(44);
   await expect(browse).toHaveCSS("outline-style", "solid");
   await expect(browse).toHaveCSS("outline-width", "3px");
+});
+
+test("resizes desktop sidebars with pointer and keyboard input", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto("/");
+
+  const controls = page.getByRole("region", { name: "Calculation setup" });
+  const structure = page.getByRole("region", { name: "Structure workspace" });
+  const controlsHandle = page.getByRole("separator", {
+    name: "Resize calculation setup",
+  });
+  const initialControls = await controls.boundingBox();
+  const initialStructure = await structure.boundingBox();
+  const handle = await controlsHandle.boundingBox();
+  expect(initialControls).not.toBeNull();
+  expect(initialStructure).not.toBeNull();
+  expect(handle).not.toBeNull();
+
+  await page.mouse.move(
+    (handle?.x ?? 0) + (handle?.width ?? 0) / 2,
+    (handle?.y ?? 0) + 200,
+  );
+  await page.mouse.down();
+  await page.mouse.move((handle?.x ?? 0) + 120, (handle?.y ?? 0) + 200);
+  await page.mouse.up();
+
+  const resizedControls = await controls.boundingBox();
+  const resizedStructure = await structure.boundingBox();
+  expect((resizedControls?.width ?? 0) - (initialControls?.width ?? 0)).toBeGreaterThan(80);
+  expect((initialStructure?.width ?? 0) - (resizedStructure?.width ?? 0)).toBeGreaterThan(80);
+
+  const reviewHandle = page.getByRole("separator", {
+    name: "Resize review panel",
+  });
+  await reviewHandle.press("ArrowLeft");
+  await expect(reviewHandle).toHaveAttribute("aria-valuenow", "34");
+});
+
+test("provides a document scrollbar when desktop panes exceed the viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1180, height: 700 });
+  await page.goto("/");
+
+  const dimensions = await page.evaluate<{
+    readonly scrollWidth: number;
+    readonly viewportWidth: number;
+  }>(`({
+    scrollWidth: document.documentElement.scrollWidth,
+    viewportWidth: window.innerWidth,
+  })`);
+  expect(dimensions.scrollWidth).toBeGreaterThan(dimensions.viewportWidth);
+  await page.evaluate("window.scrollTo(document.body.scrollWidth, 0)");
+  expect(await page.evaluate<number>("window.scrollX")).toBeGreaterThan(0);
 });
 
 test("reflows intermediate widths without horizontal clipping", async ({ page }) => {
@@ -248,8 +310,8 @@ test("reflows intermediate widths without horizontal clipping", async ({ page })
   expect((review?.x ?? 0) + (review?.width ?? 0)).toBeLessThanOrEqual(1050);
 });
 
-test("keeps the desktop workspace contained to the viewport", async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 1000 });
+test("uses the document scrollbar for long desktop content", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 700 });
   await page.goto("/");
   await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
   await page.getByRole("button", { name: "Generate recommendation" }).click();
@@ -257,25 +319,33 @@ test("keeps the desktop workspace contained to the viewport", async ({ page }) =
     page.getByRole("heading", { name: "Recommended setup" }),
   ).toBeVisible();
 
-  const header = await page.locator(".app-header").boundingBox();
-  const workspace = await page.getByRole("main").boundingBox();
-  expect(header).not.toBeNull();
-  expect(workspace).not.toBeNull();
-  expect((header?.height ?? 0) + (workspace?.height ?? 0)).toBeLessThanOrEqual(
-    1000,
+  const documentScrolls = await page.evaluate<{
+    readonly overflow: string;
+    readonly scrollHeight: number;
+    readonly viewportHeight: number;
+  }>(`({
+    overflow: getComputedStyle(document.body).overflow,
+    scrollHeight: document.documentElement.scrollHeight,
+    viewportHeight: window.innerHeight,
+  })`);
+  expect(documentScrolls.overflow).toBe("auto");
+  expect(documentScrolls.scrollHeight).toBeGreaterThan(
+    documentScrolls.viewportHeight,
   );
+  await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
+  await expect(page.getByRole("button", { name: /Download \.zip/ })).toBeVisible();
 });
 
-test("reflows without an overlaying header at effective 200 percent zoom", async ({
+test("reflows at effective 200 percent zoom without clipping", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 720, height: 500 });
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Start with a structure" }),
+    page.getByRole("heading", { name: "No structure selected" }),
   ).toBeVisible();
 
-  await expect(page.locator(".app-header")).toHaveCSS("position", "static");
+  await expect(page.locator(".app-header")).toHaveCount(0);
   const mainBox = await page.getByRole("main").boundingBox();
   expect(mainBox).not.toBeNull();
   expect((mainBox?.x ?? 0) + (mainBox?.width ?? 0)).toBeLessThanOrEqual(720);

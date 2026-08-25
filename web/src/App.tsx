@@ -4,9 +4,12 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
+import { ArrowRight } from "lucide-react";
+
 import type { StructureInspection } from "./api/coreClient";
 import { GuidedControls } from "./controls/GuidedControls";
 import { ReviewPanel } from "./review/ReviewPanel";
@@ -18,37 +21,39 @@ import { StructureViewport } from "./viewer/StructureViewport";
 import { useWorkspace, useWorkspaceSnapshot } from "./workspace/useWorkspace";
 import "./App.css";
 
-const DEFAULT_PANE_WIDTHS = { controls: 27, review: 32 } as const;
-const MIN_PANE_WIDTHS = { controls: 20, review: 25 } as const;
-const MAX_SIDEBAR_WIDTH = 70;
+const DEFAULT_CONTROLS_WIDTH = 34;
+const MIN_CONTROLS_WIDTH = 24;
+const MAX_CONTROLS_WIDTH = 42;
 const KEYBOARD_RESIZE_STEP = 2;
 
-type Pane = keyof typeof DEFAULT_PANE_WIDTHS;
+type WorkspaceView = "structure" | "recommendation";
 
 export function App() {
   const workspace = useWorkspace();
   const snapshot = useWorkspaceSnapshot();
   const { theme, toggleTheme } = useTheme();
   const grid = useRef<HTMLElement>(null);
-  const [paneWidths, setPaneWidths] = useState(DEFAULT_PANE_WIDTHS);
+  const [controlsWidth, setControlsWidth] = useState(DEFAULT_CONTROLS_WIDTH);
+  const [workspaceView, setWorkspaceView] =
+    useState<WorkspaceView>("structure");
 
-  function resizePane(pane: Pane, requestedWidth: number): void {
-    setPaneWidths((current) => {
-      const otherPane = pane === "controls" ? "review" : "controls";
-      const maximum = MAX_SIDEBAR_WIDTH - current[otherPane];
-      return {
-        ...current,
-        [pane]: Math.min(
-          maximum,
-          Math.max(MIN_PANE_WIDTHS[pane], requestedWidth),
-        ),
-      };
-    });
+  useLayoutEffect(() => {
+    if (workspaceView !== "recommendation") return;
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [workspaceView]);
+
+  function resizeControls(requestedWidth: number): void {
+    setControlsWidth(
+      Math.min(
+        MAX_CONTROLS_WIDTH,
+        Math.max(MIN_CONTROLS_WIDTH, requestedWidth),
+      ),
+    );
   }
 
   const gridStyle = {
-    "--controls-width": `${String(paneWidths.controls)}%`,
-    "--review-width": `${String(paneWidths.review)}%`,
+    "--controls-width": `${String(controlsWidth)}%`,
   } as CSSProperties;
 
   return (
@@ -105,65 +110,68 @@ export function App() {
           <h1 id="workbench-title" className="visually-hidden">
             Goldilocks SCF setup
           </h1>
-          <GuidedControls theme={theme} onToggleTheme={toggleTheme} />
-          <PaneResizeHandle
-            pane="controls"
-            label="Resize calculation setup"
-            controls="calculation-panel"
-            grid={grid}
-            value={paneWidths.controls}
-            maximum={MAX_SIDEBAR_WIDTH - paneWidths.review}
-            onResize={(value) => {
-              resizePane("controls", value);
+          <GuidedControls
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            onShowStructure={() => {
+              setWorkspaceView("structure");
+            }}
+            onShowRecommendation={() => {
+              setWorkspaceView("recommendation");
             }}
           />
-          <section
-            id="structure-panel"
-            className="structure-stage"
-            aria-label="Structure workspace"
-          >
-            {snapshot.inspection === null ? (
-              <EmptyStage loading={snapshot.operation === "inspect"} />
-            ) : (
-              <SafeStructureViewport
-                inspection={snapshot.inspection}
-                theme={theme}
-              />
-            )}
-          </section>
-          <PaneResizeHandle
-            pane="review"
-            label="Resize review panel"
-            controls="review-panel"
+          <PanelResizeHandle
             grid={grid}
-            value={paneWidths.review}
-            maximum={MAX_SIDEBAR_WIDTH - paneWidths.controls}
-            onResize={(value) => {
-              resizePane("review", value);
-            }}
+            value={controlsWidth}
+            onResize={resizeControls}
           />
-          <ReviewPanel />
+          {workspaceView === "recommendation" ? (
+            <ReviewPanel
+              onShowStructure={() => {
+                setWorkspaceView("structure");
+              }}
+            />
+          ) : (
+            <section
+              id="structure-panel"
+              className="structure-stage"
+              aria-label="Structure workspace"
+            >
+              {snapshot.inspection === null ? (
+                <EmptyStage loading={snapshot.operation === "inspect"} />
+              ) : (
+                <SafeStructureViewport
+                  inspection={snapshot.inspection}
+                  theme={theme}
+                />
+              )}
+              {snapshot.reviewed === null ? null : (
+                <button
+                  className="stage-navigation"
+                  type="button"
+                  onClick={() => {
+                    setWorkspaceView("recommendation");
+                  }}
+                >
+                  Recommendation
+                  <ArrowRight aria-hidden="true" size={15} />
+                </button>
+              )}
+            </section>
+          )}
         </main>
       )}
     </div>
   );
 }
 
-function PaneResizeHandle({
-  pane,
-  label,
-  controls,
+function PanelResizeHandle({
   grid,
   value,
-  maximum,
   onResize,
 }: {
-  readonly pane: Pane;
-  readonly label: string;
-  readonly controls: string;
   readonly grid: RefObject<HTMLElement | null>;
   readonly value: number;
-  readonly maximum: number;
   readonly onResize: (value: number) => void;
 }) {
   const activePointer = useRef<number | null>(null);
@@ -174,11 +182,7 @@ function PaneResizeHandle({
     }
     const bounds = grid.current.getBoundingClientRect();
     if (bounds.width === 0) return;
-    const width =
-      pane === "controls"
-        ? event.clientX - bounds.left
-        : bounds.right - event.clientX;
-    onResize((width / bounds.width) * 100);
+    onResize(((event.clientX - bounds.left) / bounds.width) * 100);
     event.preventDefault();
   }
 
@@ -186,20 +190,16 @@ function PaneResizeHandle({
     let next: number | null = null;
     switch (event.key) {
       case "ArrowLeft":
-        next =
-          value +
-          (pane === "review" ? KEYBOARD_RESIZE_STEP : -KEYBOARD_RESIZE_STEP);
+        next = value - KEYBOARD_RESIZE_STEP;
         break;
       case "ArrowRight":
-        next =
-          value +
-          (pane === "controls" ? KEYBOARD_RESIZE_STEP : -KEYBOARD_RESIZE_STEP);
+        next = value + KEYBOARD_RESIZE_STEP;
         break;
       case "Home":
-        next = MIN_PANE_WIDTHS[pane];
+        next = MIN_CONTROLS_WIDTH;
         break;
       case "End":
-        next = maximum;
+        next = MAX_CONTROLS_WIDTH;
         break;
     }
     if (next === null) return;
@@ -209,20 +209,20 @@ function PaneResizeHandle({
 
   return (
     <div
-      className={`pane-resizer pane-resizer--${pane}`}
+      className="pane-resizer"
       role="separator"
-      aria-label={label}
-      aria-controls={controls}
+      aria-label="Resize calculation setup"
+      aria-controls="calculation-panel"
       aria-orientation="vertical"
-      aria-valuemin={MIN_PANE_WIDTHS[pane]}
-      aria-valuemax={Math.round(maximum)}
+      aria-valuemin={MIN_CONTROLS_WIDTH}
+      aria-valuemax={MAX_CONTROLS_WIDTH}
       aria-valuenow={Math.round(value)}
       aria-valuetext={`${String(Math.round(value))}% of workspace width`}
       tabIndex={0}
       title="Drag or use arrow keys to resize"
       onKeyDown={resizeFromKeyboard}
       onDoubleClick={() => {
-        onResize(DEFAULT_PANE_WIDTHS[pane]);
+        onResize(DEFAULT_CONTROLS_WIDTH);
       }}
       onPointerDown={(event) => {
         if (event.button !== 0) return;

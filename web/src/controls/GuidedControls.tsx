@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowRight, Moon } from "lucide-react";
+import { ArrowRight, Moon, Sun } from "lucide-react";
 
 import type { CalculationDraft, Capabilities } from "../api/coreClient";
 import type { Theme } from "../theme";
@@ -15,9 +15,13 @@ type PseudoAccuracy = NonNullable<CalculationDraft["intent"]>["pseudo_accuracy"]
 export function GuidedControls({
   theme,
   onToggleTheme,
+  onShowStructure,
+  onShowRecommendation,
 }: {
   readonly theme: Theme;
   readonly onToggleTheme: () => void;
+  readonly onShowStructure: () => void;
+  readonly onShowRecommendation: () => void;
 }) {
   const workspace = useWorkspace();
   const snapshot = useWorkspaceSnapshot();
@@ -35,12 +39,19 @@ export function GuidedControls({
             <button
               className="theme-toggle"
               type="button"
-              aria-label="Dark mode"
-              aria-pressed={theme === "dark"}
+              aria-label={
+                theme === "light"
+                  ? "Switch to dark mode"
+                  : "Switch to light mode"
+              }
+              title={theme === "light" ? "Dark mode" : "Light mode"}
               onClick={onToggleTheme}
             >
-              <Moon aria-hidden="true" size={15} />
-              <span>Dark</span>
+              {theme === "light" ? (
+                <Sun aria-hidden="true" size={17} />
+              ) : (
+                <Moon aria-hidden="true" size={17} />
+              )}
             </button>
           }
         />
@@ -48,9 +59,10 @@ export function GuidedControls({
           source={snapshot.source}
           inspection={snapshot.inspection}
           inspecting={snapshot.operation === "inspect"}
-          onOpen={(source) =>
-            workspace.dispatch({ type: "source.open", source })
-          }
+          onOpen={(source) => {
+            onShowStructure();
+            return workspace.dispatch({ type: "source.open", source });
+          }}
         />
       </section>
 
@@ -59,7 +71,10 @@ export function GuidedControls({
         {snapshot.draft === null ||
         snapshot.inspection === null ||
         snapshot.capabilities === null ? null : (
-          <CalculationForm capabilities={snapshot.capabilities} />
+          <CalculationForm
+            capabilities={snapshot.capabilities}
+            onShowRecommendation={onShowRecommendation}
+          />
         )}
       </section>
     </section>
@@ -88,8 +103,10 @@ function SectionHeading({
 
 function CalculationForm({
   capabilities,
+  onShowRecommendation,
 }: {
   readonly capabilities: Capabilities;
+  readonly onShowRecommendation: () => void;
 }) {
   const workspace = useWorkspace();
   const snapshot = useWorkspaceSnapshot();
@@ -134,13 +151,13 @@ function CalculationForm({
       className="calculation-form"
       onSubmit={(event) => {
         event.preventDefault();
+        onShowRecommendation();
         void workspace.dispatch({ type: "review.compute" });
       }}
     >
       {inspecting ? (
         <p className="stale-note" role="status">
-          Inspecting the replacement structure; calculation settings are
-          temporarily disabled.
+          Calculation settings are disabled while the new structure loads.
         </p>
       ) : null}
       <label className="field">
@@ -352,16 +369,13 @@ function CalculationForm({
         </div>
       </details>
 
-      {snapshot.outOfDate ? (
-        <p className="stale-note">Overrides changed · review is now stale</p>
-      ) : null}
       <button className="primary-action" type="submit" disabled={busy}>
         <span>
           {snapshot.operation === "compute"
             ? "Computing"
             : snapshot.reviewed === null
               ? "Generate recommendation"
-              : "Recompute recommendation"}
+              : "Update recommendation"}
         </span>
         <ArrowRight aria-hidden="true" size={14} />
       </button>

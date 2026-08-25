@@ -244,7 +244,7 @@ async function parsePreparedComputation(
   if (!(resultPart instanceof Blob)) {
     throw new CoreFailure(
       "invalid_response",
-      "Goldilocks Core omitted the reviewed computation.",
+      "Goldilocks Core omitted the computation result.",
       false,
       {},
       response.status,

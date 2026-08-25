@@ -41,7 +41,6 @@ __all__ = [
     "RequestError",
     "TransportOutput",
     "compute_from_dict",
-    "http_output_from_dict",
     "inspection_source_from_dict",
     "local_output_from_dict",
 ]
@@ -104,15 +103,6 @@ def compute_from_dict(
         return ComputeRequest(draft=draft, selection=_selection(body["selection"]))
     except TypeError as error:
         raise RequestError(str(error)) from error
-
-
-def http_output_from_dict(data: Mapping[str, Any]) -> TransportOutput:
-    output = _mapping(data, "Field 'output'")
-    _reject_unknown(output, frozenset({"kind"}), "output")
-    kind = output.get("kind")
-    if kind not in {"memory", "archive"}:
-        raise RequestError("Field 'output.kind' must be memory or archive.")
-    return TransportOutput(kind, None)
 
 
 def local_output_from_dict(

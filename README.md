@@ -104,8 +104,9 @@ uv run goldilocks serve mcp
 ```
 
 HTTP publishes `/capabilities`, `/inspect`, `/compute`, `/health`, and `/ready`.
-Memory Compute returns canonical Result JSON; archive Compute streams an
-in-memory ZIP and never creates a server output directory. MCP publishes
+Compute returns one multipart response containing canonical Result JSON and,
+when complete DFT Input Data was requested, its exact in-memory ZIP. It never
+creates a server output directory. MCP publishes
 `capabilities`, `inspect_structure`, and `compute` as local stdio tools.
 
 ## Static application serving

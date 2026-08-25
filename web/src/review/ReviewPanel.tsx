@@ -94,32 +94,26 @@ export function ReviewPanel() {
             <button
               className="archive-action"
               type="button"
-              disabled={snapshot.outOfDate || snapshot.operation !== null}
+              disabled={
+                snapshot.reviewed?.archive == null ||
+                snapshot.outOfDate ||
+                snapshot.operation !== null
+              }
               onClick={() =>
                 void workspace.dispatch({ type: "review.download" })
               }
             >
-              {snapshot.operation === "download"
-                ? "Building archive"
-                : "Download .zip"}
-              {snapshot.operation === "download" ? (
-                <LoaderCircle
-                  className="spinning-icon"
-                  aria-hidden="true"
-                  size={13}
-                />
-              ) : (
-                <Download aria-hidden="true" size={13} />
-              )}
+              Download .zip
+              <Download aria-hidden="true" size={13} />
             </button>
             {snapshot.lastDownload === null ? null : (
               <p
-                className={`archive-receipt${snapshot.downloadOutOfDate ? " archive-receipt--stale" : ""}`}
+                className={`archive-receipt${snapshot.outOfDate ? " archive-receipt--stale" : ""}`}
                 role="status"
                 aria-label="Archive status"
                 aria-live="polite"
               >
-                {snapshot.downloadOutOfDate
+                {snapshot.outOfDate
                   ? "Previous archive is out of date"
                   : `${snapshot.lastDownload.filename} is ready`}
               </p>

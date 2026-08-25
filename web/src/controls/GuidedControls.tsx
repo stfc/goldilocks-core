@@ -1,10 +1,14 @@
 import { ArrowRight } from "lucide-react";
 
-import type { Capabilities } from "../api/coreClient";
+import type { CalculationDraft, Capabilities } from "../api/coreClient";
 import { useWorkspace, useWorkspaceSnapshot } from "../workspace/useWorkspace";
 import { StructureSourceControls } from "./StructureSourceControls";
 import "./GuidedControls.css";
 const K_GRID_AXES = ["x", "y", "z"] as const;
+type SmearingType = NonNullable<
+  NonNullable<CalculationDraft["hints"]>["smearing_type"]
+>;
+type PseudoAccuracy = NonNullable<CalculationDraft["intent"]>["pseudo_accuracy"];
 
 export function GuidedControls() {
   const workspace = useWorkspace();
@@ -78,6 +82,8 @@ function CalculationForm({
   const explicitKGrid = kGrid !== null && kGrid !== undefined;
   const spinSetting = formatOptionalSwitch(hints.spin_polarized);
   const vdwSetting = formatOptionalSwitch(hints.use_vdw);
+  const smearingType = hints.smearing_type;
+  const smearingWidth = hints.smearing_width_ry;
   const inspecting = snapshot.operation === "inspect";
   const busy = snapshot.operation !== null;
 
@@ -142,7 +148,7 @@ function CalculationForm({
               void workspace.dispatch({
                 type: "draft.patch",
                 intent: {
-                  pseudo_accuracy: event.currentTarget.value,
+                  pseudo_accuracy: parsePseudoAccuracy(event.currentTarget.value),
                 },
                 pseudoTable: null,
               })
@@ -178,10 +184,7 @@ function CalculationForm({
         <summary>Scientific overrides</summary>
         <p className="advanced-controls__summary">
           {explicitKGrid ? `${kGrid.join("×")} k grid` : "automatic k grid"} ·{" "}
-          {hints.smearing_width_ry === null ||
-          hints.smearing_width_ry === undefined
-            ? "automatic smearing"
-            : `${String(hints.smearing_width_ry)} Ry smearing`}{" "}
+          {smearingSummary(smearingType, smearingWidth)} {" "}
           · spin {spinSetting} · vdW {vdwSetting}
           <span> Changes require recomputation.</span>
         </p>
@@ -222,28 +225,58 @@ function CalculationForm({
               ))}
             </div>
           </fieldset>
-          <label className="field">
-            <span>Smearing width · Ry</span>
-            <input
-              type="number"
-              step="0.001"
-              disabled={inspecting}
-              min="0"
-              value={hints.smearing_width_ry ?? ""}
-              placeholder="Automatic"
-              onChange={(event) =>
-                void workspace.dispatch({
-                  type: "draft.patch",
-                  hints: {
-                    smearing_width_ry:
-                      event.currentTarget.value === ""
-                        ? null
-                        : Number(event.currentTarget.value),
-                  },
-                })
-              }
-            />
-          </label>
+          <div className="field-row">
+            <label className="field">
+              <span>Smearing treatment</span>
+              <select
+                disabled={inspecting}
+                value={smearingType ?? ""}
+                onChange={(event) => {
+                  const selected = parseSmearingType(event.currentTarget.value);
+                  void workspace.dispatch({
+                    type: "draft.patch",
+                    hints: {
+                      smearing_type: selected,
+                      smearing_width_ry:
+                        selected === null || selected === "fixed"
+                          ? null
+                          : (smearingWidth ?? 0.01),
+                    },
+                  });
+                }}
+              >
+                <option value="">Automatic</option>
+                <option value="fixed">Fixed occupations</option>
+                <option value="cold">Cold</option>
+                <option value="gaussian">Gaussian</option>
+                <option value="mp">Methfessel-Paxton</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Smearing width · Ry</span>
+              <input
+                type="number"
+                step="0.001"
+                disabled={
+                  inspecting ||
+                  smearingType === null ||
+                  smearingType === undefined ||
+                  smearingType === "fixed"
+                }
+                min="0.001"
+                value={smearingWidth ?? ""}
+                placeholder="Select smearing"
+                onChange={(event) => {
+                  const width = Number(event.currentTarget.value);
+                  if (!Number.isFinite(width) || width <= 0) return;
+                  void workspace.dispatch({
+                    type: "draft.patch",
+                    hints: { smearing_width_ry: width },
+                  });
+                }}
+              />
+            </label>
+          </div>
           <label className="field">
             <span>Spin treatment</span>
             <select
@@ -302,6 +335,34 @@ function CalculationForm({
       </button>
     </form>
   );
+}
+
+function parsePseudoAccuracy(value: string): PseudoAccuracy {
+  if (value === "efficiency" || value === "precision") return value;
+  throw new Error(`Unsupported pseudopotential accuracy: ${value}`);
+}
+
+function parseSmearingType(value: string): SmearingType | null {
+  switch (value) {
+    case "":
+      return null;
+    case "fixed":
+    case "cold":
+    case "gaussian":
+    case "mp":
+      return value;
+    default:
+      throw new Error(`Unsupported smearing treatment: ${value}`);
+  }
+}
+
+function smearingSummary(
+  type: SmearingType | null | undefined,
+  width: number | null | undefined,
+): string {
+  if (type === null || type === undefined) return "automatic smearing";
+  if (type === "fixed") return "fixed occupations";
+  return `${type} · ${String(width)} Ry`;
 }
 
 function optionalSwitchValue(value: boolean | null | undefined): string {

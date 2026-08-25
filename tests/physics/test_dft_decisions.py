@@ -12,9 +12,11 @@ from goldilocks_core import (
     ComputeRequest,
     InMemoryStructureSource,
     PresetSelection,
+    Runtime,
     compute,
 )
 from goldilocks_core.advice.smearing import METALLIC_SMEARING_WIDTH_RY
+from goldilocks_core.assets import AssetStore
 from goldilocks_core.contracts import (
     GeneratedFiles,
     ParameterAdvice,
@@ -29,18 +31,18 @@ def test_elemental_metal_uses_modest_cold_smearing_in_qe_rydberg_units(
     tmp_path: Path,
 ) -> None:
     aluminium = Structure(Lattice.cubic(4.05), ["Al"], [[0.0, 0.0, 0.0]])
-    result = compute(
-        ComputeRequest(
-            draft=CalculationDraft(
-                structure=InMemoryStructureSource(aluminium),
-                hints=CalculationHints(k_grid=(8, 8, 8)),
-                pseudo_metadata=(
-                    pseudo_metadata_factory("Al", root=tmp_path, materialize=True),
-                ),
+    request = ComputeRequest(
+        draft=CalculationDraft(
+            structure=InMemoryStructureSource(aluminium),
+            hints=CalculationHints(k_grid=(8, 8, 8)),
+            pseudo_metadata=(
+                pseudo_metadata_factory("Al", root=tmp_path, materialize=True),
             ),
-            selection=PresetSelection("generate"),
-        )
+        ),
+        selection=PresetSelection("generate"),
     )
+    with Runtime(asset_store=AssetStore(tmp_path / "assets")) as runtime:
+        result = compute(request, runtime=runtime)
     analysis = result.records[StructureAnalysisRecord]
     advice = result.records[ParameterAdvice]
 

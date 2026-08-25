@@ -25,7 +25,19 @@ def advise_smearing(
             ),
         )
 
-    if analysis.electronic_character in {"metal", "likely_metal"}:
+    if analysis.electronic_character == "metal":
+        return SmearingAdvice(
+            smearing_type="cold",
+            width_ry=METALLIC_SMEARING_WIDTH_RY,
+            provenance=Provenance(
+                source="analysis",
+                reason=(
+                    "Model-classified metallic systems benefit from modest smearing."
+                ),
+            ),
+        )
+
+    if analysis.electronic_character == "likely_metal":
         return SmearingAdvice(
             smearing_type="cold",
             width_ry=METALLIC_SMEARING_WIDTH_RY,

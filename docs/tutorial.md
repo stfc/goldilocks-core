@@ -131,14 +131,14 @@ HTTP Structure Sources are explicit inline content:
     "hints": {"k_grid": [4, 4, 4]},
     "pseudo_table": "pseudodojo-pbesol-efficiency-sr"
   },
-  "selection": {"preset": "generate"},
-  "output": {"kind": "archive"}
+  "selection": {"preset": "generate"}
 }
 ```
 
-Send this body to `POST /compute`. `{ "kind": "memory" }` returns canonical
-Result JSON. `{ "kind": "archive" }` returns ZIP bytes with a safe attachment
-filename; the server does not store the archive. Use `GET /capabilities` and
+Send this body to `POST /compute`. The multipart response contains canonical
+Result JSON and, because the `generate` preset produces complete DFT Input Data,
+the exact ZIP from that execution. Record selections without DFT Input Data omit
+the archive part. The server stores neither. Use `GET /capabilities` and
 `POST /inspect` for the other public scientific operations.
 
 ## MCP

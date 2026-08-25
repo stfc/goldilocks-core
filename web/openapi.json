@@ -109,6 +109,10 @@
           "pseudo_accuracy": {
             "anyOf": [
               {
+                "enum": [
+                  "efficiency",
+                  "precision"
+                ],
                 "type": "string"
               },
               {
@@ -120,6 +124,11 @@
           "pseudo_type": {
             "anyOf": [
               {
+                "enum": [
+                  "NC",
+                  "USPP",
+                  "PAW"
+                ],
                 "type": "string"
               },
               {
@@ -131,6 +140,11 @@
           "relativistic_mode": {
             "anyOf": [
               {
+                "enum": [
+                  "scalar",
+                  "full",
+                  "non-relativistic"
+                ],
                 "type": "string"
               },
               {
@@ -142,6 +156,12 @@
           "smearing_type": {
             "anyOf": [
               {
+                "enum": [
+                  "fixed",
+                  "gaussian",
+                  "mp",
+                  "cold"
+                ],
                 "type": "string"
               },
               {
@@ -197,6 +217,12 @@
           "vdw_method": {
             "anyOf": [
               {
+                "enum": [
+                  "d3",
+                  "d3bj",
+                  "ts",
+                  "mbd"
+                ],
                 "type": "string"
               },
               {
@@ -298,6 +324,11 @@
           "pseudo_type": {
             "anyOf": [
               {
+                "enum": [
+                  "NC",
+                  "USPP",
+                  "PAW"
+                ],
                 "type": "string"
               },
               {
@@ -309,6 +340,11 @@
           "relativistic_mode": {
             "anyOf": [
               {
+                "enum": [
+                  "scalar",
+                  "full",
+                  "non-relativistic"
+                ],
                 "type": "string"
               },
               {
@@ -320,6 +356,12 @@
           "smearing_type": {
             "anyOf": [
               {
+                "enum": [
+                  "fixed",
+                  "gaussian",
+                  "mp",
+                  "cold"
+                ],
                 "type": "string"
               },
               {
@@ -408,6 +450,10 @@
           },
           "pseudo_accuracy": {
             "default": "efficiency",
+            "enum": [
+              "efficiency",
+              "precision"
+            ],
             "title": "Pseudo Accuracy",
             "type": "string"
           },
@@ -617,25 +663,13 @@
           "draft": {
             "$ref": "#/components/schemas/CalculationDraft"
           },
-          "output": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/MemoryOutput"
-              },
-              {
-                "$ref": "#/components/schemas/HttpArchiveOutput"
-              }
-            ],
-            "title": "Output"
-          },
           "selection": {
             "$ref": "#/components/schemas/SelectionDocument"
           }
         },
         "required": [
           "draft",
-          "selection",
-          "output"
+          "selection"
         ],
         "title": "ComputeRequest",
         "type": "object"
@@ -845,21 +879,6 @@
           "role"
         ],
         "title": "GeneratedFile",
-        "type": "object"
-      },
-      "HttpArchiveOutput": {
-        "additionalProperties": false,
-        "properties": {
-          "kind": {
-            "const": "archive",
-            "title": "Kind",
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind"
-        ],
-        "title": "HttpArchiveOutput",
         "type": "object"
       },
       "InlineStructureSource": {
@@ -1139,21 +1158,6 @@
         "title": "MagnetismAdvice",
         "type": "object"
       },
-      "MemoryOutput": {
-        "additionalProperties": false,
-        "properties": {
-          "kind": {
-            "const": "memory",
-            "title": "Kind",
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind"
-        ],
-        "title": "MemoryOutput",
-        "type": "object"
-      },
       "ModelCapability": {
         "properties": {
           "feature_set": {
@@ -1245,6 +1249,31 @@
           "vdw"
         ],
         "title": "ParameterAdvice",
+        "type": "object"
+      },
+      "PreparedComputation": {
+        "additionalProperties": false,
+        "properties": {
+          "archive": {
+            "anyOf": [
+              {
+                "contentMediaType": "application/octet-stream",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ComputationResult"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "PreparedComputation",
         "type": "object"
       },
       "PresetCapability": {
@@ -1891,6 +1920,11 @@
           "pseudo_type": {
             "anyOf": [
               {
+                "enum": [
+                  "NC",
+                  "USPP",
+                  "PAW"
+                ],
                 "type": "string"
               },
               {
@@ -1902,6 +1936,11 @@
           "relativistic_mode": {
             "anyOf": [
               {
+                "enum": [
+                  "scalar",
+                  "full",
+                  "non-relativistic"
+                ],
                 "type": "string"
               },
               {
@@ -1913,6 +1952,12 @@
           "smearing_type": {
             "anyOf": [
               {
+                "enum": [
+                  "fixed",
+                  "gaussian",
+                  "mp",
+                  "cold"
+                ],
                 "type": "string"
               },
               {
@@ -3165,19 +3210,13 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
+              "multipart/form-data": {
                 "schema": {
-                  "$ref": "#/components/schemas/ComputationResult"
-                }
-              },
-              "application/zip": {
-                "schema": {
-                  "format": "binary",
-                  "type": "string"
+                  "$ref": "#/components/schemas/PreparedComputation"
                 }
               }
             },
-            "description": "Canonical Computation Result JSON or an in-memory ZIP archive."
+            "description": "One reviewed Computation Result and its exact optional archive."
           },
           "422": {
             "content": {

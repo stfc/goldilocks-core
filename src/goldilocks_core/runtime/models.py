@@ -6,7 +6,7 @@ from pymatgen.core import Structure
 
 from goldilocks_core.advice.kdistance import QrfBackend
 from goldilocks_core.analysis import heuristic_metallicity
-from goldilocks_core.assets import AssetStore
+from goldilocks_core.assets import AssetNotInstalled, AssetStore
 from goldilocks_core.contracts import (
     ElectronicCharacter,
     KMeshService,
@@ -20,6 +20,7 @@ class MetallicityModel:
         "_checkpoint",
         "_atom_init",
         "_registry_path",
+        "_asset_store",
         "_model",
         "_graph_settings",
         "_closed",
@@ -31,10 +32,12 @@ class MetallicityModel:
         checkpoint: PathLike | None,
         atom_init: PathLike | None,
         registry_path: PathLike | None,
+        asset_store: AssetStore,
     ) -> None:
         self._checkpoint = checkpoint
         self._atom_init = atom_init
         self._registry_path = registry_path
+        self._asset_store = asset_store
         self._model: object | None = None
         self._graph_settings: tuple[float, int] | None = None
         self._closed = False
@@ -44,8 +47,11 @@ class MetallicityModel:
     ) -> tuple[ElectronicCharacter, str, float | None]:
         if self._closed:
             raise RuntimeError("MetallicityModel is closed.")
-        if self._checkpoint is None or self._atom_init is None:
+        if not structure.is_ordered:
             return heuristic_metallicity(structure), "heuristic", None
+        if self._checkpoint is None or self._atom_init is None:
+            if not self._resolve_default_artifacts():
+                return heuristic_metallicity(structure), "heuristic", None
 
         from goldilocks_core.ml.qrf.metallicity import (
             classify_metallicity,
@@ -71,6 +77,25 @@ class MetallicityModel:
             max_neighbors=max_neighbors,
         )
         return character, "model", confidence
+
+    def _resolve_default_artifacts(self) -> bool:
+        from goldilocks_core.ml.model_registry import load_default_qrf_config
+
+        config = load_default_qrf_config(self._registry_path)
+        asset = config.metallicity_asset
+        if asset is None:
+            return False
+        try:
+            installed = self._asset_store.resolve_spec(asset)
+        except AssetNotInstalled:
+            return False
+        self._checkpoint = installed.path(config.metallicity_checkpoint_file)
+        self._atom_init = installed.path(config.metallicity_atom_init_file)
+        self._graph_settings = (
+            config.feature_settings.metallicity_graph_radius,
+            config.feature_settings.metallicity_max_neighbors,
+        )
+        return True
 
     def reset(self) -> None:
         self._model = None
@@ -131,6 +156,7 @@ class Runtime:
             checkpoint=self._metallicity_checkpoint,
             atom_init=self._metallicity_atom_init,
             registry_path=self._registry_path,
+            asset_store=self._asset_store,
         )
 
     @property

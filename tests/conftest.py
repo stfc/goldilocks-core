@@ -10,6 +10,11 @@ from pymatgen.core import Lattice, Structure
 from goldilocks_core.contracts import PseudoCutoffs, PseudoMetadata
 
 
+@pytest.fixture(autouse=True)
+def isolated_default_asset_root(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("GOLDILOCKS_ASSET_ROOT", str(tmp_path / "default-assets"))
+
+
 @pytest.fixture
 def silicon_structure() -> Structure:
     return Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])

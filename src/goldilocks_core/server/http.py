@@ -238,13 +238,15 @@ def create_app(
     async def asset_corrupt_handler(
         request: Request, error: AssetCorrupt
     ) -> JSONResponse:
-        del request
+        del request, error
         return JSONResponse(
             status_code=424,
             content={
                 "error": {
                     "kind": "asset_corrupt",
-                    "message": str(error),
+                    "message": (
+                        "A required runtime asset failed integrity verification."
+                    ),
                 }
             },
         )
@@ -262,16 +264,6 @@ def create_app(
                     "message": str(error),
                 }
             },
-        )
-
-    @app.exception_handler(FileNotFoundError)
-    async def not_found_handler(
-        request: Request, error: FileNotFoundError
-    ) -> JSONResponse:
-        del request
-        return JSONResponse(
-            status_code=404,
-            content={"error": {"kind": "not_found", "message": str(error)}},
         )
 
     @app.get("/health")

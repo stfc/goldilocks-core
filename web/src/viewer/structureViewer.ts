@@ -1,13 +1,15 @@
-import { createViewer, type GLViewer } from "3dmol";
+import type { GLViewer } from "3dmol";
 
 export interface StructureViewer {
   show(canonicalCif: string): void;
   dispose(): void;
 }
 
-export type StructureViewerFactory = (element: HTMLElement) => StructureViewer;
+export type StructureViewerFactory = (
+  element: HTMLElement,
+) => StructureViewer | Promise<StructureViewer>;
 
-export const attachStructureViewer: StructureViewerFactory = (element) => {
+export const attachStructureViewer: StructureViewerFactory = async (element) => {
   const probe = document.createElement("canvas");
   if (
     probe.getContext("webgl2") === null &&
@@ -15,6 +17,7 @@ export const attachStructureViewer: StructureViewerFactory = (element) => {
   ) {
     throw new Error("WebGL is unavailable");
   }
+  const { createViewer } = await import("3dmol");
   const viewer: GLViewer = createViewer(element, {
     antialias: true,
     backgroundColor: "#111a1f",

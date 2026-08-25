@@ -18,25 +18,39 @@ export function StructureViewport({
 }) {
   const host = useRef<HTMLDivElement>(null);
   const viewer = useRef<StructureViewer | null>(null);
+  const canonicalCif = useRef(inspection.canonical_cif);
   const fallback = useRef<HTMLDivElement>(null);
   const [viewerRevision, setViewerRevision] = useState(0);
 
   useEffect(() => {
-    if (host.current === null) return;
-    try {
-      viewer.current = createViewer(host.current);
-      if (fallback.current !== null) fallback.current.hidden = true;
-    } catch {
-      viewer.current = null;
-      if (fallback.current !== null) fallback.current.hidden = false;
-    }
+    const element = host.current;
+    if (element === null) return;
+    const lifetime = new AbortController();
+    void (async () => {
+      try {
+        const created = await createViewer(element);
+        if (lifetime.signal.aborted) {
+          created.dispose();
+          return;
+        }
+        viewer.current = created;
+        created.show(canonicalCif.current);
+        if (fallback.current !== null) fallback.current.hidden = true;
+      } catch {
+        if (!lifetime.signal.aborted && fallback.current !== null) {
+          fallback.current.hidden = false;
+        }
+      }
+    })();
     return () => {
+      lifetime.abort();
       viewer.current?.dispose();
       viewer.current = null;
     };
   }, [createViewer, viewerRevision]);
 
   useEffect(() => {
+    canonicalCif.current = inspection.canonical_cif;
     if (viewer.current === null) return;
     try {
       viewer.current.show(inspection.canonical_cif);
@@ -44,7 +58,7 @@ export function StructureViewport({
     } catch {
       if (fallback.current !== null) fallback.current.hidden = false;
     }
-  }, [inspection.canonical_cif, viewerRevision]);
+  }, [inspection.canonical_cif]);
 
   const lattice = inspection.structure.lattice;
   return (

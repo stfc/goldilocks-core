@@ -114,13 +114,13 @@ export interface components {
             /** Mixing Beta */
             readonly mixing_beta?: number | null;
             /** Pseudo Accuracy */
-            readonly pseudo_accuracy?: string | null;
+            readonly pseudo_accuracy?: ("efficiency" | "precision") | null;
             /** Pseudo Type */
-            readonly pseudo_type?: string | null;
+            readonly pseudo_type?: ("NC" | "USPP" | "PAW") | null;
             /** Relativistic Mode */
-            readonly relativistic_mode?: string | null;
+            readonly relativistic_mode?: ("scalar" | "full" | "non-relativistic") | null;
             /** Smearing Type */
-            readonly smearing_type?: string | null;
+            readonly smearing_type?: ("fixed" | "gaussian" | "mp" | "cold") | null;
             /** Smearing Width Ry */
             readonly smearing_width_ry?: number | null;
             /** Spin Orbit Coupling */
@@ -130,7 +130,7 @@ export interface components {
             /** Use Vdw */
             readonly use_vdw?: boolean | null;
             /** Vdw Method */
-            readonly vdw_method?: string | null;
+            readonly vdw_method?: ("d3" | "d3bj" | "ts" | "mbd") | null;
         };
         /**
          * CalculationHints
@@ -157,11 +157,11 @@ export interface components {
             /** Pseudo Accuracy */
             readonly pseudo_accuracy?: ("efficiency" | "precision") | null;
             /** Pseudo Type */
-            readonly pseudo_type?: string | null;
+            readonly pseudo_type?: ("NC" | "USPP" | "PAW") | null;
             /** Relativistic Mode */
-            readonly relativistic_mode?: string | null;
+            readonly relativistic_mode?: ("scalar" | "full" | "non-relativistic") | null;
             /** Smearing Type */
-            readonly smearing_type?: string | null;
+            readonly smearing_type?: ("fixed" | "gaussian" | "mp" | "cold") | null;
             /** Smearing Width Ry */
             readonly smearing_width_ry?: number | null;
             /** Spin Orbit Coupling */
@@ -188,8 +188,9 @@ export interface components {
             /**
              * Pseudo Accuracy
              * @default efficiency
+             * @enum {string}
              */
-            readonly pseudo_accuracy: string;
+            readonly pseudo_accuracy: "efficiency" | "precision";
             /**
              * Task
              * @default scf_single_point
@@ -273,8 +274,6 @@ export interface components {
         /** ComputeRequest */
         readonly ComputeRequest: {
             readonly draft: components["schemas"]["CalculationDraft"];
-            /** Output */
-            readonly output: components["schemas"]["MemoryOutput"] | components["schemas"]["HttpArchiveOutput"];
             readonly selection: components["schemas"]["SelectionDocument"];
         };
         /** ConvergenceAdvice */
@@ -346,14 +345,6 @@ export interface components {
             readonly path: string;
             /** Role */
             readonly role: string;
-        };
-        /** HttpArchiveOutput */
-        readonly HttpArchiveOutput: {
-            /**
-             * Kind
-             * @constant
-             */
-            readonly kind: "archive";
         };
         /** InlineStructureSource */
         readonly InlineStructureSource: {
@@ -456,14 +447,6 @@ export interface components {
             /** Spin Polarized */
             readonly spin_polarized: boolean;
         };
-        /** MemoryOutput */
-        readonly MemoryOutput: {
-            /**
-             * Kind
-             * @constant
-             */
-            readonly kind: "memory";
-        };
         /** ModelCapability */
         readonly ModelCapability: {
             /** Feature Set */
@@ -493,6 +476,12 @@ export interface components {
             readonly smearing: components["schemas"]["SmearingAdvice"];
             readonly spin_orbit: components["schemas"]["SpinOrbitAdvice"];
             readonly vdw: components["schemas"]["VdwAdvice"];
+        };
+        /** PreparedComputation */
+        readonly PreparedComputation: {
+            /** Archive */
+            readonly archive?: string | null;
+            readonly result: components["schemas"]["ComputationResult"];
         };
         /** PresetCapability */
         readonly PresetCapability: {
@@ -682,11 +671,11 @@ export interface components {
             /** Pseudo Accuracy */
             readonly pseudo_accuracy: ("efficiency" | "precision") | null;
             /** Pseudo Type */
-            readonly pseudo_type: string | null;
+            readonly pseudo_type: ("NC" | "USPP" | "PAW") | null;
             /** Relativistic Mode */
-            readonly relativistic_mode: string | null;
+            readonly relativistic_mode: ("scalar" | "full" | "non-relativistic") | null;
             /** Smearing Type */
-            readonly smearing_type: string | null;
+            readonly smearing_type: ("fixed" | "gaussian" | "mp" | "cold") | null;
             /** Smearing Width Ry */
             readonly smearing_width_ry: number | null;
             /** Spin Orbit Coupling */
@@ -1049,14 +1038,13 @@ export interface operations {
             };
         };
         readonly responses: {
-            /** @description Canonical Computation Result JSON or an in-memory ZIP archive. */
+            /** @description One reviewed Computation Result and its exact optional archive. */
             readonly 200: {
                 headers: {
                     readonly [name: string]: unknown;
                 };
                 content: {
-                    readonly "application/json": components["schemas"]["ComputationResult"];
-                    readonly "application/zip": string;
+                    readonly "multipart/form-data": components["schemas"]["PreparedComputation"];
                 };
             };
             /** @description Unprocessable Entity */

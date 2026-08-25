@@ -25,6 +25,12 @@ Direct
 `;
 
 test("prepares and downloads a real Core calculation", async ({ page }) => {
+  const computeRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/compute") {
+      computeRequests.push(request.method());
+    }
+  });
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "Start with a structure" }),
@@ -39,6 +45,14 @@ test("prepares and downloads a real Core calculation", async ({ page }) => {
     page.getByRole("heading", { name: "Recommended setup" }),
   ).toBeVisible();
   await expect(page.getByText("inputs/qe.in", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(
+      "Electronic character could not be inferred from structure facts alone.",
+    ),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Metallicity was inferred from structure-only heuristics."),
+  ).toHaveCount(0);
   await expectNoAxeViolations(page);
 
   const downloadStarted = page.waitForEvent("download");
@@ -52,6 +66,21 @@ test("prepares and downloads a real Core calculation", async ({ page }) => {
     tableId: "pseudodojo-pbesol-efficiency-sr",
     tableVersion: "0.4",
   });
+  expect(computeRequests).toEqual(["POST"]);
+});
+
+test("applies a paired smearing treatment and width override", async ({ page }) => {
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
+  await page.getByText("Scientific overrides").click();
+  await page.getByLabel("Smearing treatment").selectOption("cold");
+  await page.getByLabel("Smearing width · Ry").fill("0.02");
+
+  await page.getByRole("button", { name: "Generate recommendation" }).click();
+
+  const input = page.getByLabel("Generated input inputs/qe.in");
+  await expect(input).toContainText("smearing = 'cold'");
+  await expect(input).toContainText("degauss = 0.02");
 });
 
 test("keeps an old Result visible until an edited Draft is recomputed", async ({

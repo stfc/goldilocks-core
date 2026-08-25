@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { attachStructureViewer } from "./structureViewer";
 
 describe("structure viewer adapter", () => {
-  it("rejects unavailable WebGL instead of leaving an empty canvas", () => {
+  it("rejects unavailable WebGL instead of leaving an empty canvas", async () => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
 
-    expect(() => attachStructureViewer(document.createElement("div"))).toThrow(
-      "WebGL is unavailable",
-    );
+    await expect(
+      attachStructureViewer(document.createElement("div")),
+    ).rejects.toThrow("WebGL is unavailable");
   });
 });

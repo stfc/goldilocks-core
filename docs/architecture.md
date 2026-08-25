@@ -80,10 +80,11 @@ Compute. `server/request.py` converts strict transport shapes into Core
 contracts; Core constructors validate domain values once. Responses serialize
 Core contracts mechanically.
 
-HTTP accepts inline structures and stable Pseudopotential Set IDs. Memory
-Compute returns canonical `ComputationResult` JSON. Archive Compute uses the
-Core publisher to create ZIP bytes in memory and never accepts or creates a
-server output directory. One `ComputationCapacity` slot wraps Compute only, so
+HTTP accepts inline structures and stable Pseudopotential Set IDs. Compute
+returns one multipart response containing the canonical `ComputationResult`
+and, when the Result contains complete DFT Input Data, ZIP bytes produced from
+that same execution. HTTP never accepts or creates a server output directory.
+One `ComputationCapacity` slot wraps Compute only, so
 Capabilities, Structure Inspection, `/health`, `/ready`, and static files stay
 responsive.
 
@@ -118,7 +119,9 @@ The canonical store is external to the package. Its root is
 `<root>/<asset-id>/<version>/`; temporary downloads and source archives are
 removed after installation. A shipped runtime profile pins exact asset IDs and
 versions. Installed tables are resolved lazily by the SCF graph; transport
-deserialization performs no asset-store I/O. The CLI installs assets only
+deserialization performs no asset-store I/O. Analyze uses the installed default
+metallicity classifier when available and falls back to structure-only
+heuristics when that asset is absent or the structure is disordered. The CLI installs assets only
 through explicit lifecycle commands or `--fetch-missing`, which installs the
 exact missing dependency Core reported. See
 [Pseudopotential tables](pseudopotentials.md) for the normalized table layout
@@ -152,10 +155,11 @@ or pod management.
 ## Workbench and production image
 
 Workbench loads Capabilities once, sends inline Structure Sources to Inspection,
-and stores its mutable Calculation Draft in the browser. A successful memory
-Compute stores the exact submitted Draft with its immutable Result. Editing the
-Draft leaves that Result visible but out of date. Download resubmits the stored
-reviewed Draft for archive Compute; the server stores no Result or archive.
+and stores its mutable Calculation Draft in the browser. A successful Compute
+stores the immutable Result and exact optional archive returned by that one
+execution. Editing the Draft leaves the Result visible but out of date and
+disables its archive. Download uses the already prepared bytes; the server stores
+no Result or archive.
 
 The production image builds Workbench assets, installs every registered runtime
 asset, verifies that profile during the image build and readiness checks, then

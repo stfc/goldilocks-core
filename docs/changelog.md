@@ -35,7 +35,12 @@ All notable changes to goldilocks-core are documented here.
 - The unified `goldilocks` command provides scientific operations, asset
   lifecycle commands, examples, and optional HTTP/MCP serving.
 - CLI and local MCP support automatic, directory, archive, and memory output.
-  HTTP returns Result JSON or an unstored ZIP.
+  HTTP pairs reviewed Result JSON with its exact optional unstored ZIP in one
+  multipart response.
+- Workbench scientific controls send valid paired smearing hints, the 3D viewer
+  loads on demand, readiness tracks asset changes, and installed metallicity
+  assets drive electronic-character analysis.
+- Generated request contracts expose the supported scientific enum values.
 - Pseudopotential selection consumes one normalized metadata interface and
   resolves compatible registered tables in Core.
 - The default functional is PBEsol.

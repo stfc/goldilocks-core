@@ -24,6 +24,38 @@ Direct
 0 0 0
 `;
 
+test("serves concurrent computations through one real Core runtime", async ({
+  request,
+}) => {
+  const structure = await readFile(SILICON_CIF, "utf8");
+  const body = {
+    draft: {
+      structure: {
+        name: "Si.cif",
+        content: structure,
+        format: "cif",
+      },
+    },
+    selection: { records: ["k_points"] },
+  };
+
+  const responses = await Promise.all(
+    Array.from({ length: 8 }, () => request.post("/compute", { data: body })),
+  );
+  const payloads = await Promise.all(
+    responses.map(async (response) => {
+      expect(response.status()).toBe(200);
+      expect(response.headers()["content-type"]).toContain("multipart/form-data");
+      return response.text();
+    }),
+  );
+  const grids = payloads.map(
+    (payload) => /"grid":\[([0-9]+,[0-9]+,[0-9]+)\]/.exec(payload)?.[1],
+  );
+  expect(grids.every((grid) => grid !== undefined)).toBe(true);
+  expect(new Set(grids).size).toBe(1);
+});
+
 test("prepares and downloads a real Core calculation", async ({ page }) => {
   const computeRequests: string[] = [];
   page.on("request", (request) => {

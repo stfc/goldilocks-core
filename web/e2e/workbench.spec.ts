@@ -198,8 +198,8 @@ test("has no Axe violations in empty, failure, and viewer fallback states", asyn
       contentType: "application/json",
       body: JSON.stringify({
         error: {
-          kind: "server_busy",
-          message: "Another calculation is using the compute slot.",
+          kind: "temporary_failure",
+          message: "Core failed temporarily.",
           retryable: true,
           details: {},
         },
@@ -208,10 +208,8 @@ test("has no Axe violations in empty, failure, and viewer fallback states", asyn
   }, { times: 1 });
   await page.getByRole("button", { name: "Generate recommendation" }).click();
   const alert = page.getByRole("alert");
-  await expect(alert).toContainText("Workbench is busy");
-  await expect(alert).toContainText(
-    "Another calculation is using the compute slot.",
-  );
+  await expect(alert).toContainText("Calculation failed");
+  await expect(alert).toContainText("Core failed temporarily.");
   const status = page.getByRole("status", { name: "Workbench status" });
   await expect(status).toHaveText("Needs attention");
   await expect(status).not.toContainText("Ready");

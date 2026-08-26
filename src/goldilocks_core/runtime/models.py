@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from threading import Lock
 
 from pymatgen.core import Structure
 
@@ -23,6 +24,7 @@ class MetallicityModel:
         "_asset_store",
         "_model",
         "_graph_settings",
+        "_load_lock",
         "_closed",
     )
 
@@ -41,6 +43,7 @@ class MetallicityModel:
         self._model: object | None = None
         self._graph_settings: tuple[float, int] | None = None
         self._closed = False
+        self._load_lock = Lock()
 
     def __call__(
         self, structure: Structure
@@ -49,30 +52,34 @@ class MetallicityModel:
             raise RuntimeError("MetallicityModel is closed.")
         if not structure.is_ordered:
             return heuristic_metallicity(structure), "heuristic", None
-        if self._checkpoint is None or self._atom_init is None:
-            if not self._resolve_default_artifacts():
-                return heuristic_metallicity(structure), "heuristic", None
 
         from goldilocks_core.ml.qrf.metallicity import (
             classify_metallicity,
             load_metallicity_model,
         )
 
-        if self._model is None:
-            self._model = load_metallicity_model(os.fspath(self._checkpoint))
-        if self._graph_settings is None:
-            from goldilocks_core.ml.model_registry import load_default_qrf_config
+        with self._load_lock:
+            if self._checkpoint is None or self._atom_init is None:
+                if not self._resolve_default_artifacts():
+                    return heuristic_metallicity(structure), "heuristic", None
+            if self._model is None:
+                self._model = load_metallicity_model(os.fspath(self._checkpoint))
+            if self._graph_settings is None:
+                from goldilocks_core.ml.model_registry import load_default_qrf_config
 
-            settings = load_default_qrf_config(self._registry_path).feature_settings
-            self._graph_settings = (
-                settings.metallicity_graph_radius,
-                settings.metallicity_max_neighbors,
-            )
-        graph_radius, max_neighbors = self._graph_settings
+                settings = load_default_qrf_config(self._registry_path).feature_settings
+                self._graph_settings = (
+                    settings.metallicity_graph_radius,
+                    settings.metallicity_max_neighbors,
+                )
+            model = self._model
+            atom_init = os.fspath(self._atom_init)
+            graph_radius, max_neighbors = self._graph_settings
+
         character, confidence = classify_metallicity(
             structure,
-            self._model,
-            os.fspath(self._atom_init),
+            model,
+            atom_init,
             graph_radius=graph_radius,
             max_neighbors=max_neighbors,
         )
@@ -98,12 +105,14 @@ class MetallicityModel:
         return True
 
     def reset(self) -> None:
-        self._model = None
+        with self._load_lock:
+            self._model = None
 
     def close(self) -> None:
-        self._model = None
-        self._graph_settings = None
-        self._closed = True
+        with self._load_lock:
+            self._model = None
+            self._graph_settings = None
+            self._closed = True
 
 
 class Runtime:

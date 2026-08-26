@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from threading import Lock
+
 from pymatgen.core import Structure
 
 from goldilocks_core.assets import AssetStore
@@ -57,14 +59,20 @@ class QrfBackend:
         self._asset_store = asset_store
         self._resources: QrfResources | None = None
         self._closed = False
+        self._load_lock = Lock()
 
     def __call__(self, structure: Structure) -> KPointSelection:
         if self._closed:
             raise RuntimeError("QrfBackend is closed.")
-        if self._resources is None:
-            self._resources = self._load_resources()
+        resources = self._resources
+        if resources is None:
+            with self._load_lock:
+                resources = self._resources
+                if resources is None:
+                    resources = self._load_resources()
+                    self._resources = resources
         prediction = predict_kdistance_with_resources(
-            structure, self._config, self._resources
+            structure, self._config, resources
         )
         return kdistance_to_selection(
             structure,
@@ -76,11 +84,13 @@ class QrfBackend:
         )
 
     def reset(self) -> None:
-        self._resources = None
+        with self._load_lock:
+            self._resources = None
 
     def close(self) -> None:
-        self._resources = None
-        self._closed = True
+        with self._load_lock:
+            self._resources = None
+            self._closed = True
 
     def _load_resources(self) -> QrfResources:
         if self._config is None:

@@ -113,7 +113,7 @@ def test_memory_output_is_an_explicit_stable_compute_option() -> None:
     assert isinstance(result, ComputationResult)
 
 
-def test_service_serializes_concurrent_computations() -> None:
+def test_service_runs_concurrent_computations() -> None:
     class BlockingBackend:
         def __init__(self) -> None:
             self.calls = 0
@@ -157,8 +157,10 @@ def test_service_serializes_concurrent_computations() -> None:
             first = pool.submit(service.compute, request)
             assert backend.entered.wait(timeout=2)
             second = pool.submit(service.compute, request)
-            assert not backend.second_entered.wait(timeout=0.2)
-            backend.release.set()
+            try:
+                assert backend.second_entered.wait(timeout=2)
+            finally:
+                backend.release.set()
             first.result(timeout=2)
             second.result(timeout=2)
 

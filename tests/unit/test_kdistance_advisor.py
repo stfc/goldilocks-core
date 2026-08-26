@@ -1,4 +1,7 @@
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from threading import Event, Lock
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -123,6 +126,64 @@ def test_qrf_backend_loads_lazily_and_reuses_resources(monkeypatch) -> None:
     assert first.grid == second.grid
     assert first.provenance.source == "model"
     assert loads == 1
+
+
+def test_qrf_backend_loads_once_for_concurrent_first_calls(monkeypatch) -> None:
+    backend = QrfBackend(config=local_config())
+    resources = object()
+    load_started = Event()
+    release_load = Event()
+    duplicate_load = Event()
+    second_call_started = Event()
+    load_lock = Lock()
+    load_count = 0
+
+    def load_resources():
+        nonlocal load_count
+        with load_lock:
+            load_count += 1
+            if load_count > 1:
+                duplicate_load.set()
+        load_started.set()
+        assert release_load.wait(timeout=2)
+        return resources
+
+    def predict(structure, config, actual_resources):
+        del structure, config
+        assert actual_resources is resources
+        return SimpleNamespace(
+            median=0.25,
+            lower=0.2,
+            upper=0.3,
+            data_source="test",
+            confidence=0.9,
+        )
+
+    def second_call():
+        second_call_started.set()
+        return backend(make_structure())
+
+    monkeypatch.setattr(backend, "_load_resources", load_resources)
+    monkeypatch.setattr(
+        "goldilocks_core.advice.kdistance.predict_kdistance_with_resources",
+        predict,
+    )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(backend, make_structure())
+        assert load_started.wait(timeout=2)
+        second = pool.submit(second_call)
+        assert second_call_started.wait(timeout=2)
+        try:
+            assert not duplicate_load.wait(timeout=0.2)
+        finally:
+            release_load.set()
+        first_selection = first.result(timeout=2)
+        second_selection = second.result(timeout=2)
+
+    assert first_selection == second_selection
+
+    assert load_count == 1
 
 
 def test_qrf_backend_model_loading_errors_propagate(monkeypatch) -> None:

@@ -84,9 +84,9 @@ HTTP accepts inline structures and stable Pseudopotential Set IDs. Compute
 returns one multipart response containing the canonical `ComputationResult`
 and, when the Result contains complete DFT Input Data, ZIP bytes produced from
 that same execution. HTTP never accepts or creates a server output directory.
-One `ComputationCapacity` slot wraps Compute only, so
-Capabilities, Structure Inspection, `/health`, `/ready`, and static files stay
-responsive.
+HTTP Compute handlers execute concurrently over one process-owned Runtime.
+Task Graph declarations are immutable, execution state is request-local, and
+shared models synchronize only their first lazy load.
 
 Local MCP accepts inline structures or local paths and supports automatic,
 directory, archive, and memory output. Publication paths are absolute. HTTP and

@@ -40,6 +40,8 @@ All notable changes to goldilocks-core are documented here.
 - Workbench scientific controls send valid paired smearing hints, the 3D viewer
   loads on demand, readiness tracks asset changes, and installed metallicity
   assets drive electronic-character analysis.
+- HTTP Compute requests execute concurrently over one process-owned Runtime
+  instead of a process-wide computation slot.
 - Generated request contracts expose the supported scientific enum values.
 - Pseudopotential selection consumes one normalized metadata interface and
   resolves compatible registered tables in Core.

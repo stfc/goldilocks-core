@@ -30,11 +30,6 @@ from goldilocks_core.io.structures import StructureInputError
 from goldilocks_core.pseudo.source import PseudoTableMismatch
 from goldilocks_core.runtime import UnavailableRecord, UnknownPreset, UnknownTask
 from goldilocks_core.runtime.service import Service
-from goldilocks_core.server.capacity import (
-    ComputationCapacity,
-    ServerBusy,
-    configured_compute_wait_seconds,
-)
 from goldilocks_core.server.readiness import AssetReadiness
 from goldilocks_core.server.request import RequestError
 
@@ -64,7 +59,6 @@ def _workbench_static_root(value: str | Path | None) -> Path | None:
 def create_app(
     service: Service | None = None,
     *,
-    compute_wait_seconds: float | None = None,
     static_root: str | Path | None = None,
 ) -> Any:
     try:
@@ -78,9 +72,6 @@ def create_app(
 
     owns_service = service is None
     state = service if service is not None else Service()
-    capacity = ComputationCapacity(
-        configured_compute_wait_seconds(compute_wait_seconds)
-    )
     readiness = AssetReadiness(
         state.runtime.asset_store,
         model_registry_path=getattr(state.runtime, "model_registry_path", None),
@@ -99,24 +90,8 @@ def create_app(
 
     app = FastAPI(title="goldilocks-core", lifespan=lifespan)
     app.state.goldilocks = state
-    app.state.compute_capacity = capacity
     app.state.asset_readiness = readiness
-    install_scientific_routes(app, state, capacity)
-
-    @app.exception_handler(ServerBusy)
-    async def server_busy_handler(request: Request, error: ServerBusy) -> JSONResponse:
-        del request
-        return JSONResponse(
-            status_code=503,
-            content={
-                "error": {
-                    "kind": "server_busy",
-                    "message": str(error),
-                    "retryable": True,
-                    "details": {"retry_after_seconds": error.retry_after_seconds},
-                }
-            },
-        )
+    install_scientific_routes(app, state)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(
@@ -267,8 +242,7 @@ def create_app(
         )
 
     @app.get("/health")
-    def health() -> dict[str, str]:
-        """Report process liveness."""
+    async def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/ready")
@@ -310,7 +284,6 @@ def serve(
     *,
     host: str = "127.0.0.1",
     port: int = 8000,
-    compute_wait_seconds: float | None = None,
     static_root: str | Path | None = None,
 ) -> None:
     try:
@@ -319,7 +292,6 @@ def serve(
         raise ImportError(_MISSING_HTTP_EXTRA) from error
     uvicorn.run(
         create_app(
-            compute_wait_seconds=compute_wait_seconds,
             static_root=static_root,
         ),
         host=host,

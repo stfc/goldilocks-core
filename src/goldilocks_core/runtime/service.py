@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import threading
 from dataclasses import replace
 
 from goldilocks_core.contracts import (
@@ -25,13 +24,7 @@ __all__ = ["Service"]
 
 
 class Service:
-    __slots__ = (
-        "_runtime",
-        "_dispatcher",
-        "_computation_lock",
-        "_owns_runtime",
-        "_closed",
-    )
+    __slots__ = ("_runtime", "_dispatcher", "_owns_runtime", "_closed")
 
     def __init__(
         self,
@@ -44,7 +37,6 @@ class Service:
         self._dispatcher = Dispatcher(self._runtime)
         for handler in task_handlers:
             self._dispatcher.register(handler)
-        self._computation_lock = threading.RLock()
         self._closed = False
 
     @property
@@ -66,8 +58,7 @@ class Service:
         ):
             raise ValueError("output must be a DirectoryOutput, ArchiveOutput, or None")
         self._ensure_open()
-        with self._computation_lock:
-            result = self._dispatcher.compute(request)
+        result = self._dispatcher.compute(request)
         if output is None:
             return result
         input_data = result.records.get(DftInputData)

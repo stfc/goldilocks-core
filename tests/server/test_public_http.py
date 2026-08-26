@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from email.parser import BytesParser
 from email.policy import default
 from pathlib import Path
-from threading import Event
+from threading import Event, Lock
 
 import pytest
 
@@ -165,10 +165,10 @@ def test_http_returns_the_exact_archive_with_its_reviewed_result(
     assert not list(tmp_path.rglob("goldilocks_out"))
 
 
-def test_http_capacity_guards_only_compute(
+def test_http_runs_concurrent_computations(
     sample_structure_text: str,
 ) -> None:
-    backend = _BlockingKmeshBackend()
+    backend = _BlockingKmeshBackend(expected_calls=2)
     runtime = Runtime(kmesh_service=backend)
     service = Service(runtime)
     body = {
@@ -183,29 +183,28 @@ def test_http_capacity_guards_only_compute(
     }
     try:
         with (
-            TestClient(create_app(service, compute_wait_seconds=0.01)) as client,
-            ThreadPoolExecutor(max_workers=3) as pool,
+            TestClient(create_app(service)) as client,
+            ThreadPoolExecutor(max_workers=5) as pool,
         ):
             first = pool.submit(client.post, "/compute", json=body)
-            assert backend.entered.wait(timeout=1)
-            busy = client.post("/compute", json=body)
+            second = pool.submit(client.post, "/compute", json=body)
+            assert backend.all_entered.wait(timeout=2)
             capabilities = pool.submit(client.get, "/capabilities")
             inspection = pool.submit(
                 client.post,
                 "/inspect",
                 json={"source": body["draft"]["structure"]},
             )
-            health = client.get("/health")
+            health = pool.submit(client.get, "/health")
             try:
                 assert capabilities.result(timeout=0.5).status_code == 200
                 assert inspection.result(timeout=0.5).status_code == 200
+                assert health.result(timeout=0.5).json() == {"status": "ok"}
             finally:
                 backend.release.set()
 
             assert first.result(timeout=2).status_code == 200
-        assert busy.status_code == 503
-        assert busy.json()["error"]["kind"] == "server_busy"
-        assert health.json() == {"status": "ok"}
+            assert second.result(timeout=2).status_code == 200
     finally:
         backend.release.set()
         service.close()
@@ -559,13 +558,19 @@ class _DefectiveService(Service):
 
 
 class _BlockingKmeshBackend:
-    def __init__(self) -> None:
-        self.entered = Event()
+    def __init__(self, *, expected_calls: int) -> None:
+        self._expected_calls = expected_calls
+        self._calls = 0
+        self._lock = Lock()
+        self.all_entered = Event()
         self.release = Event()
 
     def __call__(self, structure) -> KPointSelection:
         del structure
-        self.entered.set()
+        with self._lock:
+            self._calls += 1
+            if self._calls == self._expected_calls:
+                self.all_entered.set()
         if not self.release.wait(timeout=2):
             raise RuntimeError("test did not release computation")
         return KPointSelection(

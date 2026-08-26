@@ -3,7 +3,9 @@ from __future__ import annotations
 import gc
 import hashlib
 import weakref
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
+from threading import Event, Lock
 from types import SimpleNamespace
 
 import pytest
@@ -376,6 +378,65 @@ def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
     assert analysis.electronic_character_confidence == 0.92
     assert len(calls) == 1
     assert calls[0][1:3] == (model, "atom-init.json")
+
+
+def test_metallicity_model_loads_once_for_concurrent_first_calls(
+    monkeypatch,
+) -> None:
+    from goldilocks_core.ml.qrf import metallicity
+
+    model = object()
+    load_started = Event()
+    release_load = Event()
+    duplicate_load = Event()
+    second_call_started = Event()
+    load_lock = Lock()
+    load_count = 0
+
+    def load(path):
+        nonlocal load_count
+        del path
+        with load_lock:
+            load_count += 1
+            if load_count > 1:
+                duplicate_load.set()
+        load_started.set()
+        assert release_load.wait(timeout=2)
+        return model
+
+    def classify(structure, actual_model, atom_init, **settings):
+        del structure, atom_init, settings
+        assert actual_model is model
+        return "metal", 0.92
+
+    monkeypatch.setattr(metallicity, "load_metallicity_model", load)
+    monkeypatch.setattr(metallicity, "classify_metallicity", classify)
+
+    with Runtime(
+        metallicity_checkpoint="metal.ckpt",
+        metallicity_atom_init="atom-init.json",
+        metallicity_model=make_metallicity_model(),
+    ) as runtime:
+        structure = make_structure()
+
+        def second_call():
+            second_call_started.set()
+            return runtime.metallicity(structure)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(runtime.metallicity, structure)
+            assert load_started.wait(timeout=2)
+            second = pool.submit(second_call)
+            assert second_call_started.wait(timeout=2)
+            try:
+                assert not duplicate_load.wait(timeout=0.2)
+            finally:
+                release_load.set()
+            first_result = first.result(timeout=2)
+            second_result = second.result(timeout=2)
+
+    assert first_result == second_result == ("metal", "model", 0.92)
+    assert load_count == 1
 
 
 def test_generation_preset_returns_generated_files(tmp_path) -> None:

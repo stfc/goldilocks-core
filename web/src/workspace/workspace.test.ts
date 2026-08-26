@@ -64,7 +64,11 @@ function prepared(
 
 describe("Workspace", () => {
   it("retries a failed recomputation and replaces the reviewed snapshot", async () => {
-    const failure = new CoreFailure("server_busy", "Core is busy.", true);
+    const failure = new CoreFailure(
+      "temporary_failure",
+      "Core failed temporarily.",
+      true,
+    );
     const replacementResult: ComputationResult = {
       ...computationResult,
       task_revision: "2",
@@ -201,7 +205,11 @@ describe("Workspace", () => {
   });
 
   it("preserves the old Result when recomputation fails", async () => {
-    const failure = new CoreFailure("server_busy", "Core is busy.", true);
+    const failure = new CoreFailure(
+      "temporary_failure",
+      "Core failed temporarily.",
+      true,
+    );
     const core = new CoreStub();
     core.preparedResults = [
       Promise.resolve(prepared()),

@@ -10,7 +10,6 @@ from fastapi.responses import Response
 from goldilocks_core.contracts import Capabilities, DftInputData, StructureInspection
 from goldilocks_core.publication import Publisher
 from goldilocks_core.runtime.service import Service
-from goldilocks_core.server.capacity import ComputationCapacity
 from goldilocks_core.server.request import (
     RequestError,
     compute_from_dict,
@@ -29,7 +28,7 @@ _ERROR_RESPONSES = {
         "model": ErrorResponseDocument,
         "content": {"application/json": {}},
     }
-    for status in (422, 424, 503)
+    for status in (422, 424)
 }
 _PREPARED_RESPONSE = {
     "description": "One reviewed Computation Result and its exact optional archive.",
@@ -45,11 +44,7 @@ class PreparedMultipartResponse(Response):
     media_type = "multipart/form-data"
 
 
-def install_scientific_routes(
-    app: FastAPI,
-    service: Service,
-    capacity: ComputationCapacity,
-) -> None:
+def install_scientific_routes(app: FastAPI, service: Service) -> None:
     tasks = service.capabilities().tasks
     result_document = computation_result_document(tasks)
     prepared_document = prepared_computation_document(tasks)
@@ -86,21 +81,20 @@ def install_scientific_routes(
             if isinstance(error, RequestError):
                 raise
             raise RequestError(str(error)) from error
-        with capacity.acquire():
-            result = service.compute(request)
-            result_payload = json.dumps(
-                result_document.model_validate(result.to_dict()).model_dump(
-                    mode="json", exclude_unset=True
-                ),
-                separators=(",", ":"),
-            ).encode("utf-8")
-            input_data = result.records.get(DftInputData)
-            archive = (
-                Publisher(service.runtime.asset_store).archive_bytes(input_data)
-                if input_data is not None
-                else None
-            )
-            return _prepared_response(result_payload, archive)
+        result = service.compute(request)
+        result_payload = json.dumps(
+            result_document.model_validate(result.to_dict()).model_dump(
+                mode="json", exclude_unset=True
+            ),
+            separators=(",", ":"),
+        ).encode("utf-8")
+        input_data = result.records.get(DftInputData)
+        archive = (
+            Publisher(service.runtime.asset_store).archive_bytes(input_data)
+            if input_data is not None
+            else None
+        )
+        return _prepared_response(result_payload, archive)
 
 
 def _prepared_response(result: bytes, archive: bytes | None) -> Response:

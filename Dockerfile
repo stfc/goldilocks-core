@@ -40,8 +40,7 @@ ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     MPLCONFIGDIR=/app/.cache/matplotlib \
     GOLDILOCKS_ASSET_ROOT=/opt/goldilocks/assets \
-    GOLDILOCKS_WORKBENCH_STATIC_ROOT=/app/workbench \
-    GOLDILOCKS_COMPUTE_WAIT_SECONDS=1
+    GOLDILOCKS_WORKBENCH_STATIC_ROOT=/app/workbench
 
 WORKDIR /app
 COPY --from=core-build --chown=goldilocks:goldilocks /app/.venv ./.venv

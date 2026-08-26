@@ -81,14 +81,6 @@ def build_parser() -> argparse.ArgumentParser:
             "Defaults to GOLDILOCKS_WORKBENCH_STATIC_ROOT."
         ),
     )
-    http.add_argument(
-        "--compute-wait-seconds",
-        type=float,
-        help=(
-            "Maximum wait for the container computation slot. "
-            "Defaults to GOLDILOCKS_COMPUTE_WAIT_SECONDS or 1 second."
-        ),
-    )
     transports.add_parser("mcp", help="Run the MCP stdio transport.")
 
     examples = subparsers.add_parser(
@@ -374,7 +366,6 @@ def _serve(args: argparse.Namespace) -> None:
             host=args.host,
             port=args.port,
             static_root=args.static_root,
-            compute_wait_seconds=args.compute_wait_seconds,
         )
         return
 

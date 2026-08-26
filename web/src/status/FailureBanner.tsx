@@ -46,8 +46,6 @@ function failureTitle(kind: string): string {
     case "asset_not_installed":
     case "asset_corrupt":
       return "Runtime assets unavailable";
-    case "server_busy":
-      return "Workbench is busy";
     case "invalid_structure":
       return "Check the structure";
     case "pseudo_table_mismatch":

@@ -166,10 +166,10 @@ describe("HttpCoreClient", () => {
   it("converts a Core error envelope into one typed failure", async () => {
     const payload = {
       error: {
-        kind: "server_busy",
-        message: "The computation slot is busy.",
+        kind: "temporary_failure",
+        message: "Temporary Core failure.",
         retryable: true,
-        details: { retry_after_seconds: 0.5 },
+        details: { attempt: 2 },
       },
     };
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
@@ -183,10 +183,10 @@ describe("HttpCoreClient", () => {
 
     expect(failure).toBeInstanceOf(CoreFailure);
     expect(failure).toMatchObject({
-      kind: "server_busy",
-      message: "The computation slot is busy.",
+      kind: "temporary_failure",
+      message: "Temporary Core failure.",
       retryable: true,
-      details: { retry_after_seconds: 0.5 },
+      details: { attempt: 2 },
       status: 503,
       rawResponse: payload,
     });

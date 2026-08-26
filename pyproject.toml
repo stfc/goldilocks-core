@@ -22,8 +22,10 @@ dependencies = [
     "sklearn-quantile==0.1.1",
     # The default k-points model (QRF + CGCNN metallicity) is a core capability,
     # so its ML stack ships in the base install (decision: stfc/goldilocks-core#32).
-    # torch-geometric requires torch; on GPU hosts install the matching CUDA wheel
-    # of torch first, then sync.
+    # torch-geometric requires torch. The base install resolves torch from the
+    # CPU-only PyTorch index so the workbench image doesn't ship ~3.5G of unused
+    # CUDA/nvidia libraries. GPU hosts pull the CUDA wheel via an index override
+    # (see [tool.uv] below), not the default resolution.
     "torch>=2.13.0",
     "torch-geometric>=2.5",
 ]
@@ -46,6 +48,23 @@ dev = [
 
 [tool.uv]
 package = true
+
+# PyTorch publishes CPU and CUDA wheels on separate indexes. Pin torch to the
+# CPU index so container/workbench builds don't ship ~3.5G of unused CUDA/nvidia
+# libraries. GPU hosts override with `uv sync --index-strategy unsafe-best-match
+# --extra-index-url https://download.pytorch.org/whl/cu130` (or set
+# UV_EXTRA_INDEX_URL to the cu130 index) to pull the CUDA wheel instead.
+# torch-geometric and other torch-* packages stay on PyPI; only torch itself is
+# re-sourced, since it's the one that drags in the nvidia/triton wheels.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu" },
+]
 
 [tool.pytest.ini_options]
 addopts = ["--strict-markers", "-ra"]

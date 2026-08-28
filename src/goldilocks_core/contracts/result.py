@@ -63,6 +63,14 @@ class Records(Mapping[type, Any]):
 
 @dataclass(frozen=True, slots=True)
 class Result:
+    """Complete record set from one Core job.
+
+    ``generated_files`` is empty for recommend jobs and populated for
+    generate jobs; ``bundle`` is set only when a generate job requested an
+    ``output_dir``. ``warnings`` aggregates every stage's warnings and is
+    the authoritative place to check for incomplete or degraded results.
+    """
+
     intent: CalculationIntent
     analysis: StructureAnalysisRecord
     advice: ParameterAdvice

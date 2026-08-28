@@ -17,6 +17,15 @@ from goldilocks_core.functionals import normalize_functional_label
 
 @dataclass(frozen=True, slots=True)
 class SmearingAdvice:
+    """Advised occupation treatment.
+
+    ``smearing_type`` ``None`` or ``"fixed"`` means fixed occupations; a
+    named smearing type activates ``width_ry``, which is in Rydberg and
+    ``None`` only alongside fixed occupations. ``provenance`` states the
+    source precedence: an operator hint wins over the structure analysis,
+    which wins over the package default.
+    """
+
     smearing_type: str | None
     width_ry: float | None
     provenance: Provenance

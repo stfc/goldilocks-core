@@ -12,6 +12,12 @@ class StructureInputError(ValueError):
 
 
 def load_structure(structure: StructureInput) -> Structure:
+    """Load one structure from a path, or pass a Structure through.
+
+    Raises FileNotFoundError when the path does not exist,
+    StructureInputError when it is not a file or pymatgen cannot parse it,
+    and TypeError for input types outside the StructureInput contract.
+    """
     if isinstance(structure, Structure):
         return structure
 

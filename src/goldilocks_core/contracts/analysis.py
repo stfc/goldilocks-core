@@ -17,6 +17,17 @@ class SymmetryUnavailable:
 
 @dataclass(frozen=True, slots=True)
 class StructureAnalysisRecord:
+    """Structure-derived facts feeding Advise and Select.
+
+    Symmetry fields carry ``None`` when not yet determined and
+    :class:`SymmetryUnavailable` when symmetry analysis itself failed; an
+    ``int``/``str`` value is a successful determination. The electronic
+    character comes from the source named in ``electronic_character_source``
+    (``"heuristic"`` or a model classifier); ``electronic_character_confidence``
+    is ``None`` for heuristic classifications. Warnings are provenance-bearing:
+    they state what could not be determined, not what was chosen.
+    """
+
     formula: str
     reduced_formula: str
     site_count: int

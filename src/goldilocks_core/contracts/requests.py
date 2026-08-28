@@ -30,6 +30,15 @@ def _validate_pseudo_source(
 
 @dataclass(frozen=True, slots=True)
 class PresetRequest:
+    """One complete recommend-or-generate job.
+
+    Exactly one pseudopotential source may be set: ``pseudo_metadata``
+    (in-memory records), ``pseudo_root`` (operator-managed directory), or
+    ``pseudo_table`` (registered asset-store table). All three unset is
+    allowed for recommendation and rejected by generation. ``output_dir``
+    publishes a bundle and only applies to generate jobs.
+    """
+
     structure: StructureInput
     intent: CalculationIntent = field(default_factory=CalculationIntent)
     hints: CalculationHints = field(default_factory=CalculationHints)
@@ -72,6 +81,14 @@ class PresetRequest:
 
 @dataclass(frozen=True, slots=True)
 class QueryRequest:
+    """One compute job returning only the named record types.
+
+    ``outputs`` names record types resolved through the Core registry.
+    Exactly one pseudopotential source may be set: ``pseudo_metadata``,
+    ``pseudo_root``, or ``pseudo_table``; all unset is allowed where the
+    requested records do not need pseudopotentials.
+    """
+
     structure: StructureInput
     outputs: tuple[type, ...]
     intent: CalculationIntent = field(default_factory=CalculationIntent)

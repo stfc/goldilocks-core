@@ -170,7 +170,7 @@ def table_fixture(
     elements: tuple[str, ...],
 ) -> PseudoTable:
     spec = AssetSpec(
-        table_id,
+        f"pseudopotentials/{table_id}",
         "1",
         (
             AssetFile(
@@ -286,7 +286,7 @@ def test_analyze_uses_the_installed_default_metallicity_model(
     licence = tmp_path / "licence-source"
     licence.write_text("Model terms\n", encoding="utf-8")
     spec = AssetSpec(
-        id="metallicity-fixture",
+        id="models/metallicity-fixture",
         version="1",
         files=(
             AssetFile("checkpoint", "is_metal.ckpt", checkpoint.as_uri()),

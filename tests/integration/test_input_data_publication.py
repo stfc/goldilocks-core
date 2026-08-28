@@ -1418,8 +1418,8 @@ def test_installed_pseudopotentials_and_licence_keep_immutable_asset_identity(
     table_manifest.write_text(
         json.dumps(
             {
-                "schema_version": 1,
-                "id": "fixture-table",
+                "schema_version": 2,
+                "id": "pseudopotentials/fixture-table",
                 "version": "1",
                 "provider": "sssp",
                 "functional": "PBEsol",
@@ -1498,10 +1498,10 @@ url = "{licence_source.as_uri()}"
     )
     licence = next(item for item in input_data.artifacts if item.role == "licence")
 
-    assert pseudo.source.asset_id == "fixture-table"
+    assert pseudo.source.asset_id == "pseudopotentials/fixture-table"
     assert pseudo.source.asset_version == "1"
     assert pseudo.source.path == "pseudos/Si.UPF"
-    assert licence.source.asset_id == "fixture-table"
+    assert licence.source.asset_id == "pseudopotentials/fixture-table"
     assert licence.source.asset_version == "1"
     assert licence.source.path == "LICENSE.txt"
     assert input_data.pseudopotential_set.id == "fixture-table"
@@ -1515,7 +1515,9 @@ url = "{licence_source.as_uri()}"
     assert files["licences/fixture-table.txt"] == b"Installed exact licence\n"
     assert str(store.root) not in str(input_data.to_dict())
 
-    manifest_path = store.root / "fixture-table" / "1" / "manifest.json"
+    manifest_path = (
+        store.root / "pseudopotentials" / "fixture-table" / "1" / "manifest.json"
+    )
     installed_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     wrong_preparation = {
         **installed_manifest,
@@ -1528,13 +1530,15 @@ url = "{licence_source.as_uri()}"
 
     replacement = pseudo_bytes.replace(b"exact", b"other")
     assert len(replacement) == len(pseudo_bytes)
-    (store.root / "fixture-table" / "1" / "pseudos" / "Si.UPF").write_bytes(replacement)
+    (
+        store.root / "pseudopotentials" / "fixture-table" / "1" / "pseudos" / "Si.UPF"
+    ).write_bytes(replacement)
     for entry in installed_manifest["files"]:
         if entry["path"] == "pseudos/Si.UPF":
             entry["sha256"] = hashlib.sha256(replacement).hexdigest()
             entry["size"] = len(replacement)
     manifest_path.write_text(json.dumps(installed_manifest), encoding="utf-8")
-    store.verify("fixture-table", "1")
+    store.verify(table.asset.id, "1")
 
     with pytest.raises(ValueError, match="differs from its DFT Input Data descriptor"):
         Publisher(store).files(input_data)
@@ -1575,8 +1579,8 @@ def test_model_runtime_identities_licences_and_citations_are_published(
         model_payloads.update(
             contents[file.path] for file in spec.files if file.role != "licence"
         )
-        expected_licences[f"licences/{spec.id}-{spec.version}.md"] = next(
-            contents[file.path] for file in spec.files if file.role == "licence"
+        expected_licences[f"licences/{spec.id.replace('/', '_')}-{spec.version}.md"] = (
+            next(contents[file.path] for file in spec.files if file.role == "licence")
         )
 
     def predict(self, structure: Structure) -> KPointSelection:
@@ -1604,8 +1608,8 @@ def test_model_runtime_identities_licences_and_citations_are_published(
 
     input_data = result.records[DftInputData]
     assert {item.id for item in input_data.runtime.assets} == {
-        "qrf-kpoints",
-        "metallicity-cgcnn",
+        "models/qrf-kpoints",
+        "models/metallicity-cgcnn",
     }
     assert {model["target"] for model in input_data.runtime.models} == {
         "k_distance",

@@ -34,7 +34,6 @@ _ENTRY_FIELDS = {
     "path",
     "md5",
     "header_format",
-    "upf_relativistic",
     "pseudo_type",
     "z_valence",
     "ecutwfc_ry",

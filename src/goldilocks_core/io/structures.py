@@ -91,6 +91,12 @@ def normalize_structure(source: StructureSource) -> NormalizedStructure:
 
 
 def load_structure(structure: Structure | str | Path) -> Structure:
+    """Load one structure from a path, or pass a Structure through.
+
+    Raises FileNotFoundError when the path does not exist,
+    StructureInputError when it is not a file or pymatgen cannot parse it,
+    and TypeError for input types outside the contract.
+    """
     if isinstance(structure, Structure):
         return structure
 

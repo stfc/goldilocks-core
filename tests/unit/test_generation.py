@@ -146,7 +146,8 @@ def test_generate_inputs_rejects_selected_functional_disagreement() -> None:
         )
 
 
-def test_generate_inputs_writes_each_k_points_component_in_order() -> None:
+@pytest.mark.parametrize("shift", [(1, 0, 0), (0, 1, 0), (0, 0, 1)])
+def test_generate_inputs_writes_each_k_points_component_in_order(shift) -> None:
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
@@ -158,7 +159,7 @@ def test_generate_inputs_writes_each_k_points_component_in_order() -> None:
     )
     k_points = KPointSelection(
         grid=(2, 3, 4),
-        shift=(1, 2, 3),
+        shift=shift,
         mesh_type="monkhorst-pack",
         provenance=Provenance(source="user_hint", reason="distinct components"),
     )
@@ -171,7 +172,7 @@ def test_generate_inputs_writes_each_k_points_component_in_order() -> None:
         k_points=k_points,
     )
 
-    assert "  2  3  4  1  2  3" in files[0].content
+    assert f"  2  3  4  {shift[0]}  {shift[1]}  {shift[2]}" in files[0].content
 
 
 def test_generate_inputs_uses_noncollinear_soc_without_nspin() -> None:

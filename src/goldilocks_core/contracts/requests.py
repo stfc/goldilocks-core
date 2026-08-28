@@ -69,6 +69,14 @@ def _validate_pseudo_source(
 
 @dataclass(frozen=True, slots=True)
 class CalculationDraft:
+    """One computation draft: structure, intent, hints, and pseudo source.
+
+    Exactly one pseudopotential source may be set: ``pseudo_metadata``
+    (in-memory records), ``pseudo_root`` (operator-managed directory), or
+    ``pseudo_table`` (registered asset-store table). All three unset is
+    allowed for recommendation and rejected by generation.
+    """
+
     structure: StructureSource | StructureInspection
     intent: CalculationIntent = field(default_factory=CalculationIntent)
     hints: CalculationHints = field(default_factory=CalculationHints)
@@ -117,6 +125,12 @@ class CalculationDraft:
 
 @dataclass(frozen=True, slots=True)
 class ComputeRequest:
+    """One compute job: a draft plus what to run over it.
+
+    ``selection`` is either a named preset or a set of record ids; records
+    the selection does not name are not computed.
+    """
+
     draft: CalculationDraft
     selection: ComputationSelection
 

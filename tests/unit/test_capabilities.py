@@ -218,13 +218,13 @@ def test_service_capabilities_describes_the_complete_core_catalog() -> None:
         for model in capabilities.models
     } == {
         (
-            "qrf-kpoints",
+            "models/qrf-kpoints",
             "k_point_advisor",
             "kpoints-goldilocks-QRF",
             "k_distance",
         ),
         (
-            "metallicity-cgcnn",
+            "models/metallicity-cgcnn",
             "metallicity_classifier",
             "metallicity-goldilocks-CGCNN",
             "metallicity",

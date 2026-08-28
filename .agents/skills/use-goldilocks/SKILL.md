@@ -8,6 +8,10 @@ description: Use goldilocks-core quickly for DFT input recommendation workflows.
 Use the canonical Capabilities, Structure Inspection, and Compute operations.
 Core currently supports Quantum ESPRESSO single-point SCF input preparation.
 
+Fresh installations must install the runtime assets first: run
+`goldilocks assets install default` once, or pass `--fetch-missing`, before any
+command that needs the default k-point model or pseudopotential tables.
+
 ## Progressive disclosure
 
 - `references/workflows.md` — Python, CLI, HTTP, and MCP workflows.

@@ -17,7 +17,7 @@ def test_readiness_rechecks_when_installed_asset_state_changes(
     source = tmp_path / "source.bin"
     source.write_bytes(b"healthy")
     spec = AssetSpec(
-        id="fixture",
+        id="models/fixture",
         version="1",
         files=(
             AssetFile(

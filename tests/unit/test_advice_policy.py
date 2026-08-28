@@ -192,10 +192,14 @@ def test_low_dimensional_vdw_advice_records_resolved_method(
 ) -> None:
     expected_method = "d3bj" if method is None else method
     reason = (
-        "Low-dimensional 2d structure; D3BJ is the conservative default because "
-        "dispersion may be important."
+        "Connectivity-derived 2d classification indicates a low-dimensional heuristic; "
+        "D3BJ is the conservative package default because dispersion may be "
+        "important. Override with CalculationHints(use_vdw=..., vdw_method=...) "
+        "as needed."
         if method is None
-        else "Low-dimensional 2d structure; use the operator-provided ts vdW method."
+        else "Connectivity-derived 2d classification indicates a low-dimensional "
+        "heuristic; use the operator-provided ts vdW method. Override with "
+        "CalculationHints(use_vdw=...) as needed."
     )
     assert advise_vdw(
         analysis(dimensionality="2d", low_dimensional=True),
@@ -232,7 +236,8 @@ def test_vdw_method_without_enablement_is_rejected_by_provenance_warning() -> No
         provenance=Provenance(
             source="default",
             reason=(
-                "3D bulk or undetermined dimensionality; no vdW correction by default."
+                "3D bulk or undetermined dimensionality; no vdW correction by "
+                "default. Set use_vdw=True for layered or molecular systems."
             ),
             warnings=(
                 "vdw_method='ts' was ignored because vdW is off for this "

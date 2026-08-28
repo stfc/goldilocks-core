@@ -108,6 +108,7 @@ def installed_pseudo_table(tmp_path) -> tuple[AssetStore, PseudoTable]:
                     "path": "pseudos/Si.upf",
                     "md5": hashlib.md5(payload.encode()).hexdigest(),
                     "header_format": "attr",
+                    "upf_relativistic": "scalar",
                     "pseudo_type": "NC",
                     "z_valence": 4.0,
                     "ecutwfc_ry": 35.0,

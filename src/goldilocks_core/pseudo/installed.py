@@ -17,7 +17,7 @@ from goldilocks_core.pseudo.validation import (
 )
 
 TABLE_MANIFEST = "pseudo-table.json"
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 _RELATIVISTIC = frozenset({"scalar", "full", "non-relativistic"})
 _TOP_LEVEL_FIELDS = {
     "schema_version",
@@ -36,6 +36,7 @@ _ENTRY_FIELDS = {
     "path",
     "md5",
     "header_format",
+    "upf_relativistic",
     "pseudo_type",
     "z_valence",
     "ecutwfc_ry",

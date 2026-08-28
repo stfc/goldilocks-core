@@ -184,11 +184,23 @@ def test_pseudodojo_rejects_report_registry_disagreement(tmp_path: Path) -> None
 
 
 def test_pseudodojo_rejects_upf_registry_disagreement(tmp_path: Path) -> None:
-    """A UPF header must match the table's relativistic treatment."""
+    """A fully-relativistic UPF header contradicts a scalar table declaration."""
     upf = UPF.replace(b'relativistic="scalar"', b'relativistic="full"')
 
     with pytest.raises(PseudoImportError, match="relativistic treatment full"):
         install_dojo_fixture(tmp_path, upf=upf)
+
+
+def test_pseudodojo_accepts_nonrelativistic_header_in_scalar_table(
+    tmp_path: Path,
+) -> None:
+    """Table-level classification is authoritative; NR light elements stay valid."""
+    upf = UPF.replace(b'relativistic="scalar"', b'relativistic="non-relativistic"')
+
+    installed = install_dojo_fixture(tmp_path, upf=upf)
+    metadata = load_installed_table(installed)
+
+    assert metadata[0].relativistic == "scalar"
 
 
 def test_sssp_rejects_sidecar_registry_disagreement(tmp_path: Path) -> None:
@@ -198,11 +210,21 @@ def test_sssp_rejects_sidecar_registry_disagreement(tmp_path: Path) -> None:
 
 
 def test_sssp_rejects_upf_registry_disagreement(tmp_path: Path) -> None:
-    """An SSSP UPF header must match the table's relativistic treatment."""
+    """A fully-relativistic UPF contradicts the SSSP table's scalar declaration."""
     upf = UPF.replace(b'relativistic="scalar"', b'relativistic="full"')
 
     with pytest.raises(PseudoImportError, match="relativistic treatment full"):
         install_sssp_fixture(tmp_path, upf=upf)
+
+
+def test_sssp_accepts_nonrelativistic_header_in_scalar_table(tmp_path: Path) -> None:
+    """Table-level classification is authoritative; NR light elements stay valid."""
+    upf = UPF.replace(b'relativistic="scalar"', b'relativistic="non-relativistic"')
+
+    installed = install_sssp_fixture(tmp_path, upf=upf)
+    metadata = load_installed_table(installed)
+
+    assert metadata[0].relativistic == "scalar"
 
 
 def test_installed_pseudo_manifest_rejects_unknown_entry_fields(

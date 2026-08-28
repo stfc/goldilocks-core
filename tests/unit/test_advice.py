@@ -329,7 +329,7 @@ def test_advise_parameters_enables_vdw_for_low_dimensional_system() -> None:
     assert advice.vdw.use_vdw is True
     assert advice.vdw.method == "d3bj"
     assert advice.vdw.provenance.source == "analysis"
-    assert "Low-dimensional 2d" in advice.vdw.provenance.reason
+    assert "Connectivity-derived 2d" in advice.vdw.provenance.reason
     assert "dispersion may be important" in advice.vdw.provenance.reason
 
 

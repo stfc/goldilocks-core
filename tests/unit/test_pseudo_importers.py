@@ -90,7 +90,7 @@ def install_dojo_fixture(
     }
     archive(reports, {"nested/Si.djrepo": json.dumps(report).encode()})
     spec = AssetSpec(
-        "pseudodojo-fixture",
+        "pseudopotentials/pseudodojo-fixture",
         "1",
         (
             AssetFile("pseudopotentials", "source/upfs.tgz", upfs.as_uri()),
@@ -124,7 +124,7 @@ def install_sssp_fixture(
         facts["functional"] = sidecar_functional
     sidecar.write_text(json.dumps({"Si": facts}))
     spec = AssetSpec(
-        "sssp-fixture",
+        "pseudopotentials/sssp-fixture",
         "1",
         (
             AssetFile("pseudopotentials", "source/table.tar.gz", upfs.as_uri()),
@@ -147,7 +147,7 @@ def test_pseudodojo_normalizes_reports_and_verified_upfs(tmp_path: Path) -> None
     assert metadata[0].cutoffs is not None
     assert metadata[0].cutoffs.ecutwfc_ry == 40.0
     assert metadata[0].cutoffs.ecutrho_ry == 160.0
-    assert metadata[0].table_id == "pseudodojo-fixture"
+    assert metadata[0].table_id == "pseudopotentials/pseudodojo-fixture"
     assert not list(installed.root.rglob("*.tgz"))
 
 
@@ -173,7 +173,7 @@ def test_sssp_normalizes_sidecar_and_verified_upfs(tmp_path: Path) -> None:
     assert metadata[0].cutoffs is not None
     assert metadata[0].cutoffs.ecutwfc_ry == 30.0
     assert metadata[0].cutoffs.ecutrho_ry == 120.0
-    assert metadata[0].table_id == "sssp-fixture"
+    assert metadata[0].table_id == "pseudopotentials/sssp-fixture"
     assert not list(installed.root.rglob("*.tar.gz"))
 
 

@@ -5,9 +5,9 @@ from goldilocks_core.assets.records import AssetReference, RuntimeProfile
 DEFAULT_PROFILE = RuntimeProfile(
     name="default",
     assets=(
-        AssetReference("qrf-kpoints", "QRF95"),
-        AssetReference("metallicity-cgcnn", "1"),
-        AssetReference("pseudodojo-pbesol-efficiency-sr", "0.4"),
+        AssetReference("models/qrf-kpoints", "QRF95"),
+        AssetReference("models/metallicity-cgcnn", "1"),
+        AssetReference("pseudopotentials/pseudodojo-pbesol-efficiency-sr", "0.4"),
     ),
 )
 

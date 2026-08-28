@@ -70,7 +70,7 @@ def installed_pseudo_table(tmp_path) -> tuple[AssetStore, PseudoTable]:
     source = tmp_path / "source.bin"
     source.write_bytes(b"source")
     spec = AssetSpec(
-        "sssp-fixture",
+        "pseudopotentials/sssp-fixture",
         "1",
         (AssetFile("source", "source.bin", source.as_uri()),),
     )

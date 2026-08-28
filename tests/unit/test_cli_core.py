@@ -554,7 +554,9 @@ def test_main_fetches_only_the_missing_asset_then_retries(
         calls += 1
         if calls == 1:
             raise AssetNotInstalled(
-                AssetReference("pseudodojo-pbesol-efficiency-sr", "0.4"),
+                AssetReference(
+                    "pseudopotentials/pseudodojo-pbesol-efficiency-sr", "0.4"
+                ),
                 runtime.asset_store.root,
             )
         return make_result(request)
@@ -574,7 +576,7 @@ def test_main_fetches_only_the_missing_asset_then_retries(
 
     cli_core.main()
 
-    assert installed == ["pseudodojo-pbesol-efficiency-sr"]
+    assert installed == ["pseudopotentials/pseudodojo-pbesol-efficiency-sr"]
     assert calls == 2
     assert "formula: Si" in capsys.readouterr().out
 

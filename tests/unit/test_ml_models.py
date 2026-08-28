@@ -61,12 +61,12 @@ def test_qrf_resources_resolve_installed_assets_offline(
     atom_init.write_text("{}")
     store = AssetStore(tmp_path / "assets")
     qrf_asset = AssetSpec(
-        "qrf-kpoints",
+        "models/qrf-kpoints",
         "QRF95",
         (AssetFile("model", "QRF95.pkl", qrf_source.as_uri()),),
     )
     metallicity_asset = AssetSpec(
-        "metallicity-cgcnn",
+        "models/metallicity-cgcnn",
         "1",
         (
             AssetFile("checkpoint", "is_metal.ckpt", checkpoint.as_uri()),

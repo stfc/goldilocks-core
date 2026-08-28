@@ -8,15 +8,33 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from goldilocks_core.assets.records import AssetFile
 
 _CHUNK_SIZE = 1024 * 1024
 _TIMEOUT_SECONDS = 300
+_RETRIES = Retry(
+    total=3,
+    backoff_factor=0.5,
+    status_forcelist=(429, 502, 503, 504),
+    allowed_methods=frozenset({"GET"}),
+    raise_on_status=False,
+)
 
 
 class ChecksumMismatch(ValueError):
     """A downloaded source file did not match its declared digest."""
+
+
+def _session() -> requests.Session:
+    """Return a one-shot session with a transient-failure retry policy."""
+    session = requests.Session()
+    adapter = HTTPAdapter(max_retries=_RETRIES)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
 
 
 def download(file: AssetFile, destination: Path) -> None:
@@ -28,7 +46,7 @@ def download(file: AssetFile, destination: Path) -> None:
             shutil.copyfileobj(source, target, length=_CHUNK_SIZE)
     else:
         with (
-            requests.get(file.url, stream=True, timeout=_TIMEOUT_SECONDS) as response,
+            _session().get(file.url, stream=True, timeout=_TIMEOUT_SECONDS) as response,
             destination.open("xb") as target,
         ):
             response.raise_for_status()

@@ -145,6 +145,17 @@ scientific metadata and provide two finite positive cutoffs for every selected
 element. Arbitrary JSON files and filename words are not treated as scientific
 facts.
 
+The recognized sidecar filenames are a fixed convention:
+
+- PseudoDojo: one `.djrepo` beside each UPF (same stem).
+- SSSP: any `*.json` beside the UPF, or exactly one table-level JSON named
+  `<directory>.json` one level above it (for example `pseudos/` with
+  `pseudos.json` beside it). A table-level JSON must cover every UPF in that
+  directory.
+
+Other parent-directory layouts are not searched: keep sidecars beside their
+UPF files, or follow the one table-level filename above.
+
 `pseudo_metadata`, `pseudo_root`, and `pseudo_table` are mutually exclusive.
 Explicit metadata is useful for in-memory callers; an explicit root remains
 operator-managed; an exact table ID resolves through the verified asset store.

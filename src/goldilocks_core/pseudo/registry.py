@@ -205,7 +205,7 @@ def _parse_table(table_id: str, entry: Any) -> PseudoTable:
         if provider == "pseudodojo" and dual is None:
             raise ValueError("PseudoDojo tables require charge_density_dual")
 
-        asset = AssetSpec(table_id, version, files)
+        asset = AssetSpec(f"pseudopotentials/{table_id}", version, files)
         return PseudoTable(
             id=table_id,
             provider=provider,

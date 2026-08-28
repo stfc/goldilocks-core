@@ -74,9 +74,8 @@ class AssetStore:
                 asset_directory.unlink()
             asset_directory.mkdir(parents=True, exist_ok=True)
             destination = self._asset_path(spec.id, spec.version)
-            staging_root = Path(
-                tempfile.mkdtemp(prefix=f".{spec.id}-{spec.version}-", dir=self.root)
-            )
+            staging_prefix = f".{spec.id.replace('/', '_')}-{spec.version}-"
+            staging_root = Path(tempfile.mkdtemp(prefix=staging_prefix, dir=self.root))
             try:
                 sources_dir = staging_root / "sources"
                 installed_dir = staging_root / "installed"
@@ -179,7 +178,8 @@ class AssetStore:
         AssetReference(asset_id, version)
         locks = self.root / ".locks"
         locks.mkdir(parents=True, exist_ok=True)
-        lock_path = locks / f"{asset_id}-{version}.lock"
+        lock_name = f"{asset_id.replace('/', '_')}-{version}.lock"
+        lock_path = locks / lock_name
         with lock_path.open("a+b") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             try:

@@ -44,7 +44,7 @@ class AssetSpec:
     files: tuple[AssetFile, ...]
 
     def __post_init__(self) -> None:
-        _validate_component(self.id, "asset id")
+        _validate_asset_id(self.id, "asset id")
         _validate_component(self.version, "asset version")
         if not isinstance(self.files, tuple):
             object.__setattr__(self, "files", tuple(self.files))
@@ -120,7 +120,7 @@ class AssetReference:
     version: str
 
     def __post_init__(self) -> None:
-        _validate_component(self.id, "asset id")
+        _validate_asset_id(self.id, "asset id")
         _validate_component(self.version, "asset version")
 
 
@@ -149,6 +149,18 @@ def _validate_component(value: str, label: str) -> None:
         or "\\" in value
     ):
         raise ValueError(f"{label} must be one non-empty path component: {value!r}")
+
+
+def _validate_asset_id(value: str, label: str) -> None:
+    """Require a domain-namespaced id such as 'models/qrf-kpoints'."""
+    domain, separator, name = (value or "").partition("/")
+    if not separator or not domain or not name:
+        raise ValueError(
+            f"{label} must be namespaced as '<domain>/<name>', for example "
+            f"'models/qrf-kpoints': {value!r}"
+        )
+    _validate_component(domain, f"{label} domain")
+    _validate_component(name, f"{label} name")
 
 
 def _validate_relative_path(value: str, label: str) -> None:

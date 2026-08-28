@@ -7,7 +7,7 @@ feature_set = "qrf_comp_struct_soap_lattice_metal"
 interval_confidence = 0.90
 
 [defaults.kpoints.asset]
-id = "qrf-kpoints"
+id = "models/qrf-kpoints"
 version = "QRF95"
 
 [[defaults.kpoints.asset.files]]
@@ -49,7 +49,7 @@ checkpoint_file = "is_metal.ckpt"
 atom_init_file = "atom_init.json"
 
 [defaults.kpoints.metallicity.asset]
-id = "metallicity-cgcnn"
+id = "models/metallicity-cgcnn"
 version = "1"
 
 [[defaults.kpoints.metallicity.asset.files]]

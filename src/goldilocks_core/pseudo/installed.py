@@ -68,7 +68,7 @@ def write_table_manifest(
 
     document = {
         "schema_version": _SCHEMA_VERSION,
-        "id": table.id,
+        "id": table.asset.id,
         "version": table.version,
         "provider": table.provider,
         "functional": table.functional,

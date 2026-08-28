@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
 
@@ -64,6 +65,60 @@ def test_mcp_rejects_unknown_root_arguments(test_service, request_body) -> None:
                 {**request_body, "surprise": True},
             )
         )
+
+
+def test_mcp_rejects_type_coercion_in_hints(test_service, request_body) -> None:
+    """Reject string-to-bool and string-to-int coercion instead of converting."""
+    server = create_server(test_service)
+
+    with pytest.raises(ToolError):
+        asyncio.run(
+            server.call_tool(
+                "recommend",
+                {**request_body, "hints": {"spin_polarized": "yes"}},
+            )
+        )
+    with pytest.raises(ToolError):
+        asyncio.run(
+            server.call_tool(
+                "recommend",
+                {**request_body, "hints": {"k_grid": ["3", "3", "3"]}},
+            )
+        )
+
+
+class _SlowPresetService:
+    """Service stub whose preset runs are long enough to outlast a tick."""
+
+    def __init__(self, delay: float) -> None:
+        self._delay = delay
+
+    def run_preset(self, request):
+        time.sleep(self._delay)
+
+        class _Result:
+            def to_dict(self) -> dict:
+                return {}
+
+        return _Result()
+
+
+def test_mcp_list_tools_stays_responsive_during_slow_compute() -> None:
+    """Answer discovery while a recommendation runs in a worker thread."""
+    server = create_server(_SlowPresetService(delay=0.8))
+    body = {"structure": "unused.cif"}
+
+    async def scenario() -> float:
+        pending = asyncio.create_task(server.call_tool("recommend", body))
+        await asyncio.sleep(0.1)
+        started = time.perf_counter()
+        await server.list_tools()
+        elapsed = time.perf_counter() - started
+        await pending
+        return elapsed
+
+    elapsed = asyncio.run(scenario())
+    assert elapsed < 0.5
 
 
 def test_mcp_generate_returns_core_result_and_bundle(

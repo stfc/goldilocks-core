@@ -78,8 +78,7 @@ with CoreService() as core:
     result = core.recommend(request)
 
 for pseudo in result.selection.pseudopotentials:
-    print(pseudo.element, pseudo.filename)
-print(result.selection.ecutwfc_ry, result.selection.ecutrho_ry)
+    print(pseudo.element, pseudo.filename, pseudo.ecutwfc_ry, pseudo.ecutrho_ry)
 ```
 
 Missing metadata is allowed for recommendation: selection returns explicit

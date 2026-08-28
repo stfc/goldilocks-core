@@ -10,6 +10,7 @@ from the contract types so agents get constrained choices. Behind the optional
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import Any, Literal
 
@@ -72,7 +73,7 @@ class _StrictMCPServer(MCPServer):
 class _InlineStructure(BaseModel):
     """Inline CIF or POSCAR content."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     content: str
     format: Literal["cif", "poscar"] | None = None
@@ -81,7 +82,7 @@ class _InlineStructure(BaseModel):
 class _Intent(BaseModel):
     """Calculation intent fields."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     code: str = "quantum_espresso"
     task: str = "scf_single_point"
@@ -92,10 +93,10 @@ class _Intent(BaseModel):
 class _Hints(BaseModel):
     """Operator hint fields."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     k_spacing: float | None = None
-    k_grid: tuple[int, int, int] | None = None
+    k_grid: list[int] | None = None
     smearing_type: SmearingType | None = None
     smearing_width_ry: float | None = None
     spin_polarized: bool | None = None
@@ -113,7 +114,7 @@ class _Hints(BaseModel):
 class _PseudoMetadata(BaseModel):
     """Pseudopotential metadata accepted by the Core contract."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     filepath: str
     filename: str
@@ -134,7 +135,7 @@ class _PseudoMetadata(BaseModel):
 class _KmeshModel(BaseModel):
     """Optional local k-mesh model specification."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     name: str
     version: str
@@ -238,7 +239,7 @@ def create_server(
             structure, intent, hints, pseudo_metadata, pseudo_root, kmesh_model
         )
         body["mode"] = "recommend"
-        return _run(body, state)
+        return await asyncio.to_thread(_run, body, state)
 
     @server.tool(description="Run the generate preset and return CoreResult JSON.")
     async def generate(
@@ -256,7 +257,7 @@ def create_server(
         body["mode"] = "generate"
         if output_dir is not None:
             body["output_dir"] = output_dir
-        return _run(body, state)
+        return await asyncio.to_thread(_run, body, state)
 
     @server.tool(description="Compute selected Core record types.")
     async def compute(
@@ -272,7 +273,7 @@ def create_server(
             structure, intent, hints, pseudo_metadata, pseudo_root, kmesh_model
         )
         body["outputs"] = outputs
-        return _run(body, state)
+        return await asyncio.to_thread(_run, body, state)
 
     return server
 

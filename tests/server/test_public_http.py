@@ -344,8 +344,8 @@ def test_http_asset_not_installed_error_omits_server_paths(
     assert response.json() == {
         "error": {
             "kind": "asset_not_installed",
-            "message": "Runtime asset model-fixture@7 is not installed.",
-            "asset_id": "model-fixture",
+            "message": "Runtime asset models/model-fixture@7 is not installed.",
+            "asset_id": "models/model-fixture",
             "version": "7",
             "reason": "is not installed",
         }
@@ -588,7 +588,7 @@ class _MissingAssetService(Service):
     def compute(self, request, *, output=None):
         del request, output
         raise AssetNotInstalled(
-            AssetReference("model-fixture", "7"),
+            AssetReference("models/model-fixture", "7"),
             Path("/srv/goldilocks/secret-assets"),
         )
 

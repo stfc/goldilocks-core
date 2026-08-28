@@ -306,11 +306,12 @@ def _runtime_material(
         installed = asset_store.resolve_spec(material.asset)
         licence = next(file for file in material.asset.files if file.role == "licence")
         suffix = Path(licence.path).suffix or ".txt"
+        licence_name = material.asset.id.replace("/", "_")
         artifacts.append(
             _installed_artifact(
                 installed,
                 licence.path,
-                f"licences/{material.asset.id}-{material.asset.version}{suffix}",
+                f"licences/{licence_name}-{material.asset.version}{suffix}",
                 "licence",
                 "text/markdown; charset=utf-8",
             )
@@ -490,7 +491,10 @@ def _pseudopotential_material(
     table_ids = {item.table_id for item in metadata}
     if len(table_ids) == 1 and None not in table_ids:
         table_id = next(iter(table_ids))
-        table = load_tables(registry_path)[table_id]
+        tables = {
+            table.asset.id: table for table in load_tables(registry_path).values()
+        }
+        table = tables[table_id]
         installed = asset_store.resolve_spec(table.asset)
         artifacts = [
             _installed_pseudo_artifact(selected, installed)

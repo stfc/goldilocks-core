@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -100,7 +101,8 @@ def create_server(
         description="Describe Core tasks, presets, records, codes, and assets."
     )
     async def capabilities() -> dict[str, Any]:
-        return state.capabilities().to_dict()
+        record = await asyncio.to_thread(state.capabilities)
+        return record.to_dict()
 
     @server.tool(
         description="Normalize and inspect a local or inline structure source."
@@ -114,9 +116,10 @@ def create_server(
         except ValueError as error:
             raise ToolError(str(error)) from error
         try:
-            return state.inspect_structure(parsed).to_dict()
+            result = await asyncio.to_thread(state.inspect_structure, parsed)
         except StructureInputError as error:
             raise ToolError(str(error)) from error
+        return result.to_dict()
 
     @server.tool(
         description=(
@@ -145,7 +148,9 @@ def create_server(
         except ValueError as error:
             raise ToolError(str(error)) from error
         try:
-            result = state.compute(request, output=transport_output.target)
+            result = await asyncio.to_thread(
+                state.compute, request, output=transport_output.target
+            )
         except _KNOWN_TOOL_ERRORS as error:
             raise ToolError(str(error)) from error
         return result.to_dict()

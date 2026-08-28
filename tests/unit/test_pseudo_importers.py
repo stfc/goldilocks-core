@@ -220,7 +220,7 @@ def test_pseudodojo_accepts_nonrelativistic_header_in_scalar_table(
     installed, _ = install_dojo_fixture(tmp_path, upf=upf)
     metadata = load_installed_table(installed)
 
-    assert metadata[0].relativistic == "scalar"
+    assert metadata[0].relativistic == "non-relativistic"
 
 
 def test_sssp_rejects_sidecar_registry_disagreement(tmp_path: Path) -> None:
@@ -244,7 +244,7 @@ def test_sssp_accepts_nonrelativistic_header_in_scalar_table(tmp_path: Path) -> 
     installed, _ = install_sssp_fixture(tmp_path, upf=upf)
     metadata = load_installed_table(installed)
 
-    assert metadata[0].relativistic == "scalar"
+    assert metadata[0].relativistic == "non-relativistic"
 
 
 def test_installed_pseudo_manifest_rejects_unknown_entry_fields(

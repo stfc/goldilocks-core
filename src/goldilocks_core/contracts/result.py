@@ -55,6 +55,14 @@ class Records(Mapping[type, Any]):
 
 @dataclass(frozen=True, slots=True)
 class Publication:
+    """A published output bundle and its integrity facts.
+
+    ``path`` is the published location; ``files`` lists every published
+    path relative to it. ``manifest_sha256`` pins the archive manifest and
+    ``output_sha256`` pins the archive bytes; it is ``None`` for directory
+    publications.
+    """
+
     kind: Literal["directory", "archive"]
     path: str
     files: tuple[str, ...]
@@ -67,6 +75,14 @@ class Publication:
 
 @dataclass(frozen=True, slots=True)
 class ComputationResult:
+    """Complete record set from one Compute call.
+
+    ``records`` holds every computed record for the requested selection;
+    ``warnings`` aggregates every stage's warnings and is the authoritative
+    place to check for incomplete or degraded results. ``publication`` is
+    set only when the request named an output target.
+    """
+
     draft: CalculationDraft
     task: str
     task_revision: str

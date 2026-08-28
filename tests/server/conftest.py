@@ -158,8 +158,8 @@ def publishable_service(tmp_path) -> Iterator[Service]:
     manifest.write_text(
         json.dumps(
             {
-                "schema_version": 1,
-                "id": "fixture-table",
+                "schema_version": 2,
+                "id": "pseudopotentials/fixture-table",
                 "version": "1",
                 "provider": "sssp",
                 "functional": "PBEsol",

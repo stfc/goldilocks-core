@@ -13,6 +13,7 @@ def make_analysis(
     magnetic_elements: tuple[str, ...] = (),
     heavy_elements: tuple[str, ...] = (),
     electronic_character: str = "unknown",
+    electronic_character_source: str = "heuristic",
     dimensionality: str = "unknown",
     low_dimensional: bool = False,
 ) -> StructureAnalysisRecord:
@@ -29,6 +30,7 @@ def make_analysis(
         magnetic_elements=magnetic_elements,
         heavy_elements=heavy_elements,
         electronic_character=electronic_character,
+        electronic_character_source=electronic_character_source,
         dimensionality=dimensionality,
         low_dimensional=low_dimensional,
     )
@@ -105,15 +107,22 @@ def test_advise_parameters_uses_likely_metal_smearing_from_analysis() -> None:
     assert advice.smearing.smearing_type == "cold"
     assert advice.smearing.width_ry == 0.01
     assert advice.smearing.provenance.source == "analysis"
+    assert any(
+        "structure-only heuristics" in warning
+        for warning in advice.smearing.provenance.warnings
+    )
 
 
 def test_advise_parameters_uses_metal_smearing_from_ml_classification() -> None:
-    """A model-classified metal gets the same metallic smearing as a likely metal."""
-    advice = advise_parameters(make_analysis(electronic_character="metal"))
+    """A model-classified metal gets metallic smearing without the heuristic caveat."""
+    advice = advise_parameters(
+        make_analysis(electronic_character="metal", electronic_character_source="model")
+    )
 
     assert advice.smearing.smearing_type == "cold"
     assert advice.smearing.width_ry == 0.01
     assert advice.smearing.provenance.source == "analysis"
+    assert advice.smearing.provenance.warnings == ()
 
 
 def test_advise_smearing_records_user_hint_provenance_when_hinted() -> None:
@@ -179,14 +188,14 @@ def test_advise_pseudopotentials_records_default_source_without_hints() -> None:
     assert advice.pseudopotentials.provenance.warnings == ()
 
 
-def test_advise_pseudopotentials_records_analysis_source_when_soc_enabled() -> None:
-    """SOC enabled with no relativistic hint derives pseudo provenance from analysis."""
+def test_advise_pseudopotentials_inherits_soc_hint_provenance() -> None:
+    """SOC enabled through a hint carries user_hint provenance into pseudo advice."""
     advice = advise_parameters(
         make_analysis(),
         hints=CalculationHints(spin_orbit_coupling=True),
     )
 
-    assert advice.pseudopotentials.provenance.source == "analysis"
+    assert advice.pseudopotentials.provenance.source == "user_hint"
     assert advice.pseudopotentials.relativistic_mode == "full"
 
 

@@ -35,7 +35,7 @@ for pseudo in pseudo_metadata:
         pseudo.functional,
         pseudo.pseudo_type,
         pseudo.relativistic,
-        pseudo.sssp_recommended_cutoff,
+        pseudo.cutoffs,
     )
 ```
 
@@ -60,7 +60,7 @@ request = PresetRequest(
         code="quantum_espresso",
         task="scf_single_point",
         functional="PBE",
-        pseudo_mode="efficiency",
+        pseudo_accuracy="efficiency",
     ),
     hints=CalculationHints(
         k_spacing=0.2,

@@ -9,6 +9,10 @@ Operational quickstart for using `goldilocks-core` without rereading the
 implementation. Core currently recommends and generates Quantum ESPRESSO SCF
 single-point inputs.
 
+Fresh installations must install the runtime assets first: run
+`goldilocks assets install default` once, or pass `--fetch-missing`, before any
+command that needs the default k-point model or pseudopotential tables.
+
 ## Progressive disclosure
 
 Start here. Read supporting files only for the needed branch:

@@ -196,15 +196,15 @@ def test_advise_pseudo_requirements_records_default_source_without_hints() -> No
     assert requirements.provenance.warnings == ()
 
 
-def test_advise_pseudo_requirements_records_analysis_source_for_soc() -> None:
-    """SOC enabled without a relativistic hint derives requirements from analysis."""
+def test_advise_pseudo_requirements_inherits_soc_hint_provenance() -> None:
+    """SOC enabled through a hint carries user_hint provenance into requirements."""
     advice = advise_parameters(
         make_analysis(),
         hints=CalculationHints(spin_orbit_coupling=True),
     )
 
     requirements = advice.pseudopotential_requirements
-    assert requirements.provenance.source == "analysis"
+    assert requirements.provenance.source == "user_hint"
     assert requirements.relativistic == "full"
 
 

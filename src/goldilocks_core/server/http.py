@@ -1,13 +1,12 @@
 """FastAPI transport over one process-owned Core service.
 
 A thin stateless transport: each endpoint parses the body with the shared
-deserializer, dispatches through one ``Service``
-held for the process lifetime, and returns the result's JSON form. Stage
-``ValueError``\\ s map to 4xx responses with the message preserved; parser
-:class:`~goldilocks_core.server.request.RequestError`\\ s map to 422. Behind the
-optional ``[http]`` extra; importing :mod:`goldilocks_core` never imports FastAPI.
-``DimensionalityClassificationError`` (an ``Exception`` subclass, not
-``ValueError``) is mapped explicitly to 422.
+deserializer, dispatches through one process-owned ``Service``, and returns the
+result's JSON form. Parser
+:class:`~goldilocks_core.server.request.RequestError`\\ s and named domain
+errors map to explicit 4xx responses; unexpected defects remain 500 responses.
+Behind the optional ``[http]`` extra; importing :mod:`goldilocks_core` never
+imports FastAPI.
 
 Scientific endpoints accept inline Structure Sources, intent, hints, a
 registered pseudopotential-table ID, and a Preset or Record selection.

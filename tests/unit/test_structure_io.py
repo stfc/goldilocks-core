@@ -263,6 +263,10 @@ def test_inspection_rejects_invalid_supported_structure_content(
             lambda: InlineStructureSource(name="Si.xyz", content="Si", format="xyz"),
             "Unsupported structure format",
         ),
+        (
+            lambda: InlineStructureSource(name="Si\n.cif", content="data_Si"),
+            "InlineStructureSource.name",
+        ),
         (lambda: PathStructureSource(""), "PathStructureSource.path"),
         (lambda: PathStructureSource("  "), "PathStructureSource.path"),
         (

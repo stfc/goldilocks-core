@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from threading import Event, Lock
 
 import pytest
@@ -22,6 +23,7 @@ from goldilocks_core.contracts import (
     PseudoCutoffs,
     PseudoMetadata,
 )
+from goldilocks_core.runtime.dispatch import Dispatcher
 
 
 def make_structure() -> Structure:
@@ -165,6 +167,40 @@ def test_service_runs_concurrent_computations() -> None:
             second.result(timeout=2)
 
     assert backend.calls == 2
+
+
+def test_concurrent_first_computations_wait_for_default_task_registration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registration_started = Event()
+    release_registration = Event()
+    second_started = Event()
+    original_register = Dispatcher.register
+
+    def blocking_register(dispatcher: Dispatcher, handler) -> None:
+        registration_started.set()
+        assert release_registration.wait(timeout=2)
+        original_register(dispatcher, handler)
+
+    monkeypatch.setattr(Dispatcher, "register", blocking_register)
+
+    with Service() as service, ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(service.compute, make_request())
+        assert registration_started.wait(timeout=2)
+
+        def run_second() -> ComputationResult:
+            second_started.set()
+            return service.compute(make_request())
+
+        second = pool.submit(run_second)
+        assert second_started.wait(timeout=2)
+        try:
+            with pytest.raises(FutureTimeoutError):
+                second.result(timeout=0.1)
+        finally:
+            release_registration.set()
+        assert isinstance(first.result(timeout=2), ComputationResult)
+        assert isinstance(second.result(timeout=2), ComputationResult)
 
 
 def test_capabilities_and_inspection_do_not_wait_for_computation() -> None:

@@ -8,6 +8,9 @@ All notable changes to goldilocks-core are documented here.
 
 - `goldilocks assets install`, `status`, and `verify` commands for runtime
   models and pseudopotential tables.
+- Registry table IDs are accepted by the assets commands without the
+  `pseudopotentials/` storage prefix (`goldilocks assets install
+  pseudodojo-pbesol-efficiency-sr`).
 - Installed example structures for silicon, iron, and platinum.
 - HTTP and MCP operations for recommendations, input generation, record
   queries, and capability discovery.

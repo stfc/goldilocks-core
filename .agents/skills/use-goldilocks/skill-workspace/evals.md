@@ -10,7 +10,7 @@ Expected behavior:
 
 - Load `use-goldilocks` and `use-uv`.
 - Inspect candidate CIFs with pymatgen.
-- Use `CoreService.recommend(PresetRequest(...))` with pseudo metadata to get k-grid, pseudos, cutoffs, smearing, and convergence.
+- Use `Service.recommend(PresetRequest(...))` with pseudo metadata to get k-grid, pseudos, cutoffs, smearing, and convergence.
 - Write QE input manually from selected records.
 - Report warnings and output paths.
 

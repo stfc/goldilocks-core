@@ -2,7 +2,7 @@
 
 A thin transport: each tool builds the shared parser's mapping from typed
 pydantic arguments, dispatches through one
-:class:`~goldilocks_core.runtime.service.CoreService` held for the process
+:class:`~goldilocks_core.runtime.service.Service` held for the process
 lifetime, and returns the result's JSON form. Tool input schemas are derived
 from the contract types so agents get constrained choices. Tools accept only
 the calculation itself — inline structure content, intent, and hints. Models,

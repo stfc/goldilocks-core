@@ -13,6 +13,7 @@ def make_analysis(
     magnetic_elements: tuple[str, ...] = (),
     heavy_elements: tuple[str, ...] = (),
     electronic_character: str = "unknown",
+    electronic_character_source: str = "heuristic",
     dimensionality: str = "unknown",
     low_dimensional: bool = False,
 ) -> StructureAnalysisRecord:
@@ -29,6 +30,7 @@ def make_analysis(
         magnetic_elements=magnetic_elements,
         heavy_elements=heavy_elements,
         electronic_character=electronic_character,
+        electronic_character_source=electronic_character_source,
         dimensionality=dimensionality,
         low_dimensional=low_dimensional,
     )

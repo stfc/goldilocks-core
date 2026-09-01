@@ -122,7 +122,7 @@ def load_installed_table(
 
         if table is not None:
             declared = (
-                table.id,
+                table.asset.id,
                 table.version,
                 table.provider,
                 table.functional,

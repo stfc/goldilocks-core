@@ -2,6 +2,7 @@ import hashlib
 import io
 import json
 import tarfile
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -97,10 +98,12 @@ def install_dojo_fixture(
             AssetFile("metadata", "source/reports.tgz", reports.as_uri()),
         ),
     )
-    return AssetStore(tmp_path / "store").install(
+    registry_table = table("pseudodojo", spec, functional=table_functional)
+    installed = AssetStore(tmp_path / "store").install(
         spec,
-        dojo_preparer(table("pseudodojo", spec, functional=table_functional)),
+        dojo_preparer(registry_table),
     )
+    return installed, registry_table
 
 
 def install_sssp_fixture(
@@ -131,13 +134,15 @@ def install_sssp_fixture(
             AssetFile("metadata", "source/table.json", sidecar.as_uri()),
         ),
     )
-    return AssetStore(tmp_path / "store").install(
-        spec, sssp_preparer(table("sssp", spec))
+    registry_table = table("sssp", spec)
+    installed = AssetStore(tmp_path / "store").install(
+        spec, sssp_preparer(registry_table)
     )
+    return installed, registry_table
 
 
 def test_pseudodojo_normalizes_reports_and_verified_upfs(tmp_path: Path) -> None:
-    installed = install_dojo_fixture(tmp_path)
+    installed, _ = install_dojo_fixture(tmp_path)
     metadata = load_installed_table(installed)
 
     assert [item.element for item in metadata] == ["Si"]
@@ -152,7 +157,7 @@ def test_pseudodojo_normalizes_reports_and_verified_upfs(tmp_path: Path) -> None
 
 
 def test_pseudodojo_decodes_serialized_lda_functional(tmp_path: Path) -> None:
-    installed = install_dojo_fixture(
+    installed, _ = install_dojo_fixture(
         tmp_path,
         upf=UPF.replace(b'functional="PBEsol"', b'functional="SLA PW NOGX NOGC"'),
         report_functional=SERIALIZED_LDA_FUNCTIONAL,
@@ -165,7 +170,7 @@ def test_pseudodojo_decodes_serialized_lda_functional(tmp_path: Path) -> None:
 
 
 def test_sssp_normalizes_sidecar_and_verified_upfs(tmp_path: Path) -> None:
-    installed = install_sssp_fixture(tmp_path)
+    installed, _ = install_sssp_fixture(tmp_path)
     metadata = load_installed_table(installed)
 
     assert metadata[0].provider == "sssp"
@@ -197,7 +202,7 @@ def test_pseudodojo_accepts_nonrelativistic_header_in_scalar_table(
     """Table-level classification is authoritative; NR light elements stay valid."""
     upf = UPF.replace(b'relativistic="scalar"', b'relativistic="non-relativistic"')
 
-    installed = install_dojo_fixture(tmp_path, upf=upf)
+    installed, _ = install_dojo_fixture(tmp_path, upf=upf)
     metadata = load_installed_table(installed)
 
     assert metadata[0].relativistic == "scalar"
@@ -221,7 +226,7 @@ def test_sssp_accepts_nonrelativistic_header_in_scalar_table(tmp_path: Path) -> 
     """Table-level classification is authoritative; NR light elements stay valid."""
     upf = UPF.replace(b'relativistic="scalar"', b'relativistic="non-relativistic"')
 
-    installed = install_sssp_fixture(tmp_path, upf=upf)
+    installed, _ = install_sssp_fixture(tmp_path, upf=upf)
     metadata = load_installed_table(installed)
 
     assert metadata[0].relativistic == "scalar"
@@ -231,7 +236,7 @@ def test_installed_pseudo_manifest_rejects_unknown_entry_fields(
     tmp_path: Path,
 ) -> None:
     """Strictly reject unversioned nested manifest schema changes."""
-    installed = install_sssp_fixture(tmp_path)
+    installed, _ = install_sssp_fixture(tmp_path)
     manifest = installed.path("pseudo-table.json")
     document = json.loads(manifest.read_text(encoding="utf-8"))
     document["entries"][0]["unexpected"] = True
@@ -239,3 +244,27 @@ def test_installed_pseudo_manifest_rejects_unknown_entry_fields(
 
     with pytest.raises(AssetCorrupt, match="extra: unexpected"):
         load_installed_table(installed)
+
+
+def test_installed_pseudo_manifest_agrees_with_registry_declaration(
+    tmp_path: Path,
+) -> None:
+    """A table whose registry id differs from its asset id round-trips."""
+    installed, declared = install_dojo_fixture(tmp_path)
+    assert declared.id != declared.asset.id
+
+    metadata = load_installed_table(installed, table=declared)
+
+    assert [item.element for item in metadata] == ["Si"]
+    assert metadata[0].table_id == declared.asset.id
+
+
+def test_installed_pseudo_manifest_rejects_registry_disagreement(
+    tmp_path: Path,
+) -> None:
+    """Loading against a declaration the manifest does not record fails."""
+    installed, declared = install_sssp_fixture(tmp_path)
+    tampered = replace(declared, citation="different citation")
+
+    with pytest.raises(AssetCorrupt, match="disagrees with registry"):
+        load_installed_table(installed, table=tampered)

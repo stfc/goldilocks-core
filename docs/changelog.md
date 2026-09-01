@@ -15,6 +15,16 @@ All notable changes to goldilocks-core are documented here.
 - Exact pseudopotential-table selection on Python, CLI, HTTP, and MCP requests.
 - Provider-normalized PseudoDojo and SSSP installation into verified manifests.
 
+### Fixed
+
+- Installed pseudopotential manifests validate against the table's asset id
+  (`pseudopotentials/<table>`), matching what `write_table_manifest` records.
+  Fresh installs of every registered table now load through the strict reader;
+  new lifecycle tests install and reload each shipped table.
+- Stores installed before asset-id namespacing (bare table directories with
+  `schema_version: 1` manifests) are incompatible with this release. Reinstall
+  them: `goldilocks assets install default`.
+
 ### Changed
 
 - The only console command is now `goldilocks`.

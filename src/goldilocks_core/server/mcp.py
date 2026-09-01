@@ -4,7 +4,10 @@ A thin transport: each tool builds the shared parser's mapping from typed
 pydantic arguments, dispatches through one
 :class:`~goldilocks_core.runtime.service.CoreService` held for the process
 lifetime, and returns the result's JSON form. Tool input schemas are derived
-from the contract types so agents get constrained choices. Behind the optional
+from the contract types so agents get constrained choices. Tools accept only
+the calculation itself — inline structure content, intent, and hints. Models,
+pseudopotentials, and output locations are resolved by the server process
+from its own environment. Behind the optional
 ``[mcp]`` extra; importing :mod:`goldilocks_core` never imports the MCP SDK.
 """
 
@@ -15,8 +18,6 @@ from contextlib import asynccontextmanager
 from typing import Any, Literal
 
 from goldilocks_core.contracts import (
-    ModelSource,
-    ModelType,
     QueryRequest,
     SmearingType,
     VdwMethod,
@@ -27,7 +28,7 @@ from goldilocks_core.server.request import from_dict
 try:
     from mcp.server.mcpserver import MCPServer
     from mcp.server.mcpserver.exceptions import ToolError
-    from pydantic import BaseModel, ConfigDict, Field
+    from pydantic import BaseModel, ConfigDict
 except ImportError as error:
     raise ImportError(
         "The MCP transport requires goldilocks-core[mcp]. "
@@ -111,49 +112,10 @@ class _Hints(BaseModel):
     vdw_method: VdwMethod | None = None
 
 
-class _PseudoMetadata(BaseModel):
-    """Pseudopotential metadata accepted by the Core contract."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    filepath: str
-    filename: str
-    header_format: str
-    library: str | None = None
-    source_set: str | None = None
-    element: str | None = None
-    pseudo_type: str | None = None
-    functional: str | None = None
-    relativistic: str | None = None
-    z_valence: float | None = None
-    pseudo_info: dict[str, Any] = Field(default_factory=dict)
-    is_sssp: bool = False
-    source_pseudopotential: str | None = None
-    sssp_recommended_cutoff: dict[str, Any] | None = None
-
-
-class _KmeshModel(BaseModel):
-    """Optional local k-mesh model specification."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    name: str
-    version: str
-    model_type: ModelType
-    target: str
-    feature_set: str
-    source: ModelSource
-    location: str
-    revision: str | None = None
-
-
 def _body(
     structure: str | _InlineStructure,
     intent: _Intent | None,
     hints: _Hints | None,
-    pseudo_metadata: list[_PseudoMetadata] | None,
-    pseudo_root: str | None,
-    kmesh_model: _KmeshModel | None,
 ) -> dict[str, Any]:
     """Build the shared parser's mapping from typed MCP arguments."""
     body: dict[str, Any] = {
@@ -163,21 +125,10 @@ def _body(
             else structure
         )
     }
-    for name, value in (
-        ("intent", intent),
-        ("hints", hints),
-        ("pseudo_metadata", pseudo_metadata),
-        ("pseudo_root", pseudo_root),
-        ("kmesh_model", kmesh_model),
-    ):
+    for name, value in (("intent", intent), ("hints", hints)):
         if value is None:
             continue
-        if isinstance(value, BaseModel):
-            body[name] = value.model_dump(exclude_none=True)
-        elif isinstance(value, list) and value and isinstance(value[0], BaseModel):
-            body[name] = [item.model_dump(exclude_none=True) for item in value]
-        else:
-            body[name] = value
+        body[name] = value.model_dump(exclude_none=True)
     return body
 
 
@@ -231,13 +182,8 @@ def create_server(
         structure: str | _InlineStructure,
         intent: _Intent | None = None,
         hints: _Hints | None = None,
-        pseudo_metadata: list[_PseudoMetadata] | None = None,
-        pseudo_root: str | None = None,
-        kmesh_model: _KmeshModel | None = None,
     ) -> dict[str, Any]:
-        body = _body(
-            structure, intent, hints, pseudo_metadata, pseudo_root, kmesh_model
-        )
+        body = _body(structure, intent, hints)
         body["mode"] = "recommend"
         return await asyncio.to_thread(_run, body, state)
 
@@ -246,17 +192,9 @@ def create_server(
         structure: str | _InlineStructure,
         intent: _Intent | None = None,
         hints: _Hints | None = None,
-        pseudo_metadata: list[_PseudoMetadata] | None = None,
-        pseudo_root: str | None = None,
-        output_dir: str | None = None,
-        kmesh_model: _KmeshModel | None = None,
     ) -> dict[str, Any]:
-        body = _body(
-            structure, intent, hints, pseudo_metadata, pseudo_root, kmesh_model
-        )
+        body = _body(structure, intent, hints)
         body["mode"] = "generate"
-        if output_dir is not None:
-            body["output_dir"] = output_dir
         return await asyncio.to_thread(_run, body, state)
 
     @server.tool(description="Compute selected Core record types.")
@@ -265,13 +203,8 @@ def create_server(
         outputs: list[_OutputName],
         intent: _Intent | None = None,
         hints: _Hints | None = None,
-        pseudo_metadata: list[_PseudoMetadata] | None = None,
-        pseudo_root: str | None = None,
-        kmesh_model: _KmeshModel | None = None,
     ) -> dict[str, Any]:
-        body = _body(
-            structure, intent, hints, pseudo_metadata, pseudo_root, kmesh_model
-        )
+        body = _body(structure, intent, hints)
         body["outputs"] = outputs
         return await asyncio.to_thread(_run, body, state)
 

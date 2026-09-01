@@ -67,6 +67,12 @@ HTTP exposes `/recommend`, `/generate`, `/compute`, `/tasks`, `/codes`,
 `list_tasks`, `list_codes`, and `list_models` as stdio tools. Each server owns
 one `CoreService` for its lifetime.
 
+Transport requests carry only the calculation — inline CIF/POSCAR content,
+`intent`, `hints`, and `outputs`. File paths, model overrides, and
+pseudopotential sources are never request data: the server resolves models
+and pseudopotentials from its own environment. Pass files by content, not by
+path.
+
 ## Common options
 
 | Flag | Type | Default | Maps to |

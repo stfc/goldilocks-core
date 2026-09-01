@@ -22,6 +22,7 @@ All notable changes to goldilocks-core are documented here.
 
 ### Changed
 
+- Transports accept only the calculation: `from_dict` parses inline structure content, `intent`, `hints`, and `outputs`, and rejects `output_dir`, `pseudo_metadata`, `pseudo_root`, and `kmesh_model` as unknown fields. Path-form structures are rejected too — the wire carries inline CIF/POSCAR content, never server paths. Model selection, pseudopotential sources, and output locations are deployment configuration resolved by the server process (pinned model registry, asset store); per-request overrides remain available on the CLI and Python API, which run inside the operator's trust boundary.
 - CLI model name/version metadata now requires the local `--model` backend.
 - Loaded-model quantiles are checked before QRF confidence is reported.
 - Job-level warnings now include de-duplicated scientific caveats from Advise as well as Analyze, Kmesh, and Select.

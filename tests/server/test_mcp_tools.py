@@ -43,6 +43,20 @@ def test_mcp_lists_six_tools_with_constrained_outputs(test_service) -> None:
     assert compute.input_schema["additionalProperties"] is False
 
 
+@pytest.mark.parametrize(
+    "removed", ["kmesh_model", "pseudo_metadata", "pseudo_root", "output_dir"]
+)
+def test_mcp_tool_schemas_exclude_deployment_configuration(
+    test_service, removed: str
+) -> None:
+    """Tool schemas never expose deployment configuration to clients."""
+    server = create_server(test_service)
+    tools = asyncio.run(server.list_tools())
+
+    for tool in tools:
+        assert removed not in tool.input_schema.get("properties", {})
+
+
 def test_mcp_recommend_returns_core_result(test_service, request_body) -> None:
     """Return CoreResult JSON from the recommend tool."""
     server = create_server(test_service)
@@ -103,10 +117,12 @@ class _SlowPresetService:
         return _Result()
 
 
-def test_mcp_list_tools_stays_responsive_during_slow_compute() -> None:
+def test_mcp_list_tools_stays_responsive_during_slow_compute(
+    sample_structure_text: str,
+) -> None:
     """Answer discovery while a recommendation runs in a worker thread."""
     server = create_server(_SlowPresetService(delay=0.8))
-    body = {"structure": "unused.cif"}
+    body = {"structure": sample_structure_text}
 
     async def scenario() -> float:
         pending = asyncio.create_task(server.call_tool("recommend", body))
@@ -121,22 +137,39 @@ def test_mcp_list_tools_stays_responsive_during_slow_compute() -> None:
     assert elapsed < 0.5
 
 
-def test_mcp_generate_returns_core_result_and_bundle(
-    test_service, request_body, tmp_path
+def test_mcp_generate_without_server_pseudopotentials_raises_tool_error(
+    test_service, request_body
 ) -> None:
-    """Return generated files and publish a requested bundle."""
+    """Surface the generate rejection as a ToolError for the agent."""
     server = create_server(test_service)
-    output_dir = tmp_path / "bundle"
 
-    data = _call(
-        server,
-        "generate",
-        {**request_body, "output_dir": str(output_dir)},
-    )
+    with pytest.raises(ToolError, match="Pseudopotential selection"):
+        _call(server, "generate", request_body)
 
-    assert data["generated_files"][0]["path"] == "inputs/qe.in"
-    assert data["bundle"]["path"] == str(output_dir)
-    assert (output_dir / "inputs" / "qe.in").is_file()
+
+def test_mcp_rejects_deployment_configuration_arguments(
+    test_service, request_body
+) -> None:
+    """Reject client-supplied model and filesystem configuration."""
+    server = create_server(test_service)
+
+    with pytest.raises(ToolError, match="Unknown recommend arguments: kmesh_model"):
+        _call(
+            server,
+            "recommend",
+            {
+                **request_body,
+                "kmesh_model": {
+                    "name": "m",
+                    "version": "1",
+                    "model_type": "random_forest",
+                    "target": "k_index",
+                    "feature_set": "cslr",
+                    "source": "local",
+                    "location": "/tmp/model.pkl",
+                },
+            },
+        )
 
 
 def test_mcp_compute_returns_requested_records(test_service, request_body) -> None:

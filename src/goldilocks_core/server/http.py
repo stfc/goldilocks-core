@@ -8,6 +8,12 @@ held for the process lifetime, and returns the result's JSON form. Stage
 optional ``[http]`` extra; importing :mod:`goldilocks_core` never imports FastAPI.
 ``DimensionalityClassificationError`` (an ``Exception`` subclass, not
 ``ValueError``) is mapped explicitly to 422.
+
+Endpoints accept only the calculation itself — an inline Structure Source,
+intent, hints, and (for queries) the requested record types. Deployment
+configuration is server-side: models, pseudopotentials, and output locations
+are resolved from the server's own environment, so no request body names
+server-side paths or loadable artifacts.
 """
 
 from __future__ import annotations
@@ -151,7 +157,7 @@ def create_app(service: CoreService | None = None) -> Any:
 
     @app.post("/generate")
     def generate(body: dict[str, Any]) -> dict[str, Any]:
-        """Run the generate preset and optionally publish a bundle."""
+        """Run the generate preset and return generated files."""
         return _execute("generate", body, state)
 
     @app.post("/compute")

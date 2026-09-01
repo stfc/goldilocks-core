@@ -8,7 +8,7 @@ from pymatgen.core import Structure
 from goldilocks_core.assets import AssetStore
 from goldilocks_core.contracts import PseudoCutoffs, PseudoMetadata
 from goldilocks_core.examples import structure
-from goldilocks_core.runtime import CoreRuntime, CoreService
+from goldilocks_core.runtime import Runtime, Service
 
 
 @pytest.fixture
@@ -64,9 +64,8 @@ def request_body(sample_structure_text: str) -> dict[str, object]:
 
 
 @pytest.fixture
-def test_service(tmp_path) -> Iterator[CoreService]:
-    """Yield a hermetic Core service over an empty explicit asset store."""
-    runtime = CoreRuntime(asset_store=AssetStore(tmp_path / "assets"))
-    service = CoreService(runtime)
+def test_service(tmp_path) -> Iterator[Service]:
+    """Yield a hermetic service over an empty explicit asset store."""
+    service = Service(runtime=Runtime(asset_store=AssetStore(tmp_path / "assets")))
     yield service
     service.close()

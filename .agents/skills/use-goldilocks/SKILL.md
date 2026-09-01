@@ -41,11 +41,11 @@ Load + Advice + Select + Kmesh -> Generate
 
 Choose the operation from the needed output:
 
-- Complete recommendation records: `CoreService.recommend(PresetRequest(...))`.
-- Generated files in memory: `CoreService.generate(PresetRequest(...))`.
-- Generated files on disk: `CoreService.generate(..., output_dir=...)`.
-- Selected records only: `CoreService.compute(QueryRequest(...))`.
-- Repeated calls or discovery: keep one `CoreService` open.
+- Complete recommendation records: `Service.recommend(PresetRequest(...))`.
+- Generated files in memory: `Service.generate(PresetRequest(...))`.
+- Generated files on disk: `Service.generate(..., output_dir=...)`.
+- Selected records only: `Service.compute(QueryRequest(...))`.
+- Repeated calls or discovery: keep one `Service` open.
 - One call: `run_core_job` or `query_records`.
 
 Bundle publication is a side effect of Generate, not a separate mode.
@@ -69,7 +69,7 @@ Use the root facade for application operations:
 from goldilocks_core import (
     CalculationHints,
     CalculationIntent,
-    CoreService,
+    Service,
     PresetRequest,
     QueryRequest,
     query_records,
@@ -92,7 +92,7 @@ Requests without a pseudopotential argument resolve the installed default
 table; pass `--pseudo-root` only to use an operator-managed custom library.
 
 HTTP and MCP require the `[http]` and `[mcp]` extras. Both transports keep one
-`CoreService` alive and expose recommend, generate, compute, task discovery,
+`Service` alive and expose recommend, generate, compute, task discovery,
 code discovery, and model discovery.
 
 ## Common pitfalls

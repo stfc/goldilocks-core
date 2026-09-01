@@ -24,20 +24,20 @@ import threading
 
 from goldilocks_core.contracts import (
     CodeName,
-    CoreRecords,
-    CoreResult,
     PresetRequest,
     QueryRequest,
+    Records,
+    Result,
 )
 from goldilocks_core.generation.registry import available_codes
-from goldilocks_core.runtime.core import CoreRuntime
-from goldilocks_core.runtime.dispatch import TaskDispatcher
-from goldilocks_core.runtime.graph import TaskGraphDescription
+from goldilocks_core.runtime.dispatch import Dispatcher
+from goldilocks_core.runtime.graph import GraphInfo
+from goldilocks_core.runtime.models import Runtime
 
-__all__ = ["CoreService"]
+__all__ = ["Service"]
 
 
-class CoreService:
+class Service:
     """Unified backend runtime for Core entrypoints (CLI, HTTP, MCP).
 
     Owns a :class:`CoreRuntime` for model lifecycle (closing it when owned) and
@@ -50,15 +50,15 @@ class CoreService:
 
     __slots__ = ("_runtime", "_dispatcher", "_lock", "_owns_runtime", "_closed")
 
-    def __init__(self, runtime: CoreRuntime | None = None) -> None:
+    def __init__(self, runtime: Runtime | None = None) -> None:
         self._owns_runtime = runtime is None
-        self._runtime = runtime if runtime is not None else CoreRuntime()
-        self._dispatcher = TaskDispatcher(self._runtime)
+        self._runtime = runtime if runtime is not None else Runtime()
+        self._dispatcher = Dispatcher(self._runtime)
         self._lock = threading.RLock()
         self._closed = False
 
     @property
-    def runtime(self) -> CoreRuntime:
+    def runtime(self) -> Runtime:
         """The model-lifecycle backend this service dispatches through."""
         return self._runtime
 
@@ -67,7 +67,7 @@ class CoreService:
         """Return whether this service has been closed."""
         return self._closed
 
-    def recommend(self, request: PresetRequest) -> CoreResult:
+    def recommend(self, request: PresetRequest) -> Result:
         """Execute the task's recommend preset and assemble a full result."""
         with self._lock:
             self._ensure_open()
@@ -78,25 +78,25 @@ class CoreService:
         request: PresetRequest,
         *,
         output_dir: str | None = None,
-    ) -> CoreResult:
+    ) -> Result:
         """Execute the task's generate preset and optionally publish a bundle."""
         with self._lock:
             self._ensure_open()
             return self._dispatcher.generate(request, output_dir=output_dir)
 
-    def compute(self, request: QueryRequest) -> CoreRecords:
+    def compute(self, request: QueryRequest) -> Records:
         """Execute the minimal subgraph for ``request.outputs`` on the task."""
         with self._lock:
             self._ensure_open()
             return self._dispatcher.compute(request)
 
-    def run_preset(self, request: PresetRequest) -> CoreResult:
+    def run_preset(self, request: PresetRequest) -> Result:
         """Dispatch the preset selected by ``request.mode``."""
         with self._lock:
             self._ensure_open()
             return self._dispatcher.run_preset(request)
 
-    def describe_tasks(self) -> tuple[TaskGraphDescription, ...]:
+    def describe_tasks(self) -> tuple[GraphInfo, ...]:
         """Return transport-safe descriptions of every registered task."""
         with self._lock:
             self._ensure_open()
@@ -122,9 +122,9 @@ class CoreService:
 
     def _ensure_open(self) -> None:
         if self._closed:
-            raise RuntimeError("CoreService is closed.")
+            raise RuntimeError("Service is closed.")
 
-    def __enter__(self) -> CoreService:
+    def __enter__(self) -> Service:
         return self
 
     def __exit__(self, *exc: object) -> None:

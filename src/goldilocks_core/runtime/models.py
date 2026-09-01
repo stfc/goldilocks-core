@@ -14,7 +14,7 @@ import os
 
 from pymatgen.core import Structure
 
-from goldilocks_core.advisors.kdistance_advisor import QrfKDistanceBackend
+from goldilocks_core.advice.kdistance import QrfBackend
 from goldilocks_core.analysis import heuristic_metallicity
 from goldilocks_core.assets import AssetStore
 from goldilocks_core.contracts import (
@@ -25,7 +25,7 @@ from goldilocks_core.contracts import (
 )
 
 
-class MetallicityService:
+class MetallicityModel:
     """Runtime-owned CGCNN metallicity classifier with model lifecycle.
 
     Returns the structure-only heuristic when no model artifacts are
@@ -62,7 +62,7 @@ class MetallicityService:
     ) -> tuple[ElectronicCharacter, str, float | None]:
         """Classify metallicity, or fall back to the structure heuristic."""
         if self._closed:
-            raise RuntimeError("MetallicityService is closed.")
+            raise RuntimeError("MetallicityModel is closed.")
         if self._checkpoint is None or self._atom_init is None:
             return heuristic_metallicity(structure), "heuristic", None
 
@@ -102,7 +102,7 @@ class MetallicityService:
         self._closed = True
 
 
-class CoreRuntime:
+class Runtime:
     """Own the lifecycle of the kmesh and metallicity model services.
 
     Exposes ``kmesh_service`` and ``metallicity`` as read-only services for
@@ -132,18 +132,18 @@ class CoreRuntime:
         self._metallicity = self._build_metallicity()
         self._closed = False
 
-    def _build_backend(self) -> QrfKDistanceBackend:
+    def _build_backend(self) -> QrfBackend:
         """Build the runtime-owned QRF kmesh backend."""
-        return QrfKDistanceBackend(
+        return QrfBackend(
             registry_path=self._registry_path,
             metallicity_checkpoint=self._metallicity_checkpoint,
             metallicity_atom_init=self._metallicity_atom_init,
             asset_store=self._asset_store,
         )
 
-    def _build_metallicity(self) -> MetallicityService:
+    def _build_metallicity(self) -> MetallicityModel:
         """Build the runtime-owned metallicity classifier."""
-        return MetallicityService(
+        return MetallicityModel(
             checkpoint=self._metallicity_checkpoint,
             atom_init=self._metallicity_atom_init,
             registry_path=self._registry_path,
@@ -155,7 +155,7 @@ class CoreRuntime:
         return self._backend
 
     @property
-    def metallicity(self) -> MetallicityService:
+    def metallicity(self) -> MetallicityModel:
         """The runtime-owned metallicity classifier."""
         return self._metallicity
 
@@ -202,7 +202,7 @@ class CoreRuntime:
         self._metallicity.close()
         self._closed = True
 
-    def __enter__(self) -> CoreRuntime:
+    def __enter__(self) -> Runtime:
         return self
 
     def __exit__(self, *exc: object) -> None:

@@ -5,13 +5,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from goldilocks_core.contracts import BundleRecord, CoreResult, JsonDict
+from goldilocks_core.contracts import BundleRecord, JsonDict, Result
 
 MANIFEST_FILENAME = "manifest.json"
 MANIFEST_VERSION = 2
 
 
-def build_bundle_manifest(result: CoreResult) -> JsonDict:
+def build_bundle_manifest(result: Result) -> JsonDict:
     """Return a JSON-safe manifest for a Core output bundle.
 
     Args:
@@ -44,7 +44,7 @@ def build_bundle_manifest(result: CoreResult) -> JsonDict:
 
 
 def write_bundle_directory(
-    result: CoreResult,
+    result: Result,
     output_dir: str | Path,
 ) -> BundleRecord:
     """Write generated files and a manifest to a new bundle directory.

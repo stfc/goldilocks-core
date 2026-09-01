@@ -12,13 +12,13 @@ from goldilocks_core.contracts import (
     BundleRecord,
     CalculationHints,
     CalculationIntent,
-    CoreRecords,
-    CoreResult,
     KPointSelection,
     ParameterAdvice,
     PresetRequest,
     Provenance,
     QueryRequest,
+    Records,
+    Result,
     SelectionRecord,
     StructureAnalysisRecord,
 )
@@ -26,7 +26,7 @@ from goldilocks_core.contracts import (
 _VDW_METHODS = ("d3", "d3bj", "ts", "mbd")
 
 
-def make_result(request: PresetRequest | QueryRequest, *, runtime=None) -> CoreResult:
+def make_result(request: PresetRequest | QueryRequest, *, runtime=None) -> Result:
     """Build a minimal Core result for CLI tests."""
     del runtime
     analysis = StructureAnalysisRecord(
@@ -42,7 +42,7 @@ def make_result(request: PresetRequest | QueryRequest, *, runtime=None) -> CoreR
         heavy_elements=(),
     )
     advice = advise_parameters(analysis, intent=request.intent, hints=request.hints)
-    return CoreResult(
+    return Result(
         intent=request.intent,
         analysis=analysis,
         advice=advice,
@@ -56,7 +56,7 @@ def make_result(request: PresetRequest | QueryRequest, *, runtime=None) -> CoreR
     )
 
 
-def make_records(request: QueryRequest, *, runtime=None) -> CoreRecords:
+def make_records(request: QueryRequest, *, runtime=None) -> Records:
     """Build the records selected by a CLI compute request."""
     del runtime
     result = make_result(request)
@@ -64,7 +64,7 @@ def make_records(request: QueryRequest, *, runtime=None) -> CoreRecords:
         StructureAnalysisRecord: result.analysis,
         ParameterAdvice: result.advice,
     }
-    return CoreRecords(
+    return Records(
         {output_type: available[output_type] for output_type in request.outputs or ()}
     )
 
@@ -281,7 +281,7 @@ def test_main_rejects_disabled_vdw_method_before_job_execution(
 ) -> None:
     """Reject contradictory vdW options before invoking the Core job runner."""
 
-    def fail_if_run(*args, **kwargs) -> CoreResult:
+    def fail_if_run(*args, **kwargs) -> Result:
         pytest.fail("run_core_job must not be called for invalid CLI options")
 
     monkeypatch.setattr(cli_core, "run_core_job", fail_if_run)
@@ -321,7 +321,7 @@ def test_main_rejects_model_metadata_without_model_before_job_execution(
 ) -> None:
     """Fail on backend-only metadata before invoking the Core job runner."""
 
-    def fail_if_run(*args, **kwargs) -> CoreResult:
+    def fail_if_run(*args, **kwargs) -> Result:
         pytest.fail("run_core_job must not be called for invalid CLI options")
 
     monkeypatch.setattr(cli_core, "run_core_job", fail_if_run)
@@ -352,7 +352,7 @@ def test_main_compute_prints_requested_analysis_and_advice(monkeypatch, capsys) 
     """Resolve multiple output names and print their CoreRecords as JSON."""
     captured: dict[str, QueryRequest] = {}
 
-    def fake_query_records(request: QueryRequest, *, runtime=None) -> CoreRecords:
+    def fake_query_records(request: QueryRequest, *, runtime=None) -> Records:
         del runtime
         captured["request"] = request
         return make_records(request)
@@ -407,7 +407,7 @@ def test_main_compute_prints_only_requested_analysis(monkeypatch, capsys) -> Non
 def test_main_compute_rejects_unknown_output_type(monkeypatch, capsys) -> None:
     """Report the invalid contract name before running a compute query."""
 
-    def fail_if_run(*args, **kwargs) -> CoreRecords:
+    def fail_if_run(*args, **kwargs) -> Records:
         pytest.fail("query_records must not be called for invalid output types")
 
     monkeypatch.setattr(cli_core, "query_records", fail_if_run)
@@ -436,7 +436,7 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
     """Keep CLI main as parse -> request -> run_core_job -> print."""
     captured: dict[str, PresetRequest] = {}
 
-    def fake_run_core_job(request: PresetRequest, *, runtime=None) -> CoreResult:
+    def fake_run_core_job(request: PresetRequest, *, runtime=None) -> Result:
         del runtime
         captured["request"] = request
         return make_result(request)
@@ -479,7 +479,7 @@ def test_main_builds_request_with_model_backend(monkeypatch, capsys) -> None:
     """Resolve CLI --model into a k-index model spec on the request."""
     captured: dict[str, PresetRequest] = {}
 
-    def fake_run_core_job(request: PresetRequest, *, runtime=None) -> CoreResult:
+    def fake_run_core_job(request: PresetRequest, *, runtime=None) -> Result:
         del runtime
         captured["request"] = request
         return make_result(request)
@@ -514,11 +514,11 @@ def test_main_builds_generate_request_with_output_dir(monkeypatch, capsys) -> No
     """Pass generate output path through the shared Core job request."""
     captured: dict[str, PresetRequest] = {}
 
-    def fake_run_core_job(request: PresetRequest, *, runtime=None) -> CoreResult:
+    def fake_run_core_job(request: PresetRequest, *, runtime=None) -> Result:
         del runtime
         captured["request"] = request
         result = make_result(request)
-        return CoreResult(
+        return Result(
             intent=result.intent,
             analysis=result.analysis,
             advice=result.advice,

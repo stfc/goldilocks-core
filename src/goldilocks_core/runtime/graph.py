@@ -21,15 +21,15 @@ from dataclasses import dataclass
 from typing import Any
 
 from goldilocks_core.contracts import (
-    CoreRecords,
     JsonDict,
+    Records,
     record_type_id,
     to_jsonable,
 )
 
 
 @dataclass(frozen=True, slots=True)
-class StageSpec:
+class Stage:
     """One record-producing stage and its record dependencies.
 
     ``call`` receives the matched upstream records positionally plus the run
@@ -56,7 +56,7 @@ class Preset:
 
 
 @dataclass(frozen=True, slots=True)
-class TaskSpec:
+class TaskGraph:
     """The stages and named output sets for one task.
 
     ``task`` is the stable task identifier; ``name``, ``description``, and
@@ -67,7 +67,7 @@ class TaskSpec:
     """
 
     task: str
-    stages: tuple[StageSpec, ...]
+    stages: tuple[Stage, ...]
     presets: tuple[Preset, ...]
     name: str = ""
     description: str = ""
@@ -83,7 +83,7 @@ class TaskSpec:
 
 
 @dataclass(frozen=True, slots=True)
-class StageDescription:
+class StageInfo:
     """Transport-safe description of one graph stage."""
 
     id: str
@@ -98,7 +98,7 @@ class StageDescription:
 
 
 @dataclass(frozen=True, slots=True)
-class PresetDescription:
+class PresetInfo:
     """Transport-safe description of one named output preset."""
 
     id: str
@@ -111,7 +111,7 @@ class PresetDescription:
 
 
 @dataclass(frozen=True, slots=True)
-class TaskGraphDescription:
+class GraphInfo:
     """Backend-owned, transport-safe description of one task.
 
     Carries stable task, stage, and record identifiers plus semantic names and
@@ -123,8 +123,8 @@ class TaskGraphDescription:
     revision: str
     name: str
     description: str
-    stages: tuple[StageDescription, ...]
-    presets: tuple[PresetDescription, ...]
+    stages: tuple[StageInfo, ...]
+    presets: tuple[PresetInfo, ...]
     selectable_record_ids: tuple[str, ...]
 
     def to_dict(self) -> JsonDict:
@@ -132,14 +132,14 @@ class TaskGraphDescription:
         return to_jsonable(self)
 
 
-def describe_task(task: TaskSpec) -> TaskGraphDescription:
+def describe_task(task: TaskGraph) -> GraphInfo:
     """Serialize a :class:`TaskSpec` into a transport-safe description.
 
     Stage and record identifiers are stable backend-owned strings read from the
     spec itself; no Python callables or class names are serialized.
     """
     stages = tuple(
-        StageDescription(
+        StageInfo(
             id=stage.id,
             name=stage.name,
             description=stage.description,
@@ -149,7 +149,7 @@ def describe_task(task: TaskSpec) -> TaskGraphDescription:
         for stage in task.stages
     )
     presets = tuple(
-        PresetDescription(
+        PresetInfo(
             id=preset.name,
             name=preset.name,
             output_record_ids=tuple(
@@ -158,7 +158,7 @@ def describe_task(task: TaskSpec) -> TaskGraphDescription:
         )
         for preset in task.presets
     )
-    return TaskGraphDescription(
+    return GraphInfo(
         id=task.task,
         revision=task.revision,
         name=task.name,
@@ -172,10 +172,10 @@ def describe_task(task: TaskSpec) -> TaskGraphDescription:
 
 
 def execute(
-    task: TaskSpec,
+    task: TaskGraph,
     outputs: tuple[type, ...],
     context: Any,
-) -> CoreRecords:
+) -> Records:
     """Resolve and execute the minimal subgraph for the requested outputs.
 
     Stages are ordered by a topological walk over their record dependencies,
@@ -183,7 +183,7 @@ def execute(
     handed to every stage as ``ctx`` without inspection.
     """
     producers = {stage.output: stage for stage in task.stages}
-    ordered: list[StageSpec] = []
+    ordered: list[Stage] = []
     visiting: set[type] = set()
     resolved: set[type] = set()
 
@@ -214,4 +214,4 @@ def execute(
         arguments = tuple(memo[input_type] for input_type in stage.inputs)
         memo[stage.output] = stage.call(*arguments, ctx=context)
 
-    return CoreRecords({output_type: memo[output_type] for output_type in outputs})
+    return Records({output_type: memo[output_type] for output_type in outputs})

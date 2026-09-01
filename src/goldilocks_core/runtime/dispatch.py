@@ -17,34 +17,34 @@ from dataclasses import replace
 
 from goldilocks_core.bundle import write_bundle_directory
 from goldilocks_core.contracts import (
-    CoreRecords,
-    CoreResult,
     PresetRequest,
     QueryRequest,
+    Records,
+    Result,
 )
-from goldilocks_core.runtime.core import CoreRuntime
-from goldilocks_core.runtime.graph import TaskGraphDescription, describe_task, execute
-from goldilocks_core.runtime.task import TaskHandler
+from goldilocks_core.runtime.graph import GraphInfo, describe_task, execute
+from goldilocks_core.runtime.models import Runtime
+from goldilocks_core.runtime.task import GraphHandler
 
 
-class UnknownTaskError(ValueError):
+class UnknownTask(ValueError):
     """A request names no registered Core task."""
 
 
-class TaskDispatcher:
-    """Dispatch Core task graphs through registered :class:`TaskHandler`s.
+class Dispatcher:
+    """Dispatch Core task graphs through registered :class:`GraphHandler`s.
 
-    Borrows a :class:`CoreRuntime` for owned services and an open-state guard;
+    Borrows a :class:`Runtime` for owned services and an open-state guard;
     owns the task registry. Register a custom task and dispatch by
     ``intent.task`` without the runtime or the executor changing.
     """
 
-    def __init__(self, runtime: CoreRuntime) -> None:
+    def __init__(self, runtime: Runtime) -> None:
         self._runtime = runtime
-        self._tasks: dict[str, TaskHandler] = {}
+        self._tasks: dict[str, GraphHandler] = {}
         self._default_pending = True
 
-    def register(self, handler: TaskHandler) -> None:
+    def register(self, handler: GraphHandler) -> None:
         """Register a task for dispatch by ``intent.task``."""
         self._tasks[handler.spec.task] = handler
 
@@ -64,7 +64,7 @@ class TaskDispatcher:
         if SCF_HANDLER.spec.task not in self._tasks:
             self.register(SCF_HANDLER)
 
-    def recommend(self, request: PresetRequest) -> CoreResult:
+    def recommend(self, request: PresetRequest) -> Result:
         """Execute the task's recommend preset and assemble a full result."""
         self._ensure_open()
         self._ensure_default()
@@ -82,7 +82,7 @@ class TaskDispatcher:
         request: PresetRequest,
         *,
         output_dir: str | None = None,
-    ) -> CoreResult:
+    ) -> Result:
         """Execute the task's generate preset and optionally publish a bundle."""
         self._ensure_open()
         self._ensure_default()
@@ -98,7 +98,7 @@ class TaskDispatcher:
             return result
         return replace(result, bundle=write_bundle_directory(result, output_dir))
 
-    def compute(self, request: QueryRequest) -> CoreRecords:
+    def compute(self, request: QueryRequest) -> Records:
         """Execute the minimal subgraph for ``request.outputs`` on the task."""
         self._ensure_open()
         self._ensure_default()
@@ -109,23 +109,23 @@ class TaskDispatcher:
             handler.build_context(request, self._runtime),
         )
 
-    def describe_tasks(self) -> tuple[TaskGraphDescription, ...]:
+    def describe_tasks(self) -> tuple[GraphInfo, ...]:
         """Return transport-safe descriptions of every registered task."""
         self._ensure_default()
         return tuple(describe_task(handler.spec) for handler in self._tasks.values())
 
-    def run_preset(self, request: PresetRequest) -> CoreResult:
+    def run_preset(self, request: PresetRequest) -> Result:
         """Dispatch the preset selected by ``request.mode``."""
         if request.mode == "recommend":
             return self.recommend(request)
         return self.generate(request, output_dir=request.output_dir)
 
-    def _handler_for(self, request: PresetRequest | QueryRequest) -> TaskHandler:
+    def _handler_for(self, request: PresetRequest | QueryRequest) -> GraphHandler:
         """Return the registered handler for ``request.intent.task``."""
         handler = self._tasks.get(request.intent.task)
         if handler is None:
             available = ", ".join(sorted(self._tasks)) or "none"
-            raise UnknownTaskError(
+            raise UnknownTask(
                 f"No Core task registered for task={request.intent.task!r}. "
                 f"Available: {available}"
             )
@@ -133,4 +133,4 @@ class TaskDispatcher:
 
     def _ensure_open(self) -> None:
         if self._runtime.is_closed:
-            raise RuntimeError("CoreRuntime is closed.")
+            raise RuntimeError("Runtime is closed.")

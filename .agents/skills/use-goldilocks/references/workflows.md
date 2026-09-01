@@ -56,7 +56,7 @@ library table or explicit operator policy and preserve provenance.
 from goldilocks_core import (
     CalculationHints,
     CalculationIntent,
-    CoreService,
+    Service,
     PresetRequest,
 )
 
@@ -77,7 +77,7 @@ request = PresetRequest(
     ),
 )
 
-with CoreService() as core:
+with Service() as core:
     result = core.recommend(request)
 
 print(result.analysis.reduced_formula)
@@ -97,14 +97,14 @@ elements when inspecting a generated calculation.
 ## Generate files in memory
 
 ```python
-from goldilocks_core import CalculationHints, CoreService, PresetRequest
+from goldilocks_core import CalculationHints, Service, PresetRequest
 
 request = PresetRequest(
     structure="structure.cif",
     hints=CalculationHints(k_grid=(4, 4, 4)),
 )
 
-with CoreService() as core:
+with Service() as core:
     result = core.generate(request)
 
 for generated_file in result.generated_files:
@@ -115,7 +115,7 @@ for generated_file in result.generated_files:
 ## Publish a bundle directory
 
 ```python
-with CoreService() as core:
+with Service() as core:
     result = core.generate(request, output_dir="run-dir")
 
 print(result.bundle.path)
@@ -145,7 +145,7 @@ before running QE; Core does not copy pseudopotential libraries.
 ## Query selected records
 
 ```python
-from goldilocks_core import CalculationHints, CoreService, QueryRequest
+from goldilocks_core import CalculationHints, Service, QueryRequest
 from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
 
 request = QueryRequest(
@@ -154,7 +154,7 @@ request = QueryRequest(
     hints=CalculationHints(k_grid=(4, 4, 4)),
 )
 
-with CoreService() as core:
+with Service() as core:
     records = core.compute(request)
 
 print(records[StructureAnalysisRecord])
@@ -189,7 +189,7 @@ records = query_records(
 Put the model specification on the request; do not replace a pipeline object:
 
 ```python
-from goldilocks_core import CoreService, PresetRequest
+from goldilocks_core import Service, PresetRequest
 from goldilocks_core.contracts import ModelSpec
 
 spec = ModelSpec(
@@ -202,7 +202,7 @@ spec = ModelSpec(
     location="models/kmesh.joblib",
 )
 
-with CoreService() as core:
+with Service() as core:
     result = core.recommend(
         PresetRequest(structure="structure.cif", kmesh_model=spec)
     )
@@ -219,7 +219,7 @@ uv run goldilocks serve mcp
 
 HTTP exposes `/recommend`, `/generate`, `/compute`, `/tasks`, `/codes`,
 `/models`, and `/health`. MCP exposes matching operation and discovery tools
-over stdio. Both reuse one process-owned `CoreService`.
+over stdio. Both reuse one process-owned `Service`.
 
 ## Manual QE writing check
 

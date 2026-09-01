@@ -4,13 +4,13 @@ import asyncio
 
 import pytest
 
-from goldilocks_core.runtime import CoreService
+from goldilocks_core.runtime import Service
 
 pytest.importorskip("mcp")
 create_server = pytest.importorskip("goldilocks_core.server.mcp").create_server
 
 
-class _CountingService(CoreService):
+class _CountingService(Service):
     """Record preset calls made through one service instance."""
 
     def __init__(self) -> None:

@@ -67,10 +67,10 @@ warnings            -> result.warnings
 ```python
 from pymatgen.core import Structure
 from pymatgen.core.periodic_table import Element
-from goldilocks_core import CoreService, PresetRequest
+from goldilocks_core import Service, PresetRequest
 
 structure = Structure.from_file("structure.cif")
-with CoreService() as core:
+with Service() as core:
     result = core.recommend(PresetRequest(structure=structure))
 
 pseudo_by_element = {

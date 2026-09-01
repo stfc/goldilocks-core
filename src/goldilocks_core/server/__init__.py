@@ -7,6 +7,8 @@ so importing this facade (and ``goldilocks_core``) never pulls ``fastapi`` or
 transports use it and it has no optional dependencies.
 """
 
+from __future__ import annotations
+
 from goldilocks_core.server.request import RequestError, from_dict
 
 __all__ = ["RequestError", "from_dict"]

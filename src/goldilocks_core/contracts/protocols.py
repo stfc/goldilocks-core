@@ -6,7 +6,7 @@ from typing import Callable, Protocol, runtime_checkable
 
 from pymatgen.core import Structure
 
-from goldilocks_core.contracts.records import KPointSelection
+from goldilocks_core.contracts.kpoints import KPointSelection
 
 KMeshAdvisor = Callable[[Structure], KPointSelection]
 """Kmesh-stage advisor signature: predict a k-point mesh from a structure."""

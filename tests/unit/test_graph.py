@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from goldilocks_core.runtime import Preset, StageSpec, TaskSpec, execute
+from goldilocks_core.runtime import Preset, Stage, TaskGraph, execute
 
 
 @dataclass
@@ -53,12 +53,12 @@ def test_linear_graph_runs_only_requested_output_dependencies() -> None:
         ran.append("c")
         return StubC(b.value + "c")
 
-    task = TaskSpec(
+    task = TaskGraph(
         task="linear",
         stages=(
-            StageSpec(StubA, (), make_a),
-            StageSpec(StubB, (StubA,), make_b),
-            StageSpec(StubC, (StubB,), make_c),
+            Stage(StubA, (), make_a),
+            Stage(StubB, (StubA,), make_b),
+            Stage(StubC, (StubB,), make_c),
         ),
         presets=(),
     )
@@ -88,12 +88,12 @@ def test_parallel_roots_share_dependencies_without_running_siblings() -> None:
         ran.append("c")
         return StubC()
 
-    task = TaskSpec(
+    task = TaskGraph(
         task="parallel",
         stages=(
-            StageSpec(StubA, (), make_a),
-            StageSpec(StubB, (StubA,), make_b),
-            StageSpec(StubC, (StubA,), make_c),
+            Stage(StubA, (), make_a),
+            Stage(StubB, (StubA,), make_b),
+            Stage(StubC, (StubA,), make_c),
         ),
         presets=(),
     )
@@ -126,13 +126,13 @@ def test_partial_query_returns_only_requested_records() -> None:
         ran.append("d")
         return StubD()
 
-    task = TaskSpec(
+    task = TaskGraph(
         task="partial",
         stages=(
-            StageSpec(StubA, (), make_a),
-            StageSpec(StubB, (StubA,), make_b),
-            StageSpec(StubC, (StubB,), make_c),
-            StageSpec(StubD, (StubC,), make_d),
+            Stage(StubA, (), make_a),
+            Stage(StubB, (StubA,), make_b),
+            Stage(StubC, (StubB,), make_c),
+            Stage(StubD, (StubC,), make_d),
         ),
         presets=(),
     )
@@ -147,16 +147,16 @@ def test_partial_query_returns_only_requested_records() -> None:
 
 
 def test_missing_producer_raises_value_error() -> None:
-    task = TaskSpec(task="missing", stages=(), presets=())
+    task = TaskGraph(task="missing", stages=(), presets=())
 
     with pytest.raises(ValueError, match="No stage produces.*MissingRecord"):
         execute(task, (MissingRecord,), SimpleNamespace())
 
 
 def test_missing_dependency_producer_raises_value_error() -> None:
-    task = TaskSpec(
+    task = TaskGraph(
         task="missing-dependency",
-        stages=(StageSpec(StubB, (MissingRecord,), lambda value, *, ctx: StubB()),),
+        stages=(Stage(StubB, (MissingRecord,), lambda value, *, ctx: StubB()),),
         presets=(),
     )
 
@@ -165,11 +165,11 @@ def test_missing_dependency_producer_raises_value_error() -> None:
 
 
 def test_cycle_raises_value_error() -> None:
-    task = TaskSpec(
+    task = TaskGraph(
         task="cycle",
         stages=(
-            StageSpec(StubA, (StubB,), lambda value, *, ctx: StubA()),
-            StageSpec(StubB, (StubA,), lambda value, *, ctx: StubB()),
+            Stage(StubA, (StubB,), lambda value, *, ctx: StubA()),
+            Stage(StubB, (StubA,), lambda value, *, ctx: StubB()),
         ),
         presets=(),
     )
@@ -187,9 +187,9 @@ def test_execute_passes_context_opaquely_to_stages() -> None:
         received.append(ctx)
         return StubA()
 
-    task = TaskSpec(
+    task = TaskGraph(
         task="context",
-        stages=(StageSpec(StubA, (), inspect),),
+        stages=(Stage(StubA, (), inspect),),
         presets=(),
     )
 
@@ -200,7 +200,7 @@ def test_execute_passes_context_opaquely_to_stages() -> None:
 
 def test_task_preset_lookup() -> None:
     recommend = Preset("recommend", (StubA, StubB))
-    task = TaskSpec(task="preset", stages=(), presets=(recommend,))
+    task = TaskGraph(task="preset", stages=(), presets=(recommend,))
 
     assert task.preset("recommend") is recommend
     with pytest.raises(KeyError):

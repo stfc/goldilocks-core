@@ -37,7 +37,7 @@ Primary docs:
 
    Required distinctions:
 
-   - `CoreService` implements reusable recommend/generate/compute operations
+   - `Service` implements reusable recommend/generate/compute operations
      plus task/code/model discovery.
    - `run_core_job(PresetRequest)` and `query_records(QueryRequest)` are
      short-lived Python conveniences.

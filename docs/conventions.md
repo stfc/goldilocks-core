@@ -42,9 +42,9 @@ This is the same convention as VASP's `KSPACING` tag. It differs from some codes
 
 ## Heavy-element heuristic
 
-`contains_heavy_elements` and `heavy_elements` use a **period-5-and-heavier** heuristic: any element with `row >= 5` in pymatgen's periodic table is considered heavy.
-
-This replaced the earlier heuristic of `Z >= 57` (lanthanum onwards). The period-5 criterion is broader and catches elements like iodine (Z=53, period 5) that are relevant for SOC considerations even though they aren't lanthanides.
+`contains_heavy_elements` and `heavy_elements` classify period-5-and-heavier
+elements as heavy. This includes elements such as iodine that can need SOC
+consideration.
 
 ## Electronic character classification
 
@@ -62,9 +62,10 @@ SOC is **never enabled automatically**, even when heavy elements are present. In
 - `SpinOrbitAdvice.consider` is set to `True` when heavy elements are detected.
 - `SpinOrbitAdvice.enabled` remains `False` unless the operator explicitly sets `CalculationHints(spin_orbit_coupling=True)`.
 
-Rationale: enabling SOC significantly changes calculation cost, convergence behavior, and pseudopotential requirements. The operator must make an informed decision.
-
-This differs intentionally from the vdW policy: a connectivity-derived low-dimensional classification makes D3BJ a conservative package default because dispersion may be important to weak interlayer, surface, and intermolecular interactions and the correction adds relatively little setup and cost. It does not establish that dispersion dominates; the operator can override the setting or method with `CalculationHints(use_vdw=..., vdw_method=...)`. Heavy elements only trigger SOC consideration because SOC has broader cost and setup consequences.
+SOC changes calculation cost, convergence, and pseudopotential requirements.
+The operator must enable it explicitly. A low-dimensional structure can enable
+the lower-cost D3BJ dispersion correction by default; the operator can override
+that choice.
 
 ## Pseudopotential relativistic modes
 

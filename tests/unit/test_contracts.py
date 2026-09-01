@@ -13,7 +13,7 @@ from goldilocks_core.contracts import (
     ParameterAdvice,
     PresetRequest,
     Provenance,
-    PseudopotentialAdvice,
+    PseudopotentialRequirements,
     SelectionRecord,
     SmearingAdvice,
     SpinOrbitAdvice,
@@ -57,11 +57,11 @@ def _make_advice() -> ParameterAdvice:
             heavy_elements=(),
             provenance=provenance,
         ),
-        pseudopotentials=PseudopotentialAdvice(
+        pseudopotential_requirements=PseudopotentialRequirements(
             functional="PBE",
-            pseudo_mode="efficiency",
+            accuracy="efficiency",
             pseudo_type=None,
-            relativistic_mode="scalar",
+            relativistic="scalar",
             provenance=provenance,
         ),
         convergence=ConvergenceAdvice(conv_thr=1e-6, provenance=provenance),
@@ -113,12 +113,11 @@ def test_core_records_maps_requested_types_and_serializes_record_names() -> None
     }
 
 
-def test_calculation_intent_omits_removed_accuracy_control() -> None:
-    """Keep unsupported accuracy semantics out of construction and serialization."""
-    with pytest.raises(TypeError, match="accuracy_level"):
-        CalculationIntent(accuracy_level="high")
-
-    assert "accuracy_level" not in CalculationIntent().to_dict()
+def test_calculation_intent_validates_pseudo_accuracy() -> None:
+    """Expose one typed registered accuracy tier in intent."""
+    assert CalculationIntent(pseudo_accuracy="precision").pseudo_accuracy == "precision"
+    with pytest.raises(ValueError, match="pseudo_accuracy"):
+        CalculationIntent(pseudo_accuracy="fast")
 
 
 def test_hints_serialize_explicit_grid_as_list() -> None:
@@ -137,7 +136,7 @@ def test_calculation_hints_expose_per_stage_views() -> None:
         smearing_width_ry=0.01,
         spin_polarized=True,
         spin_orbit_coupling=False,
-        pseudo_mode="precision",
+        pseudo_accuracy="precision",
         pseudo_type="NC",
         relativistic_mode="full",
         conv_thr=1e-8,
@@ -153,7 +152,7 @@ def test_calculation_hints_expose_per_stage_views() -> None:
     assert hints.smearing.smearing_width_ry == 0.01
     assert hints.spin.spin_polarized is True
     assert hints.spin.spin_orbit_coupling is False
-    assert hints.pseudo.pseudo_mode == "precision"
+    assert hints.pseudo.accuracy == "precision"
     assert hints.pseudo.pseudo_type == "NC"
     assert hints.pseudo.relativistic_mode == "full"
     assert hints.convergence.conv_thr == 1e-8

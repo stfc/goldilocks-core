@@ -7,6 +7,10 @@ import json
 import sys
 from pathlib import Path
 
+from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled, AssetStore
+from goldilocks_core.cli.assets import install as install_assets
+from goldilocks_core.cli.assets import statuses as asset_statuses
+from goldilocks_core.cli.assets import verify as verify_assets
 from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
@@ -18,14 +22,13 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.examples import structures_path
 from goldilocks_core.generation import available_codes, available_tasks
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
-from goldilocks_core.runtime import query_records, run_core_job
+from goldilocks_core.runtime import CoreRuntime, query_records, run_core_job
 
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the staged Core CLI parser."""
     parser = argparse.ArgumentParser(
-        prog="goldilocks-core",
+        prog="goldilocks",
         description="Run the staged Goldilocks Core pipeline.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -67,6 +70,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print the directory holding the bundled example structures.",
     )
 
+    assets = subparsers.add_parser(
+        "assets",
+        help="Install and inspect immutable runtime assets.",
+    )
+    asset_commands = assets.add_subparsers(dest="assets_command", required=True)
+    for command in ("install", "status", "verify"):
+        operation = asset_commands.add_parser(command)
+        operation.add_argument(
+            "name",
+            nargs="?",
+            default="default",
+            help="Asset id or shipped profile name (default: default).",
+        )
+
     return parser
 
 
@@ -81,25 +98,43 @@ def main() -> None:
     if args.command == "serve":
         _serve(args)
         return
+    if args.command == "assets":
+        _assets(args, parser)
+        return
 
+    store = AssetStore()
+    attempted: set[tuple[str, str]] = set()
     try:
         _validate_backend_options(args)
         request = _request_from_args(args)
-    except ValueError as error:
+        while True:
+            try:
+                with CoreRuntime(asset_store=store) as runtime:
+                    output = (
+                        query_records(request, runtime=runtime)
+                        if args.command == "compute"
+                        else run_core_job(request, runtime=runtime)
+                    )
+                break
+            except AssetNotInstalled as error:
+                key = (error.reference.id, error.reference.version)
+                if not args.fetch_missing or key in attempted:
+                    raise
+                attempted.add(key)
+                install_assets(error.reference.id, store=store)
+    except (AssetCorrupt, AssetNotInstalled, KeyError, ValueError) as error:
         parser.print_usage(sys.stderr)
         print(f"{parser.prog}: error: {error}", file=sys.stderr)
         raise SystemExit(2) from error
 
     if args.command == "compute":
-        records = query_records(request)
-        print(json.dumps(records.to_dict(), indent=2, sort_keys=True))
+        print(json.dumps(output.to_dict(), indent=2, sort_keys=True))
         return
 
-    result = run_core_job(request)
-
+    result = output
     if args.json:
-        output = {"request": request.to_dict(), **result.to_dict()}
-        print(json.dumps(output, indent=2, sort_keys=True))
+        rendered = {"request": request.to_dict(), **result.to_dict()}
+        print(json.dumps(rendered, indent=2, sort_keys=True))
         return
 
     _print_human_summary(result)
@@ -125,10 +160,23 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
         default="PBEsol",
         help="Exchange-correlation functional.",
     )
-    parser.add_argument("--pseudo-mode", default="efficiency")
+    parser.add_argument(
+        "--pseudo-accuracy",
+        choices=["efficiency", "precision"],
+        default="efficiency",
+    )
     parser.add_argument("--pseudo-type")
     parser.add_argument("--relativistic-mode")
     parser.add_argument("--pseudo-root", help="Directory containing UPF files.")
+    parser.add_argument(
+        "--pseudo-table",
+        help="Exact registered pseudopotential table id (default: registry default).",
+    )
+    parser.add_argument(
+        "--fetch-missing",
+        action="store_true",
+        help="Install only missing assets required by the request, then retry.",
+    )
     parser.add_argument(
         "--model",
         help="Local ML k-index model path for k-point selection.",
@@ -192,7 +240,7 @@ def _request_from_args(args: argparse.Namespace) -> PresetRequest | QueryRequest
         code=args.code,
         task=args.task,
         functional=args.functional,
-        pseudo_mode=args.pseudo_mode,
+        pseudo_accuracy=args.pseudo_accuracy,
     )
     hints = CalculationHints(
         k_spacing=args.k_spacing,
@@ -209,9 +257,7 @@ def _request_from_args(args: argparse.Namespace) -> PresetRequest | QueryRequest
         use_vdw=_parse_optional_bool(args.use_vdw),
         vdw_method=args.vdw_method,
     )
-    pseudo_metadata = (
-        tuple(load_pseudo_metadata(Path(args.pseudo_root))) if args.pseudo_root else ()
-    )
+    pseudo_root = str(Path(args.pseudo_root).expanduser()) if args.pseudo_root else None
     kmesh_model = _model_spec_from_args(args)
 
     if args.command == "compute":
@@ -220,7 +266,8 @@ def _request_from_args(args: argparse.Namespace) -> PresetRequest | QueryRequest
             outputs=_parse_outputs(args.outputs),
             intent=intent,
             hints=hints,
-            pseudo_metadata=pseudo_metadata,
+            pseudo_root=pseudo_root,
+            pseudo_table=args.pseudo_table,
             kmesh_model=kmesh_model,
         )
     return PresetRequest(
@@ -228,7 +275,8 @@ def _request_from_args(args: argparse.Namespace) -> PresetRequest | QueryRequest
         intent=intent,
         hints=hints,
         mode=args.command,
-        pseudo_metadata=pseudo_metadata,
+        pseudo_root=pseudo_root,
+        pseudo_table=args.pseudo_table,
         output_dir=getattr(args, "out", None),
         kmesh_model=kmesh_model,
     )
@@ -240,6 +288,29 @@ def _parse_outputs(value: str) -> tuple[type, ...]:
     if any(not name for name in names):
         raise ValueError("--outputs must contain comma-separated record type ids")
     return resolve_output_types(names)
+
+
+def _assets(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """Run one explicit runtime-asset lifecycle operation."""
+    store = AssetStore()
+    print(f"asset root: {store.root}")
+    try:
+        if args.assets_command == "install":
+            installed = install_assets(args.name, store=store)
+            for asset in installed:
+                print(f"{asset.id}@{asset.version}: installed")
+            return
+        if args.assets_command == "status":
+            for asset_id, version, state in asset_statuses(args.name, store=store):
+                print(f"{asset_id}@{version}: {state}")
+            return
+        installed = verify_assets(args.name, store=store)
+        for asset in installed:
+            print(f"{asset.id}@{asset.version}: verified")
+    except (AssetCorrupt, AssetNotInstalled, KeyError, ValueError) as error:
+        parser.print_usage(sys.stderr)
+        print(f"{parser.prog}: error: {error}", file=sys.stderr)
+        raise SystemExit(2) from error
 
 
 def _serve(args: argparse.Namespace) -> None:

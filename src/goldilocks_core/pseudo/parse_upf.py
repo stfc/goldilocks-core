@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 from typing import Any
@@ -28,18 +27,6 @@ def _to_float(value: object) -> float | None:
     if text is None:
         return None
     return float(text)
-
-
-def _extract_library(filepath: str) -> str | None:
-    """Extract the top-level pseudo library from the path."""
-    parts = Path(filepath).parts
-    if "pseudopotentials" not in parts:
-        return None
-
-    index = parts.index("pseudopotentials")
-    if index + 1 >= len(parts):
-        return None
-    return parts[index + 1]
 
 
 def _normalize_element(value: object) -> str | None:
@@ -285,51 +272,6 @@ def _get_element(
     return None
 
 
-def _is_sssp_folder(path: Path) -> bool:
-    """Return True if the file is inside an SSSP directory."""
-    return path.parent.name.startswith("SSSP")
-
-
-def _load_sssp_json(path: Path) -> dict[str, Any] | None:
-    """Load the SSSP sidecar JSON when available."""
-    folder_name = path.parent.name
-    json_path = path.parent.parent / f"{folder_name}.json"
-
-    if not json_path.exists():
-        return None
-
-    return json.loads(json_path.read_text())
-
-
-def _get_sssp_info(
-    path: Path, element: str | None
-) -> tuple[bool, str | None, dict[str, Any] | None]:
-    """Return SSSP-specific metadata derived from the sidecar JSON."""
-    is_sssp = _is_sssp_folder(path)
-
-    if not is_sssp:
-        return False, path.parent.name, None
-
-    if element is None:
-        return True, None, None
-
-    data = _load_sssp_json(path)
-    if data is None:
-        return True, None, None
-
-    entry = data.get(element)
-    if entry is None:
-        return True, None, None
-
-    source_pseudopotential = entry.get("pseudopotential")
-    sssp_recommended_cutoff = {
-        "ecutwfc_ry": entry.get("cutoff_wfc"),
-        "ecutrho_ry": entry.get("cutoff_rho"),
-    }
-
-    return True, source_pseudopotential, sssp_recommended_cutoff
-
-
 def parse_upf_metadata(path: str | Path) -> PseudoMetadata:
     """Parse one UPF file into a PseudoMetadata object."""
     path = Path(path)
@@ -346,24 +288,15 @@ def parse_upf_metadata(path: str | Path) -> PseudoMetadata:
         header_data.setdefault(key, value)
 
     element = _get_element(header_data, path.name)
-    is_sssp, source_pseudopotential, sssp_recommended_cutoff = _get_sssp_info(
-        path, element
-    )
 
     return PseudoMetadata(
         filepath=str(path),
         filename=path.name,
         header_format=header_format,
-        library=_extract_library(str(path)),
-        source_set=path.parent.name,
-        element=_normalize_element(header_data.get("element"))
-        or _extract_element_from_filename(path.name),
+        element=element,
         pseudo_type=_normalize_pseudo_type(header_data.get("pseudo_type")),
         functional=normalize_functional_label(header_data.get("functional")),
         relativistic=_normalize_relativistic(header_data.get("relativistic")),
         z_valence=_to_float(header_data.get("z_valence")),
         pseudo_info=header_data,
-        is_sssp=is_sssp,
-        source_pseudopotential=source_pseudopotential,
-        sssp_recommended_cutoff=sssp_recommended_cutoff,
     )

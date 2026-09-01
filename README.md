@@ -26,18 +26,17 @@ uv sync --group dev
 
 ## Python API
 
-`CoreService` is the reusable application interface. It owns model state,
-serializes access to that state, and exposes preset runs, record queries, and
-discovery:
+`CoreService` is the main Python interface. Use `recommend()` to inspect a
+complete recommendation, `generate()` to create input files, and `compute()` to
+request selected records.
 
 ```python
 from goldilocks_core import CalculationHints, CoreService, PresetRequest
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 request = PresetRequest(
     structure="path/to/structure.cif",
     hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
-    pseudo_metadata=tuple(load_pseudo_metadata("path/to/pseudopotentials")),
+    pseudo_table="pseudodojo-pbesol-efficiency-sr",
 )
 
 with CoreService() as core:
@@ -50,54 +49,54 @@ for generated_file in result.generated_files:
 
 The public operations are:
 
-- `CoreService.recommend(PresetRequest(...))` — return the complete
-  recommendation record set;
-- `CoreService.generate(PresetRequest(...), output_dir=...)` — also generate
-  inputs and optionally publish a manifest-backed directory;
-- `CoreService.compute(QueryRequest(...))` — return only selected record types;
-- `describe_tasks()`, `describe_codes()`, and `describe_models()` — discover
-  backend capabilities.
+- `CoreService.recommend(PresetRequest(...))` returns a complete recommendation.
+- `CoreService.generate(PresetRequest(...), output_dir=...)` also creates input
+  files and can write them to a new directory.
+- `CoreService.compute(QueryRequest(...))` returns only the requested records.
 
-`run_core_job(PresetRequest(...))` and `query_records(QueryRequest(...))` are
-one-call conveniences. Use `CoreService` for repeated work so model resources
-are reused. Explicit `k_grid` and `k_spacing` hints bypass model loading;
-`PresetRequest.kmesh_model` and `QueryRequest.kmesh_model` select a local
-k-index model instead of the configured QRF default.
+`recommend` and `generate` also exist as CLI commands and as HTTP and MCP
+operations. They are not top-level Python functions. For a single Python call,
+use `run_core_job(PresetRequest(...))`.
 
 See the [tutorial](docs/tutorial.md) and
 [pipeline reference](docs/pipeline.md) for complete examples.
 
 ## CLI and transports
 
+Install the default runtime assets once:
+
 ```bash
-uv run goldilocks-core recommend structure.cif --json
-uv run goldilocks-core generate structure.cif \
-    --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
-uv run goldilocks-core compute structure.cif \
-    --outputs analysis,k_points --k-grid 4 4 4
+uv run goldilocks assets install default
+uv run goldilocks assets verify default
 ```
 
-Bundle output requires a new destination directory. See the
+Run a recommendation or create input files. Requests use the installed default
+pseudopotential table unless `--pseudo-table` or `--pseudo-root` selects another
+source:
+
+```bash
+uv run goldilocks recommend structure.cif --json
+uv run goldilocks generate structure.cif --pseudo-table sssp-pbesol-efficiency-sr --out run/ --json
+uv run goldilocks compute structure.cif --outputs analysis,k_points --k-grid 4 4 4
+```
+
+The default asset store is `$XDG_DATA_HOME/goldilocks/assets`, or
+`~/.local/share/goldilocks/assets` when `XDG_DATA_HOME` is not set. Set
+`GOLDILOCKS_ASSET_ROOT` to use a different location. See the
 [CLI reference](docs/cli.md) for all controls.
 
-Example structures are installed with the package, so there is something to run straight away:
+Example structures are installed with the package:
 
 ```bash
-uv run goldilocks-core recommend "$(uv run goldilocks-core examples path)/Si.cif" --json
-```
-
-The standalone model-oriented entry point remains available:
-
-```bash
-uv run goldilocks-kmesh structure.cif --model path/to/model.joblib
+uv run goldilocks recommend "$(uv run goldilocks examples path)/Si.cif" --json
 ```
 
 HTTP and MCP are optional:
 
 ```bash
 uv sync --all-extras
-uv run goldilocks-core serve http --host 127.0.0.1 --port 8000
-uv run goldilocks-core serve mcp
+uv run goldilocks serve http --host 127.0.0.1 --port 8000
+uv run goldilocks serve mcp
 ```
 
 HTTP publishes `/recommend`, `/generate`, `/compute`, `/tasks`, `/codes`,
@@ -109,6 +108,7 @@ discovery calls as tools over stdio.
 - [Tutorial](docs/tutorial.md)
 - [Pipeline and stage behavior](docs/pipeline.md)
 - [Scientific conventions](docs/conventions.md)
+- [Pseudopotential tables, storage, and licensing](docs/pseudopotentials.md)
 - [CLI reference](docs/cli.md)
 - [Architecture and extension points](docs/architecture.md)
 
@@ -129,8 +129,10 @@ Tests use synthetic structures, temporary files, small UPF snippets, and fake mo
 
 Code is licensed under the [BSD 3-Clause License](LICENSE).
 
-Documentation under `docs/` and the example structures under `examples/` are
-licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Documentation under `docs/` and the example structures under
+`src/goldilocks_core/examples/structures/` are licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
-Bundled and user-supplied pseudopotentials carry their own upstream licences —
-see [docs/pseudopotentials.md](docs/pseudopotentials.md).
+Pseudopotential files are downloaded only by explicit asset installation and
+retain their upstream licences; they are not bundled in the wheel or source
+archive. See [Pseudopotential tables](docs/pseudopotentials.md).

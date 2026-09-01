@@ -1,10 +1,12 @@
 import json
 import sys
 from dataclasses import fields
+from types import SimpleNamespace
 
 import pytest
 
 from goldilocks_core.advice import advise_parameters
+from goldilocks_core.assets import AssetNotInstalled, AssetReference
 from goldilocks_core.cli import core as cli_core
 from goldilocks_core.contracts import (
     BundleRecord,
@@ -24,8 +26,9 @@ from goldilocks_core.contracts import (
 _VDW_METHODS = ("d3", "d3bj", "ts", "mbd")
 
 
-def make_result(request: PresetRequest | QueryRequest) -> CoreResult:
+def make_result(request: PresetRequest | QueryRequest, *, runtime=None) -> CoreResult:
     """Build a minimal Core result for CLI tests."""
+    del runtime
     analysis = StructureAnalysisRecord(
         formula="Si1",
         reduced_formula="Si",
@@ -53,8 +56,9 @@ def make_result(request: PresetRequest | QueryRequest) -> CoreResult:
     )
 
 
-def make_records(request: QueryRequest) -> CoreRecords:
+def make_records(request: QueryRequest, *, runtime=None) -> CoreRecords:
     """Build the records selected by a CLI compute request."""
+    del runtime
     result = make_result(request)
     available = {
         StructureAnalysisRecord: result.analysis,
@@ -102,7 +106,7 @@ def test_cli_public_control_parity_is_explicit_and_complete() -> None:
         "code": "--code",
         "task": "--task",
         "functional": "--functional",
-        "pseudo_mode": "--pseudo-mode",
+        "pseudo_accuracy": "--pseudo-accuracy",
     }
     hints_cli_mapping = {
         "k_spacing": "--k-spacing",
@@ -111,9 +115,8 @@ def test_cli_public_control_parity_is_explicit_and_complete() -> None:
         "smearing_width_ry": "--smearing-width-ry",
         "spin_polarized": "--spin-polarized",
         "spin_orbit_coupling": "--spin-orbit-coupling",
-        # The CLI sets intent.pseudo_mode directly instead of exposing a
-        # second override for the same effective pseudopotential family.
-        "pseudo_mode": None,
+        # Accuracy is request intent; the CLI exposes no duplicate hint flag.
+        "pseudo_accuracy": None,
         "pseudo_type": "--pseudo-type",
         "relativistic_mode": "--relativistic-mode",
         "conv_thr": "--conv-thr",
@@ -150,7 +153,7 @@ def test_cli_public_control_parity_is_explicit_and_complete() -> None:
             "scf_single_point",
             "--functional",
             "PBEsol",
-            "--pseudo-mode",
+            "--pseudo-accuracy",
             "precision",
             "--k-spacing",
             "0.25",
@@ -189,7 +192,7 @@ def test_cli_public_control_parity_is_explicit_and_complete() -> None:
         code="quantum_espresso",
         task="scf_single_point",
         functional="PBEsol",
-        pseudo_mode="precision",
+        pseudo_accuracy="precision",
     )
     assert request.hints == CalculationHints(
         k_spacing=0.25,
@@ -286,7 +289,7 @@ def test_main_rejects_disabled_vdw_method_before_job_execution(
         sys,
         "argv",
         [
-            "goldilocks-core",
+            "goldilocks",
             "recommend",
             "Si.cif",
             "--use-vdw",
@@ -325,7 +328,7 @@ def test_main_rejects_model_metadata_without_model_before_job_execution(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["goldilocks-core", "recommend", "Si.cif", option, "metadata"],
+        ["goldilocks", "recommend", "Si.cif", option, "metadata"],
     )
 
     with pytest.raises(SystemExit) as error:
@@ -335,21 +338,22 @@ def test_main_rejects_model_metadata_without_model_before_job_execution(
     assert f"{option} requires --model" in capsys.readouterr().err
 
 
-def test_cli_rejects_removed_accuracy_control(capsys) -> None:
-    """Do not accept an accuracy control with no scientific semantics."""
+def test_cli_rejects_retired_pseudo_mode_control(capsys) -> None:
+    """Expose the typed accuracy tier rather than an ambiguous mode string."""
     parser = cli_core.build_parser()
 
     with pytest.raises(SystemExit):
-        parser.parse_args(["recommend", "Si.cif", "--accuracy-level", "high"])
+        parser.parse_args(["recommend", "Si.cif", "--pseudo-mode", "precision"])
 
-    assert "unrecognized arguments: --accuracy-level high" in capsys.readouterr().err
+    assert "unrecognized arguments: --pseudo-mode" in capsys.readouterr().err
 
 
 def test_main_compute_prints_requested_analysis_and_advice(monkeypatch, capsys) -> None:
     """Resolve multiple output names and print their CoreRecords as JSON."""
     captured: dict[str, QueryRequest] = {}
 
-    def fake_query_records(request: QueryRequest) -> CoreRecords:
+    def fake_query_records(request: QueryRequest, *, runtime=None) -> CoreRecords:
+        del runtime
         captured["request"] = request
         return make_records(request)
 
@@ -358,7 +362,7 @@ def test_main_compute_prints_requested_analysis_and_advice(monkeypatch, capsys) 
         sys,
         "argv",
         [
-            "goldilocks-core",
+            "goldilocks",
             "compute",
             "Si.cif",
             "--outputs",
@@ -385,7 +389,7 @@ def test_main_compute_prints_only_requested_analysis(monkeypatch, capsys) -> Non
         sys,
         "argv",
         [
-            "goldilocks-core",
+            "goldilocks",
             "compute",
             "Si.cif",
             "--outputs",
@@ -411,7 +415,7 @@ def test_main_compute_rejects_unknown_output_type(monkeypatch, capsys) -> None:
         sys,
         "argv",
         [
-            "goldilocks-core",
+            "goldilocks",
             "compute",
             "Si.cif",
             "--outputs",
@@ -432,7 +436,8 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
     """Keep CLI main as parse -> request -> run_core_job -> print."""
     captured: dict[str, PresetRequest] = {}
 
-    def fake_run_core_job(request: PresetRequest) -> CoreResult:
+    def fake_run_core_job(request: PresetRequest, *, runtime=None) -> CoreResult:
+        del runtime
         captured["request"] = request
         return make_result(request)
 
@@ -441,7 +446,7 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
         sys,
         "argv",
         [
-            "goldilocks-core",
+            "goldilocks",
             "recommend",
             "Si.cif",
             "--k-grid",
@@ -450,6 +455,8 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
             "1",
             "--pseudo-type",
             "NC",
+            "--pseudo-table",
+            "sssp-pbe-precision-sr",
             "--json",
         ],
     )
@@ -462,6 +469,7 @@ def test_main_builds_request_and_prints_json(monkeypatch, capsys) -> None:
     assert request.mode == "recommend"
     assert request.hints.k_grid == (2, 2, 1)
     assert request.hints.pseudo_type == "NC"
+    assert request.pseudo_table == "sssp-pbe-precision-sr"
     output = json.loads(capsys.readouterr().out)
     assert output["k_points"]["grid"] == [2, 2, 1]
     assert output["request"]["structure"] == "Si.cif"
@@ -471,7 +479,8 @@ def test_main_builds_request_with_model_backend(monkeypatch, capsys) -> None:
     """Resolve CLI --model into a k-index model spec on the request."""
     captured: dict[str, PresetRequest] = {}
 
-    def fake_run_core_job(request: PresetRequest) -> CoreResult:
+    def fake_run_core_job(request: PresetRequest, *, runtime=None) -> CoreResult:
+        del runtime
         captured["request"] = request
         return make_result(request)
 
@@ -480,7 +489,7 @@ def test_main_builds_request_with_model_backend(monkeypatch, capsys) -> None:
         sys,
         "argv",
         [
-            "goldilocks-core",
+            "goldilocks",
             "recommend",
             "Si.cif",
             "--model",
@@ -505,7 +514,8 @@ def test_main_builds_generate_request_with_output_dir(monkeypatch, capsys) -> No
     """Pass generate output path through the shared Core job request."""
     captured: dict[str, PresetRequest] = {}
 
-    def fake_run_core_job(request: PresetRequest) -> CoreResult:
+    def fake_run_core_job(request: PresetRequest, *, runtime=None) -> CoreResult:
+        del runtime
         captured["request"] = request
         result = make_result(request)
         return CoreResult(
@@ -521,7 +531,7 @@ def test_main_builds_generate_request_with_output_dir(monkeypatch, capsys) -> No
     monkeypatch.setattr(
         sys,
         "argv",
-        ["goldilocks-core", "generate", "Si.cif", "--out", "run"],
+        ["goldilocks", "generate", "Si.cif", "--out", "run"],
     )
 
     cli_core.main()
@@ -529,3 +539,101 @@ def test_main_builds_generate_request_with_output_dir(monkeypatch, capsys) -> No
     assert captured["request"].mode == "generate"
     assert captured["request"].output_dir == "run"
     assert "bundle: run" in capsys.readouterr().out
+
+
+def test_main_fetches_only_the_missing_asset_then_retries(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Install the exact structured dependency, never the default profile."""
+    installed: list[str] = []
+    calls = 0
+
+    def fake_run_core_job(request, *, runtime):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise AssetNotInstalled(
+                AssetReference(
+                    "pseudopotentials/pseudodojo-pbesol-efficiency-sr", "0.4"
+                ),
+                runtime.asset_store.root,
+            )
+        return make_result(request)
+
+    def fake_install(name, *, store):
+        del store
+        installed.append(name)
+        return ()
+
+    monkeypatch.setattr(cli_core, "install_assets", fake_install)
+    monkeypatch.setattr(cli_core, "run_core_job", fake_run_core_job)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["goldilocks", "recommend", "Si.cif", "--fetch-missing"],
+    )
+
+    cli_core.main()
+
+    assert installed == ["pseudopotentials/pseudodojo-pbesol-efficiency-sr"]
+    assert calls == 2
+    assert "formula: Si" in capsys.readouterr().out
+
+
+def test_main_prints_asset_status_without_installing(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path,
+) -> None:
+    """Inspect the default profile without invoking acquisition."""
+    root = tmp_path / "configured-assets"
+    monkeypatch.setenv("GOLDILOCKS_ASSET_ROOT", str(root))
+    monkeypatch.setattr(
+        cli_core,
+        "asset_statuses",
+        lambda name, *, store: (("qrf-kpoints", "QRF95", "missing"),),
+    )
+    monkeypatch.setattr(
+        cli_core,
+        "install_assets",
+        lambda name, *, store: pytest.fail("status must not install assets"),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["goldilocks", "assets", "status"],
+    )
+
+    cli_core.main()
+
+    assert capsys.readouterr().out == (
+        f"asset root: {root}\nqrf-kpoints@QRF95: missing\n"
+    )
+
+
+def test_main_installs_named_asset(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Install exactly the asset selected by the operator."""
+    names: list[str] = []
+
+    def fake_install(name: str, *, store) -> tuple[SimpleNamespace, ...]:
+        del store
+        names.append(name)
+        return (SimpleNamespace(id=name, version="1"),)
+
+    monkeypatch.setattr(cli_core, "install_assets", fake_install)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["goldilocks", "assets", "install", "qrf-kpoints"],
+    )
+
+    cli_core.main()
+
+    assert names == ["qrf-kpoints"]
+    output = capsys.readouterr().out
+    assert "asset root: " in output
+    assert "qrf-kpoints@1: installed" in output

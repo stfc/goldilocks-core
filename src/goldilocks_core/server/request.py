@@ -48,7 +48,7 @@ _INTENT_FIELDS = frozenset(field.name for field in fields(CalculationIntent))
 _HINT_FIELDS = frozenset(field.name for field in fields(CalculationHints))
 _STRING_HINTS = {
     "smearing_type",
-    "pseudo_mode",
+    "pseudo_accuracy",
     "pseudo_type",
     "relativistic_mode",
     "vdw_method",

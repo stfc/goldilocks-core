@@ -1,603 +1,379 @@
-import numpy as np
-import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.advice import advise_parameters
-from goldilocks_core.analysis import analyze_structure
 from goldilocks_core.contracts import (
-    CalculationHints,
-    CalculationIntent,
-    KmeshHints,
-    ParameterAdvice,
+    Provenance,
+    PseudoCutoffs,
     PseudoMetadata,
+    PseudopotentialRequirements,
 )
-from goldilocks_core.kmesh import resolve_kpoints
-from goldilocks_core.selection import (
-    _metadata_matches_mode,
-    _rank_pseudo_candidate,
-    select_parameters,
-)
+from goldilocks_core.selection import select_pseudopotentials
 
 
-def make_structure() -> Structure:
-    """Build a simple cubic silicon structure."""
+def make_structure(*species: str) -> Structure:
+    """Build a simple structure containing the requested species."""
     return Structure(
         lattice=Lattice.cubic(4.0),
-        species=["Si"],
-        coords=[[0.0, 0.0, 0.0]],
+        species=list(species or ("Si",)),
+        coords=[
+            [index / max(len(species), 1), 0.0, 0.0]
+            for index in range(len(species) or 1)
+        ],
+    )
+
+
+def make_requirements(
+    *,
+    functional: str = "PBEsol",
+    accuracy: str = "efficiency",
+    pseudo_type: str | None = "NC",
+    relativistic: str = "scalar",
+) -> PseudopotentialRequirements:
+    """Build scientific constraints for selection tests."""
+    return PseudopotentialRequirements(
+        functional=functional,
+        accuracy=accuracy,
+        pseudo_type=pseudo_type,
+        relativistic=relativistic,
+        provenance=Provenance(source="default", reason="test requirements"),
     )
 
 
 def make_metadata(
     *,
+    element: str = "Si",
     filename: str = "Si.UPF",
-    source_set: str | None = None,
+    provider: str | None = "sssp",
+    accuracy: str | None = "efficiency",
     functional: str = "PBEsol",
-    cutoffs: dict | None = None,
-    library: str | None = "SSSP",
-    is_sssp: bool = True,
     pseudo_type: str | None = "NC",
     relativistic: str | None = "scalar",
+    ecutwfc_ry: float | None = 30.0,
+    ecutrho_ry: float | None = 120.0,
+    frozen_4f_core: bool = False,
 ) -> PseudoMetadata:
-    """Build synthetic pseudopotential metadata for selection tests."""
+    """Build normalized pseudopotential metadata."""
+    cutoffs = (
+        None
+        if ecutwfc_ry is None and ecutrho_ry is None
+        else PseudoCutoffs(
+            ecutwfc_ry=ecutwfc_ry,
+            ecutrho_ry=ecutrho_ry,
+        )
+    )
     return PseudoMetadata(
         filepath=f"/pseudo/{filename}",
         filename=filename,
         header_format="attr",
-        library=library,
-        source_set=source_set,
-        element="Si",
+        provider=provider,
+        accuracy=accuracy,
+        element=element,
         pseudo_type=pseudo_type,
         functional=functional,
         relativistic=relativistic,
-        is_sssp=is_sssp,
-        sssp_recommended_cutoff=(
-            {"ecutwfc_ry": "30", "ecutrho_ry": 120} if cutoffs is None else cutoffs
-        ),
+        cutoffs=cutoffs,
+        source_identifier=f"source/{filename}",
+        frozen_4f_core=frozen_4f_core,
     )
 
 
-def select_from_advice(
-    structure: Structure,
-    advice: ParameterAdvice,
-    *,
-    metadata_list: list[PseudoMetadata] | None = None,
-):
-    """Run Select on advice without k-points (Select no longer takes them)."""
-    return select_parameters(
-        structure,
-        advice,
-        metadata_list=metadata_list,
-    )
-
-
-def test_select_parameters_resolves_pseudos_with_kmesh_selection() -> None:
-    """Select concrete pseudo and cutoffs around a Kmesh-stage grid."""
-    structure = make_structure()
-    hints = CalculationHints(k_spacing=0.25, pseudo_type="NC")
-    advice = advise_parameters(analyze_structure(structure), hints=hints)
-
-    selection = select_from_advice(
-        structure,
-        advice,
-        metadata_list=[make_metadata()],
+def test_selects_complete_candidate_matching_every_requirement() -> None:
+    """Return the exact metadata and provider-backed provenance."""
+    selection = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(),
+        [make_metadata()],
     )
 
     pseudo = selection.pseudopotentials[0]
     assert pseudo.element == "Si"
     assert pseudo.filename == "Si.UPF"
     assert pseudo.filepath == "/pseudo/Si.UPF"
+    assert pseudo.functional == "PBEsol"
     assert pseudo.ecutwfc_ry == 30.0
     assert pseudo.ecutrho_ry == 120.0
     assert pseudo.provenance.source == "lookup"
-    assert (
-        pseudo.provenance.reason
-        == "Select the highest-ranked deterministic pseudo matching advice."
-    )
-    assert pseudo.provenance.data_source == "SSSP"
-    assert pseudo.provenance.warnings == pseudo.warnings
+    assert pseudo.provenance.data_source == "sssp"
+    assert pseudo.warnings == ()
     assert selection.warnings == ()
 
 
-def test_select_parameters_matches_canonical_functional_labels() -> None:
-    """Match Python PBEsol intent to equivalent metadata labels."""
-    structure = make_structure()
-    advice = advise_parameters(
-        analyze_structure(structure),
-        intent=CalculationIntent(functional="PBE_SOL"),
-        hints=CalculationHints(pseudo_type="NC"),
-    )
-
-    selection = select_from_advice(
-        structure,
-        advice,
-        metadata_list=[make_metadata(functional="PBESOL")],
-    )
-
-    assert advice.pseudopotentials.functional == "PBEsol"
-    assert selection.pseudopotentials[0].filename == "Si.UPF"
-
-
-def test_select_parameters_prefers_matching_pseudo_mode_and_cutoffs() -> None:
-    """Rank pseudo candidates by requested mode before filename order."""
-    structure = make_structure()
-    advice = advise_parameters(
-        analyze_structure(structure),
-        hints=CalculationHints(pseudo_type="NC", pseudo_mode="precision"),
-    )
+def test_selects_by_registered_accuracy_not_filename() -> None:
+    """Use normalized accuracy data even when filenames suggest the opposite."""
     efficiency = make_metadata(
-        filename="A-efficiency.UPF",
-        source_set="SSSP_efficiency",
-        cutoffs={"ecutwfc_ry": 30, "ecutrho_ry": 120},
+        filename="looks-like-precision.UPF",
+        accuracy="efficiency",
+        ecutwfc_ry=30,
+        ecutrho_ry=120,
     )
     precision = make_metadata(
-        filename="Z-precision.UPF",
-        source_set="SSSP_precision",
-        cutoffs={"ecutwfc_ry": 60, "ecutrho_ry": 240},
+        filename="looks-like-efficiency.UPF",
+        accuracy="precision",
+        ecutwfc_ry=60,
+        ecutrho_ry=240,
     )
 
-    selection = select_from_advice(
-        structure,
-        advice,
-        metadata_list=[efficiency, precision],
+    selection = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(accuracy="precision"),
+        [efficiency, precision],
     )
 
-    assert selection.pseudopotentials[0].filename == "Z-precision.UPF"
+    assert selection.pseudopotentials[0].filename == "looks-like-efficiency.UPF"
     assert selection.pseudopotentials[0].ecutwfc_ry == 60.0
-    assert selection.pseudopotentials[0].provenance.source == "lookup"
-    assert "highest-ranked" in selection.pseudopotentials[0].provenance.reason
 
 
-def test_select_parameters_prefers_complete_cutoff_metadata() -> None:
-    """Rank candidates with complete cutoff metadata before incomplete ones."""
-    structure = make_structure()
-    advice = advise_parameters(
-        analyze_structure(structure),
-        hints=CalculationHints(pseudo_type="NC"),
-    )
-    incomplete = make_metadata(
-        filename="A-incomplete.UPF",
-        source_set="SSSP_efficiency",
-        cutoffs={"ecutwfc_ry": 30},
-    )
-    complete = make_metadata(
-        filename="Z-complete.UPF",
-        source_set="SSSP_efficiency",
-        cutoffs={"ecutwfc_ry": 35, "ecutrho_ry": 140},
-    )
-
-    selection = select_from_advice(
-        structure,
-        advice,
-        metadata_list=[incomplete, complete],
-    )
-
-    assert selection.pseudopotentials[0].filename == "Z-complete.UPF"
-    assert selection.warnings == ()
-
-
-@pytest.mark.parametrize(
-    "invalid_value",
-    [
-        "not-a-number",
-        float("nan"),
-        float("inf"),
-        -float("inf"),
-        0,
-        -1,
-        True,
-        False,
-        np.bool_(True),
-        np.bool_(False),
-    ],
-)
-def test_select_parameters_ranks_invalid_cutoffs_as_incomplete(
-    invalid_value: object,
-) -> None:
-    """Prefer complete metadata over every class of invalid cutoff."""
-    structure = make_structure()
-    advice = advise_parameters(
-        analyze_structure(structure),
-        hints=CalculationHints(pseudo_type="NC"),
-    )
-    invalid = make_metadata(
-        filename="A-invalid.UPF",
-        source_set="SSSP_efficiency",
-        cutoffs={"ecutwfc_ry": invalid_value, "ecutrho_ry": 120},
-    )
-    complete = make_metadata(
-        filename="Z-complete.UPF",
-        source_set="SSSP_efficiency",
-        cutoffs={"ecutwfc_ry": 35, "ecutrho_ry": 140},
-    )
-
-    selection = select_from_advice(
-        structure,
-        advice,
-        metadata_list=[invalid, complete],
-    )
-
-    assert selection.pseudopotentials[0].filename == "Z-complete.UPF"
-
-
-@pytest.mark.parametrize(
-    ("ecutwfc", "ecutrho"),
-    [(np.int64(30), np.float32(120)), (np.float64(35), np.int32(140))],
-)
-def test_select_parameters_accepts_finite_numpy_numeric_cutoffs(
-    ecutwfc: object,
-    ecutrho: object,
-) -> None:
-    """Accept finite NumPy numeric scalars while rejecting NumPy booleans."""
-    structure = make_structure()
-    advice = advise_parameters(analyze_structure(structure))
-
-    selection = select_from_advice(
-        structure,
-        advice,
-        metadata_list=[
-            make_metadata(cutoffs={"ecutwfc_ry": ecutwfc, "ecutrho_ry": ecutrho})
-        ],
-    )
-
-    pseudo = selection.pseudopotentials[0]
-    assert pseudo.ecutwfc_ry == float(ecutwfc)
-    assert pseudo.ecutrho_ry == float(ecutrho)
-    assert not any("cutoff metadata" in warning for warning in pseudo.warnings)
-
-
-def test_select_parameters_ranks_missing_cutoffs_as_incomplete() -> None:
-    """Prefer complete metadata over lexically earlier missing metadata."""
-    structure = make_structure()
-    advice = advise_parameters(
-        analyze_structure(structure),
-        hints=CalculationHints(pseudo_type="NC"),
-    )
-    missing = make_metadata(
-        filename="A-missing.UPF",
-        source_set="SSSP_efficiency",
-        cutoffs={"ecutwfc_ry": 30},
-    )
-    complete = make_metadata(
-        filename="Z-complete.UPF",
-        source_set="SSSP_efficiency",
-        cutoffs={"ecutwfc_ry": 35, "ecutrho_ry": 140},
-    )
-
-    selection = select_from_advice(
-        structure,
-        advice,
-        metadata_list=[missing, complete],
-    )
-
-    assert selection.pseudopotentials[0].filename == "Z-complete.UPF"
-
-
-@pytest.mark.parametrize(
-    "invalid_value",
-    [
-        "not-a-number",
-        float("nan"),
-        float("inf"),
-        -float("inf"),
-        0,
-        -1,
-        True,
-        False,
-        np.bool_(True),
-        np.bool_(False),
-    ],
-)
-def test_select_parameters_warns_about_present_invalid_cutoffs(
-    invalid_value: object,
-) -> None:
-    """Sanitize invalid metadata and explain that it must be replaced."""
-    structure = make_structure()
-    advice = advise_parameters(analyze_structure(structure))
-
-    selection = select_from_advice(
-        structure,
-        advice,
-        metadata_list=[
-            make_metadata(cutoffs={"ecutwfc_ry": invalid_value, "ecutrho_ry": 120})
-        ],
-    )
-
-    pseudo = selection.pseudopotentials[0]
-    assert pseudo.ecutwfc_ry is None
-    assert pseudo.ecutrho_ry == 120.0
-    assert pseudo.warnings == (
-        f"Selected pseudopotential for Si has invalid cutoff metadata "
-        f"(ecutwfc_ry={invalid_value!r}); replace it with finite positive values "
-        "before generation.",
-    )
-    assert pseudo.provenance.warnings == pseudo.warnings
-
-
-def test_select_parameters_distinguishes_missing_cutoff_warning() -> None:
-    """Report absent cutoff metadata separately from malformed values."""
-    structure = make_structure()
-    advice = advise_parameters(analyze_structure(structure))
-
-    selection = select_from_advice(
-        structure,
-        advice,
-        metadata_list=[make_metadata(cutoffs={"ecutwfc_ry": 30})],
-    )
-
-    warnings = selection.pseudopotentials[0].warnings
-    assert warnings == (
-        "Selected pseudopotential for Si is missing cutoff metadata "
-        "for ecutrho_ry; provide finite positive values before generation.",
-    )
-
-
-def test_select_parameters_keeps_explicit_grid_hint() -> None:
-    """Use a Kmesh-stage explicit grid without recalculating spacing."""
-    structure = make_structure()
-    hints = KmeshHints(k_grid=(2, 2, 1))
-
-    k_points = resolve_kpoints(structure, hints, lambda s: None)
-
-    assert k_points.grid == (2, 2, 1)
-    assert k_points.provenance.source == "user_hint"
-
-
-def test_select_parameters_warns_when_pseudo_is_missing() -> None:
-    """Surface missing pseudopotentials as structured selection warnings."""
-    structure = make_structure()
-    advice = advise_parameters(
-        analyze_structure(structure),
-        intent=CalculationIntent(functional="PBEsol"),
-    )
-
-    selection = select_from_advice(
-        structure,
-        advice,
-        metadata_list=[make_metadata(functional="PBE")],
-    )
-
-    pseudo = selection.pseudopotentials[0]
-    assert pseudo.element == "Si"
-    assert pseudo.filename is None
-    assert pseudo.filepath is None
-    assert pseudo.ecutwfc_ry is None
-    assert pseudo.ecutrho_ry is None
-    assert pseudo.provenance.source == "fallback"
-    assert pseudo.provenance.reason == "No matching pseudopotential was available."
-    assert pseudo.provenance.warnings == pseudo.warnings
-    assert pseudo.warnings == (
-        "No pseudopotential metadata matched Si / PBEsol / scalar.",
-    )
-
-
-def test_select_parameters_aggregates_pseudo_warnings_into_record() -> None:
-    """Per-pseudo selection warnings are aggregated onto the SelectionRecord."""
-    structure = make_structure()
-    advice = advise_parameters(
-        analyze_structure(structure),
-        intent=CalculationIntent(functional="PBEsol"),
-    )
-    selection = select_from_advice(
-        structure,
-        advice,
-        metadata_list=[make_metadata(functional="PBE")],
-    )
-
-    pseudo = selection.pseudopotentials[0]
-    assert pseudo.warnings == (
-        "No pseudopotential metadata matched Si / PBEsol / scalar.",
-    )
-    assert selection.warnings == pseudo.warnings
-
-
-def test_select_parameters_filters_by_pseudo_type() -> None:
-    """Exclude candidates whose pseudo type does not match advice."""
-    structure = make_structure()
-    advice = advise_parameters(
-        analyze_structure(structure),
-        hints=CalculationHints(pseudo_type="NC"),
-    )
-
-    selection = select_from_advice(
-        structure,
-        advice,
-        metadata_list=[make_metadata(pseudo_type="PAW")],
-    )
-
-    pseudo = selection.pseudopotentials[0]
-    assert pseudo.filename is None
-    assert pseudo.provenance.source == "fallback"
-
-
-def test_select_parameters_filters_by_relativistic_mode() -> None:
-    """Exclude candidates whose relativistic mode does not match advice."""
-    structure = make_structure()
-    advice = advise_parameters(analyze_structure(structure))
-
-    selection = select_from_advice(
-        structure,
-        advice,
-        metadata_list=[make_metadata(relativistic="full")],
-    )
-
-    pseudo = selection.pseudopotentials[0]
-    assert pseudo.filename is None
-    assert pseudo.provenance.source == "fallback"
-
-
-def test_select_parameters_warns_when_selected_pseudo_mismatches_mode() -> None:
-    """Report an exact warning when the selected pseudo misses the mode."""
-    structure = make_structure()
-    advice = advise_parameters(
-        analyze_structure(structure),
-        hints=CalculationHints(pseudo_type="NC", pseudo_mode="precision"),
-    )
-
-    selection = select_from_advice(
-        structure,
-        advice,
-        metadata_list=[make_metadata(source_set="SSSP_efficiency")],
+def test_unknown_custom_accuracy_is_eligible_with_warning() -> None:
+    """Accept unknown custom-root accuracy without pretending it is a match."""
+    selection = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(accuracy="precision"),
+        [make_metadata(provider=None, accuracy=None)],
     )
 
     pseudo = selection.pseudopotentials[0]
     assert pseudo.filename == "Si.UPF"
     assert pseudo.warnings == (
-        "Selected pseudopotential for Si does not explicitly match "
-        "pseudo mode 'precision'.",
+        "Selected custom pseudopotential for Si has no registered accuracy tier; "
+        "requested precision.",
     )
-    assert pseudo.provenance.warnings == pseudo.warnings
+    assert selection.warnings == pseudo.warnings
 
 
-def test_select_parameters_warns_exact_missing_cutoff_text() -> None:
-    """Report both missing cutoffs with exact joined text."""
-    structure = make_structure()
-    advice = advise_parameters(analyze_structure(structure))
-
-    selection = select_from_advice(
-        structure,
-        advice,
-        metadata_list=[make_metadata(cutoffs={})],
+def test_known_wrong_accuracy_is_not_used_as_fallback() -> None:
+    """Reject a declared efficiency pseudo for a precision request."""
+    selection = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(accuracy="precision"),
+        [make_metadata(accuracy="efficiency")],
     )
 
     pseudo = selection.pseudopotentials[0]
-    assert pseudo.ecutwfc_ry is None
+    assert pseudo.filename is None
+    assert pseudo.provenance.source == "fallback"
+    assert "registered accuracy precision" in pseudo.warnings[0]
+
+
+def test_prefers_complete_cutoffs_within_matching_candidates() -> None:
+    """Rank complete provider-neutral cutoff data ahead of lexical order."""
+    incomplete = make_metadata(
+        filename="A-incomplete.UPF",
+        ecutwfc_ry=30,
+        ecutrho_ry=None,
+    )
+    complete = make_metadata(
+        filename="Z-complete.UPF",
+        ecutwfc_ry=35,
+        ecutrho_ry=140,
+    )
+
+    selection = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(),
+        [incomplete, complete],
+    )
+
+    assert selection.pseudopotentials[0].filename == "Z-complete.UPF"
+    assert selection.warnings == ()
+
+
+def test_reports_missing_cutoff_fields_without_sanitizing_values() -> None:
+    """Preserve valid partial metadata and name the missing field."""
+    selection = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(),
+        [make_metadata(ecutwfc_ry=30, ecutrho_ry=None)],
+    )
+
+    pseudo = selection.pseudopotentials[0]
+    assert pseudo.ecutwfc_ry == 30.0
     assert pseudo.ecutrho_ry is None
     assert pseudo.warnings == (
-        "Selected pseudopotential for Si is missing cutoff metadata "
-        "for ecutwfc_ry, ecutrho_ry; provide finite positive values before "
-        "generation.",
+        "Selected pseudopotential for Si is missing cutoff metadata for "
+        "ecutrho_ry; provide finite positive values before generation.",
     )
-    assert pseudo.provenance.warnings == pseudo.warnings
 
 
-def test_select_parameters_warns_exact_invalid_cutoff_text() -> None:
-    """Report both invalid cutoffs with exact joined text."""
-    structure = make_structure()
-    advice = advise_parameters(analyze_structure(structure))
+def test_normalized_functional_aliases_match() -> None:
+    """Match equivalent functional spellings after contract normalization."""
+    selection = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(functional="PBE_SOL"),
+        [make_metadata(functional="PBESOL")],
+    )
 
-    selection = select_from_advice(
-        structure,
-        advice,
-        metadata_list=[
-            make_metadata(cutoffs={"ecutwfc_ry": "bad", "ecutrho_ry": "bad2"})
+    assert selection.pseudopotentials[0].filename == "Si.UPF"
+
+
+def test_functional_disagreement_returns_actionable_warning() -> None:
+    """Report actual available functionals without provider-specific advice."""
+    selection = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(functional="PBEsol"),
+        [make_metadata(functional="PBE")],
+    )
+
+    pseudo = selection.pseudopotentials[0]
+    assert pseudo.filename is None
+    assert pseudo.warnings == (
+        "Available pseudopotentials for Si do not match functional PBEsol; "
+        "available: PBE.",
+    )
+
+
+def test_pseudo_type_and_relativistic_treatment_are_required() -> None:
+    """Exclude candidates that violate either explicit scientific constraint."""
+    wrong_type = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(pseudo_type="NC"),
+        [make_metadata(pseudo_type="PAW")],
+    )
+    wrong_relativistic = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(relativistic="scalar"),
+        [make_metadata(relativistic="full")],
+    )
+
+    assert wrong_type.pseudopotentials[0].filename is None
+    assert "matches type NC" in wrong_type.warnings[0]
+    assert wrong_relativistic.pseudopotentials[0].filename is None
+    assert "scalar PBEsol" in wrong_relativistic.warnings[0]
+
+
+def test_frozen_4f_core_warning_survives_selection() -> None:
+    """Keep the provisional PseudoDojo 3+ caveat attached to the choice."""
+    selection = select_pseudopotentials(
+        make_structure("Ce"),
+        make_requirements(),
+        [
+            make_metadata(
+                element="Ce",
+                filename="Ce.upf",
+                frozen_4f_core=True,
+            )
+        ],
+    )
+
+    assert "freezes 4f electrons" in selection.warnings[0]
+    assert "Ce, Eu, or Yb" in selection.warnings[0]
+
+
+def test_lanthanide_routes_to_sssp_when_both_providers_available() -> None:
+    """Never select a PseudoDojo pseudo for a lanthanide when SSSP exists."""
+    dojo = make_metadata(
+        element="Ce",
+        filename="Ce-pdojo.UPF",
+        provider="pseudodojo",
+        frozen_4f_core=True,
+    )
+    sssp = make_metadata(element="Ce", filename="Ce-sssp.UPF", provider="sssp")
+
+    selection = select_pseudopotentials(
+        make_structure("Ce"),
+        make_requirements(),
+        [dojo, sssp],
+    )
+
+    pseudo = selection.pseudopotentials[0]
+    assert pseudo.filename == "Ce-sssp.UPF"
+    assert pseudo.provenance.data_source == "sssp"
+    assert pseudo.warnings == ()
+
+
+def test_lanthanide_without_sssp_returns_actionable_fallback() -> None:
+    """Refuse PseudoDojo lanthanide pseudos and say how to fix it."""
+    selection = select_pseudopotentials(
+        make_structure("Ce"),
+        make_requirements(),
+        [
+            make_metadata(
+                element="Ce",
+                provider="pseudodojo",
+                frozen_4f_core=True,
+            )
         ],
     )
 
     pseudo = selection.pseudopotentials[0]
-    assert pseudo.ecutwfc_ry is None
-    assert pseudo.ecutrho_ry is None
-    assert pseudo.warnings == (
-        "Selected pseudopotential for Si has invalid cutoff metadata "
-        "(ecutwfc_ry='bad', ecutrho_ry='bad2'); replace it with finite positive "
-        "values before generation.",
-    )
-    assert pseudo.provenance.warnings == pseudo.warnings
+    assert pseudo.filename is None
+    assert pseudo.provenance.source == "fallback"
+    assert "only SSSP pseudopotentials" in pseudo.warnings[0]
+    assert "goldilocks assets install sssp-pbesol-efficiency-sr" in pseudo.warnings[0]
+    assert "--pseudo-table sssp-pbesol-efficiency-sr" in pseudo.warnings[0]
 
 
-def test_rank_pseudo_candidate_exact_key_mode_matches() -> None:
-    """Ranking key is an explicit deterministic tuple for a matching candidate."""
-    metadata = make_metadata(
-        filename="Si.UPF",
-        source_set="SSSP_efficiency",
-        cutoffs={"ecutwfc_ry": 30, "ecutrho_ry": 120},
-    )
-    assert _rank_pseudo_candidate(metadata, "efficiency") == (
-        0,
-        0,
-        0,
-        "SSSP_efficiency",
-        "Si.UPF",
+def test_actinide_without_sssp_returns_actionable_fallback() -> None:
+    """No PseudoDojo table covers actinides; require SSSP."""
+    selection = select_pseudopotentials(
+        make_structure("U"),
+        make_requirements(),
+        [make_metadata(element="U", provider="pseudodojo")],
     )
 
+    pseudo = selection.pseudopotentials[0]
+    assert pseudo.filename is None
+    assert "no PseudoDojo table covers actinides" in pseudo.warnings[0]
 
-def test_rank_pseudo_candidate_exact_key_mode_mismatch_and_incomplete() -> None:
-    """Ranking key marks mode mismatch and incomplete cutoffs distinctly."""
-    metadata = make_metadata(
-        filename="Si.UPF",
-        source_set="SSSP_efficiency",
-        cutoffs={"ecutwfc_ry": 30},
-    )
-    assert _rank_pseudo_candidate(metadata, "precision") == (
-        1,
-        1,
-        0,
-        "SSSP_efficiency",
-        "Si.UPF",
+
+def test_lanthanide_full_relativistic_request_notes_no_soc() -> None:
+    """SSSP has no fully-relativistic table; say so for Ln/An with SOC."""
+    selection = select_pseudopotentials(
+        make_structure("Ce"),
+        make_requirements(relativistic="full"),
+        [make_metadata(element="Ce", relativistic="scalar")],
     )
 
-
-def test_rank_pseudo_candidate_exact_key_non_sssp() -> None:
-    """Ranking key marks non-SSSP candidates with a distinct sssp rank."""
-    metadata = make_metadata(
-        filename="Si.UPF",
-        source_set="SSSP_efficiency",
-        is_sssp=False,
-        cutoffs={"ecutwfc_ry": 30, "ecutrho_ry": 120},
-    )
-    assert _rank_pseudo_candidate(metadata, "efficiency") == (
-        0,
-        0,
-        1,
-        "SSSP_efficiency",
-        "Si.UPF",
-    )
+    pseudo = selection.pseudopotentials[0]
+    assert pseudo.filename is None
+    assert "no spin-orbit coupling" in pseudo.warnings[0]
 
 
-def test_rank_pseudo_candidate_exact_key_source_fallback() -> None:
-    """Ranking key falls back to the library when source_set is absent."""
-    metadata = make_metadata(
-        filename="Si.UPF",
-        source_set=None,
-        library="SSSP",
-        cutoffs={"ecutwfc_ry": 30, "ecutrho_ry": 120},
-    )
-    assert _rank_pseudo_candidate(metadata, "efficiency") == (
-        0,
-        0,
-        0,
-        "SSSP",
-        "Si.UPF",
+def test_sssp_preferred_over_pseudodojo_in_ranking() -> None:
+    """Rank SSSP ahead of PseudoDojo for equal complete candidates."""
+    dojo = make_metadata(filename="A-dojo.UPF", provider="pseudodojo")
+    sssp = make_metadata(filename="Z-sssp.UPF", provider="sssp")
+
+    selection = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(),
+        [dojo, sssp],
     )
 
+    assert selection.pseudopotentials[0].filename == "Z-sssp.UPF"
 
-def test_rank_pseudo_candidate_exact_key_no_source() -> None:
-    """Ranking key uses an empty source when neither source is present."""
-    metadata = make_metadata(
-        filename="Si.UPF",
-        source_set=None,
-        library=None,
-        cutoffs={"ecutwfc_ry": 30, "ecutrho_ry": 120},
+
+def test_complete_cutoffs_outrank_sssp_preference() -> None:
+    """Cutoff completeness still beats provider preference in ranking."""
+    incomplete_sssp = make_metadata(
+        filename="A-sssp.UPF",
+        provider="sssp",
+        ecutwfc_ry=30,
+        ecutrho_ry=None,
     )
-    assert _rank_pseudo_candidate(metadata, "efficiency") == (
-        0,
-        0,
-        0,
-        "",
-        "Si.UPF",
+    complete_dojo = make_metadata(
+        filename="Z-dojo.UPF",
+        provider="pseudodojo",
+        ecutwfc_ry=35,
+        ecutrho_ry=140,
     )
 
+    selection = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(),
+        [incomplete_sssp, complete_dojo],
+    )
 
-def test_metadata_matches_mode_crosses_field_boundary() -> None:
-    """A multi-word mode matches across the joined field boundary."""
-    metadata = make_metadata(library="SSSP", source_set="efficiency")
-    assert _metadata_matches_mode(metadata, "SSSP efficiency") is True
-
-
-def test_metadata_matches_mode_precision_source_returns_false_for_efficiency() -> None:
-    """A precision source set does not match an efficiency mode."""
-    metadata = make_metadata(source_set="SSSP_precision")
-    assert _metadata_matches_mode(metadata, "efficiency") is False
+    assert selection.pseudopotentials[0].filename == "Z-dojo.UPF"
 
 
-def test_metadata_matches_mode_sssp_flag_wins_without_mode_words() -> None:
-    """The SSSP flag alone matches when no mode word is present."""
-    metadata = make_metadata(library="Other", source_set=None, is_sssp=True)
-    assert _metadata_matches_mode(metadata, "efficiency") is True
+def test_selection_is_complete_and_deterministic_for_multiple_elements() -> None:
+    """Emit one element-sorted choice regardless of metadata order."""
+    selection = select_pseudopotentials(
+        make_structure("Na", "Cl"),
+        make_requirements(),
+        [
+            make_metadata(element="Na", filename="Na.upf"),
+            make_metadata(element="Cl", filename="Cl.upf"),
+        ],
+    )
 
-
-@pytest.mark.parametrize("library", ["SSSP", "sssp"])
-def test_metadata_matches_mode_library_sssp(library: str) -> None:
-    """An SSSP library matches even when the SSSP flag is unset."""
-    metadata = make_metadata(library=library, source_set=None, is_sssp=False)
-    assert _metadata_matches_mode(metadata, "efficiency") is True
+    assert [pseudo.element for pseudo in selection.pseudopotentials] == ["Cl", "Na"]

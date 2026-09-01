@@ -22,6 +22,9 @@ from goldilocks_core.contracts.types import (
     ModelSource,
     ModelType,
     ProvenanceSource,
+    PseudoAccuracy,
+    PseudoType,
+    RelativisticTreatment,
     StructureInput,
     VdwMethod,
 )
@@ -82,58 +85,108 @@ class ModelSpec:
     revision: str | None = None
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
+class PseudoCutoffs:
+    """Provider-neutral plane-wave cutoffs in Rydberg.
+
+    Every present value is finite and positive.
+    """
+
+    ecutwfc_ry: float | None = None
+    ecutrho_ry: float | None = None
+
+    def __post_init__(self) -> None:
+        """Validate every supplied cutoff and normalize values to floats."""
+        for field_name in ("ecutwfc_ry", "ecutrho_ry"):
+            value = getattr(self, field_name)
+            if value is not None:
+                _validate_finite_positive(value, f"PseudoCutoffs.{field_name}")
+                object.__setattr__(self, field_name, float(value))
+
+
+@dataclass(frozen=True, slots=True)
 class PseudoMetadata:
-    """Structured pseudopotential metadata extracted from a UPF file.
+    """Provider-neutral metadata for one selectable pseudopotential.
 
-    Produced by ``parse_upf_metadata()`` and consumed by pseudo
-    selection. Not frozen: callers may mutate fields when
-    synthesizing test metadata.
-
-    Attributes:
-        filepath: full path to the UPF file on disk.
-        filename: basename of the UPF file (e.g. ``Si.UPF``).
-        header_format: UPF header format: ``attr`` or ``text``.
-        library: pseudo library name (e.g. ``SSSP``), extracted
-            from the file path.
-        source_set: source set within the library (e.g.
-            ``efficiency``, ``precision``).
-        element: element symbol this pseudo is for (e.g.
-            ``Si``).
-        pseudo_type: normalized pseudo type: ``NC``, ``USPP``,
-            or ``PAW``.
-        functional: normalized functional label (e.g. ``PBE``,
-            ``PBEsol``, ``LDA``).
-        relativistic: normalized relativistic mode: ``scalar``,
-            ``full``, or ``non-relativistic``.
-        z_valence: valence charge.
-        pseudo_info: raw header fields not mapped to typed
-            attributes.
-        is_sssp: whether this pseudo is from the SSSP library.
-        source_pseudopotential: original pseudo identifier from
-            the UPF header.
-        sssp_recommended_cutoff: SSSP recommended cutoffs dict
-            with ``ecutwfc_ry`` and ``ecutrho_ry`` in Rydberg.
+    Provider identity and raw header facts are provenance only. Scientific
+    selection uses the normalized functional, accuracy, pseudo type,
+    relativistic treatment, and cutoffs.
     """
 
     filepath: str
     filename: str
     header_format: str
-    library: str | None = None
-    source_set: str | None = None
+    provider: str | None = None
+    accuracy: PseudoAccuracy | None = None
     element: str | None = None
-    pseudo_type: str | None = None
+    pseudo_type: PseudoType | None = None
     functional: str | None = None
-    relativistic: str | None = None
+    relativistic: RelativisticTreatment | None = None
     z_valence: float | None = None
-    pseudo_info: dict[str, Any] = field(default_factory=dict)
-    is_sssp: bool = False
-    source_pseudopotential: str | None = None
-    sssp_recommended_cutoff: dict[str, Any] | None = None
+    table_id: str | None = None
+    cutoffs: PseudoCutoffs | None = None
+    source_identifier: str | None = None
+    frozen_4f_core: bool = False
+    pseudo_info: JsonDict = field(default_factory=dict)
+    warnings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        """Canonicalize supported functional labels from metadata producers."""
-        self.functional = normalize_functional_label(self.functional)
+        """Normalize and validate metadata at its domain boundary."""
+        for field_name in ("filepath", "filename", "header_format"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"PseudoMetadata.{field_name} must be a non-empty string; "
+                    f"got {value!r}"
+                )
+        for field_name in ("provider", "element", "source_identifier", "table_id"):
+            _validate_optional_nonempty_str(
+                getattr(self, field_name), f"PseudoMetadata.{field_name}"
+            )
+        if self.accuracy is not None and self.accuracy not in {
+            "efficiency",
+            "precision",
+        }:
+            raise ValueError(
+                "PseudoMetadata.accuracy must be 'efficiency', 'precision', "
+                f"or None; got {self.accuracy!r}"
+            )
+        if self.pseudo_type is not None and self.pseudo_type not in {
+            "NC",
+            "USPP",
+            "PAW",
+        }:
+            raise ValueError(
+                "PseudoMetadata.pseudo_type must be NC, USPP, PAW, or None; "
+                f"got {self.pseudo_type!r}"
+            )
+        _validate_relativistic_mode(self.relativistic, "PseudoMetadata.relativistic")
+        functional = normalize_functional_label(self.functional)
+        object.__setattr__(self, "functional", functional)
+        if self.z_valence is not None:
+            _validate_finite_positive(self.z_valence, "PseudoMetadata.z_valence")
+            object.__setattr__(self, "z_valence", float(self.z_valence))
+        if self.cutoffs is not None and not isinstance(self.cutoffs, PseudoCutoffs):
+            if not isinstance(self.cutoffs, Mapping):
+                raise ValueError(
+                    "PseudoMetadata.cutoffs must be PseudoCutoffs, an object, or None"
+                )
+            try:
+                cutoffs = PseudoCutoffs(**dict(self.cutoffs))
+            except TypeError as error:
+                raise ValueError(f"Invalid PseudoMetadata.cutoffs: {error}") from error
+            object.__setattr__(self, "cutoffs", cutoffs)
+        if not isinstance(self.frozen_4f_core, bool):
+            raise ValueError("PseudoMetadata.frozen_4f_core must be a boolean")
+        if not isinstance(self.pseudo_info, dict):
+            raise ValueError("PseudoMetadata.pseudo_info must be a dictionary")
+        object.__setattr__(self, "pseudo_info", dict(self.pseudo_info))
+        if not isinstance(self.warnings, tuple):
+            object.__setattr__(self, "warnings", tuple(self.warnings))
+        if any(
+            not isinstance(warning, str) or not warning for warning in self.warnings
+        ):
+            raise ValueError("PseudoMetadata.warnings must contain non-empty strings")
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -200,24 +253,29 @@ class CalculationIntent:
         task: type of calculation to prepare.
         functional: exchange-correlation functional label
             (e.g. ``PBE``, ``PBEsol``, ``LDA``).
-        pseudo_mode: pseudopotential family preference
-            (e.g. ``efficiency``, ``precision``).
+        pseudo_accuracy: registered pseudopotential accuracy tier
+            (``efficiency`` or ``precision``).
     """
 
     code: CodeName = "quantum_espresso"
     task: CalcTask = "scf_single_point"
     functional: str = "PBEsol"
-    pseudo_mode: str = "efficiency"
+    pseudo_accuracy: PseudoAccuracy = "efficiency"
 
     def __post_init__(self) -> None:
         """Require named targets and normalize the functional."""
-        for field_name in ("code", "task", "pseudo_mode"):
+        for field_name in ("code", "task"):
             value = getattr(self, field_name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(
                     f"CalculationIntent.{field_name} must be a non-empty string; "
                     f"got {value!r}"
                 )
+        if self.pseudo_accuracy not in {"efficiency", "precision"}:
+            raise ValueError(
+                "CalculationIntent.pseudo_accuracy must be 'efficiency' or "
+                f"'precision'; got {self.pseudo_accuracy!r}"
+            )
 
         functional = normalize_functional_label(self.functional)
         if functional is None:
@@ -265,7 +323,7 @@ class SpinHints:
 class PseudoHints:
     """Pseudopotential-stage operator overrides."""
 
-    pseudo_mode: str | None = None
+    accuracy: PseudoAccuracy | None = None
     pseudo_type: str | None = None
     relativistic_mode: str | None = None
 
@@ -309,8 +367,8 @@ class CalculationHints:
             non-magnetic (``False``) calculation.
         spin_orbit_coupling: force SOC on (``True``) or off
             (``False``).
-        pseudo_mode: override pseudo family preference (e.g.
-            ``efficiency``, ``precision``).
+        pseudo_accuracy: override registered pseudo accuracy
+            (``efficiency`` or ``precision``).
         pseudo_type: override pseudo type (e.g. ``NC``,
             ``USPP``, ``PAW``).
         relativistic_mode: override relativistic treatment
@@ -334,7 +392,7 @@ class CalculationHints:
     smearing_width_ry: float | None = None
     spin_polarized: bool | None = None
     spin_orbit_coupling: bool | None = None
-    pseudo_mode: str | None = None
+    pseudo_accuracy: PseudoAccuracy | None = None
     pseudo_type: str | None = None
     relativistic_mode: str | None = None
     conv_thr: float | None = None
@@ -382,9 +440,14 @@ class CalculationHints:
             raise ValueError(
                 "CalculationHints.vdw_method must be None when use_vdw is False"
             )
-        _validate_optional_nonempty_str(
-            self.pseudo_mode, "CalculationHints.pseudo_mode"
-        )
+        if self.pseudo_accuracy is not None and self.pseudo_accuracy not in {
+            "efficiency",
+            "precision",
+        }:
+            raise ValueError(
+                "CalculationHints.pseudo_accuracy must be 'efficiency', "
+                f"'precision', or None; got {self.pseudo_accuracy!r}"
+            )
         _validate_optional_nonempty_str(
             self.pseudo_type, "CalculationHints.pseudo_type"
         )
@@ -413,7 +476,7 @@ class CalculationHints:
     @property
     def pseudo(self) -> PseudoHints:
         return PseudoHints(
-            pseudo_mode=self.pseudo_mode,
+            accuracy=self.pseudo_accuracy,
             pseudo_type=self.pseudo_type,
             relativistic_mode=self.relativistic_mode,
         )
@@ -603,38 +666,46 @@ class SpinOrbitAdvice:
 
 
 @dataclass(frozen=True, slots=True)
-class PseudopotentialAdvice:
-    """Advised pseudopotential family and treatment intent.
+class PseudopotentialRequirements:
+    """Scientific constraints used to select pseudopotentials.
 
-    Select uses this to filter and rank pseudopotential candidates.
-
-    Attributes:
-        functional: exchange-correlation functional the pseudos
-            should target (e.g. ``PBE``).
-        pseudo_mode: pseudo family preference (e.g.
-            ``efficiency``, ``precision``).
-        pseudo_type: pseudo type filter (e.g. ``NC``, ``USPP``,
-            ``PAW``), or None to accept any.
-        relativistic_mode: relativistic treatment: ``scalar``,
-            ``full``, or ``non-relativistic``.
-        provenance: why this advice was chosen.
+    The record contains no provider, table, filename, path, or cutoff choice.
+    Advise derives it from calculation intent, operator hints, and SOC policy;
+    Select resolves it against explicitly available metadata.
     """
 
     functional: str
-    pseudo_mode: str
-    pseudo_type: str | None
-    relativistic_mode: str
+    accuracy: PseudoAccuracy
+    pseudo_type: PseudoType | None
+    relativistic: RelativisticTreatment
     provenance: Provenance
 
     def __post_init__(self) -> None:
-        """Normalize the functional at the advice-record boundary."""
+        """Normalize and validate the scientific selection constraints."""
         functional = normalize_functional_label(self.functional)
         if functional is None:
             raise ValueError(
-                "PseudopotentialAdvice.functional must be a non-empty string; "
-                f"got {self.functional!r}"
+                "PseudopotentialRequirements.functional must be a non-empty "
+                f"string; got {self.functional!r}"
             )
         object.__setattr__(self, "functional", functional)
+        if self.accuracy not in {"efficiency", "precision"}:
+            raise ValueError(
+                "PseudopotentialRequirements.accuracy must be 'efficiency' or "
+                f"'precision'; got {self.accuracy!r}"
+            )
+        if self.pseudo_type is not None and self.pseudo_type not in {
+            "NC",
+            "USPP",
+            "PAW",
+        }:
+            raise ValueError(
+                "PseudopotentialRequirements.pseudo_type must be NC, USPP, "
+                f"PAW, or None; got {self.pseudo_type!r}"
+            )
+        _validate_relativistic_mode(
+            self.relativistic, "PseudopotentialRequirements.relativistic"
+        )
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -700,22 +771,14 @@ class VdwAdvice:
 class ParameterAdvice:
     """Complete Advise-stage output.
 
-    Contains one advice record per recommendation category. Each record
-    carries its own ``Provenance`` explaining why that value was chosen.
-
-    Attributes:
-        smearing: occupation smearing settings.
-        magnetism: spin-polarization setting.
-        spin_orbit: SOC relevance and setting.
-        pseudopotentials: pseudo family and treatment intent.
-        convergence: SCF convergence parameters.
-        vdw: VdwAdvice.
+    Advice records contain scientific and numerical policy only. Concrete
+    pseudopotential resources remain Select-stage output.
     """
 
     smearing: SmearingAdvice
     magnetism: MagnetismAdvice
     spin_orbit: SpinOrbitAdvice
-    pseudopotentials: PseudopotentialAdvice
+    pseudopotential_requirements: PseudopotentialRequirements
     convergence: ConvergenceAdvice
     vdw: VdwAdvice
 
@@ -754,7 +817,7 @@ class PseudopotentialSelection:
     """Concrete pseudopotential selected for one element.
 
     ``filename`` is None when no matching pseudopotential was found.
-    Cutoff values are in Rydberg and come from SSSP recommended cutoffs.
+    Cutoff values are provider-neutral and expressed in Rydberg.
 
     Attributes:
         element: element symbol this selection is for.
@@ -772,10 +835,44 @@ class PseudopotentialSelection:
     element: str
     filename: str | None
     filepath: str | None
+    functional: str | None
     ecutwfc_ry: float | None
     ecutrho_ry: float | None
     provenance: Provenance
     warnings: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Validate selected resource identity, functional, and cutoffs."""
+        if not isinstance(self.element, str) or not self.element.strip():
+            raise ValueError(
+                "PseudopotentialSelection.element must be a non-empty string"
+            )
+        if (self.filename is None) != (self.filepath is None):
+            raise ValueError(
+                "PseudopotentialSelection filename and filepath must both be "
+                "present or both be None"
+            )
+        for field_name in ("filename", "filepath"):
+            _validate_optional_nonempty_str(
+                getattr(self, field_name), f"PseudopotentialSelection.{field_name}"
+            )
+        functional = normalize_functional_label(self.functional)
+        object.__setattr__(self, "functional", functional)
+        for field_name in ("ecutwfc_ry", "ecutrho_ry"):
+            value = getattr(self, field_name)
+            if value is not None:
+                _validate_finite_positive(
+                    value, f"PseudopotentialSelection.{field_name}"
+                )
+                object.__setattr__(self, field_name, float(value))
+        if self.filename is None and any(
+            value is not None
+            for value in (self.functional, self.ecutwfc_ry, self.ecutrho_ry)
+        ):
+            raise ValueError(
+                "An unresolved PseudopotentialSelection cannot carry scientific "
+                "metadata"
+            )
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -941,6 +1038,24 @@ class CoreResult:
         return to_jsonable(self)
 
 
+def _validate_pseudo_source(
+    metadata: tuple[PseudoMetadata, ...] | None,
+    root: str | None,
+    table: str | None,
+    request_type: str,
+) -> None:
+    """Require at most one explicit pseudopotential source declaration."""
+    if metadata is not None and any(
+        not isinstance(item, PseudoMetadata) for item in metadata
+    ):
+        raise ValueError(f"{request_type}.pseudo_metadata must contain PseudoMetadata")
+    if sum((metadata is not None, root is not None, table is not None)) > 1:
+        raise ValueError(
+            f"{request_type} accepts only one of pseudo_metadata, "
+            "pseudo_root, or pseudo_table"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class PresetRequest:
     """Operator request for a named-preset Core run (recommend/generate).
@@ -955,7 +1070,10 @@ class PresetRequest:
         intent: what to calculate.
         hints: optional operator overrides.
         mode: preset mode: ``recommend`` or ``generate``.
-        pseudo_metadata: pseudopotential metadata for selection.
+        pseudo_metadata: caller-supplied pseudopotential metadata; when provided
+            it takes precedence over filesystem-backed sources.
+        pseudo_root: optional operator-managed UPF root.
+        pseudo_table: optional exact registered table identifier.
         output_dir: optional output directory, meaningful only with
             ``generate``. The generate entrypoint handles publishing there.
         kmesh_model: optional local k-index model spec; when set, the SCF path
@@ -966,14 +1084,28 @@ class PresetRequest:
     intent: CalculationIntent = field(default_factory=CalculationIntent)
     hints: CalculationHints = field(default_factory=CalculationHints)
     mode: JobMode = "recommend"
-    pseudo_metadata: tuple[PseudoMetadata, ...] = ()
+    pseudo_metadata: tuple[PseudoMetadata, ...] | None = None
+    pseudo_root: str | None = None
+    pseudo_table: str | None = None
     output_dir: str | None = None
     kmesh_model: ModelSpec | None = None
 
     def __post_init__(self) -> None:
-        """Validate the preset mode at construction."""
+        """Validate preset mode and pseudopotential source references."""
         if self.mode not in {"recommend", "generate"}:
             raise ValueError(f"Unsupported Core job mode: {self.mode}")
+        if self.pseudo_metadata is not None and not isinstance(
+            self.pseudo_metadata, tuple
+        ):
+            object.__setattr__(self, "pseudo_metadata", tuple(self.pseudo_metadata))
+        _validate_optional_nonempty_str(self.pseudo_root, "PresetRequest.pseudo_root")
+        _validate_optional_nonempty_str(self.pseudo_table, "PresetRequest.pseudo_table")
+        _validate_pseudo_source(
+            self.pseudo_metadata,
+            self.pseudo_root,
+            self.pseudo_table,
+            "PresetRequest",
+        )
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary."""
@@ -983,6 +1115,8 @@ class PresetRequest:
             "hints": to_jsonable(self.hints),
             "mode": self.mode,
             "pseudo_metadata": to_jsonable(self.pseudo_metadata),
+            "pseudo_root": self.pseudo_root,
+            "pseudo_table": self.pseudo_table,
             "output_dir": self.output_dir,
             "kmesh_model": to_jsonable(self.kmesh_model),
         }
@@ -1001,7 +1135,9 @@ class QueryRequest:
         outputs: requested DAG record types (required, non-None).
         intent: what to calculate.
         hints: optional operator overrides.
-        pseudo_metadata: pseudopotential metadata for selection.
+        pseudo_metadata: caller-supplied metadata, which takes source precedence.
+        pseudo_root: optional operator-managed UPF root.
+        pseudo_table: optional exact registered table identifier.
         kmesh_model: optional local k-index model spec.
     """
 
@@ -1009,8 +1145,25 @@ class QueryRequest:
     outputs: tuple[type, ...]
     intent: CalculationIntent = field(default_factory=CalculationIntent)
     hints: CalculationHints = field(default_factory=CalculationHints)
-    pseudo_metadata: tuple[PseudoMetadata, ...] = ()
+    pseudo_metadata: tuple[PseudoMetadata, ...] | None = None
+    pseudo_root: str | None = None
+    pseudo_table: str | None = None
     kmesh_model: ModelSpec | None = None
+
+    def __post_init__(self) -> None:
+        """Validate pseudopotential source references."""
+        if self.pseudo_metadata is not None and not isinstance(
+            self.pseudo_metadata, tuple
+        ):
+            object.__setattr__(self, "pseudo_metadata", tuple(self.pseudo_metadata))
+        _validate_optional_nonempty_str(self.pseudo_root, "QueryRequest.pseudo_root")
+        _validate_optional_nonempty_str(self.pseudo_table, "QueryRequest.pseudo_table")
+        _validate_pseudo_source(
+            self.pseudo_metadata,
+            self.pseudo_root,
+            self.pseudo_table,
+            "QueryRequest",
+        )
 
     def to_dict(self) -> JsonDict:
         """Return a JSON-serializable dictionary with stable record ids."""
@@ -1020,5 +1173,7 @@ class QueryRequest:
             "intent": to_jsonable(self.intent),
             "hints": to_jsonable(self.hints),
             "pseudo_metadata": to_jsonable(self.pseudo_metadata),
+            "pseudo_root": self.pseudo_root,
+            "pseudo_table": self.pseudo_table,
             "kmesh_model": to_jsonable(self.kmesh_model),
         }

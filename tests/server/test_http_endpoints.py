@@ -75,21 +75,17 @@ def test_recommend_returns_core_result_json(test_service, request_body) -> None:
     assert data["generated_files"] == []
 
 
-def test_generate_without_server_pseudopotentials_maps_to_422(
+def test_generate_returns_generated_files_without_bundle(
     test_service, request_body
 ) -> None:
-    """Reject generation while the server has no pseudopotential source.
-
-    Transport requests cannot carry pseudopotential metadata; until the
-    runtime resolves pseudopotentials from its own asset store, generate
-    fails with the documented selection error instead of inventing cutoffs.
-    """
+    """Return generated files; output locations are server-managed."""
     with TestClient(create_app(test_service)) as client:
         response = client.post("/generate", json=request_body)
 
-    assert response.status_code == 422
-    assert response.json()["error"]["kind"] == "generation_error"
-    assert "pseudopotential" in response.json()["error"]["message"].lower()
+    assert response.status_code == 200
+    data = response.json()
+    assert data["generated_files"][0]["path"] == "inputs/qe.in"
+    assert data["bundle"] is None
 
 
 def test_path_form_structure_maps_to_422(test_service, tmp_path) -> None:
@@ -141,6 +137,67 @@ def test_unknown_task_maps_to_422_with_message(test_service, request_body) -> No
     assert response.status_code == 422
     assert response.json()["error"]["kind"] == "invalid_task"
     assert "No Core task registered" in response.json()["error"]["message"]
+
+
+def test_asset_corrupt_maps_to_424(test_service, request_body, monkeypatch) -> None:
+    """Expose a corrupt installed asset as a deployment integrity error."""
+    from goldilocks_core.assets import AssetCorrupt
+
+    def raise_corrupt(service, request):
+        del service, request
+        raise AssetCorrupt("installed pseudopotential manifest is invalid")
+
+    monkeypatch.setattr(type(test_service), "run_preset", raise_corrupt)
+
+    with TestClient(create_app(test_service)) as client:
+        response = client.post("/recommend", json=request_body)
+
+    assert response.status_code == 424
+    assert response.json()["error"]["kind"] == "asset_corrupt"
+    assert "manifest is invalid" in response.json()["error"]["message"]
+
+
+def test_asset_not_installed_maps_to_424(
+    test_service, request_body, tmp_path, monkeypatch
+) -> None:
+    """Expose a missing runtime asset as a structured dependency error."""
+    from goldilocks_core.assets import AssetNotInstalled, AssetReference
+
+    reference = AssetReference("pseudopotentials/pseudodojo", "0.4")
+
+    def raise_missing(service, request):
+        del service, request
+        raise AssetNotInstalled(reference, tmp_path / "assets")
+
+    monkeypatch.setattr(type(test_service), "run_preset", raise_missing)
+
+    with TestClient(create_app(test_service)) as client:
+        response = client.post("/recommend", json=request_body)
+
+    assert response.status_code == 424
+    assert response.json()["error"]["kind"] == "asset_not_installed"
+    assert response.json()["error"]["asset_id"] == "pseudopotentials/pseudodojo"
+    assert response.json()["error"]["version"] == "0.4"
+
+
+def test_pseudo_table_mismatch_maps_to_422(
+    test_service, request_body, monkeypatch
+) -> None:
+    """Expose a table that cannot satisfy the request as invalid input."""
+    from goldilocks_core.pseudo.source import PseudoTableMismatch
+
+    def raise_mismatch(service, request):
+        del service, request
+        raise PseudoTableMismatch("table cannot satisfy the request")
+
+    monkeypatch.setattr(type(test_service), "run_preset", raise_mismatch)
+
+    with TestClient(create_app(test_service)) as client:
+        response = client.post("/recommend", json=request_body)
+
+    assert response.status_code == 422
+    assert response.json()["error"]["kind"] == "pseudo_table_mismatch"
+    assert "cannot satisfy" in response.json()["error"]["message"]
 
 
 def test_unexpected_value_error_remains_a_500(

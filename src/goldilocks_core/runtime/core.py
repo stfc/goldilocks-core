@@ -16,6 +16,7 @@ from pymatgen.core import Structure
 
 from goldilocks_core.advisors.kdistance_advisor import QrfKDistanceBackend
 from goldilocks_core.analysis import heuristic_metallicity
+from goldilocks_core.assets import AssetStore
 from goldilocks_core.contracts import (
     ElectronicCharacter,
     KMeshService,
@@ -117,10 +118,14 @@ class CoreRuntime:
         metallicity_checkpoint: PathLike | None = None,
         metallicity_atom_init: PathLike | None = None,
         kmesh_service: KMeshService | None = None,
+        asset_store: AssetStore | None = None,
+        pseudo_registry_path: PathLike | None = None,
     ) -> None:
         self._registry_path = registry_path
         self._metallicity_checkpoint = metallicity_checkpoint
         self._metallicity_atom_init = metallicity_atom_init
+        self._asset_store = asset_store or AssetStore()
+        self._pseudo_registry_path = pseudo_registry_path
         self._backend = (
             kmesh_service if kmesh_service is not None else self._build_backend()
         )
@@ -133,6 +138,7 @@ class CoreRuntime:
             registry_path=self._registry_path,
             metallicity_checkpoint=self._metallicity_checkpoint,
             metallicity_atom_init=self._metallicity_atom_init,
+            asset_store=self._asset_store,
         )
 
     def _build_metallicity(self) -> MetallicityService:
@@ -152,6 +158,16 @@ class CoreRuntime:
     def metallicity(self) -> MetallicityService:
         """The runtime-owned metallicity classifier."""
         return self._metallicity
+
+    @property
+    def asset_store(self) -> AssetStore:
+        """The shared store used by every installed runtime resource."""
+        return self._asset_store
+
+    @property
+    def pseudo_registry_path(self) -> PathLike | None:
+        """The optional pseudopotential registry override."""
+        return self._pseudo_registry_path
 
     def describe_models(self) -> list[dict[str, str | None]]:
         """Return transport-safe descriptions of all registered ML models.

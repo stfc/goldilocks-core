@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pymatgen.core import Structure
 
+from goldilocks_core.assets import AssetStore
 from goldilocks_core.contracts import (
     KPointSelection,
     PathLike,
@@ -58,11 +59,13 @@ class QrfKDistanceBackend:
         config: QrfKpointsConfig | None = None,
         metallicity_checkpoint: str | None = None,
         metallicity_atom_init: str | None = None,
+        asset_store: AssetStore | None = None,
     ) -> None:
         self._registry_path = registry_path
         self._config = config
         self._metallicity_checkpoint = metallicity_checkpoint
         self._metallicity_atom_init = metallicity_atom_init
+        self._asset_store = asset_store
         self._resources: QrfResources | None = None
         self._closed = False
 
@@ -101,4 +104,5 @@ class QrfKDistanceBackend:
             self._config,
             metallicity_checkpoint=self._metallicity_checkpoint,
             metallicity_atom_init=self._metallicity_atom_init,
+            asset_store=self._asset_store,
         )

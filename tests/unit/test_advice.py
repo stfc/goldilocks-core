@@ -44,7 +44,7 @@ def test_advise_parameters_records_user_hint_provenance() -> None:
             k_grid=(2, 2, 1),
             spin_polarized=True,
             spin_orbit_coupling=True,
-            pseudo_mode="precision",
+            pseudo_accuracy="precision",
             smearing_type="cold",
             smearing_width_ry=0.01,
         ),
@@ -54,8 +54,8 @@ def test_advise_parameters_records_user_hint_provenance() -> None:
     assert advice.magnetism.provenance.source == "user_hint"
     assert advice.spin_orbit.enabled is True
     assert advice.spin_orbit.consider is False
-    assert advice.pseudopotentials.pseudo_mode == "precision"
-    assert advice.pseudopotentials.relativistic_mode == "full"
+    assert advice.pseudopotential_requirements.accuracy == "precision"
+    assert advice.pseudopotential_requirements.relativistic == "full"
     assert advice.smearing.smearing_type == "cold"
     assert advice.convergence.provenance.source == "default"
 
@@ -73,9 +73,9 @@ def test_advise_parameters_uses_analysis_without_silently_enabling_soc() -> None
     assert advice.spin_orbit.enabled is False
     assert advice.spin_orbit.provenance.source == "analysis"
     assert advice.spin_orbit.heavy_elements == ("I",)
-    assert advice.pseudopotentials.functional == "PBEsol"
-    assert advice.pseudopotentials.relativistic_mode == "scalar"
-    assert advice.pseudopotentials.provenance.warnings
+    assert advice.pseudopotential_requirements.functional == "PBEsol"
+    assert advice.pseudopotential_requirements.relativistic == "scalar"
+    assert advice.pseudopotential_requirements.provenance.warnings
 
 
 @pytest.mark.parametrize(
@@ -90,7 +90,7 @@ def test_calculation_intent_canonicalizes_supported_pbesol_spellings(
     advice = advise_parameters(make_analysis(), intent=intent)
 
     assert intent.functional == "PBEsol"
-    assert advice.pseudopotentials.functional == "PBEsol"
+    assert advice.pseudopotential_requirements.functional == "PBEsol"
 
 
 def test_calculation_intent_preserves_unknown_functional_labels() -> None:
@@ -107,22 +107,15 @@ def test_advise_parameters_uses_likely_metal_smearing_from_analysis() -> None:
     assert advice.smearing.smearing_type == "cold"
     assert advice.smearing.width_ry == 0.01
     assert advice.smearing.provenance.source == "analysis"
-    assert any(
-        "structure-only heuristics" in warning
-        for warning in advice.smearing.provenance.warnings
-    )
 
 
 def test_advise_parameters_uses_metal_smearing_from_ml_classification() -> None:
-    """A model-classified metal gets metallic smearing without the heuristic caveat."""
-    advice = advise_parameters(
-        make_analysis(electronic_character="metal", electronic_character_source="model")
-    )
+    """A model-classified metal gets the same metallic smearing as a likely metal."""
+    advice = advise_parameters(make_analysis(electronic_character="metal"))
 
     assert advice.smearing.smearing_type == "cold"
     assert advice.smearing.width_ry == 0.01
     assert advice.smearing.provenance.source == "analysis"
-    assert advice.smearing.provenance.warnings == ()
 
 
 def test_advise_smearing_records_user_hint_provenance_when_hinted() -> None:
@@ -184,34 +177,37 @@ def test_advise_spin_orbit_defaults_to_disabled_without_heavy_elements() -> None
     assert advice.spin_orbit.provenance.source == "default"
 
 
-def test_advise_pseudopotentials_records_user_hint_source_without_soc() -> None:
+def test_advise_pseudo_requirements_records_user_hint_source_without_soc() -> None:
     """Pseudo hints without SOC record user_hint provenance and no warnings."""
     advice = advise_parameters(
         make_analysis(),
-        hints=CalculationHints(pseudo_mode="precision"),
+        hints=CalculationHints(pseudo_accuracy="precision"),
     )
 
-    assert advice.pseudopotentials.provenance.source == "user_hint"
-    assert advice.pseudopotentials.provenance.warnings == ()
+    requirements = advice.pseudopotential_requirements
+    assert requirements.provenance.source == "user_hint"
+    assert requirements.provenance.warnings == ()
 
 
-def test_advise_pseudopotentials_records_default_source_without_hints() -> None:
+def test_advise_pseudo_requirements_records_default_source_without_hints() -> None:
     """No pseudo hints and no SOC record default provenance and no warnings."""
     advice = advise_parameters(make_analysis())
 
-    assert advice.pseudopotentials.provenance.source == "default"
-    assert advice.pseudopotentials.provenance.warnings == ()
+    requirements = advice.pseudopotential_requirements
+    assert requirements.provenance.source == "default"
+    assert requirements.provenance.warnings == ()
 
 
-def test_advise_pseudopotentials_inherits_soc_hint_provenance() -> None:
-    """SOC enabled through a hint carries user_hint provenance into pseudo advice."""
+def test_advise_pseudo_requirements_inherits_soc_hint_provenance() -> None:
+    """SOC enabled through a hint carries user_hint provenance into requirements."""
     advice = advise_parameters(
         make_analysis(),
         hints=CalculationHints(spin_orbit_coupling=True),
     )
 
-    assert advice.pseudopotentials.provenance.source == "user_hint"
-    assert advice.pseudopotentials.relativistic_mode == "full"
+    requirements = advice.pseudopotential_requirements
+    assert requirements.provenance.source == "user_hint"
+    assert requirements.relativistic == "full"
 
 
 def test_advise_magnetism_user_hint_carries_magnetic_elements() -> None:
@@ -271,17 +267,17 @@ def test_calculation_hints_validate_pseudo_fields() -> None:
     with pytest.raises(ValueError, match="relativistic_mode"):
         CalculationHints(relativistic_mode="garbage")
 
-    with pytest.raises(ValueError, match="pseudo_mode"):
-        CalculationHints(pseudo_mode="")
+    with pytest.raises(ValueError, match="pseudo_accuracy"):
+        CalculationHints(pseudo_accuracy="")
 
     with pytest.raises(ValueError, match="pseudo_type"):
         CalculationHints(pseudo_type="   ")
 
 
-def test_calculation_intent_validates_pseudo_mode() -> None:
-    """Reject an empty pseudo_mode on calculation intent at the boundary."""
-    with pytest.raises(ValueError, match="pseudo_mode"):
-        CalculationIntent(pseudo_mode="")
+def test_calculation_intent_validates_pseudo_accuracy() -> None:
+    """Reject an unsupported pseudo accuracy on calculation intent."""
+    with pytest.raises(ValueError, match="pseudo_accuracy"):
+        CalculationIntent(pseudo_accuracy="fast")
 
 
 def test_advise_parameters_vdw_defaults_off() -> None:

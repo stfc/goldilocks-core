@@ -11,11 +11,13 @@ No module-level cache is used — lifecycle ownership lives in the backend.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from pathlib import Path
 
 import numpy as np
 from pymatgen.core import Structure
 
+from goldilocks_core.assets import AssetStore
 from goldilocks_core.contracts import StructureFeatureVector
 from goldilocks_core.ml.model_registry import QrfKpointsConfig
 
@@ -59,17 +61,25 @@ class QrfResources:
 
 def _resolve_metallicity_artifacts(
     config: QrfKpointsConfig,
+    store: AssetStore,
     checkpoint: str | None,
     atom_init: str | None,
 ) -> tuple[str, str]:
-    """Resolve configured metallicity artifacts to local paths."""
-    from goldilocks_core.ml.models import resolve_artifact
-
+    """Resolve explicit or installed metallicity resources to local paths."""
+    if checkpoint is not None and atom_init is not None:
+        return checkpoint, atom_init
+    if config.metallicity_asset is None:
+        base = config.metallicity_model.location
+        return (
+            checkpoint or str(Path(base) / config.metallicity_checkpoint_file),
+            atom_init or str(Path(base) / config.metallicity_atom_init_file),
+        )
+    installed = store.resolve(
+        config.metallicity_asset.id, config.metallicity_asset.version
+    )
     return (
-        checkpoint
-        or resolve_artifact(config.metallicity, config.metallicity_checkpoint_file),
-        atom_init
-        or resolve_artifact(config.metallicity, config.metallicity_atom_init_file),
+        checkpoint or str(installed.path(config.metallicity_checkpoint_file)),
+        atom_init or str(installed.path(config.metallicity_atom_init_file)),
     )
 
 
@@ -78,22 +88,24 @@ def load_qrf_resources(
     *,
     metallicity_checkpoint: str | None = None,
     metallicity_atom_init: str | None = None,
+    asset_store: AssetStore | None = None,
 ) -> QrfResources:
-    """Load the QRF model, metallicity model, and atom-init path.
-
-    Resources are loaded fresh on each call. Callers that reuse the same
-    config across multiple structures should hold the returned
-    :class:`QrfResources` and call :func:`predict_kdistance_with_resources`
-    per structure to avoid repeated loading.
-    """
+    """Load installed QRF resources without performing network access."""
     from goldilocks_core.ml.models import load_model
     from goldilocks_core.ml.qrf.metallicity import load_metallicity_model
 
+    store = asset_store or AssetStore()
     checkpoint, atom_init = _resolve_metallicity_artifacts(
-        config, metallicity_checkpoint, metallicity_atom_init
+        config, store, metallicity_checkpoint, metallicity_atom_init
     )
+    model = config.model
+    if config.model_asset is not None:
+        installed = store.resolve(config.model_asset.id, config.model_asset.version)
+        model = replace(
+            model, source="local", location=str(installed.path(config.model_file))
+        )
     return QrfResources(
-        model=load_model(config.model),
+        model=load_model(model),
         metal_model=load_metallicity_model(checkpoint),
         atom_init=atom_init,
     )

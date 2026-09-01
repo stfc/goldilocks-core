@@ -1,5 +1,3 @@
-"""Structure input and analysis utilities."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,30 +8,15 @@ from goldilocks_core.contracts import StructureInput
 
 
 class StructureInputError(ValueError):
-    """A structure path or file cannot be used as a periodic structure."""
+    pass
 
 
 def load_structure(structure: StructureInput) -> Structure:
-    """Load a structure input into a pymatgen Structure.
+    """Load one structure from a path, or pass a Structure through.
 
-    Parameters
-    ----------
-    structure
-        Either a pymatgen Structure object or a path to a structure file.
-
-    Returns
-    -------
-    Structure
-        A pymatgen Structure instance.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the provided structure path does not exist.
-    StructureInputError
-        If the path is not a file or its format is not supported.
-    TypeError
-        If the input is neither a Structure nor a valid path-like value.
+    Raises FileNotFoundError when the path does not exist,
+    StructureInputError when it is not a file or pymatgen cannot parse it,
+    and TypeError for input types outside the StructureInput contract.
     """
     if isinstance(structure, Structure):
         return structure

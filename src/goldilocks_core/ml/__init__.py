@@ -1,5 +1,3 @@
-"""Machine-learning inference boundaries for Goldilocks."""
-
 from __future__ import annotations
 
 from goldilocks_core.ml.kindex import predict_kindex

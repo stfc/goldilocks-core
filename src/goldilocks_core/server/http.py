@@ -1,7 +1,7 @@
 """FastAPI transport over one process-owned Core service.
 
 A thin stateless transport: each endpoint parses the body with the shared
-deserializer, dispatches through one ``CoreService``
+deserializer, dispatches through one ``Service``
 held for the process lifetime, and returns the result's JSON form. Stage
 ``ValueError``\\ s map to 4xx responses with the message preserved; parser
 :class:`~goldilocks_core.server.request.RequestError`\\ s map to 422. Behind the

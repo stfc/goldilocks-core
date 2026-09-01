@@ -1,5 +1,3 @@
-"""Shipped runtime profiles composed from exact domain asset versions."""
-
 from goldilocks_core.assets.records import AssetReference, RuntimeProfile
 
 DEFAULT_PROFILE = RuntimeProfile(
@@ -15,7 +13,6 @@ PROFILES = {DEFAULT_PROFILE.name: DEFAULT_PROFILE}
 
 
 def profile(name: str) -> RuntimeProfile:
-    """Return a shipped profile by name."""
     try:
         return PROFILES[name]
     except KeyError as error:

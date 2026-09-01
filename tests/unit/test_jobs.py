@@ -29,7 +29,6 @@ from goldilocks_core.ml.model_registry import load_default_qrf_config
 
 
 def make_structure() -> Structure:
-    """Build a simple silicon structure."""
     return Structure(
         lattice=Lattice.cubic(4.0),
         species=["Si"],
@@ -38,7 +37,6 @@ def make_structure() -> Structure:
 
 
 def make_metadata() -> PseudoMetadata:
-    """Build synthetic pseudopotential metadata with cutoffs."""
     return PseudoMetadata(
         filepath="/pseudo/Si.UPF",
         filename="Si.UPF",
@@ -58,7 +56,6 @@ def make_metadata() -> PseudoMetadata:
 
 
 def test_run_core_job_recommend_matches_public_recommendation_shape() -> None:
-    """Run the configured job graph through Select for recommendation mode."""
     result = run_core_job(
         PresetRequest(
             structure=make_structure(),
@@ -75,7 +72,6 @@ def test_run_core_job_recommend_matches_public_recommendation_shape() -> None:
 
 
 def test_query_records_returns_only_requested_records() -> None:
-    """query_records computes the explicit output set, not a preset."""
     request = QueryRequest(
         structure=make_structure(),
         hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
@@ -95,7 +91,6 @@ def test_query_records_returns_only_requested_records() -> None:
 
 
 def test_query_records_reuses_caller_owned_runtime() -> None:
-    """A query leaves its caller-provided runtime open for reuse."""
     request = QueryRequest(
         structure=make_structure(),
         outputs=(StructureAnalysisRecord, ParameterAdvice),
@@ -112,7 +107,6 @@ def test_query_records_reuses_caller_owned_runtime() -> None:
 
 
 def test_run_core_job_aggregates_kmesh_warnings() -> None:
-    """Surface Kmesh-stage provenance warnings at the job level."""
     result = run_core_job(
         PresetRequest(
             structure=make_structure(),
@@ -130,7 +124,6 @@ def test_run_core_job_aggregates_kmesh_warnings() -> None:
 
 
 def test_run_core_job_aggregates_advice_warnings() -> None:
-    """Surface scientific caveats in job-level warnings."""
     result = run_core_job(
         PresetRequest(
             structure=make_structure(),
@@ -145,7 +138,6 @@ def test_run_core_job_aggregates_advice_warnings() -> None:
 
 
 def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> None:
-    """The Python job runner uses the same configured default as the CLI."""
 
     class FakeQRF:
         q = [0.05, 0.5, 0.95]
@@ -205,7 +197,6 @@ def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> 
 
 
 def test_run_core_job_rejects_unknown_task() -> None:
-    """Tasks without a registered path raise at dispatch."""
     with pytest.raises(
         ValueError, match="No Core task registered for task='magnetic_nscf'"
     ):
@@ -220,7 +211,6 @@ def test_run_core_job_rejects_unknown_task() -> None:
 
 
 def test_run_core_job_reuses_caller_owned_runtime() -> None:
-    """A passed runtime remains open for subsequent jobs."""
     request = PresetRequest(
         structure=make_structure(),
         hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
@@ -237,7 +227,6 @@ def test_run_core_job_reuses_caller_owned_runtime() -> None:
 
 
 def test_run_core_job_generate_adds_generated_files() -> None:
-    """Run the configured job graph through Generate for generated files."""
     result = run_core_job(
         PresetRequest(
             structure=make_structure(),
@@ -252,7 +241,6 @@ def test_run_core_job_generate_adds_generated_files() -> None:
 
 
 def test_run_core_job_generate_with_caller_owned_runtime() -> None:
-    """Generate mode dispatches through a caller-owned runtime."""
     request = PresetRequest(
         structure=make_structure(),
         hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
@@ -268,7 +256,6 @@ def test_run_core_job_generate_with_caller_owned_runtime() -> None:
 
 
 def test_run_core_job_generate_with_output_dir_writes_bundle(tmp_path: Path) -> None:
-    """Run generate mode with output_dir and write a bundle directory."""
     output_dir = tmp_path / "bundle"
     result = run_core_job(
         PresetRequest(

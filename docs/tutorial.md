@@ -9,7 +9,7 @@ Install the default runtime assets, then use an explicit k-point hint for a
 deterministic first run that bypasses the k-point model:
 
 ```python
-from goldilocks_core import CalculationHints, CoreService, PresetRequest
+from goldilocks_core import CalculationHints, Service, PresetRequest
 from goldilocks_core.examples import structure
 
 request = PresetRequest(
@@ -17,7 +17,7 @@ request = PresetRequest(
     hints=CalculationHints(k_grid=(4, 4, 4)),
 )
 
-with CoreService() as core:
+with Service() as core:
     result = core.recommend(request)
 
 print(result.analysis.reduced_formula)
@@ -36,7 +36,7 @@ installed default pseudopotential table.
 Hints override only the fields they name:
 
 ```python
-from goldilocks_core import CalculationHints, CoreService, PresetRequest
+from goldilocks_core import CalculationHints, Service, PresetRequest
 
 request = PresetRequest(
     structure="structure.cif",
@@ -50,7 +50,7 @@ request = PresetRequest(
     ),
 )
 
-with CoreService() as core:
+with Service() as core:
     result = core.recommend(request)
 
 print(result.advice.magnetism.provenance.source)  # user_hint
@@ -66,7 +66,7 @@ Selection consumes validated metadata records, not raw UPF contents. To use a
 directory outside the asset store, point the request at it:
 
 ```python
-from goldilocks_core import CalculationHints, CoreService, PresetRequest
+from goldilocks_core import CalculationHints, Service, PresetRequest
 
 request = PresetRequest(
     structure="structure.cif",
@@ -74,7 +74,7 @@ request = PresetRequest(
     pseudo_root="pseudos",
 )
 
-with CoreService() as core:
+with Service() as core:
     result = core.recommend(request)
 
 for pseudo in result.selection.pseudopotentials:
@@ -88,7 +88,7 @@ raises an explicit selection error; Core does not create fallback selections.
 ## Generate input files
 
 ```python
-from goldilocks_core import CalculationHints, CoreService, PresetRequest
+from goldilocks_core import CalculationHints, Service, PresetRequest
 
 request = PresetRequest(
     structure="structure.cif",
@@ -96,7 +96,7 @@ request = PresetRequest(
     pseudo_table="pseudodojo-pbesol-efficiency-sr",
 )
 
-with CoreService() as core:
+with Service() as core:
     result = core.generate(request)
 
 qe_input = result.generated_files[0]
@@ -107,7 +107,7 @@ print(qe_input.content)
 To publish the generated files, pass a new output directory:
 
 ```python
-with CoreService() as core:
+with Service() as core:
     result = core.generate(request, output_dir="run")
 
 print(result.bundle.path)
@@ -124,7 +124,7 @@ A `QueryRequest` names the Python record types needed by the caller. The DAG
 runs only their prerequisites:
 
 ```python
-from goldilocks_core import CalculationHints, CoreService, QueryRequest
+from goldilocks_core import CalculationHints, Service, QueryRequest
 from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
 
 request = QueryRequest(
@@ -133,7 +133,7 @@ request = QueryRequest(
     hints=CalculationHints(k_grid=(4, 4, 4)),
 )
 
-with CoreService() as core:
+with Service() as core:
     records = core.compute(request)
 
 print(records[StructureAnalysisRecord].crystal_system)
@@ -149,9 +149,9 @@ Keep one service alive across requests. It lazily loads configured models,
 serializes dispatch over shared state, and releases owned resources on close:
 
 ```python
-from goldilocks_core import CoreService, PresetRequest
+from goldilocks_core import Service, PresetRequest
 
-with CoreService() as core:
+with Service() as core:
     first = core.recommend(PresetRequest(structure="Si.cif"))
     second = core.recommend(PresetRequest(structure="Ge.cif"))
     print(core.describe_tasks())
@@ -174,7 +174,7 @@ records = query_records(
 ## Select a local k-point model
 
 ```python
-from goldilocks_core import CoreService, PresetRequest
+from goldilocks_core import Service, PresetRequest
 from goldilocks_core.contracts import ModelSpec
 
 spec = ModelSpec(
@@ -187,7 +187,7 @@ spec = ModelSpec(
     location="model.joblib",
 )
 
-with CoreService() as core:
+with Service() as core:
     result = core.recommend(
         PresetRequest(structure="structure.cif", kmesh_model=spec)
     )
@@ -236,4 +236,4 @@ uv run goldilocks serve mcp
 
 The HTTP server exposes operation and discovery endpoints. The MCP stdio server
 exposes the same operations and discovery as six typed tools. Both keep one
-`CoreService` alive for the server process.
+`Service` alive for the server process.

@@ -1,10 +1,3 @@
-"""Composition + structure + SOAP + lattice features for the QRF model.
-
-The extractor owns the ordered 483-value schema. The model registry declares
-that schema and owns the feature-producing settings used for one artifact.
-Heavy dependencies are imported lazily so importing this module stays cheap.
-"""
-
 from __future__ import annotations
 
 import inspect
@@ -57,7 +50,6 @@ def extract_structure_features(
     structure: Structure,
     settings: QrfFeatureSettings,
 ) -> np.ndarray:
-    """Return the ordered composition, structure, SOAP, and lattice block."""
     return np.concatenate(
         [
             _composition_features(structure, settings),
@@ -74,7 +66,6 @@ def extract_qrf_features(
     atom_init_path: str,
     settings: QrfFeatureSettings,
 ) -> StructureFeatureVector:
-    """Assemble the extractor-owned 483-value QRF feature schema."""
     from .metallicity import metal_features
 
     structure_block = extract_structure_features(structure, settings)
@@ -101,7 +92,6 @@ def extract_qrf_features(
 
 
 def _require_finite(values: object, block_name: str) -> np.ndarray:
-    """Return a float array after rejecting NaN and both infinities."""
     converted = np.asarray(values, dtype=float)
     if not np.isfinite(converted).all():
         raise ValueError(f"{block_name} contains non-finite values.")

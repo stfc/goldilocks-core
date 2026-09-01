@@ -1,5 +1,3 @@
-"""Generate-stage input writers for completed Core recommendations."""
-
 from __future__ import annotations
 
 from goldilocks_core.generation.errors import GenerationError

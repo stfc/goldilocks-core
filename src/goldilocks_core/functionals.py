@@ -1,5 +1,3 @@
-"""Canonical exchange-correlation functional labels."""
-
 from __future__ import annotations
 
 import re
@@ -24,11 +22,6 @@ _RECOGNIZED_LABELS = {
 
 
 def normalize_functional_label(value: object) -> str | None:
-    """Return the canonical label for a supported functional spelling.
-
-    Unknown labels are stripped but otherwise preserved so they cannot be
-    silently treated as a different functional.
-    """
     if not isinstance(value, str):
         return None
 

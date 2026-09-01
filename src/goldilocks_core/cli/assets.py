@@ -1,5 +1,3 @@
-"""Console operations over domain-owned runtime asset catalogues."""
-
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -12,7 +10,6 @@ from goldilocks_core.pseudo.registry import load_tables
 
 
 def catalogue() -> dict[str, AssetInstallation]:
-    """Merge domain installations and reject duplicate asset identifiers."""
     installations = (
         *(AssetInstallation(spec) for spec in model_asset_specs()),
         *table_installations(),
@@ -29,7 +26,6 @@ def catalogue() -> dict[str, AssetInstallation]:
 def references(
     name: str, entries: Mapping[str, AssetInstallation] | None = None
 ) -> tuple[AssetInstallation, ...]:
-    """Resolve one asset id, bare registry table id, or shipped profile."""
     entries = dict(entries or catalogue())
     if name in entries:
         return (entries[name],)
@@ -58,7 +54,6 @@ def references(
 def _table_reference(
     name: str, entries: Mapping[str, AssetInstallation]
 ) -> AssetInstallation | None:
-    """Map one bare pseudopotential-table id to its namespaced asset."""
     try:
         table = load_tables()[name]
     except KeyError:
@@ -69,7 +64,6 @@ def _table_reference(
 def install(
     name: str, *, store: AssetStore | None = None
 ) -> tuple[InstalledAsset, ...]:
-    """Install one asset or every exact asset in a shipped profile."""
     target = store or AssetStore()
     return tuple(
         target.install(registration.spec, registration.prepare)
@@ -80,7 +74,6 @@ def install(
 def statuses(
     name: str, *, store: AssetStore | None = None
 ) -> tuple[tuple[str, str, str], ...]:
-    """Return id, version, and integrity status for an asset or profile."""
     target = store or AssetStore()
     return tuple(
         (
@@ -93,7 +86,6 @@ def statuses(
 
 
 def verify(name: str, *, store: AssetStore | None = None) -> tuple[InstalledAsset, ...]:
-    """Verify one asset or every exact asset in a shipped profile."""
     target = store or AssetStore()
     return tuple(
         target.verify(registration.spec.id, registration.spec.version)

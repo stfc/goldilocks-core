@@ -1,5 +1,3 @@
-"""Normalize verified PseudoDojo archives into one installed table."""
-
 from __future__ import annotations
 
 import hashlib
@@ -27,7 +25,6 @@ _MD5 = re.compile(r"[0-9a-fA-F]{32}")
 
 
 def preparer(table: PseudoTable):
-    """Return an asset preparer bound to one PseudoDojo table declaration."""
     if table.provider != "pseudodojo":
         raise ValueError(f"not a PseudoDojo table: {table.id}")
 
@@ -55,7 +52,6 @@ def preparer(table: PseudoTable):
 
 
 def _reports(archive: Path) -> dict[str, dict[str, Any]]:
-    """Read and validate every PseudoDojo report before extracting UPFs."""
     reports: dict[str, dict[str, Any]] = {}
     with tarfile.open(archive, "r:gz") as tar:
         for member in tar.getmembers():
@@ -150,7 +146,6 @@ def _extract_pseudos(
     table: PseudoTable,
     reports: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Extract UPFs only after provider, report, and header facts agree."""
     entries: list[dict[str, Any]] = []
     if table.charge_density_dual is None:
         raise PseudoImportError(

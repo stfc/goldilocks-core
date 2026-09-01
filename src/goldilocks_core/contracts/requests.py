@@ -30,26 +30,13 @@ def _validate_pseudo_source(
 
 @dataclass(frozen=True, slots=True)
 class PresetRequest:
-    """Operator request for a named-preset Core run (recommend/generate).
+    """One complete recommend-or-generate job.
 
-    Passed to :func:`run_core_job` (or a dispatcher's ``recommend``/``generate``).
-    ``mode`` selects the preset; ``output_dir`` is meaningful only with
-    ``generate``.
-
-    Attributes:
-        structure: structure input — a pymatgen Structure or a path to a
-            structure file.
-        intent: what to calculate.
-        hints: optional operator overrides.
-        mode: preset mode: ``recommend`` or ``generate``.
-        pseudo_metadata: caller-supplied pseudopotential metadata; when provided
-            it takes precedence over filesystem-backed sources.
-        pseudo_root: optional operator-managed UPF root.
-        pseudo_table: optional exact registered table identifier.
-        output_dir: optional output directory, meaningful only with
-            ``generate``. The generate entrypoint handles publishing there.
-        kmesh_model: optional local k-index model spec; when set, the SCF path
-            uses it for k-point selection instead of the default QRF model.
+    Exactly one pseudopotential source may be set: ``pseudo_metadata``
+    (in-memory records), ``pseudo_root`` (operator-managed directory), or
+    ``pseudo_table`` (registered asset-store table). All three unset falls
+    back to the registered default table. ``output_dir`` publishes a bundle
+    and only applies to generate jobs.
     """
 
     structure: StructureInput
@@ -63,7 +50,6 @@ class PresetRequest:
     kmesh_model: ModelSpec | None = None
 
     def __post_init__(self) -> None:
-        """Validate preset mode and pseudopotential source references."""
         if self.mode not in {"recommend", "generate"}:
             raise ValueError(f"Unsupported Core job mode: {self.mode}")
         if self.pseudo_metadata is not None and not isinstance(
@@ -80,7 +66,6 @@ class PresetRequest:
         )
 
     def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary."""
         return {
             "structure": to_jsonable(self.structure),
             "intent": to_jsonable(self.intent),
@@ -96,21 +81,12 @@ class PresetRequest:
 
 @dataclass(frozen=True, slots=True)
 class QueryRequest:
-    """Operator request for an explicit record query.
+    """One compute job returning only the named record types.
 
-    Passed to :func:`query_records` (or a dispatcher's ``compute``). ``outputs``
-    is required: it names the DAG record types to compute.
-
-    Attributes:
-        structure: structure input — a pymatgen Structure or a path to a
-            structure file.
-        outputs: requested DAG record types (required, non-None).
-        intent: what to calculate.
-        hints: optional operator overrides.
-        pseudo_metadata: caller-supplied metadata, which takes source precedence.
-        pseudo_root: optional operator-managed UPF root.
-        pseudo_table: optional exact registered table identifier.
-        kmesh_model: optional local k-index model spec.
+    ``outputs`` names record types resolved through the Core registry.
+    Exactly one pseudopotential source may be set: ``pseudo_metadata``,
+    ``pseudo_root``, or ``pseudo_table``; all unset falls back to the
+    registered default table.
     """
 
     structure: StructureInput
@@ -123,7 +99,6 @@ class QueryRequest:
     kmesh_model: ModelSpec | None = None
 
     def __post_init__(self) -> None:
-        """Validate pseudopotential source references."""
         if self.pseudo_metadata is not None and not isinstance(
             self.pseudo_metadata, tuple
         ):
@@ -138,7 +113,6 @@ class QueryRequest:
         )
 
     def to_dict(self) -> JsonDict:
-        """Return a JSON-serializable dictionary with stable record ids."""
         return {
             "structure": to_jsonable(self.structure),
             "outputs": [record_type_id(output_type) for output_type in self.outputs],

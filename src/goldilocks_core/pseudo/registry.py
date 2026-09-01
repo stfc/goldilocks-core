@@ -1,5 +1,3 @@
-"""Validated domain registry for complete pseudopotential-table assets."""
-
 from __future__ import annotations
 
 import math
@@ -55,13 +53,11 @@ _OPTIONAL_TABLE_FIELDS = frozenset(
 
 
 class InvalidPseudoRegistry(ValueError):
-    """A pseudopotential registry violates its domain schema."""
+    pass
 
 
 @dataclass(frozen=True, slots=True)
 class PseudoTable:
-    """Scientific table facts and its complete acquisition description."""
-
     id: str
     provider: str
     upstream_table: str
@@ -78,7 +74,6 @@ class PseudoTable:
 
 
 def load_tables(path: PathLike | None = None) -> dict[str, PseudoTable]:
-    """Load and validate complete table entries."""
     registry_path = path or os.environ.get(PSEUDO_REGISTRY_ENV)
     try:
         if registry_path:
@@ -110,7 +105,6 @@ def load_tables(path: PathLike | None = None) -> dict[str, PseudoTable]:
 
 
 def default_table(tables: dict[str, PseudoTable] | None = None) -> PseudoTable:
-    """Return the single validated table marked as the shipped default."""
     loaded = tables or load_tables()
     defaults = [table for table in loaded.values() if table.default]
     if len(defaults) != 1:
@@ -122,12 +116,10 @@ def default_table(tables: dict[str, PseudoTable] | None = None) -> PseudoTable:
 
 
 def table_asset_specs(path: PathLike | None = None) -> tuple[AssetSpec, ...]:
-    """Return all pseudopotential asset declarations."""
     return tuple(table.asset for table in load_tables(path).values())
 
 
 def _parse_table(table_id: str, entry: Any) -> PseudoTable:
-    """Parse one table without deriving acquisition data in Python."""
     if not isinstance(table_id, str) or not isinstance(entry, dict):
         raise InvalidPseudoRegistry(
             "table identifiers and declarations must be objects"

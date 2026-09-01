@@ -1,5 +1,3 @@
-"""Convergence advice policy for the Advise stage."""
-
 from __future__ import annotations
 
 from goldilocks_core.advice._hints import has_hint
@@ -15,12 +13,6 @@ DEFAULT_ELECTRON_MAXSTEP = 80
 
 
 def advise_convergence(hints: ConvergenceHints) -> ConvergenceAdvice:
-    """Return SCF convergence advice with user hints applied.
-
-    ``None`` means "let Core decide"; a non-None value overrides. The
-    ``is not None`` check (not ``or``) honours that contract and stays correct
-    if the boundary validation ever loosens to admit falsy non-None values.
-    """
     if has_hint(hints):
         return ConvergenceAdvice(
             conv_thr=hints.conv_thr if hints.conv_thr is not None else DEFAULT_CONV_THR,

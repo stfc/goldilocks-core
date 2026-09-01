@@ -9,8 +9,6 @@ TestClient = pytest.importorskip("fastapi.testclient").TestClient
 
 
 class _CountingService(Service):
-    """Record preset calls made through one service instance."""
-
     def __init__(self) -> None:
         super().__init__()
         self.preset_calls = 0
@@ -21,7 +19,6 @@ class _CountingService(Service):
 
 
 def test_http_reuses_one_service_across_requests(request_body) -> None:
-    """Serve multiple requests through the same process service."""
     service = _CountingService()
     try:
         with TestClient(create_app(service)) as client:
@@ -37,7 +34,6 @@ def test_http_reuses_one_service_across_requests(request_body) -> None:
 
 
 def test_http_closes_its_owned_service_on_shutdown() -> None:
-    """Close the process service (and its runtime) when the app lifespan ends."""
     app = create_app()
 
     with TestClient(app) as client:

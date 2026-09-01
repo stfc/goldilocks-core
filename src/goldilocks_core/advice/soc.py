@@ -1,5 +1,3 @@
-"""Spin-orbit coupling advice policy for the Advise stage."""
-
 from __future__ import annotations
 
 from goldilocks_core.contracts import (
@@ -14,6 +12,8 @@ def advise_spin_orbit(
     analysis: StructureAnalysisRecord,
     hints: SpinHints,
 ) -> SpinOrbitAdvice:
+    """SOC is never auto-enabled. Heavy elements set ``consider=True``;
+    the operator must set ``spin_orbit_coupling=True`` to enable it."""
     if hints.spin_orbit_coupling is not None:
         return SpinOrbitAdvice(
             enabled=hints.spin_orbit_coupling,

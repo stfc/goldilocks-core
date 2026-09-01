@@ -42,7 +42,6 @@ def test_registry_has_one_exact_default() -> None:
 
 
 def test_registry_rejects_unknown_table_fields(tmp_path: Path) -> None:
-    """Do not silently accept an unversioned registry schema extension."""
     registry = tmp_path / "registry.toml"
     registry.write_text(
         """

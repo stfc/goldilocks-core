@@ -1,5 +1,3 @@
-"""Load complete QRF runtime configuration and asset declarations."""
-
 from __future__ import annotations
 
 import os
@@ -18,8 +16,6 @@ _REGISTRY_RESOURCE = "registry.toml"
 
 @dataclass(frozen=True, slots=True)
 class QrfFeatureSettings:
-    """Settings used to reproduce the QRF feature vector."""
-
     composition_featurizers: tuple[str, ...]
     element_property_preset: str
     impute_nan: bool
@@ -41,8 +37,6 @@ class QrfFeatureSettings:
 
 @dataclass(frozen=True, slots=True)
 class QrfKpointsConfig:
-    """Model behavior and exact runtime assets required for QRF inference."""
-
     model: ModelSpec
     model_asset: AssetSpec | None
     model_file: str
@@ -56,7 +50,6 @@ class QrfKpointsConfig:
 
 
 def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
-    """Load QRF configuration from an explicit, environment, or packaged TOML."""
     registry_path = path or os.environ.get(MODEL_REGISTRY_ENV)
     if registry_path is None:
         registry = resources.files("goldilocks_core.ml").joinpath(_REGISTRY_RESOURCE)
@@ -111,7 +104,6 @@ def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
 
 
 def model_asset_specs(path: PathLike | None = None) -> tuple[AssetSpec, ...]:
-    """Return every shipped model asset in the selected registry."""
     config = load_default_qrf_config(path)
     return tuple(
         spec

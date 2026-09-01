@@ -1,13 +1,3 @@
-"""The SCF task: run context, stage graph, and preset result assembly.
-
-This is the one calculation task the runtime ships with. It owns the SCF
-run context (request data plus the runtime services the SCF stages need), the
-stage adapters that plug the pure stage functions into the generic graph, and
-the assembly of a full ``CoreResult`` from a preset's records. New tasks
-(nscf, phonons) bring their own context and stage graph; they do not edit the
-generic executor or this module.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -47,12 +37,6 @@ from goldilocks_core.selection import select_pseudopotentials
 
 @dataclass(frozen=True, slots=True)
 class ScfContext:
-    """Request data and runtime services for the SCF task graph.
-
-    Model services and the pseudopotential source resolver are runtime-owned
-    or request-scoped. Source resolution remains lazy until Select runs.
-    """
-
     structure_input: StructureInput
     kmesh_advisor: KMeshAdvisor
     metallicity_classifier: Callable[
@@ -161,7 +145,6 @@ def build_scf_context(
     request: PresetRequest | QueryRequest,
     runtime: Runtime,
 ) -> ScfContext:
-    """Build a fresh SCF run context from a request and the runtime's services."""
     backend: KMeshAdvisor = runtime.kmesh_service
     if request.kmesh_model is not None:
         backend = ml_kmesh_advisor(request.kmesh_model)
@@ -183,7 +166,6 @@ def assemble_core_result(
     request: PresetRequest,
     records: Records,
 ) -> Result:
-    """Assemble a full SCF preset result from type-keyed graph records."""
     analysis = records[StructureAnalysisRecord]
     advice = records[ParameterAdvice]
     k_points = records[KPointSelection]
@@ -207,7 +189,6 @@ def assemble_core_result(
 
 
 def _advice_warnings(advice: ParameterAdvice) -> tuple[str, ...]:
-    """Return warnings from every advice decision."""
     return _unique_warnings(
         advice.smearing.provenance.warnings,
         advice.magnetism.provenance.warnings,
@@ -219,7 +200,6 @@ def _advice_warnings(advice: ParameterAdvice) -> tuple[str, ...]:
 
 
 def _unique_warnings(*groups: tuple[str, ...]) -> tuple[str, ...]:
-    """Return warnings in first-seen order without duplicates."""
     return tuple(dict.fromkeys(warning for group in groups for warning in group))
 
 

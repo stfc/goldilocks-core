@@ -18,7 +18,6 @@ from goldilocks_core.contracts import PseudoMetadata
 def test_elemental_metal_uses_modest_cold_smearing_in_qe_rydberg_units(
     pseudo_metadata_factory: Callable[..., PseudoMetadata],
 ) -> None:
-    """Metal heuristics should produce the documented conservative QE starting point."""
     aluminium = Structure(Lattice.cubic(4.05), ["Al"], [[0.0, 0.0, 0.0]])
 
     result = run_core_job(
@@ -41,7 +40,6 @@ def test_elemental_metal_uses_modest_cold_smearing_in_qe_rydberg_units(
 
 
 def test_heavy_element_prompts_for_soc_without_silently_enabling_it() -> None:
-    """Structure-only evidence is insufficient to incur SOC cost automatically."""
     iodine = Structure(Lattice.cubic(7.0), ["I"], [[0.0, 0.0, 0.0]])
 
     result = run_core_job(
@@ -62,7 +60,6 @@ def test_heavy_element_prompts_for_soc_without_silently_enabling_it() -> None:
 def test_explicit_soc_couples_fully_relativistic_pseudos_to_qe_noncollinear_flags(
     pseudo_metadata_factory: Callable[..., PseudoMetadata],
 ) -> None:
-    """An explicit SOC decision must propagate through selection and generation."""
     iodine = Structure(Lattice.cubic(7.0), ["I"], [[0.0, 0.0, 0.0]])
 
     result = run_core_job(
@@ -88,7 +85,6 @@ def test_pseudopotential_functional_must_match_calculation_functional(
     silicon_structure: Structure,
     pseudo_metadata_factory: Callable[..., PseudoMetadata],
 ) -> None:
-    """Selection must not silently mix PBE and PBEsol datasets."""
     pbe = pseudo_metadata_factory("Si", functional="PBE", root=Path("/pbe"))
     pbesol = pseudo_metadata_factory("Si", functional="PBEsol", root=Path("/pbesol"))
 

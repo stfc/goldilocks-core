@@ -1,5 +1,3 @@
-"""Resolve k-point hints into a mesh selection."""
-
 from __future__ import annotations
 
 from pymatgen.core import Structure
@@ -18,12 +16,8 @@ def resolve_kpoints(
     hints: KmeshHints,
     backend: KMeshAdvisor,
 ) -> KPointSelection:
-    """Resolve operator k-point hints into a mesh, else delegate to a model.
-
-    Explicit ``k_grid`` wins over ``k_spacing``; both beat the model backend.
-    The model is only consulted when no hint is set, so hint-only requests
-    never load a model.
-    """
+    """``k_grid`` wins over ``k_spacing``; both bypass the model backend.
+    The model is only consulted when no hint is set."""
     if hints.k_grid is not None:
         warnings = (
             ("Both k_grid and k_spacing were provided; explicit grid wins.",)

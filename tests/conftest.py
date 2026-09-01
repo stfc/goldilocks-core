@@ -11,13 +11,11 @@ from goldilocks_core.contracts import PseudoCutoffs, PseudoMetadata
 
 @pytest.fixture
 def silicon_structure() -> Structure:
-    """Return a small ordered elemental structure for portable tests."""
     return Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
 
 
 @pytest.fixture
 def sodium_chloride_structure() -> Structure:
-    """Return a small ordered binary structure for cross-element tests."""
     return Structure(
         Lattice.cubic(5.64),
         ["Na", "Cl"],
@@ -27,7 +25,6 @@ def sodium_chloride_structure() -> Structure:
 
 @pytest.fixture
 def pseudo_metadata_factory() -> Callable[..., PseudoMetadata]:
-    """Return a factory for synthetic, network-free pseudopotential metadata."""
 
     def make_metadata(
         element: str,
@@ -62,7 +59,6 @@ def pseudo_metadata_factory() -> Callable[..., PseudoMetadata]:
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """Mark tests by architectural layer based on their containing directory."""
     layer_markers = {
         "unit": pytest.mark.unit,
         "integration": pytest.mark.integration,

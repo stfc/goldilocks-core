@@ -127,6 +127,8 @@ stable registered table ID. Without an explicit source, Select chooses a
 compatible registered table. Resolution happens only when selected Records
 depend on pseudopotentials.
 
-Transport adapters expose only source variants appropriate to their seam:
-HTTP accepts inline structures and stable table IDs; CLI and local MCP may also
-accept local structure and pseudopotential paths.
+Transport adapters expose only source variants appropriate to their seam.
+HTTP and MCP accept inline structures and stable registered table IDs. They do
+not accept structure paths, pseudopotential roots or metadata payloads, model
+locations, or publication paths. Python and CLI retain trusted local sources
+and output targets.

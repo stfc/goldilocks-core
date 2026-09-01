@@ -144,6 +144,11 @@ the archive part. The server stores neither. Use `GET /capabilities` and
 ## MCP
 
 Local stdio MCP exposes `capabilities`, `inspect_structure`, and `compute`.
-Compute accepts the same draft and selection shape, but local sources may be
-paths. Omitted output automatically publishes complete DFT Input Data. Explicit
-`memory`, `directory`, and `archive` output variants are available.
+Compute accepts the same inline draft, optional registered table ID, and
+selection shape as HTTP. Omitted output automatically publishes complete DFT
+Input Data to a server-chosen directory. Explicit `memory` output suppresses
+publication.
+
+MCP does not accept structure paths, pseudopotential roots, model locations, or
+publication paths. Use the CLI or Python interface for trusted local filesystem
+configuration.

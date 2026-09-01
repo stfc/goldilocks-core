@@ -9,11 +9,11 @@ optional ``[http]`` extra; importing :mod:`goldilocks_core` never imports FastAP
 ``DimensionalityClassificationError`` (an ``Exception`` subclass, not
 ``ValueError``) is mapped explicitly to 422.
 
-Endpoints accept only the calculation itself — an inline Structure Source,
-intent, hints, and (for queries) the requested record types. Deployment
-configuration is server-side: models, pseudopotentials, and output locations
-are resolved from the server's own environment, so no request body names
-server-side paths or loadable artifacts.
+Scientific endpoints accept inline Structure Sources, intent, hints, a
+registered pseudopotential-table ID, and a Preset or Record selection.
+Pseudopotential contents, models, and publication locations are resolved from
+the server's environment; request bodies never name server paths or loadable
+artifacts.
 """
 
 from __future__ import annotations

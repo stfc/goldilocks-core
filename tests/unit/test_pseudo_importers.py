@@ -75,7 +75,7 @@ def install_dojo_fixture(
     upf: bytes = UPF,
     report_functional: object = "PBEsol",
     table_functional: str = "PBEsol",
-) -> InstalledAsset:
+) -> tuple[InstalledAsset, PseudoTable]:
     """Install one synthetic PseudoDojo table."""
     upfs = tmp_path / "upfs.tgz"
     reports = tmp_path / "reports.tgz"
@@ -111,7 +111,7 @@ def install_sssp_fixture(
     *,
     upf: bytes = UPF,
     sidecar_functional: str | None = None,
-) -> InstalledAsset:
+) -> tuple[InstalledAsset, PseudoTable]:
     """Install one synthetic SSSP table."""
     upfs = tmp_path / "table.tar.gz"
     sidecar = tmp_path / "table.json"
@@ -189,7 +189,7 @@ def test_sssp_normalizes_sidecar_and_verified_upfs(tmp_path: Path) -> None:
 
 def test_sssp_preserves_nonrelativistic_upf_provenance(tmp_path: Path) -> None:
     upf = UPF.replace(b'relativistic="scalar"', b'relativistic="non-relativistic"')
-    installed = install_sssp_fixture(tmp_path, upf=upf)
+    installed, _ = install_sssp_fixture(tmp_path, upf=upf)
 
     metadata = load_installed_table(installed)
 

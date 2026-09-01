@@ -1,19 +1,10 @@
-"""Shared request deserialization for HTTP and MCP transports.
+"""Shared deserialization for HTTP and MCP scientific requests.
 
-One :func:`from_dict` parser is used by both transports: it turns a JSON-like
-mapping into a validated :class:`~goldilocks_core.contracts.PresetRequest`
-(when no ``outputs`` are named) or
-:class:`~goldilocks_core.contracts.QueryRequest` (when ``outputs`` names a
-record subset). Unknown keys and bad types are rejected with named-field
-:class:`RequestError` messages; stage ``ValueError``\\ s are not caught here and
-surface to the transport's error handler.
-
-The parser accepts only the calculation itself: an inline Structure Source,
-the calculation intent, scientist hints, and (for queries) the requested
-record types. Deployment configuration is never request data — model and
-pseudopotential selection and output locations are resolved by the server
-from its own environment, so no transport field names server-side paths or
-loadable artifacts.
+Transports accept an inline Structure Source, calculation intent, scientist
+hints, one registered pseudopotential-table ID, and a computation selection.
+The server resolves paths, pseudopotential contents, models, and publication
+locations from its own environment. The wire carries scientific content and
+registered identity, never server paths or loadable artifacts.
 """
 
 from __future__ import annotations
@@ -30,7 +21,6 @@ from goldilocks_core.contracts import (
     DirectoryOutput,
     InlineStructureSource,
     OutputTarget,
-    PathStructureSource,
     PresetSelection,
     RecordSelection,
     StructureSource,
@@ -42,13 +32,12 @@ __all__ = [
     "TransportOutput",
     "compute_from_dict",
     "inspection_source_from_dict",
-    "local_output_from_dict",
+    "mcp_output_from_dict",
 ]
 
 _INTENT_FIELDS = frozenset(field.name for field in fields(CalculationIntent))
 _HINT_FIELDS = frozenset(field.name for field in fields(CalculationHints))
 _DRAFT_FIELDS = frozenset({"structure", "intent", "hints", "pseudo_table"})
-_LOCAL_DRAFT_FIELDS = _DRAFT_FIELDS | {"pseudo_root"}
 
 
 class RequestError(ValueError):
@@ -57,26 +46,19 @@ class RequestError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class TransportOutput:
-    kind: Literal["memory", "archive", "directory", "automatic"]
+    kind: Literal["memory", "automatic"]
     target: OutputTarget | None
 
 
-def inspection_source_from_dict(
-    data: Mapping[str, Any], *, allow_path: bool = False
-) -> StructureSource:
+def inspection_source_from_dict(data: Mapping[str, Any]) -> StructureSource:
     body = _mapping(data, "Request body")
     _reject_unknown(body, frozenset({"source"}), "request")
     if "source" not in body:
         raise RequestError("Request body requires 'source'.")
-    return _structure_source(body["source"], allow_path=allow_path)
+    return _structure_source(body["source"])
 
 
-def compute_from_dict(
-    data: Mapping[str, Any],
-    *,
-    allow_path: bool = False,
-    allow_local_assets: bool = False,
-) -> ComputeRequest:
+def compute_from_dict(data: Mapping[str, Any]) -> ComputeRequest:
     body = _mapping(data, "Request body")
     _reject_unknown(body, frozenset({"draft", "selection"}), "request")
     if "draft" not in body:
@@ -85,8 +67,7 @@ def compute_from_dict(
         raise RequestError("Request body requires 'selection'.")
 
     draft_data = _mapping(body["draft"], "Field 'draft'")
-    allowed_draft = _LOCAL_DRAFT_FIELDS if allow_local_assets else _DRAFT_FIELDS
-    _reject_unknown(draft_data, allowed_draft, "draft")
+    _reject_unknown(draft_data, _DRAFT_FIELDS, "draft")
     if "structure" not in draft_data:
         raise RequestError("Field 'draft' requires 'structure'.")
 
@@ -94,10 +75,9 @@ def compute_from_dict(
         intent = _contract(CalculationIntent, draft_data.get("intent"), "intent")
         hints = _contract(CalculationHints, draft_data.get("hints"), "hints")
         draft = CalculationDraft(
-            structure=_structure_source(draft_data["structure"], allow_path=allow_path),
+            structure=_structure_source(draft_data["structure"]),
             intent=intent,
             hints=hints,
-            pseudo_root=draft_data.get("pseudo_root"),
             pseudo_table=draft_data.get("pseudo_table"),
         )
         return ComputeRequest(draft=draft, selection=_selection(body["selection"]))
@@ -105,31 +85,16 @@ def compute_from_dict(
         raise RequestError(str(error)) from error
 
 
-def local_output_from_dict(
-    data: Mapping[str, Any] | None, *, default_automatic: bool
-) -> TransportOutput:
+def mcp_output_from_dict(data: Mapping[str, Any] | None) -> TransportOutput:
     if data is None:
-        return TransportOutput(
-            "automatic" if default_automatic else "memory",
-            DirectoryOutput() if default_automatic else None,
-        )
+        return TransportOutput("automatic", DirectoryOutput())
     output = _mapping(data, "Field 'output'")
-    _reject_unknown(output, frozenset({"kind", "path"}), "output")
-    kind = output.get("kind")
-    if kind == "memory":
-        if "path" in output:
-            raise RequestError("Memory output does not accept 'path'.")
-        return TransportOutput("memory", None)
-    if kind in {"directory", "archive"}:
-        path = output.get("path")
-        if path is None:
-            raise RequestError(f"{kind.title()} output requires 'path'.")
-        if kind == "directory":
-            return TransportOutput("directory", DirectoryOutput(path))
-        from goldilocks_core.contracts import ArchiveOutput
-
-        return TransportOutput("archive", ArchiveOutput(path))
-    raise RequestError("Field 'output.kind' must be memory, directory, or archive.")
+    _reject_unknown(output, frozenset({"kind"}), "output")
+    if output.get("kind") != "memory":
+        raise RequestError(
+            "MCP output must be omitted for automatic publication or set to memory."
+        )
+    return TransportOutput("memory", None)
 
 
 def _contract(contract_type: type, value: Any, name: str):
@@ -141,20 +106,21 @@ def _contract(contract_type: type, value: Any, name: str):
     return contract_type(**document)
 
 
-def _structure_source(value: Any, *, allow_path: bool) -> StructureSource:
+def _structure_source(value: Any) -> StructureSource:
     if isinstance(value, str):
-        if not allow_path:
-            raise RequestError("HTTP Structure Sources must use inline content.")
-        return PathStructureSource(value)
+        raise RequestError(
+            "Transports do not accept file paths. Read the file and pass its text "
+            "as an inline Structure Source."
+        )
     source = _mapping(value, "Field 'source'")
+    if source.get("kind") == "path" or "path" in source:
+        raise RequestError(
+            "Transports do not accept file paths. Read the file and pass its text "
+            "as an inline Structure Source."
+        )
     _reject_unknown(source, frozenset({"kind", "name", "content", "format"}), "source")
     kind = source.get("kind", "inline")
     if kind != "inline":
-        if kind == "path" and allow_path:
-            _reject_unknown(source, frozenset({"kind", "path"}), "source")
-            if "path" not in source:
-                raise RequestError("Path Structure Source requires 'path'.")
-            return PathStructureSource(source["path"])
         raise RequestError(f"Unsupported Structure Source kind: {kind!r}.")
     missing = [name for name in ("name", "content") if name not in source]
     if missing:

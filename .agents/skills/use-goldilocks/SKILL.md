@@ -71,7 +71,10 @@ uv run goldilocks compute STRUCTURE --preset generate --out RUN_DIR --json
 ```
 
 HTTP exposes `/capabilities`, `/inspect`, and `/compute`; local stdio MCP exposes
-`capabilities`, `inspect_structure`, and `compute`.
+`capabilities`, `inspect_structure`, and `compute`. Send inline structure content
+and, when needed, a registered Pseudopotential Set ID. HTTP and MCP do not
+accept structure paths, local pseudopotential sources, model locations, or
+publication paths.
 
 ## Completion check
 

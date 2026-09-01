@@ -88,10 +88,13 @@ HTTP Compute handlers execute concurrently over one process-owned Runtime.
 Task Graph declarations are immutable, execution state is request-local, and
 shared models synchronize only their first lazy load.
 
-Local MCP accepts inline structures or local paths and supports automatic,
-directory, archive, and memory output. Publication paths are absolute. HTTP and
-MCP remain optional imports. OpenAPI is exported from the application, and the
-Workbench imports generated TypeScript declarations from that document.
+Local MCP accepts inline structures and supports server-chosen automatic
+publication or memory output. HTTP and MCP may carry a stable registered
+Pseudopotential Set ID, but never structure paths, pseudopotential roots or
+metadata payloads, model locations, or publication paths. Python and CLI own
+trusted local filesystem controls. HTTP and MCP remain optional imports.
+OpenAPI is exported from the application, and the Workbench imports generated
+TypeScript declarations from that document.
 
 ## Runtime assets
 

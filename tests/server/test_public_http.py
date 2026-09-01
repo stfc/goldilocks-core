@@ -157,6 +157,10 @@ def test_http_returns_the_exact_archive_with_its_reviewed_result(
         "goldilocks-inputs.zip",
     )
     reviewed = json.loads(parts["result"][2])
+    assert reviewed["draft"]["pseudo_table"] == "fixture-table"
+    assert reviewed["draft"]["pseudo_root"] is None
+    assert reviewed["draft"]["pseudo_metadata"] is None
+    assert reviewed["draft"]["kmesh_model"] is None
     with zipfile.ZipFile(io.BytesIO(parts["archive"][2])) as archive:
         assert "inputs/qe.in" in archive.namelist()
         manifest = json.loads(archive.read("goldilocks.json"))
@@ -281,15 +285,28 @@ def test_http_does_not_relabel_unexpected_core_defects(
     assert response.status_code == 500
 
 
-def test_http_rejects_non_inline_sources_and_unknown_fields(test_service) -> None:
+def test_http_rejects_paths_and_deployment_configuration(test_service) -> None:
+    inline = {"name": "Si.cif", "content": ""}
     with TestClient(create_app(test_service)) as client:
         path_source = client.post(
             "/inspect", json={"source": "/server/inaccessible.cif"}
         )
+        path_draft = client.post(
+            "/compute",
+            json={
+                "draft": {
+                    "structure": {
+                        "kind": "path",
+                        "path": "/server/inaccessible.cif",
+                    }
+                },
+                "selection": {"records": ["analysis"]},
+            },
+        )
         unknown = client.post(
             "/compute",
             json={
-                "draft": {"structure": {"name": "Si.cif", "content": ""}},
+                "draft": {"structure": inline},
                 "selection": {"records": ["analysis"]},
                 "unexpected": True,
             },
@@ -297,11 +314,25 @@ def test_http_rejects_non_inline_sources_and_unknown_fields(test_service) -> Non
         directory = client.post(
             "/compute",
             json={
-                "draft": {"structure": {"name": "Si.cif", "content": ""}},
+                "draft": {"structure": inline},
                 "selection": {"records": ["analysis"]},
                 "output": {"kind": "directory", "path": "/server/output"},
             },
         )
+        deployment_fields = {
+            field: client.post(
+                "/compute",
+                json={
+                    "draft": {"structure": inline, field: value},
+                    "selection": {"records": ["analysis"]},
+                },
+            )
+            for field, value in (
+                ("pseudo_root", "/server/pseudos"),
+                ("pseudo_metadata", []),
+                ("kmesh_model", {"location": "/server/model.pkl"}),
+            )
+        }
 
     assert path_source.status_code == 422
     assert path_source.json()["error"]["kind"] == "invalid_request"
@@ -309,6 +340,11 @@ def test_http_rejects_non_inline_sources_and_unknown_fields(test_service) -> Non
         path_source.json()["error"]["details"]["validation_errors"][0]["path"]
         == "body.source"
     )
+    assert "Transports do not accept file paths" in path_source.text
+    assert "/server/inaccessible.cif" not in path_source.text
+    assert path_draft.status_code == 422
+    assert "Transports do not accept file paths" in path_draft.text
+    assert "/server/inaccessible.cif" not in path_draft.text
     assert unknown.status_code == 422
     assert any(
         item["path"] == "body.unexpected"
@@ -317,6 +353,10 @@ def test_http_rejects_non_inline_sources_and_unknown_fields(test_service) -> Non
     assert directory.status_code == 422
     assert directory.json()["error"]["kind"] == "invalid_request"
     assert "/server/output" not in directory.text
+    for field, response in deployment_fields.items():
+        assert response.status_code == 422
+        errors = response.json()["error"]["details"]["validation_errors"]
+        assert any(item["path"] == f"body.draft.{field}" for item in errors)
 
 
 def test_http_asset_not_installed_error_omits_server_paths(
@@ -453,6 +493,14 @@ def test_openapi_describes_canonical_json_and_archive_contracts(test_service) ->
     }
     request = schemas["ComputeRequest"]
     assert set(request["properties"]) == {"draft", "selection"}
+    draft = schemas["CalculationDraft"]
+    assert set(draft["properties"]) == {
+        "structure",
+        "intent",
+        "hints",
+        "pseudo_table",
+    }
+    assert draft["additionalProperties"] is False
     intent = schemas["CalculationIntent-Input"]["properties"]
     assert intent["pseudo_accuracy"]["enum"] == ["efficiency", "precision"]
     hints = schemas["CalculationHints-Input"]["properties"]

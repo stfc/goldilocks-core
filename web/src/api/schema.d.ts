@@ -391,9 +391,9 @@ export interface components {
             readonly provenance: components["schemas"]["Provenance"];
             /** Shift */
             readonly shift: readonly [
-                number,
-                number,
-                number
+                0 | 1,
+                0 | 1,
+                0 | 1
             ];
         };
         /** LatticeDocument */

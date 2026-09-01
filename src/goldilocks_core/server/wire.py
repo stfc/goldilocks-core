@@ -6,7 +6,7 @@ from functools import reduce
 from operator import or_
 from typing import Any, Literal, TypeAliasType, get_args, get_origin, get_type_hints
 
-from pydantic import BaseModel, ConfigDict, JsonValue, create_model
+from pydantic import BaseModel, ConfigDict, JsonValue, create_model, model_validator
 
 from goldilocks_core.contracts import (
     CalculationHints,
@@ -53,9 +53,25 @@ HintsDocument = create_model(
     __base__=_HintsBase,
     k_grid=(list[int] | None, None),
 )
+
+
+def _inline_structure(value: Any) -> Any:
+    if isinstance(value, str) or (
+        isinstance(value, dict) and (value.get("kind") == "path" or "path" in value)
+    ):
+        raise ValueError(
+            "Transports do not accept file paths. Read the file and pass its "
+            "text as an inline Structure Source."
+        )
+    return value
+
+
 InlineStructureDocument = create_model(
     "InlineStructureSource",
     __config__=_STRICT,
+    __validators__={
+        "inline_structure": model_validator(mode="before")(_inline_structure)
+    },
     kind=(Literal["inline"], "inline"),
     name=(str, ...),
     content=(str, ...),
@@ -74,15 +90,6 @@ DraftDocument = create_model(
     hints=(HintsDocument | None, None),
     pseudo_table=(str | None, None),
 )
-LocalDraftDocument = create_model(
-    "LocalCalculationDraft",
-    __config__=_STRICT,
-    structure=(str | InlineStructureDocument, ...),
-    intent=(IntentDocument | None, None),
-    hints=(HintsDocument | None, None),
-    pseudo_table=(str | None, None),
-    pseudo_root=(str | None, None),
-)
 PresetSelectionDocument = create_model(
     "PresetSelection", __config__=_STRICT, preset=(str, ...)
 )
@@ -92,21 +99,6 @@ RecordSelectionDocument = create_model(
 type SelectionDocument = PresetSelectionDocument | RecordSelectionDocument
 MemoryOutputDocument = create_model(
     "MemoryOutput", __config__=_STRICT, kind=(Literal["memory"], ...)
-)
-DirectoryOutputDocument = create_model(
-    "DirectoryOutput",
-    __config__=_STRICT,
-    kind=(Literal["directory"], ...),
-    path=(str, ...),
-)
-ArchiveOutputDocument = create_model(
-    "ArchiveOutput",
-    __config__=_STRICT,
-    kind=(Literal["archive"], ...),
-    path=(str, ...),
-)
-type LocalOutputDocument = (
-    MemoryOutputDocument | DirectoryOutputDocument | ArchiveOutputDocument
 )
 ComputeRequestDocument = create_model(
     "ComputeRequest",

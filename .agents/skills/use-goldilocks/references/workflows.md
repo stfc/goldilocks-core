@@ -141,5 +141,7 @@ uv run goldilocks serve mcp
 
 HTTP accepts inline Structure Sources and returns one multipart response with
 reviewed Result JSON and its exact optional ZIP. Local MCP accepts inline
-content or paths and can publish local outputs. Both reuse one process-owned
-`Service`.
+content and either publishes automatically to a server-chosen directory or
+keeps the Result in memory. Both may select a registered pseudopotential table
+by stable ID. Neither accepts structure paths, pseudopotential roots, model
+locations, or publication paths. Both reuse one process-owned `Service`.

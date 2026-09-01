@@ -38,7 +38,16 @@ def references(
         return (entries[name],)
     if name == WORKBENCH_PROFILE:
         return tuple(entries[asset_id] for asset_id in sorted(entries))
-    selected = profile(name)
+    table_reference = _table_reference(name, entries)
+    if table_reference is not None:
+        return (table_reference,)
+    try:
+        selected = profile(name)
+    except KeyError as error:
+        raise KeyError(
+            f"unknown asset {name!r}; use an asset id, a registry table id, "
+            "or a shipped profile name"
+        ) from error
     resolved: list[AssetInstallation] = []
     for reference in selected.assets:
         registration = entries.get(reference.id)

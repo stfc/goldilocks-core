@@ -17,15 +17,16 @@ from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.assets import AssetFile, AssetStore
 from goldilocks_core.contracts import (
+    CalculationDraft,
     CalculationHints,
-    PresetRequest,
+    InMemoryStructureSource,
     Provenance,
     PseudoMetadata,
     PseudopotentialRequirements,
 )
 from goldilocks_core.pseudo.installed import load_installed_table, write_table_manifest
 from goldilocks_core.pseudo.registry import PseudoTable, default_table, load_tables
-from goldilocks_core.pseudo.source import source_for_request
+from goldilocks_core.pseudo.source import source_for_draft
 
 pytestmark = pytest.mark.integration
 
@@ -100,8 +101,8 @@ def test_default_table_serves_a_fresh_install(tmp_path: Path) -> None:
     structure = Structure(
         Lattice.cubic(5.43), ["Si", "Si"], [[0, 0, 0], [0.25, 0.25, 0.25]]
     )
-    request = PresetRequest(
-        structure=structure,
+    draft = CalculationDraft(
+        structure=InMemoryStructureSource(structure),
         hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
     )
     requirements = PseudopotentialRequirements(
@@ -116,7 +117,7 @@ def test_default_table_serves_a_fresh_install(tmp_path: Path) -> None:
         ),
     )
 
-    resolver = source_for_request(request, store=store)
+    resolver = source_for_draft(draft, store=store)
     metadata: tuple[PseudoMetadata, ...] = resolver(structure, requirements)
 
     assert {item.element for item in metadata} >= {"Si"}

@@ -15,12 +15,12 @@ from goldilocks_core.runtime.service import Service
 from goldilocks_core.server.request import (
     compute_from_dict,
     inspection_source_from_dict,
-    local_output_from_dict,
+    mcp_output_from_dict,
 )
 from goldilocks_core.server.wire import (
+    DraftDocument,
     InlineStructureDocument,
-    LocalDraftDocument,
-    LocalOutputDocument,
+    MemoryOutputDocument,
     SelectionDocument,
 )
 
@@ -104,15 +104,12 @@ def create_server(
         record = await asyncio.to_thread(state.capabilities)
         return record.to_dict()
 
-    @server.tool(
-        description="Normalize and inspect a local or inline structure source."
-    )
+    @server.tool(description="Normalize and inspect an inline structure source.")
     async def inspect_structure(
-        source: str | InlineStructureDocument,
+        source: InlineStructureDocument,
     ) -> dict[str, Any]:
-        document = source if isinstance(source, str) else source.model_dump()
         try:
-            parsed = inspection_source_from_dict({"source": document}, allow_path=True)
+            parsed = inspection_source_from_dict({"source": source.model_dump()})
         except ValueError as error:
             raise ToolError(str(error)) from error
         try:
@@ -128,22 +125,19 @@ def create_server(
         )
     )
     async def compute(
-        draft: LocalDraftDocument,
+        draft: DraftDocument,
         selection: SelectionDocument,
-        output: LocalOutputDocument | None = None,
+        output: MemoryOutputDocument | None = None,
     ) -> dict[str, Any]:
         try:
             request = compute_from_dict(
                 {
                     "draft": draft.model_dump(),
                     "selection": selection.model_dump(),
-                },
-                allow_path=True,
-                allow_local_assets=True,
+                }
             )
-            transport_output = local_output_from_dict(
-                output.model_dump() if output is not None else None,
-                default_automatic=True,
+            transport_output = mcp_output_from_dict(
+                output.model_dump() if output is not None else None
             )
         except ValueError as error:
             raise ToolError(str(error)) from error

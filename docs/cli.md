@@ -88,9 +88,9 @@ retries. It does not replace corrupt assets.
 ## Asset administration
 
 ```bash
-uv run goldilocks assets install [default|ASSET_ID]
-uv run goldilocks assets status [default|ASSET_ID]
-uv run goldilocks assets verify [default|ASSET_ID]
+uv run goldilocks assets install [PROFILE|ASSET_ID|TABLE_ID]
+uv run goldilocks assets status [PROFILE|ASSET_ID|TABLE_ID]
+uv run goldilocks assets verify [PROFILE|ASSET_ID|TABLE_ID]
 ```
 
 The default asset root is `$XDG_DATA_HOME/goldilocks/assets`, falling back to
@@ -115,11 +115,17 @@ uv run goldilocks serve mcp
 ```
 
 HTTP exposes `GET /capabilities`, `POST /inspect`, `POST /compute`,
-`GET /health`, and `GET /ready`. HTTP accepts inline structure content only.
-Compute returns one multipart response with canonical JSON and the exact
-optional unstored ZIP produced by that execution.
+`GET /health`, and `GET /ready`. HTTP accepts inline structure content and an
+optional registered pseudopotential table ID. Compute returns one multipart
+response with canonical JSON and the exact optional unstored ZIP produced by
+that execution.
 
 Local stdio MCP exposes exactly `capabilities`, `inspect_structure`, and
-`compute`. MCP accepts local paths or inline sources. Omitted Compute output
-automatically publishes complete DFT Input Data; explicit memory, directory,
-and archive output variants are available.
+`compute`. MCP also accepts inline structure content and an optional registered
+table ID. Omitted Compute output automatically publishes complete DFT Input
+Data to a server-chosen directory; explicit `memory` output suppresses
+publication.
+
+HTTP and MCP do not accept structure paths, pseudopotential roots or metadata
+payloads, model locations, or publication paths. Use Python or CLI for trusted
+local filesystem configuration.

@@ -134,11 +134,22 @@ def test_heuristic_metallicity_keeps_its_uncertainty_warning() -> None:
     )
 
 
-@pytest.mark.parametrize("character", ["insulator", "unknown"])
-def test_nonmetal_smearing_defaults_to_fixed_occupations(character: str) -> None:
+def test_model_classified_insulator_uses_analysis_backed_fixed_occupations() -> None:
     assert advise_smearing(
-        analysis(electronic_character=character), SmearingHints()
+        analysis(electronic_character="insulator", electronic_character_source="model"),
+        SmearingHints(),
     ) == SmearingAdvice(
+        smearing_type="fixed",
+        width_ry=None,
+        provenance=Provenance(
+            source="analysis",
+            reason="Insulating electronic character supports fixed occupations.",
+        ),
+    )
+
+
+def test_unknown_metallicity_defaults_to_fixed_occupations() -> None:
+    assert advise_smearing(analysis(), SmearingHints()) == SmearingAdvice(
         smearing_type="fixed",
         width_ry=None,
         provenance=Provenance(

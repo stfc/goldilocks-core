@@ -18,6 +18,9 @@ All notable changes to goldilocks-core are documented here.
 - A stateless same-origin Workbench and production image with the complete
   verified runtime asset profile.
 - Generated OpenAPI and TypeScript contracts for Workbench.
+- Asset lifecycle commands accept bare registry table IDs such as
+  `pseudodojo-pbesol-efficiency-sr` as well as namespaced asset IDs and shipped
+  profiles.
 
 ### Fixed
 
@@ -25,18 +28,19 @@ All notable changes to goldilocks-core are documented here.
   (`pseudopotentials/<table>`), matching what `write_table_manifest` records.
   Fresh installs of every registered table now load through the strict reader;
   new lifecycle tests install and reload each shipped table.
-- Stores installed before asset-id namespacing (bare table directories with
-  `schema_version: 1` manifests) are incompatible with this release. Reinstall
-  them: `goldilocks assets install default`.
+- Runtime asset stores with `schema_version: 1` asset manifests are
+  incompatible with this release, including both bare and namespaced table
+  directories. Reinstall them: `goldilocks assets install default`.
 
 ### Changed
 
 - `recommend` and `generate` are Preset IDs selected through Compute.
 - The unified `goldilocks` command provides scientific operations, asset
   lifecycle commands, examples, and optional HTTP/MCP serving.
-- CLI and local MCP support automatic, directory, archive, and memory output.
-  HTTP pairs reviewed Result JSON with its exact optional unstored ZIP in one
-  multipart response.
+- CLI supports automatic, directory, archive, and memory output. Local MCP
+  supports server-chosen automatic publication or memory output; it does not
+  accept publication paths. HTTP pairs reviewed Result JSON with its exact
+  optional unstored ZIP in one multipart response.
 - Workbench scientific controls send valid paired smearing hints, the 3D viewer
   loads on demand, readiness tracks asset changes, and installed metallicity
   assets drive electronic-character analysis.
@@ -44,5 +48,7 @@ All notable changes to goldilocks-core are documented here.
   instead of a process-wide computation slot.
 - Generated request contracts expose the supported scientific enum values.
 - Pseudopotential selection consumes one normalized metadata interface and
-  resolves compatible registered tables in Core.
+  resolves compatible registered tables in Core. HTTP and MCP may select a
+  registered table by stable ID, but accept no structure paths, pseudopotential
+  roots or metadata payloads, model locations, or publication paths.
 - The default functional is PBEsol.

@@ -322,6 +322,39 @@ describe("Goldilocks Workbench", () => {
     });
   });
 
+  it("submits a registered pseudopotential table by stable ID", async () => {
+    const user = userEvent.setup();
+    const core = new CoreStub(Promise.resolve(capabilities));
+    core.inspectionResults = [Promise.resolve(inspection)];
+    core.preparedResults = [Promise.resolve(prepared())];
+    const workspace = createWorkspace(core);
+    const { container } = render(
+      <WorkspaceProvider workspace={workspace}>
+        <App />
+      </WorkspaceProvider>,
+    );
+    await screen.findByRole("button", {
+      name: "Choose a CIF or POSCAR structure",
+    });
+    await user.upload(structureInput(container), structureFile());
+    await user.selectOptions(
+      screen.getByLabelText("Pseudopotential table"),
+      "sssp-pbesol-efficiency-sr",
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Generate recommendation" }),
+    );
+
+    expect(core.computeCalls[0]).toEqual({
+      draft: {
+        ...draft,
+        pseudo_table: "sssp-pbesol-efficiency-sr",
+      },
+      selection: { preset: "generate" },
+    });
+  });
+
   it("keeps the old Result visible and disables download after an edit", async () => {
     const user = userEvent.setup();
     const core = new CoreStub(Promise.resolve(capabilities));

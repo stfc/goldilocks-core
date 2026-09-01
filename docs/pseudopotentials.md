@@ -198,6 +198,8 @@ clearly until complete legal and citation material is supplied.
 `pseudo_metadata`, `pseudo_root`, and `pseudo_table` are mutually exclusive.
 Explicit metadata is useful for in-memory callers; an explicit root remains
 operator-managed; an exact table ID resolves through the verified asset store.
+HTTP and MCP expose only `pseudo_table`: callers may choose a registered
+scientific set by stable ID without transmitting metadata, roots, or files.
 Build explicit metadata with `parse_upf_metadata`, which binds the file's SHA-256
 and size from one binary read. Generation rereads the file once and requires that
 binding to match. `source_identifier` must be a provider-relative identity or URL,

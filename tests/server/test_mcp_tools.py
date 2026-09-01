@@ -30,11 +30,16 @@ def test_mcp_exposes_exactly_three_scientific_tools(test_service) -> None:
     }
     assert all(tool.input_schema["additionalProperties"] is False for tool in tools)
     compute = next(tool for tool in tools if tool.name == "compute")
-    assert (
-        compute.input_schema["$defs"]["LocalCalculationDraft"]["additionalProperties"]
-        is False
-    )
-    assert "AutomaticOutput" not in compute.input_schema["$defs"]
+    draft = compute.input_schema["$defs"]["CalculationDraft"]
+    assert draft["additionalProperties"] is False
+    assert set(draft["properties"]) == {
+        "structure",
+        "intent",
+        "hints",
+        "pseudo_table",
+    }
+    assert "DirectoryOutput" not in compute.input_schema["$defs"]
+    assert "ArchiveOutput" not in compute.input_schema["$defs"]
     assert compute.input_schema["$defs"]["RecordSelection"]["properties"]["records"][
         "items"
     ] == {"type": "string"}
@@ -48,7 +53,6 @@ def test_mcp_capabilities_and_inspection_return_core_contracts(
     server = create_server(test_service)
 
     capabilities = _call(server, "capabilities", {})
-    local = _call(server, "inspect_structure", {"source": sample_structure_path})
     inline = _call(
         server,
         "inspect_structure",
@@ -62,20 +66,27 @@ def test_mcp_capabilities_and_inspection_return_core_contracts(
     )
 
     assert capabilities["tasks"][0]["id"] == "scf_single_point"
-    assert local["structure"]["reduced_formula"] == "Si"
     assert inline["source"]["name"] == "uploaded.cif"
+    with pytest.raises(ToolError, match="Transports do not accept file paths"):
+        asyncio.run(
+            server.call_tool("inspect_structure", {"source": sample_structure_path})
+        )
 
 
 def test_mcp_compute_memory_returns_canonical_result(
     test_service,
-    sample_structure_path: str,
+    sample_structure_text: str,
 ) -> None:
     result = _call(
         create_server(test_service),
         "compute",
         {
             "draft": {
-                "structure": sample_structure_path,
+                "structure": {
+                    "name": "Si.cif",
+                    "content": sample_structure_text,
+                    "format": "cif",
+                },
                 "hints": {"k_grid": [3, 3, 3]},
             },
             "selection": {"records": ["k_points"]},
@@ -91,14 +102,18 @@ def test_mcp_compute_memory_returns_canonical_result(
 
 def test_mcp_selects_custom_records_through_core_registry(
     custom_record_service,
-    sample_structure_path: str,
+    sample_structure_text: str,
 ) -> None:
     result = _call(
         create_server(custom_record_service),
         "compute",
         {
             "draft": {
-                "structure": sample_structure_path,
+                "structure": {
+                    "name": "Si.cif",
+                    "content": sample_structure_text,
+                    "format": "cif",
+                },
                 "intent": {"task": "custom_task"},
             },
             "selection": {"records": ["custom_summary"]},
@@ -112,7 +127,7 @@ def test_mcp_selects_custom_records_through_core_registry(
 
 def test_mcp_compute_automatically_publishes_complete_results(
     publishable_service,
-    sample_structure_path: str,
+    sample_structure_text: str,
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -129,7 +144,11 @@ def test_mcp_compute_automatically_publishes_complete_results(
         "compute",
         {
             "draft": {
-                "structure": sample_structure_path,
+                "structure": {
+                    "name": "Si.cif",
+                    "content": sample_structure_text,
+                    "format": "cif",
+                },
                 "hints": {"k_grid": [3, 3, 3]},
                 "pseudo_table": "fixture-table",
             },
@@ -137,43 +156,52 @@ def test_mcp_compute_automatically_publishes_complete_results(
         },
     )
 
+    assert result["draft"]["pseudo_table"] == "fixture-table"
+    assert result["draft"]["pseudo_root"] is None
+    assert result["draft"]["pseudo_metadata"] is None
+    assert result["draft"]["kmesh_model"] is None
     assert result["publication"]["kind"] == "directory"
     assert result["publication"]["path"] == str(tmp_path / "goldilocks_out")
     assert (tmp_path / "goldilocks_out" / "goldilocks.json").is_file()
 
 
 @pytest.mark.parametrize("kind", ["directory", "archive"])
-def test_mcp_compute_supports_explicit_local_outputs(
-    publishable_service,
-    sample_structure_path: str,
+def test_mcp_rejects_explicit_local_output_paths(
+    test_service,
+    sample_structure_text: str,
     tmp_path,
     kind: str,
 ) -> None:
     destination = tmp_path / ("ready.zip" if kind == "archive" else "ready")
-    result = _call(
-        create_server(publishable_service),
-        "compute",
-        {
-            "draft": {
-                "structure": sample_structure_path,
-                "hints": {"k_grid": [3, 3, 3]},
-                "pseudo_table": "fixture-table",
-            },
-            "selection": {"preset": "generate"},
-            "output": {"kind": kind, "path": str(destination)},
-        },
-    )
-
-    assert result["publication"]["kind"] == kind
-    assert result["publication"]["path"] == str(destination)
-    if kind == "archive":
-        assert destination.read_bytes().startswith(b"PK")
-    else:
-        assert (destination / "goldilocks.json").is_file()
+    with pytest.raises(ToolError):
+        asyncio.run(
+            create_server(test_service).call_tool(
+                "compute",
+                {
+                    "draft": {
+                        "structure": {
+                            "name": "Si.cif",
+                            "content": sample_structure_text,
+                            "format": "cif",
+                        }
+                    },
+                    "selection": {"records": ["analysis"]},
+                    "output": {"kind": kind, "path": str(destination)},
+                },
+            )
+        )
+    assert not destination.exists()
 
 
-def test_mcp_rejects_unknown_and_conflicting_transport_shapes(test_service) -> None:
+def test_mcp_rejects_unknown_and_deployment_configuration(
+    test_service, sample_structure_text: str
+) -> None:
     server = create_server(test_service)
+    inline = {
+        "name": "Si.cif",
+        "content": sample_structure_text,
+        "format": "cif",
+    }
 
     with pytest.raises(ToolError, match="Unknown compute arguments: unexpected"):
         asyncio.run(server.call_tool("compute", {"unexpected": True}))
@@ -182,20 +210,25 @@ def test_mcp_rejects_unknown_and_conflicting_transport_shapes(test_service) -> N
             server.call_tool(
                 "compute",
                 {
-                    "draft": {"structure": "Si.cif"},
+                    "draft": {"structure": inline},
                     "selection": {"preset": "recommend", "records": ["analysis"]},
                     "output": {"kind": "memory"},
                 },
             )
         )
-    with pytest.raises(ToolError, match="Extra inputs are not permitted"):
-        asyncio.run(
-            server.call_tool(
-                "compute",
-                {
-                    "draft": {"structure": "Si.cif", "unexpected": True},
-                    "selection": {"records": ["analysis"]},
-                    "output": {"kind": "memory"},
-                },
+    for field, value in (
+        ("pseudo_root", "/server/pseudos"),
+        ("pseudo_metadata", []),
+        ("kmesh_model", {"location": "/server/model.pkl"}),
+    ):
+        with pytest.raises(ToolError, match="Extra inputs are not permitted"):
+            asyncio.run(
+                server.call_tool(
+                    "compute",
+                    {
+                        "draft": {"structure": inline, field: value},
+                        "selection": {"records": ["analysis"]},
+                        "output": {"kind": "memory"},
+                    },
+                )
             )
-        )

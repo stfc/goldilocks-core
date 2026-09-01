@@ -72,6 +72,7 @@ Install the default runtime assets once:
 ```bash
 uv run goldilocks assets install default
 uv run goldilocks assets verify default
+uv run goldilocks assets install pseudodojo-pbesol-efficiency-sr
 ```
 Inspect a structure, query Records, or run a named Preset. Without an explicit
 pseudopotential source, Core chooses a compatible registered table. Use
@@ -106,8 +107,13 @@ uv run goldilocks serve mcp
 HTTP publishes `/capabilities`, `/inspect`, `/compute`, `/health`, and `/ready`.
 Compute returns one multipart response containing canonical Result JSON and,
 when complete DFT Input Data was requested, its exact in-memory ZIP. It never
-creates a server output directory. MCP publishes
-`capabilities`, `inspect_structure`, and `compute` as local stdio tools.
+creates a server output directory. MCP publishes `capabilities`,
+`inspect_structure`, and `compute` as local stdio tools.
+
+HTTP and MCP accept inline structures and may select one registered
+pseudopotential table by stable ID. They do not accept structure paths,
+pseudopotential roots or metadata payloads, model locations, or publication
+paths. Python and CLI retain trusted local path and publication controls.
 
 ## Static application serving
 

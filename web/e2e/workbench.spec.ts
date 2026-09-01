@@ -57,10 +57,14 @@ test("serves concurrent computations through one real Core runtime", async ({
 });
 
 test("prepares and downloads a real Core calculation", async ({ page }) => {
-  const computeRequests: string[] = [];
+  const computeRequests: { readonly method: string; readonly body: string | null }[] =
+    [];
   page.on("request", (request) => {
     if (new URL(request.url()).pathname === "/compute") {
-      computeRequests.push(request.method());
+      computeRequests.push({
+        method: request.method(),
+        body: request.postData(),
+      });
     }
   });
   await page.goto("/");
@@ -71,6 +75,9 @@ test("prepares and downloads a real Core calculation", async ({ page }) => {
   await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
   await expect(page.getByLabel("Crystal structure viewer")).toBeVisible();
   await expect(page.getByText("8 atomic sites", { exact: true })).toBeVisible();
+  await page
+    .getByLabel("Pseudopotential table")
+    .selectOption("pseudodojo-pbesol-efficiency-sr");
 
   await page.getByRole("button", { name: "Generate recommendation" }).click();
   await expect(
@@ -147,7 +154,18 @@ test("prepares and downloads a real Core calculation", async ({ page }) => {
     tableId: "pseudodojo-pbesol-efficiency-sr",
     tableVersion: "0.4",
   });
-  expect(computeRequests).toEqual(["POST"]);
+  expect(computeRequests).toHaveLength(1);
+  expect(computeRequests[0]?.method).toBe("POST");
+  expect(computeRequests[0]?.body).toContain(
+    '"pseudo_table":"pseudodojo-pbesol-efficiency-sr"',
+  );
+  for (const forbiddenField of [
+    "pseudo_root",
+    "pseudo_metadata",
+    "kmesh_model",
+  ]) {
+    expect(computeRequests[0]?.body).not.toContain(forbiddenField);
+  }
 });
 
 test("applies a paired smearing treatment and width override", async ({ page }) => {
@@ -536,8 +554,8 @@ function verifyArchive(
     "inputs/qe.in",
     `source/${expected.sourceName}`,
     `licences/${expected.tableId}.txt`,
-    "licences/qrf-kpoints-QRF95.md",
-    "licences/metallicity-cgcnn-1.md",
+    "licences/models_qrf-kpoints-QRF95.md",
+    "licences/models_metallicity-cgcnn-1.md",
     "structure/canonical.cif",
   ]) {
     expect(names).toContain(required);

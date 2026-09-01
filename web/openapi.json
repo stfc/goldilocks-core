@@ -989,12 +989,24 @@
             "minItems": 3,
             "prefixItems": [
               {
+                "enum": [
+                  0,
+                  1
+                ],
                 "type": "integer"
               },
               {
+                "enum": [
+                  0,
+                  1
+                ],
                 "type": "integer"
               },
               {
+                "enum": [
+                  0,
+                  1
+                ],
                 "type": "integer"
               }
             ],

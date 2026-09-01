@@ -47,8 +47,6 @@ class AssetNotInstalled(FileNotFoundError):
 class AssetCorrupt(ValueError):
     """An installed asset does not match its strict manifest."""
 
-    pass
-
 
 class AssetStore:
     """Install, resolve, and verify complete immutable runtime assets."""

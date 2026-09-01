@@ -26,8 +26,6 @@ PseudoSource = Callable[
 class PseudoTableMismatch(ValueError):
     """A selected table cannot satisfy the requested scientific constraints."""
 
-    pass
-
 
 def source_for_request(
     request: PresetRequest | QueryRequest,

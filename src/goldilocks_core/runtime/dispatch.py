@@ -30,8 +30,6 @@ from goldilocks_core.runtime.task import GraphHandler
 class UnknownTask(ValueError):
     """A request names no registered Core task."""
 
-    pass
-
 
 class Dispatcher:
     """Dispatch Core task graphs through registered :class:`GraphHandler`s.

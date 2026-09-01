@@ -12,8 +12,6 @@ from goldilocks_core.contracts import StructureInput
 class StructureInputError(ValueError):
     """A structure path or file cannot be used as a periodic structure."""
 
-    pass
-
 
 def load_structure(structure: StructureInput) -> Structure:
     """Load a structure input into a pymatgen Structure.

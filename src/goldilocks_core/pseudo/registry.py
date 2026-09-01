@@ -57,8 +57,6 @@ _OPTIONAL_TABLE_FIELDS = frozenset(
 class InvalidPseudoRegistry(ValueError):
     """A pseudopotential registry violates its domain schema."""
 
-    pass
-
 
 @dataclass(frozen=True, slots=True)
 class PseudoTable:

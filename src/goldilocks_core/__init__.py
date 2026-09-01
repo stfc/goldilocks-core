@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from goldilocks_core.contracts import (
+    BundleRecord,
     CalculationHints,
     CalculationIntent,
     PresetRequest,
@@ -19,6 +20,7 @@ from goldilocks_core.runtime import (
 )
 
 __all__ = [
+    "BundleRecord",
     "CalculationHints",
     "CalculationIntent",
     "Dispatcher",

@@ -27,8 +27,6 @@ _RETRIES = Retry(
 class ChecksumMismatch(ValueError):
     """A downloaded source file did not match its declared digest."""
 
-    pass
-
 
 def _session() -> requests.Session:
     """Return a one-shot session with a transient-failure retry policy."""

@@ -6,6 +6,7 @@ from goldilocks_core.assets import AssetInstallation, AssetStore, InstalledAsset
 from goldilocks_core.assets.profiles import profile
 from goldilocks_core.ml.model_registry import model_asset_specs
 from goldilocks_core.pseudo.install import table_installations
+from goldilocks_core.pseudo.registry import load_tables
 
 
 def catalogue() -> dict[str, AssetInstallation]:
@@ -28,7 +29,16 @@ def references(
     entries = dict(entries or catalogue())
     if name in entries:
         return (entries[name],)
-    selected = profile(name)
+    table_reference = _table_reference(name, entries)
+    if table_reference is not None:
+        return (table_reference,)
+    try:
+        selected = profile(name)
+    except KeyError as error:
+        raise KeyError(
+            f"unknown asset {name!r}; use an asset id, a registry table id, "
+            "or a shipped profile name"
+        ) from error
     resolved: list[AssetInstallation] = []
     for reference in selected.assets:
         registration = entries.get(reference.id)
@@ -39,6 +49,16 @@ def references(
             )
         resolved.append(registration)
     return tuple(resolved)
+
+
+def _table_reference(
+    name: str, entries: Mapping[str, AssetInstallation]
+) -> AssetInstallation | None:
+    try:
+        table = load_tables()[name]
+    except KeyError:
+        return None
+    return entries.get(table.asset.id)
 
 
 def install(

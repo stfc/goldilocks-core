@@ -16,6 +16,9 @@ from goldilocks_core.contracts import (
     SymmetryUnavailable,
 )
 
+HEAVY_ELEMENT_MIN_ROW = 5
+"""Lowest periodic-table row treated as heavy for spin-orbit advice."""
+
 
 class DimensionalityClassificationError(Exception):
     """Raised when CrystalNN/Larsen fails on an ordered structure.
@@ -84,7 +87,9 @@ def analyze_structure(
         element.symbol for element in periodic_elements if element.is_actinoid
     )
     heavy_elements = tuple(
-        element.symbol for element in periodic_elements if element.row >= 5
+        element.symbol
+        for element in periodic_elements
+        if element.row >= HEAVY_ELEMENT_MIN_ROW
     )
     magnetic_elements = tuple(sorted({*transition_metals, *lanthanides, *actinides}))
     disorder_warnings = _find_disorder_warnings(structure)

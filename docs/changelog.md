@@ -39,6 +39,11 @@ All notable changes to goldilocks-core are documented here.
   Core.
 - `recommend`, `generate`, and `compute` use one `Service` interface across
   Python, CLI, HTTP, and MCP.
+- Public type renames: `CoreService` to `Service`, `CoreRuntime` to `Runtime`,
+  `TaskDispatcher` to `Dispatcher`, `CoreResult` to `Result`, and
+  `CoreJobRequest` split into `PresetRequest` and `QueryRequest`. The root
+  facade re-exports the new names; `BundleRecord` stays importable from the
+  root.
 - Transports accept only the calculation: inline structure content, `intent`,
   `hints`, and `outputs`. File paths, model overrides, pseudopotential
   sources, and output locations are deployment configuration resolved by the

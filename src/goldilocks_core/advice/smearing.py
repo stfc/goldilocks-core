@@ -46,6 +46,16 @@ def advise_smearing(
             ),
         )
 
+    if analysis.electronic_character == "insulator":
+        return SmearingAdvice(
+            smearing_type="fixed",
+            width_ry=None,
+            provenance=Provenance(
+                source="analysis",
+                reason="Insulating electronic character supports fixed occupations.",
+            ),
+        )
+
     return SmearingAdvice(
         smearing_type="fixed",
         width_ry=None,

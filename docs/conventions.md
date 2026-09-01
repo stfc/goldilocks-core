@@ -74,4 +74,4 @@ This differs intentionally from the vdW policy: a connectivity-derived low-dimen
 | `full` | Fully relativistic (required when SOC is enabled) |
 | `non-relativistic` | No relativistic treatment (rarely used) |
 
-When `SpinOrbitAdvice.enabled` is `True` but `CalculationHints.relativistic_mode` is not set, the Advise stage automatically sets `PseudopotentialAdvice.relativistic_mode` to `"full"` and records `analysis` provenance.
+When `SpinOrbitAdvice.enabled` is `True` but `CalculationHints.relativistic_mode` is not set, the Advise stage automatically sets `PseudopotentialAdvice.relativistic_mode` to `"full"` and inherits the SOC decision's `user_hint` provenance.

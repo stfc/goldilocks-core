@@ -137,13 +137,28 @@ def test_advise_smearing_records_user_hint_provenance_when_hinted() -> None:
     assert advice.smearing.provenance.source == "user_hint"
 
 
-def test_advise_smearing_defaults_to_fixed_occupations_for_non_metals() -> None:
-    """Non-metallic, un-hinted structures get fixed occupations by default."""
-    advice = advise_parameters(make_analysis(electronic_character="insulator"))
+def test_advise_smearing_defaults_to_fixed_occupations_for_insulators() -> None:
+    """A model-classified insulator gets analysis-backed fixed occupations."""
+    advice = advise_parameters(
+        make_analysis(
+            electronic_character="insulator", electronic_character_source="model"
+        )
+    )
+
+    assert advice.smearing.smearing_type == "fixed"
+    assert advice.smearing.width_ry is None
+    assert advice.smearing.provenance.source == "analysis"
+    assert advice.smearing.provenance.warnings == ()
+
+
+def test_advise_smearing_defaults_to_fixed_occupations_when_character_unknown() -> None:
+    """Unknown metallicity falls back to default fixed occupations."""
+    advice = advise_parameters(make_analysis())
 
     assert advice.smearing.smearing_type == "fixed"
     assert advice.smearing.width_ry is None
     assert advice.smearing.provenance.source == "default"
+    assert "Metallicity is unknown" in advice.smearing.provenance.reason
 
 
 def test_advise_spin_orbit_user_hint_records_provenance_and_heavy_elements() -> None:

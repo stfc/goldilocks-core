@@ -7,14 +7,20 @@ mapping into a validated :class:`~goldilocks_core.contracts.PresetRequest`
 record subset). Unknown keys and bad types are rejected with named-field
 :class:`RequestError` messages; stage ``ValueError``\\ s are not caught here and
 surface to the transport's error handler.
+
+The parser accepts only the calculation itself: an inline Structure Source,
+the calculation intent, scientist hints, and (for queries) the requested
+record types. Deployment configuration is never request data — model and
+pseudopotential selection and output locations are resolved by the server
+from its own environment, so no transport field names server-side paths or
+loadable artifacts.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import fields
-from pathlib import Path
-from typing import Any, get_args
+from typing import Any
 
 from pymatgen.core import Structure
 
@@ -22,15 +28,10 @@ from goldilocks_core.contracts import (
     CalculationHints,
     CalculationIntent,
     JobMode,
-    ModelSource,
-    ModelSpec,
-    ModelType,
     PresetRequest,
-    PseudoMetadata,
     QueryRequest,
     resolve_output_types,
 )
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 __all__ = ["RequestError", "from_dict"]
 
@@ -41,17 +42,10 @@ _ALLOWED_TOP_LEVEL = frozenset(
         "hints",
         "mode",
         "outputs",
-        "output_dir",
-        "pseudo_metadata",
-        "pseudo_root",
-        "kmesh_model",
     }
 )
 _INTENT_FIELDS = frozenset(field.name for field in fields(CalculationIntent))
 _HINT_FIELDS = frozenset(field.name for field in fields(CalculationHints))
-_PSEUDO_FIELDS = frozenset(field.name for field in fields(PseudoMetadata))
-_MODEL_FIELDS = frozenset(field.name for field in fields(ModelSpec))
-_MODEL_REQUIRED = _MODEL_FIELDS - {"revision"}
 _STRING_HINTS = {
     "smearing_type",
     "pseudo_mode",
@@ -86,13 +80,10 @@ def from_dict(data: Mapping[str, Any]) -> PresetRequest | QueryRequest:
 
     mode = _parse_mode(data.get("mode"))
     outputs = _parse_outputs(data.get("outputs"))
-    output_dir = _parse_output_dir(data.get("output_dir"), mode, outputs)
 
     structure = _parse_structure(data["structure"])
     intent = _parse_intent(data.get("intent"))
     hints = _parse_hints(data.get("hints"))
-    pseudo_metadata = _parse_pseudo_metadata(data)
-    kmesh_model = _parse_kmesh_model(data.get("kmesh_model"))
 
     if outputs is not None:
         return QueryRequest(
@@ -100,17 +91,12 @@ def from_dict(data: Mapping[str, Any]) -> PresetRequest | QueryRequest:
             outputs=outputs,
             intent=intent,
             hints=hints,
-            pseudo_metadata=pseudo_metadata,
-            kmesh_model=kmesh_model,
         )
     return PresetRequest(
         structure=structure,
         intent=intent,
         hints=hints,
         mode=mode,
-        pseudo_metadata=pseudo_metadata,
-        output_dir=output_dir,
-        kmesh_model=kmesh_model,
     )
 
 
@@ -122,15 +108,19 @@ def _reject_unknown(
         raise RequestError(f"Unknown {section} fields: {', '.join(unknown)}")
 
 
-def _parse_structure(value: Any) -> str | Structure:
+def _parse_structure(value: Any) -> Structure:
+    """Parse a Structure Source: inline content only, never a server path."""
     if isinstance(value, str):
         if "\n" in value or value.lstrip().startswith("data_"):
             return _parse_structure_text(value, None)
-        return value
+        raise RequestError(
+            "Field 'structure' must be inline CIF/POSCAR content; transports "
+            "do not accept file paths. Read the file and pass its text."
+        )
     if not isinstance(value, Mapping):
         raise RequestError(
-            "Field 'structure' must be a file path, inline CIF/POSCAR string, "
-            "inline content object, or pymatgen Structure object."
+            "Field 'structure' must be inline CIF/POSCAR content as a string, "
+            "a content object, or a pymatgen Structure object."
         )
     if (
         value.get("@module") == "pymatgen.core.structure"
@@ -236,103 +226,6 @@ def _parse_outputs(value: Any) -> tuple[type, ...] | None:
     try:
         return resolve_output_types(list(value))
     except ValueError as error:
-        raise RequestError(str(error)) from error
-
-
-def _parse_output_dir(
-    value: Any, mode: JobMode, outputs: tuple[type, ...] | None
-) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise RequestError("Field 'output_dir' must be a string or null.")
-    if not value.strip():
-        raise RequestError("Field 'output_dir' must be a non-empty string.")
-    if mode != "generate" or outputs is not None:
-        raise RequestError("Field 'output_dir' is only valid for generate requests.")
-    return value
-
-
-def _parse_pseudo_metadata(data: Mapping[str, Any]) -> tuple[PseudoMetadata, ...]:
-    if "pseudo_metadata" in data:
-        value = data["pseudo_metadata"]
-        if value is None:
-            return ()
-        if not _is_sequence(value):
-            raise RequestError("Field 'pseudo_metadata' must be a list or null.")
-        return tuple(_parse_pseudo(item) for item in value)
-    root = data.get("pseudo_root")
-    if root is None:
-        return ()
-    if not isinstance(root, str):
-        raise RequestError("Field 'pseudo_root' must be a path string or null.")
-    try:
-        return tuple(load_pseudo_metadata(Path(root)))
-    except (OSError, TypeError, ValueError) as error:
-        raise RequestError(
-            f"Could not load pseudo metadata from {root!r}: {error}"
-        ) from error
-
-
-def _parse_pseudo(value: Any) -> PseudoMetadata:
-    if not isinstance(value, Mapping):
-        raise RequestError("Each 'pseudo_metadata' entry must be a JSON object.")
-    _reject_unknown(value, _PSEUDO_FIELDS, "pseudo_metadata")
-    string_fields = _PSEUDO_FIELDS - {
-        "z_valence",
-        "pseudo_info",
-        "is_sssp",
-        "sssp_recommended_cutoff",
-    }
-    for name in string_fields:
-        item = value.get(name)
-        if item is not None and not isinstance(item, str):
-            raise RequestError(
-                f"Field 'pseudo_metadata.{name}' must be a string or null."
-            )
-    z_valence = value.get("z_valence")
-    if z_valence is not None and (
-        not isinstance(z_valence, (int, float)) or isinstance(z_valence, bool)
-    ):
-        raise RequestError(
-            "Field 'pseudo_metadata.z_valence' must be a number or null."
-        )
-    if "pseudo_info" in value and not isinstance(value["pseudo_info"], Mapping):
-        raise RequestError("Field 'pseudo_metadata.pseudo_info' must be an object.")
-    if "is_sssp" in value and not isinstance(value["is_sssp"], bool):
-        raise RequestError("Field 'pseudo_metadata.is_sssp' must be a boolean.")
-    cutoff = value.get("sssp_recommended_cutoff")
-    if cutoff is not None and not isinstance(cutoff, Mapping):
-        raise RequestError(
-            "Field 'pseudo_metadata.sssp_recommended_cutoff' must be an object or null."
-        )
-    try:
-        return PseudoMetadata(**value)
-    except (TypeError, ValueError) as error:
-        raise RequestError(str(error)) from error
-
-
-def _parse_kmesh_model(value: Any) -> ModelSpec | None:
-    if value is None:
-        return None
-    if not isinstance(value, Mapping):
-        raise RequestError("Field 'kmesh_model' must be a JSON object or null.")
-    _reject_unknown(value, _MODEL_FIELDS, "kmesh_model")
-    missing = sorted(_MODEL_REQUIRED - set(value))
-    if missing:
-        raise RequestError(
-            f"Field 'kmesh_model' is missing required keys: {', '.join(missing)}"
-        )
-    for name, item in value.items():
-        if item is not None and not isinstance(item, str):
-            raise RequestError(f"Field 'kmesh_model.{name}' must be a string.")
-    if value["model_type"] not in get_args(ModelType):
-        raise RequestError(f"Unsupported model type: {value['model_type']!r}")
-    if value["source"] not in get_args(ModelSource):
-        raise RequestError(f"Unsupported model source: {value['source']!r}")
-    try:
-        return ModelSpec(**value)
-    except (TypeError, ValueError) as error:
         raise RequestError(str(error)) from error
 
 

@@ -22,36 +22,11 @@ def sample_structure_text(sample_structure_path: str) -> str:
 
 
 @pytest.fixture
-def pseudo_metadata() -> dict[str, object]:
-    """Return metadata sufficient to render a silicon QE input."""
+def request_body(sample_structure_text: str) -> dict[str, object]:
+    """Return a transport request body carrying only the calculation."""
     return {
-        "filepath": "/pseudo/Si.UPF",
-        "filename": "Si.UPF",
-        "header_format": "attr",
-        "library": "SSSP",
-        "source_set": "efficiency",
-        "element": "Si",
-        "pseudo_type": "NC",
-        "functional": "PBEsol",
-        "relativistic": "scalar",
-        "z_valence": 4.0,
-        "is_sssp": True,
-        "sssp_recommended_cutoff": {
-            "ecutwfc_ry": 30.0,
-            "ecutrho_ry": 120.0,
-        },
-    }
-
-
-@pytest.fixture
-def request_body(
-    sample_structure_path: str, pseudo_metadata: dict[str, object]
-) -> dict[str, object]:
-    """Return a model-free transport request body."""
-    return {
-        "structure": sample_structure_path,
+        "structure": sample_structure_text,
         "hints": {"k_grid": [3, 3, 3]},
-        "pseudo_metadata": [pseudo_metadata],
     }
 
 

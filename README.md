@@ -8,7 +8,7 @@ It provides:
 - advice for k-points, smearing, magnetism, SOC, convergence, vdW, and pseudopotentials;
 - a default Quantile Random Forest k-point model;
 - deterministic pseudopotential selection and QE input generation;
-- Python and CLI entry points over the same staged pipeline.
+- Python, CLI, HTTP, and MCP entry points over one process-owned service.
 
 ## Install
 
@@ -26,46 +26,59 @@ uv sync --group dev
 
 ## Python API
 
+`CoreService` is the reusable application interface. It owns model state,
+serializes access to that state, and exposes preset runs, record queries, and
+discovery:
+
 ```python
-from goldilocks_core import CalculationHints, generate
+from goldilocks_core import CalculationHints, CoreService, PresetRequest
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
-result = generate(
-    "path/to/structure.cif",
+request = PresetRequest(
+    structure="path/to/structure.cif",
     hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
-    pseudo_metadata=load_pseudo_metadata("path/to/pseudopotentials"),
+    pseudo_metadata=tuple(load_pseudo_metadata("path/to/pseudopotentials")),
 )
+
+with CoreService() as core:
+    result = core.generate(request)
 
 for generated_file in result.generated_files:
     print(generated_file.path)
     print(generated_file.content)
-
-print(result.warnings)
 ```
 
-The public workflows are:
+The public operations are:
 
-- `recommend(...)` — return analysis, advice, and concrete selections;
-- `generate(...)` — also return generated QE input files and, when
-  `output_dir` is given, publish them with `manifest.json`.
+- `CoreService.recommend(PresetRequest(...))` — return the complete
+  recommendation record set;
+- `CoreService.generate(PresetRequest(...), output_dir=...)` — also generate
+  inputs and optionally publish a manifest-backed directory;
+- `CoreService.compute(QueryRequest(...))` — return only selected record types;
+- `describe_tasks()`, `describe_codes()`, and `describe_models()` — discover
+  backend capabilities.
 
-Use `CoreJobRequest` with `run_core_job()` when you need a single request model.
-`run_core_job` delegates to a fresh `CoreRuntime`, or reuses a caller-supplied
-runtime for model lifecycle across jobs.
+`run_core_job(PresetRequest(...))` and `query_records(QueryRequest(...))` are
+one-call conveniences. Use `CoreService` for repeated work so model resources
+are reused. Explicit `k_grid` and `k_spacing` hints bypass model loading;
+`PresetRequest.kmesh_model` and `QueryRequest.kmesh_model` select a local
+k-index model instead of the configured QRF default.
 
-The default k-point backend loads the configured QRF model lazily. Model errors are reported directly. Explicit `k_grid` and `k_spacing` hints bypass model loading; use `--model` (or `CoreJobRequest.kmesh_model`) to select a local k-index model instead.
+See the [tutorial](docs/tutorial.md) and
+[pipeline reference](docs/pipeline.md) for complete examples.
 
-See the [tutorial](docs/tutorial.md) and [pipeline reference](docs/pipeline.md) for complete examples.
-
-## CLI
+## CLI and transports
 
 ```bash
 uv run goldilocks-core recommend structure.cif --json
 uv run goldilocks-core generate structure.cif \
     --pseudo-root path/to/pseudos --k-grid 4 4 4 --out run/ --json
+uv run goldilocks-core compute structure.cif \
+    --outputs analysis,k_points --k-grid 4 4 4
 ```
 
-Bundle output requires a new destination directory. See the [CLI reference](docs/cli.md) for all controls.
+Bundle output requires a new destination directory. See the
+[CLI reference](docs/cli.md) for all controls.
 
 Example structures are installed with the package, so there is something to run straight away:
 
@@ -78,6 +91,18 @@ The standalone model-oriented entry point remains available:
 ```bash
 uv run goldilocks-kmesh structure.cif --model path/to/model.joblib
 ```
+
+HTTP and MCP are optional:
+
+```bash
+uv sync --all-extras
+uv run goldilocks-core serve http --host 127.0.0.1 --port 8000
+uv run goldilocks-core serve mcp
+```
+
+HTTP publishes `/recommend`, `/generate`, `/compute`, `/tasks`, `/codes`,
+`/models`, and `/health`. MCP publishes the same three operations and three
+discovery calls as tools over stdio.
 
 ## Documentation
 

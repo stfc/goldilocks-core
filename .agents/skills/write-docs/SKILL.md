@@ -36,29 +36,41 @@ Primary docs:
 
    Required distinctions:
 
-   - Python staged pipeline is implemented (`recommend`, `generate`, `write_bundle`).
-   - CLI `goldilocks-core` with `recommend`, `generate`, and `bundle` subcommands is implemented.
-   - CLI `goldilocks-kmesh` for standalone ML k-point prediction is implemented.
-   - Generate and bundle-directory output are implemented.
+   - `CoreService` implements reusable recommend/generate/compute operations
+     plus task/code/model discovery.
+   - `run_core_job(PresetRequest)` and `query_records(QueryRequest)` are
+     short-lived Python conveniences.
+   - CLI `goldilocks-core` implements `recommend`, `generate`, `compute`,
+     `serve`, and `examples`; `goldilocks-kmesh` remains standalone.
+   - Optional `[http]` and `[mcp]` transports are implemented over one service.
+   - Generate can publish a bundle directory; there is no bundle operation.
    - Runner, AiiDA, frontend, auth, and workspace concerns are out of scope.
 
 3. Keep stage language consistent.
 
    ```text
-   Load -> Analyze -> Advise -> Kmesh -> Select -> Generate -> Bundle
+   Load -> Analyze -> Advise -> Select
+   Load -> Kmesh
+   Load + Advice + Select + Kmesh -> Generate
    ```
 
 4. Keep package ownership consistent.
 
    ```text
-   contracts.py  -> boundary dataclasses
-   jobs.py       -> orchestration and public convenience API
-   analysis.py   -> facts only
-   advice.py     -> provenance-backed recommendations
-   kmesh.py      -> k-point grid resolution
-   selection.py  -> concrete choices
-   io/           -> loading only
-   cli/          -> thin wrappers
+   contracts/          -> boundary dataclasses and stable record IDs
+   runtime/graph.py    -> type-keyed DAG execution
+   runtime/dispatch.py -> task registry and preset/query dispatch
+   runtime/core.py     -> model lifecycle
+   runtime/service.py  -> reusable operations, locking, and discovery
+   runtime/jobs.py     -> short-lived convenience entry points
+   server/request.py   -> canonical transport deserializer
+   server/http.py      -> optional HTTP adapter
+   server/mcp.py       -> optional MCP adapter
+   analysis.py         -> structure facts
+   advice/             -> provenance-backed recommendations
+   kmesh/              -> k-point resolution
+   selection.py        -> concrete pseudopotential choices
+   generation/         -> target-code rendering
    ```
 
 5. Validate Mermaid diagrams before embedding.

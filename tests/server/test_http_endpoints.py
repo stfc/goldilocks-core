@@ -75,21 +75,34 @@ def test_recommend_returns_core_result_json(test_service, request_body) -> None:
     assert data["generated_files"] == []
 
 
-def test_generate_publishes_bundle_and_returns_core_result_json(
-    test_service, request_body, tmp_path
+def test_generate_without_server_pseudopotentials_maps_to_422(
+    test_service, request_body
 ) -> None:
-    """Pass body output_dir to the generate preset."""
-    output_dir = tmp_path / "bundle"
-    body = {**request_body, "output_dir": str(output_dir)}
+    """Reject generation while the server has no pseudopotential source.
 
+    Transport requests cannot carry pseudopotential metadata; until the
+    runtime resolves pseudopotentials from its own asset store, generate
+    fails with the documented selection error instead of inventing cutoffs.
+    """
     with TestClient(create_app(test_service)) as client:
-        response = client.post("/generate", json=body)
+        response = client.post("/generate", json=request_body)
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["generated_files"][0]["path"] == "inputs/qe.in"
-    assert data["bundle"]["path"] == str(output_dir)
-    assert (output_dir / "inputs" / "qe.in").is_file()
+    assert response.status_code == 422
+    assert response.json()["error"]["kind"] == "generation_error"
+    assert "pseudopotential" in response.json()["error"]["message"].lower()
+
+
+def test_path_form_structure_maps_to_422(test_service, tmp_path) -> None:
+    """Reject a file-path structure; transports require inline content."""
+    with TestClient(create_app(test_service)) as client:
+        response = client.post(
+            "/compute",
+            json={"structure": str(tmp_path / "Si.cif"), "outputs": ["analysis"]},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["kind"] == "invalid_request"
+    assert "do not accept file paths" in response.json()["error"]["message"]
 
 
 def test_compute_returns_only_requested_records(test_service, request_body) -> None:
@@ -128,63 +141,6 @@ def test_unknown_task_maps_to_422_with_message(test_service, request_body) -> No
     assert response.status_code == 422
     assert response.json()["error"]["kind"] == "invalid_task"
     assert "No Core task registered" in response.json()["error"]["message"]
-
-
-def test_generate_without_pseudopotentials_maps_to_422(
-    test_service, request_body
-) -> None:
-    """Reject generation when selection cannot supply renderable pseudos."""
-    body = {
-        name: value for name, value in request_body.items() if name != "pseudo_metadata"
-    }
-
-    with TestClient(create_app(test_service)) as client:
-        response = client.post("/generate", json=body)
-
-    assert response.status_code == 422
-    assert response.json()["error"]["kind"] == "generation_error"
-    assert "pseudopotential" in response.json()["error"]["message"].lower()
-
-
-def test_existing_bundle_destination_maps_to_409(
-    test_service, request_body, tmp_path
-) -> None:
-    """Report a bundle destination collision without a server error."""
-    output_dir = tmp_path / "bundle"
-    output_dir.mkdir()
-
-    with TestClient(create_app(test_service)) as client:
-        response = client.post(
-            "/generate",
-            json={**request_body, "output_dir": str(output_dir)},
-        )
-
-    assert response.status_code == 409
-    assert response.json()["error"]["kind"] == "output_conflict"
-
-
-def test_empty_bundle_destination_maps_to_422(test_service, request_body) -> None:
-    """Reject an empty output directory before bundle publication."""
-    with TestClient(create_app(test_service)) as client:
-        response = client.post(
-            "/generate",
-            json={**request_body, "output_dir": ""},
-        )
-
-    assert response.status_code == 422
-    assert response.json()["error"]["kind"] == "invalid_request"
-
-
-def test_directory_structure_path_maps_to_422(test_service, tmp_path) -> None:
-    """Reject a directory where a structure file is required."""
-    with TestClient(create_app(test_service)) as client:
-        response = client.post(
-            "/compute",
-            json={"structure": str(tmp_path), "outputs": ["analysis"]},
-        )
-
-    assert response.status_code == 422
-    assert response.json()["error"]["kind"] == "invalid_structure"
 
 
 def test_unexpected_value_error_remains_a_500(

@@ -1,6 +1,7 @@
 # CLI reference
 
-The `goldilocks-core` command is a thin wrapper around `CoreJobRequest` and `run_core_job()`. It parses arguments, runs the staged pipeline, and prints JSON or a short human-readable summary.
+The `goldilocks-core` command is a thin wrapper over `CoreService`. Preset
+commands build `PresetRequest`; `compute` builds `QueryRequest`.
 
 ## Commands
 
@@ -20,6 +21,17 @@ goldilocks-core generate structure.cif [options]
 
 Runs Load → Analyze → Advise → Kmesh → Select → Generate. Outputs a recommendation with generated input files. Pass `--out run/` to publish the files and manifest as a portable bundle; the destination must not already exist.
 
+### compute
+
+```bash
+goldilocks-core compute structure.cif \
+    --outputs analysis,k_points [options]
+```
+
+Runs the minimal task subgraph needed for the comma-separated stable record IDs
+and always prints the selected records as JSON. Available IDs are `analysis`,
+`advice`, `k_points`, `selection`, and `generated_files`.
+
 ### examples
 
 ```bash
@@ -36,11 +48,36 @@ goldilocks-core recommend "$(goldilocks-core examples path)/Si.cif" --json
 
 The directory's `README.md` explains what each example exercises. From Python, use `goldilocks_core.examples.structure("Si.cif")` rather than building the path by hand.
 
+### serve
+
+```bash
+goldilocks-core serve http [--host 127.0.0.1] [--port 8000]
+goldilocks-core serve mcp
+```
+
+The HTTP and MCP transports require their optional dependencies:
+
+```bash
+uv sync --extra http
+uv sync --extra mcp
+```
+
+HTTP exposes `/recommend`, `/generate`, `/compute`, `/tasks`, `/codes`,
+`/models`, and `/health`. MCP exposes `recommend`, `generate`, `compute`,
+`list_tasks`, `list_codes`, and `list_models` as stdio tools. Each server owns
+one `CoreService` for its lifetime.
+
+Transport requests carry only the calculation — inline CIF/POSCAR content,
+`intent`, `hints`, and `outputs`. File paths, model overrides, and
+pseudopotential sources are never request data: the server resolves models
+and pseudopotentials from its own environment. Pass files by content, not by
+path.
+
 ## Common options
 
 | Flag | Type | Default | Maps to |
 | --- | --- | --- | --- |
-| `structure` | positional | — | `CoreJobRequest.structure` |
+| `structure` | positional | — | `PresetRequest.structure` or `QueryRequest.structure` |
 | `--code` | choice | `quantum_espresso` | `CalculationIntent.code` |
 | `--task` | choice | `scf_single_point` | `CalculationIntent.task` |
 | `--functional` | str | `PBEsol` | `CalculationIntent.functional` (canonicalized; e.g. `PBESOL` → `PBEsol`) |
@@ -48,7 +85,7 @@ The directory's `README.md` explains what each example exercises. From Python, u
 | `--pseudo-type` | str | None | `CalculationHints.pseudo_type` |
 | `--relativistic-mode` | str | None | `CalculationHints.relativistic_mode` |
 | `--pseudo-root` | path | None | Loads UPF files recursively into `pseudo_metadata` |
-| `--model` | path | None | `CoreJobRequest.kmesh_model` (local k-index model) |
+| `--model` | path | None | request `kmesh_model` (local k-index model) |
 | `--model-name` | str | `cli-kmesh-model` with `--model` | Model name recorded in Kmesh provenance; requires `--model` |
 | `--model-version` | str | `unknown` with `--model` | Model version recorded in `ModelSpec`; requires `--model` |
 | `--k-spacing` | float | None | `CalculationHints.k_spacing` |
@@ -93,7 +130,10 @@ and is rejected by the shared `CalculationHints` contract before job execution.
 
 ### JSON (`--json`)
 
-Full JSON envelope: `{"request": request.to_dict(), **result.to_dict()}` printed with `indent=2, sort_keys=True`. Suitable for piping to `jq` or HTTP services.
+`recommend` and `generate` print
+`{"request": request.to_dict(), **result.to_dict()}` with stable keys.
+`compute` always prints the selected `CoreRecords` JSON and does not use a
+request envelope.
 
 ### Human-readable (default)
 
@@ -129,10 +169,10 @@ goldilocks-core recommend structure.cif --model model.joblib --json
 ```
 
 The CLI builds a `ModelSpec` from `--model`, `--model-name`, and
-`--model-version`, puts it on `CoreJobRequest.kmesh_model`, and calls
-`run_core_job(request)`. The model spec is request data, so it serializes with
-the rest of the job. `--model-name` and `--model-version` are local-model
-metadata and are rejected unless `--model` is set.
+`--model-version`, puts it on the request's `kmesh_model`, and dispatches
+through the shared service surface. The model spec serializes with the rest of
+the request. `--model-name` and `--model-version` are local-model metadata and
+are rejected unless `--model` is set.
 
 Hint precedence still applies:
 

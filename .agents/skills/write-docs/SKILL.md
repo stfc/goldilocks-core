@@ -21,7 +21,6 @@ Primary docs:
 - `README.md` — user-facing summary, install, quick start, Python API, current CLI, development commands.
 - `docs/architecture.md` — module ownership, pipeline boundaries, data contracts, extension points.
 - `AGENTS.md` — durable project rules for future agents.
-
 - `docs/pseudopotentials.md` — table installation, storage, provider normalization, licensing, and citation.
 
 ## Workflow

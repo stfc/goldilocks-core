@@ -53,10 +53,11 @@ Bundle publication is a side effect of Generate, not a separate mode.
 ## Inputs to identify
 
 1. Structure path or `pymatgen.Structure`.
-2. Target code, task, functional, and pseudo mode.
+2. Target code, task, functional, and `pseudo_accuracy`.
 3. Operator hints: k-grid or k-spacing, smearing, spin/SOC, pseudo type,
    convergence.
-4. Pseudopotential metadata source, usually a local directory of `.UPF` files.
+4. Pseudopotential source: the installed default table unless the operator
+   points at a custom library root.
 5. Required output: full recommendation, selected records, generated text, or
    published directory.
 
@@ -81,11 +82,14 @@ CLI operations map one-to-one to the service:
 
 ```bash
 uv run goldilocks recommend STRUCTURE --json
-uv run goldilocks generate STRUCTURE --pseudo-root PSEUDOS --out RUN_DIR --json
+uv run goldilocks generate STRUCTURE --out RUN_DIR --json
 uv run goldilocks compute STRUCTURE --outputs analysis,k_points
 uv run goldilocks serve http
 uv run goldilocks serve mcp
 ```
+
+Requests without a pseudopotential argument resolve the installed default
+table; pass `--pseudo-root` only to use an operator-managed custom library.
 
 HTTP and MCP require the `[http]` and `[mcp]` extras. Both transports keep one
 `CoreService` alive and expose recommend, generate, compute, task discovery,

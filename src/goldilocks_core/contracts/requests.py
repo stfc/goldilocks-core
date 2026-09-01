@@ -34,9 +34,9 @@ class PresetRequest:
 
     Exactly one pseudopotential source may be set: ``pseudo_metadata``
     (in-memory records), ``pseudo_root`` (operator-managed directory), or
-    ``pseudo_table`` (registered asset-store table). All three unset is
-    allowed for recommendation and rejected by generation. ``output_dir``
-    publishes a bundle and only applies to generate jobs.
+    ``pseudo_table`` (registered asset-store table). All three unset falls
+    back to the registered default table. ``output_dir`` publishes a bundle
+    and only applies to generate jobs.
     """
 
     structure: StructureInput
@@ -85,8 +85,8 @@ class QueryRequest:
 
     ``outputs`` names record types resolved through the Core registry.
     Exactly one pseudopotential source may be set: ``pseudo_metadata``,
-    ``pseudo_root``, or ``pseudo_table``; all unset is allowed where the
-    requested records do not need pseudopotentials.
+    ``pseudo_root``, or ``pseudo_table``; all unset falls back to the
+    registered default table.
     """
 
     structure: StructureInput

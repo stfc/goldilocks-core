@@ -371,6 +371,26 @@ def test_select_parameters_warns_when_pseudo_is_missing() -> None:
     )
 
 
+def test_select_parameters_aggregates_pseudo_warnings_into_record() -> None:
+    """Per-pseudo selection warnings are aggregated onto the SelectionRecord."""
+    structure = make_structure()
+    advice = advise_parameters(
+        analyze_structure(structure),
+        intent=CalculationIntent(functional="PBEsol"),
+    )
+    selection = select_from_advice(
+        structure,
+        advice,
+        metadata_list=[make_metadata(functional="PBE")],
+    )
+
+    pseudo = selection.pseudopotentials[0]
+    assert pseudo.warnings == (
+        "No pseudopotential metadata matched Si / PBEsol / scalar.",
+    )
+    assert selection.warnings == pseudo.warnings
+
+
 def test_select_parameters_filters_by_pseudo_type() -> None:
     """Exclude candidates whose pseudo type does not match advice."""
     structure = make_structure()

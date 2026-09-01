@@ -25,7 +25,7 @@ def advise_pseudopotentials(
     warnings: tuple[str, ...] = ()
 
     if spin_orbit.enabled and hints.relativistic_mode is None:
-        source = "analysis"
+        source = spin_orbit.provenance.source
     elif spin_orbit.consider and not spin_orbit.enabled:
         warnings = (
             "Heavy elements are present; fully-relativistic pseudos may be needed "

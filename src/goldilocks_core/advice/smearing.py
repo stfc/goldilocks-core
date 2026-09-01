@@ -28,6 +28,7 @@ def advise_smearing(
         )
 
     if analysis.electronic_character in {"metal", "likely_metal"}:
+        heuristic_inferred = analysis.electronic_character_source == "heuristic"
         return SmearingAdvice(
             smearing_type="cold",
             width_ry=METALLIC_SMEARING_WIDTH_RY,
@@ -35,9 +36,23 @@ def advise_smearing(
                 source="analysis",
                 reason="Likely metallic composition benefits from modest smearing.",
                 warnings=(
-                    "Metallicity is inferred from structure-only heuristics; verify "
-                    "against electronic-structure data.",
+                    (
+                        "Metallicity is inferred from structure-only heuristics; "
+                        "verify against electronic-structure data.",
+                    )
+                    if heuristic_inferred
+                    else ()
                 ),
+            ),
+        )
+
+    if analysis.electronic_character == "insulator":
+        return SmearingAdvice(
+            smearing_type="fixed",
+            width_ry=None,
+            provenance=Provenance(
+                source="analysis",
+                reason="Insulating electronic character supports fixed occupations.",
             ),
         )
 

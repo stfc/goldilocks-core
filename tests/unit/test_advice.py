@@ -13,6 +13,7 @@ def make_analysis(
     magnetic_elements: tuple[str, ...] = (),
     heavy_elements: tuple[str, ...] = (),
     electronic_character: str = "unknown",
+    electronic_character_source: str = "heuristic",
     dimensionality: str = "unknown",
     low_dimensional: bool = False,
 ) -> StructureAnalysisRecord:
@@ -29,6 +30,7 @@ def make_analysis(
         magnetic_elements=magnetic_elements,
         heavy_elements=heavy_elements,
         electronic_character=electronic_character,
+        electronic_character_source=electronic_character_source,
         dimensionality=dimensionality,
         low_dimensional=low_dimensional,
     )
@@ -70,6 +72,7 @@ def test_advise_parameters_uses_analysis_without_silently_enabling_soc() -> None
     assert advice.spin_orbit.consider is True
     assert advice.spin_orbit.enabled is False
     assert advice.spin_orbit.provenance.source == "analysis"
+    assert advice.spin_orbit.heavy_elements == ("I",)
     assert advice.pseudopotentials.functional == "PBEsol"
     assert advice.pseudopotentials.relativistic_mode == "scalar"
     assert advice.pseudopotentials.provenance.warnings
@@ -104,6 +107,141 @@ def test_advise_parameters_uses_likely_metal_smearing_from_analysis() -> None:
     assert advice.smearing.smearing_type == "cold"
     assert advice.smearing.width_ry == 0.01
     assert advice.smearing.provenance.source == "analysis"
+    assert any(
+        "structure-only heuristics" in warning
+        for warning in advice.smearing.provenance.warnings
+    )
+
+
+def test_advise_parameters_uses_metal_smearing_from_ml_classification() -> None:
+    """A model-classified metal gets metallic smearing without the heuristic caveat."""
+    advice = advise_parameters(
+        make_analysis(electronic_character="metal", electronic_character_source="model")
+    )
+
+    assert advice.smearing.smearing_type == "cold"
+    assert advice.smearing.width_ry == 0.01
+    assert advice.smearing.provenance.source == "analysis"
+    assert advice.smearing.provenance.warnings == ()
+
+
+def test_advise_smearing_records_user_hint_provenance_when_hinted() -> None:
+    """Operator smearing hints are tagged with user_hint provenance."""
+    advice = advise_parameters(
+        make_analysis(),
+        hints=CalculationHints(smearing_type="gaussian", smearing_width_ry=0.02),
+    )
+
+    assert advice.smearing.smearing_type == "gaussian"
+    assert advice.smearing.width_ry == 0.02
+    assert advice.smearing.provenance.source == "user_hint"
+
+
+def test_advise_smearing_defaults_to_fixed_occupations_for_insulators() -> None:
+    """A model-classified insulator gets analysis-backed fixed occupations."""
+    advice = advise_parameters(
+        make_analysis(
+            electronic_character="insulator", electronic_character_source="model"
+        )
+    )
+
+    assert advice.smearing.smearing_type == "fixed"
+    assert advice.smearing.width_ry is None
+    assert advice.smearing.provenance.source == "analysis"
+    assert advice.smearing.provenance.warnings == ()
+
+
+def test_advise_smearing_defaults_to_fixed_occupations_when_character_unknown() -> None:
+    """Unknown metallicity falls back to default fixed occupations."""
+    advice = advise_parameters(make_analysis())
+
+    assert advice.smearing.smearing_type == "fixed"
+    assert advice.smearing.width_ry is None
+    assert advice.smearing.provenance.source == "default"
+    assert "Metallicity is unknown" in advice.smearing.provenance.reason
+
+
+def test_advise_spin_orbit_user_hint_records_provenance_and_heavy_elements() -> None:
+    """An operator SOC hint overrides the decision and carries heavy elements."""
+    advice = advise_parameters(
+        make_analysis(heavy_elements=("I",)),
+        hints=CalculationHints(spin_orbit_coupling=True),
+    )
+
+    assert advice.spin_orbit.enabled is True
+    assert advice.spin_orbit.consider is False
+    assert advice.spin_orbit.heavy_elements == ("I",)
+    assert advice.spin_orbit.provenance.source == "user_hint"
+
+
+def test_advise_spin_orbit_defaults_to_disabled_without_heavy_elements() -> None:
+    """With no heavy elements and no hint, SOC is disabled by default."""
+    advice = advise_parameters(make_analysis())
+
+    assert advice.spin_orbit.enabled is False
+    assert advice.spin_orbit.consider is False
+    assert advice.spin_orbit.heavy_elements == ()
+    assert advice.spin_orbit.provenance.source == "default"
+
+
+def test_advise_pseudopotentials_records_user_hint_source_without_soc() -> None:
+    """Pseudo hints without SOC record user_hint provenance and no warnings."""
+    advice = advise_parameters(
+        make_analysis(),
+        hints=CalculationHints(pseudo_mode="precision"),
+    )
+
+    assert advice.pseudopotentials.provenance.source == "user_hint"
+    assert advice.pseudopotentials.provenance.warnings == ()
+
+
+def test_advise_pseudopotentials_records_default_source_without_hints() -> None:
+    """No pseudo hints and no SOC record default provenance and no warnings."""
+    advice = advise_parameters(make_analysis())
+
+    assert advice.pseudopotentials.provenance.source == "default"
+    assert advice.pseudopotentials.provenance.warnings == ()
+
+
+def test_advise_pseudopotentials_inherits_soc_hint_provenance() -> None:
+    """SOC enabled through a hint carries user_hint provenance into pseudo advice."""
+    advice = advise_parameters(
+        make_analysis(),
+        hints=CalculationHints(spin_orbit_coupling=True),
+    )
+
+    assert advice.pseudopotentials.provenance.source == "user_hint"
+    assert advice.pseudopotentials.relativistic_mode == "full"
+
+
+def test_advise_magnetism_user_hint_carries_magnetic_elements() -> None:
+    """An operator spin hint carries the detected magnetic elements."""
+    advice = advise_parameters(
+        make_analysis(magnetic_elements=("Fe",)),
+        hints=CalculationHints(spin_polarized=True),
+    )
+
+    assert advice.magnetism.spin_polarized is True
+    assert advice.magnetism.magnetic_elements == ("Fe",)
+    assert advice.magnetism.provenance.source == "user_hint"
+
+
+def test_advise_magnetism_analysis_carries_magnetic_elements() -> None:
+    """Detected magnetic elements trigger spin polarization with analysis provenance."""
+    advice = advise_parameters(make_analysis(magnetic_elements=("Fe",)))
+
+    assert advice.magnetism.spin_polarized is True
+    assert advice.magnetism.magnetic_elements == ("Fe",)
+    assert advice.magnetism.provenance.source == "analysis"
+
+
+def test_advise_magnetism_defaults_without_magnetic_elements() -> None:
+    """No magnetic elements and no hint defaults to unpolarized with no elements."""
+    advice = advise_parameters(make_analysis())
+
+    assert advice.magnetism.spin_polarized is False
+    assert advice.magnetism.magnetic_elements == ()
+    assert advice.magnetism.provenance.source == "default"
 
 
 def test_advise_parameters_records_convergence_hints() -> None:

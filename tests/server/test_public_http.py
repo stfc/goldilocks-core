@@ -285,7 +285,9 @@ def test_http_does_not_relabel_unexpected_core_defects(
     assert response.status_code == 500
 
 
-def test_http_rejects_paths_and_deployment_configuration(test_service) -> None:
+def test_http_rejects_paths_and_deployment_configuration(
+    test_service, sample_structure_text: str
+) -> None:
     inline = {"name": "Si.cif", "content": ""}
     with TestClient(create_app(test_service)) as client:
         path_source = client.post(
@@ -317,6 +319,19 @@ def test_http_rejects_paths_and_deployment_configuration(test_service) -> None:
                 "draft": {"structure": inline},
                 "selection": {"records": ["analysis"]},
                 "output": {"kind": "directory", "path": "/server/output"},
+            },
+        )
+        unsafe_name = client.post(
+            "/compute",
+            json={
+                "draft": {
+                    "structure": {
+                        "name": "Si\n.cif",
+                        "content": sample_structure_text,
+                        "format": "cif",
+                    }
+                },
+                "selection": {"preset": "generate"},
             },
         )
         deployment_fields = {
@@ -353,6 +368,11 @@ def test_http_rejects_paths_and_deployment_configuration(test_service) -> None:
     assert directory.status_code == 422
     assert directory.json()["error"]["kind"] == "invalid_request"
     assert "/server/output" not in directory.text
+    assert unsafe_name.status_code == 422
+    assert unsafe_name.json()["error"] == {
+        "kind": "invalid_request",
+        "message": "InlineStructureSource.name must be one filename",
+    }
     for field, response in deployment_fields.items():
         assert response.status_code == 422
         errors = response.json()["error"]["details"]["validation_errors"]

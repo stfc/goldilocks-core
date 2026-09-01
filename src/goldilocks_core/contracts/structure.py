@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Literal
@@ -28,6 +29,7 @@ class InlineStructureSource:
             or PurePath(self.name).name != self.name
             or "/" in self.name
             or "\\" in self.name
+            or any(unicodedata.category(character) == "Cc" for character in self.name)
         ):
             raise ValueError("InlineStructureSource.name must be one filename")
         if not isinstance(self.content, str):

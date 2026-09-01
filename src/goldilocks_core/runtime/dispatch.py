@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from threading import Lock
 
 from goldilocks_core.contracts import (
     CalculationTaskCapability,
@@ -28,6 +29,7 @@ class Dispatcher:
         self._runtime = runtime
         self._tasks: dict[str, GraphHandler] = {}
         self._default_pending = True
+        self._default_lock = Lock()
 
     def register(self, handler: GraphHandler) -> None:
         task = handler.spec
@@ -84,11 +86,14 @@ class Dispatcher:
     def _ensure_default(self) -> None:
         if not self._default_pending:
             return
-        self._default_pending = False
-        from goldilocks_core.runtime.scf import SCF_HANDLER
+        with self._default_lock:
+            if not self._default_pending:
+                return
+            from goldilocks_core.runtime.scf import SCF_HANDLER
 
-        if SCF_HANDLER.spec.task not in self._tasks:
-            self.register(SCF_HANDLER)
+            if SCF_HANDLER.spec.task not in self._tasks:
+                self.register(SCF_HANDLER)
+            self._default_pending = False
 
     def compute(self, request: ComputeRequest) -> ComputationResult:
         self._ensure_open()

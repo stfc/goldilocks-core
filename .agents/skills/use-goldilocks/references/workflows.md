@@ -22,7 +22,14 @@ for path in sorted(Path("structures").glob("*.cif")):
         print(path, "ERROR", error)
 ```
 
-## Load pseudopotential metadata
+## Pseudopotential sources
+
+A request with no pseudopotential argument resolves the installed default
+table, including cutoff metadata. Install it first: `goldilocks assets install
+default`.
+
+To use an operator-managed custom library instead, load its metadata and pass
+it explicitly:
 
 ```python
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
@@ -35,7 +42,7 @@ for pseudo in pseudo_metadata:
         pseudo.functional,
         pseudo.pseudo_type,
         pseudo.relativistic,
-        pseudo.sssp_recommended_cutoff,
+        pseudo.cutoffs,
     )
 ```
 
@@ -52,7 +59,6 @@ from goldilocks_core import (
     CoreService,
     PresetRequest,
 )
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 request = PresetRequest(
     structure="structure.cif",
@@ -60,7 +66,7 @@ request = PresetRequest(
         code="quantum_espresso",
         task="scf_single_point",
         functional="PBE",
-        pseudo_mode="efficiency",
+        pseudo_accuracy="efficiency",
     ),
     hints=CalculationHints(
         k_spacing=0.2,
@@ -69,7 +75,6 @@ request = PresetRequest(
         # smearing_type="cold",
         # smearing_width_ry=0.01,
     ),
-    pseudo_metadata=tuple(load_pseudo_metadata("pseudos")),
 )
 
 with CoreService() as core:
@@ -83,6 +88,9 @@ print(result.advice.convergence)
 print(result.warnings)
 ```
 
+To use a custom library instead of the installed table, add
+`pseudo_metadata=tuple(load_pseudo_metadata("pseudos"))` to the request.
+
 Extract cutoffs from each `PseudopotentialSelection` and use the maxima across
 elements when inspecting a generated calculation.
 
@@ -90,12 +98,10 @@ elements when inspecting a generated calculation.
 
 ```python
 from goldilocks_core import CalculationHints, CoreService, PresetRequest
-from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 
 request = PresetRequest(
     structure="structure.cif",
     hints=CalculationHints(k_grid=(4, 4, 4)),
-    pseudo_metadata=tuple(load_pseudo_metadata("pseudos")),
 )
 
 with CoreService() as core:
@@ -119,13 +125,10 @@ print(result.bundle.manifest)
 CLI equivalent:
 
 ```bash
-uv run goldilocks-core generate structure.cif \
-    --pseudo-root pseudos \
-    --functional PBE \
-    --k-spacing 0.2 \
-    --out run-dir \
-    --json
+uv run goldilocks generate structure.cif --functional PBE --k-spacing 0.2 --out run-dir --json
 ```
+
+Pass `--pseudo-root pseudos` only for a custom operator-managed library.
 
 The destination must not exist. The published layout is:
 
@@ -161,9 +164,7 @@ print(records[KPointSelection])
 CLI equivalent:
 
 ```bash
-uv run goldilocks-core compute structure.cif \
-    --outputs analysis,k_points \
-    --k-grid 4 4 4
+uv run goldilocks compute structure.cif --outputs analysis,k_points --k-grid 4 4 4
 ```
 
 ## One-call runner
@@ -212,8 +213,8 @@ print(result.k_points.grid)
 
 ```bash
 uv sync --all-extras
-uv run goldilocks-core serve http --host 127.0.0.1 --port 8000
-uv run goldilocks-core serve mcp
+uv run goldilocks serve http --host 127.0.0.1 --port 8000
+uv run goldilocks serve mcp
 ```
 
 HTTP exposes `/recommend`, `/generate`, `/compute`, `/tasks`, `/codes`,

@@ -11,10 +11,12 @@ from threading import Event, Lock
 
 import pytest
 
-from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled, AssetReference
+from goldilocks_core.assets.records import AssetReference
+from goldilocks_core.assets.store import AssetCorrupt, AssetNotInstalled
 from goldilocks_core.kmesh.resolve import KPointSelection
 from goldilocks_core.provenance import Provenance
-from goldilocks_core.runtime import Runtime, Service
+from goldilocks_core.runtime.models import Runtime
+from goldilocks_core.runtime.service import Service
 from goldilocks_core.server.http import create_app
 
 TestClient = pytest.importorskip("fastapi.testclient").TestClient

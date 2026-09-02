@@ -7,7 +7,6 @@ import pytest
 
 from goldilocks_core import Service
 from goldilocks_core.calculation import CalculationHints, CalculationIntent
-from goldilocks_core.runtime import GraphHandler, Preset, Runtime, Stage, TaskGraph
 from goldilocks_core.runtime.capabilities import (
     Capabilities,
     ModelCapability,
@@ -15,10 +14,15 @@ from goldilocks_core.runtime.capabilities import (
 )
 from goldilocks_core.runtime.graph import (
     CalculationTaskCapability,
+    Preset,
     PresetCapability,
+    Stage,
     StageCapability,
+    TaskGraph,
 )
+from goldilocks_core.runtime.models import Runtime
 from goldilocks_core.runtime.registry import RECORD_TYPE_IDS
+from goldilocks_core.runtime.task import GraphHandler
 from goldilocks_core.serialization import to_portable
 
 

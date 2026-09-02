@@ -16,7 +16,8 @@ import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.advice.pseudo import PseudopotentialRequirements
-from goldilocks_core.assets import AssetFile, AssetStore
+from goldilocks_core.assets.records import AssetFile
+from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.calculation import CalculationHints
 from goldilocks_core.io.structures import InMemoryStructureSource
 from goldilocks_core.provenance import Provenance

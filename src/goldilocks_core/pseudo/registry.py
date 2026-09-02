@@ -10,7 +10,7 @@ from typing import Any
 
 from pymatgen.core import Element
 
-from goldilocks_core.assets import AssetFile, AssetSpec
+from goldilocks_core.assets.records import AssetFile, AssetSpec
 from goldilocks_core.functionals import normalize_functional_label
 from goldilocks_core.types import PathLike, PseudoAccuracy, RelativisticTreatment
 

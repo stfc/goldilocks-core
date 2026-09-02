@@ -3,13 +3,9 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass
 
-from goldilocks_core.assets import (
-    AssetCorrupt,
-    AssetInstallation,
-    AssetNotInstalled,
-    AssetStore,
-)
+from goldilocks_core.assets.records import AssetInstallation
 from goldilocks_core.assets.runtime import WORKBENCH_PROFILE, catalogue, references
+from goldilocks_core.assets.store import AssetCorrupt, AssetNotInstalled, AssetStore
 from goldilocks_core.types import PathLike
 
 

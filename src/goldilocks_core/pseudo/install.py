@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 
-from goldilocks_core.assets import AssetInstallation, AssetPreparer
+from goldilocks_core.assets.records import AssetInstallation, AssetPreparer
 from goldilocks_core.pseudo.import_pseudodojo import preparer as dojo_preparer
 from goldilocks_core.pseudo.import_sssp import preparer as sssp_preparer
 from goldilocks_core.pseudo.registry import (

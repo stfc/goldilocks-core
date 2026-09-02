@@ -28,7 +28,7 @@ from goldilocks_core import (
     Service,
     StructureAnalysisRecord,
 )
-from goldilocks_core.examples import structure
+from goldilocks_core.examples.structures import structure
 
 request = ComputeRequest(
     draft=CalculationDraft(structure=structure("Si.cif")),
@@ -57,7 +57,7 @@ results.
 The `structure()` function returns the full path to an installed example:
 
 ```python
-from goldilocks_core.examples import structure
+from goldilocks_core.examples.structures import structure
 
 silicon_path = structure("Si.cif")
 ```

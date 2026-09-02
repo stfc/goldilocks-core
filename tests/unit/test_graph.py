@@ -3,7 +3,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from goldilocks_core.runtime import Preset, Stage, TaskGraph, UnknownPreset, execute
+from goldilocks_core.runtime.graph import (
+    Preset,
+    Stage,
+    TaskGraph,
+    UnknownPreset,
+    execute,
+)
 
 
 @dataclass

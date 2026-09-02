@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 from pymatgen.core import Structure
 
-from goldilocks_core.advice import ml_kmesh_advisor
+from goldilocks_core.advice.kindex import ml_kmesh_advisor
 from goldilocks_core.advice.parameters import ParameterAdvice, advise_parameters
 from goldilocks_core.advice.pseudo import PseudopotentialRequirements
 from goldilocks_core.analysis import StructureAnalysisRecord, analyze_structure

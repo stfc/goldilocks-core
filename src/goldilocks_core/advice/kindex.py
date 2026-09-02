@@ -10,7 +10,7 @@ from goldilocks_core.kmesh.math import (
     generate_candidate_k_distances,
 )
 from goldilocks_core.kmesh.resolve import KMeshAdvisor, KPointSelection
-from goldilocks_core.ml.kindex import predict_kindex
+from goldilocks_core.ml.kindex.inference import predict_kindex
 from goldilocks_core.ml.models import ModelSpec
 from goldilocks_core.provenance import Provenance
 

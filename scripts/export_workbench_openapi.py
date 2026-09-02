@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from goldilocks_core.runtime import Service
+from goldilocks_core.runtime.service import Service
 from goldilocks_core.server.http import create_app
 
 

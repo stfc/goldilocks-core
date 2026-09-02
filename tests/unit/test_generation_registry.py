@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from goldilocks_core.generation import (
-    GenerationError,
+from goldilocks_core.generation.errors import GenerationError
+from goldilocks_core.generation.registry import (
     available_codes,
     available_tasks,
     writer_for,

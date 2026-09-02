@@ -62,7 +62,8 @@ Primary docs:
 4. Keep package ownership consistent.
 
    ```text
-   contracts/            -> domain values, boundary contracts, stable Record IDs
+   calculation.py, request.py, result.py
+                        -> operator boundary contracts and stable Record IDs
    runtime/graph.py      -> type-keyed DAG execution
    runtime/dispatch.py   -> Calculation Task registry and Compute dispatch
    runtime/models.py     -> model lifecycle

@@ -13,9 +13,10 @@ Load + Advice + Select + Kmesh -> Generate
 Analysis + Advice + Kmesh + Select + Generate -> DFT Input Data
 ```
 
-The executor resolves this dependency graph from typed stage inputs and
-outputs. Stages are functions with no stage base classes; only source and asset
-resolution, input rendering, and publication touch the filesystem.
+The executor resolves this dependency graph from the records each stage
+produces and consumes. Stages are functions with no stage base classes; only
+source and asset resolution, input rendering, and publication touch the
+filesystem.
 
 ## Modules
 

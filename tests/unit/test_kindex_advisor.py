@@ -41,11 +41,11 @@ def test_advise_kpoints_returns_selected_mesh(monkeypatch) -> None:
 
     advice = advise_kpoints(structure, spec)
 
-    assert advice.mesh_type == "monkhorst-pack"
-    assert advice.grid == (3, 3, 3)
-    assert advice.shift == (0, 0, 0)
-    assert advice.provenance.source == "model"
-    assert advice.provenance.data_source == spec.name
+    assert advice["mesh_type"] == "monkhorst-pack"
+    assert advice["grid"] == [3, 3, 3]
+    assert advice["shift"] == [0, 0, 0]
+    assert advice["provenance"].source == "model"
+    assert advice["provenance"].data_source == spec.name
 
 
 def test_ml_kmesh_advisor_uses_model_when_invoked(monkeypatch) -> None:
@@ -58,6 +58,6 @@ def test_ml_kmesh_advisor_uses_model_when_invoked(monkeypatch) -> None:
 
     selection = ml_kmesh_advisor(spec)(structure)
 
-    assert selection.grid == (3, 3, 3)
-    assert selection.provenance.source == "model"
-    assert selection.provenance.data_source == spec.name
+    assert selection["grid"] == [3, 3, 3]
+    assert selection["provenance"].source == "model"
+    assert selection["provenance"].data_source == spec.name

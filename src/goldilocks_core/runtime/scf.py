@@ -228,14 +228,14 @@ def collect_scf_warnings(records: Records) -> tuple[str, ...]:
         groups.append(_advice_warnings(advice))
     k_points = records.get(KPointSelection)
     if k_points is not None:
-        groups.append(k_points.provenance.warnings)
+        groups.append(k_points["provenance"].warnings)
     selection = records.get(SelectionRecord)
     if selection is not None:
-        groups.append(selection.warnings)
+        groups.append(selection["warnings"])
     return _unique_warnings(*groups)
 
 
-def _advice_warnings(advice: ParameterAdvice) -> tuple[str, ...]:
+def _advice_warnings(advice: JsonDict) -> tuple[str, ...]:
     return _unique_warnings(
         advice["smearing"]["provenance"].warnings,
         advice["magnetism"]["provenance"].warnings,

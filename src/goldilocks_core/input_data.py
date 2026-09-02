@@ -19,7 +19,7 @@ from goldilocks_core.ml.models import ModelSpec
 from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.pseudo.registry import load_tables
-from goldilocks_core.selection import PseudopotentialSelection, SelectionRecord
+from goldilocks_core.selection import SelectionRecord, selection_portable
 from goldilocks_core.serialization import to_jsonable, to_portable
 from goldilocks_core.types import JsonDict, PathLike
 
@@ -170,7 +170,7 @@ def assemble_dft_input_data(
             "analysis": to_portable(analysis),
             "advice": to_portable(advice),
             "k_points": to_portable(k_points),
-            "selection": to_portable(selection),
+            "selection": selection_portable(selection),
             "generated_files": [
                 {"path": item.path, "role": item.role} for item in generated_files
             ],
@@ -198,24 +198,26 @@ def _bind_selected_pseudo_metadata(
     metadata: tuple[PseudoMetadata, ...],
 ) -> tuple[PseudoMetadata, ...]:
     bound: list[PseudoMetadata] = []
-    for selected in selection.pseudopotentials:
+    for selected in selection["pseudopotentials"]:
         matches = tuple(
             candidate
             for candidate in metadata
-            if candidate.element == selected.element
-            and candidate.filename == selected.filename
-            and candidate.filepath == selected.filepath
-            and _pseudo_source_identity(candidate) == selected.provenance.data_source
+            if candidate.element == selected["element"]
+            and candidate.filename == selected["filename"]
+            and candidate.filepath == selected["filepath"]
+            and (
+                _pseudo_source_identity(candidate) == selected["provenance"].data_source
+            )
         )
         if not matches:
             raise ValueError(
                 "Selected pseudopotential has no exact metadata candidate for "
-                f"{selected.element}"
+                f"{selected['element']}"
             )
         if len(matches) != 1:
             raise ValueError(
                 "Selected pseudopotential metadata is ambiguous for "
-                f"{selected.element}: {len(matches)} exact candidates"
+                f"{selected['element']}: {len(matches)} exact candidates"
             )
         bound.append(matches[0])
     return tuple(bound)
@@ -372,7 +374,7 @@ def _used_model_material(
     custom_metallicity_model: ModelSpec | None,
     uses_default_metallicity_model: bool,
 ) -> tuple[_ModelMaterial, ...]:
-    kpoints_uses_model = k_points.provenance.source == "model"
+    kpoints_uses_model = k_points["provenance"].source == "model"
     analysis_uses_model = analysis["electronic_character_source"] == "model"
     if not kpoints_uses_model and not analysis_uses_model:
         return ()
@@ -532,7 +534,7 @@ def _pseudopotential_material(
         installed = asset_store.resolve_spec(table.asset)
         artifacts = [
             _installed_pseudo_artifact(selected, installed)
-            for selected in selection.pseudopotentials
+            for selected in selection["pseudopotentials"]
         ]
         artifacts.append(
             _installed_artifact(
@@ -562,19 +564,19 @@ def _pseudopotential_material(
         raise ValueError("Selected pseudopotentials must come from one installed set")
 
     artifacts: list[JsonDict] = []
-    for selected, item in zip(selection.pseudopotentials, metadata, strict=True):
-        if selected.filepath is None or selected.filename is None:
+    for selected, item in zip(selection["pseudopotentials"], metadata, strict=True):
+        if selected["filepath"] is None or selected["filename"] is None:
             raise ValueError(
-                f"Cannot assemble unresolved pseudopotential for {selected.element}."
+                f"Cannot assemble unresolved pseudopotential for {selected['element']}"
             )
         artifacts.append(
             _generated_artifact(
-                f"pseudo/{selected.filename}",
+                f"pseudo/{selected['filename']}",
                 "pseudopotential",
                 _read_explicit_pseudo(item),
-                identity=item.source_identifier or selected.filename,
+                identity=item.source_identifier or selected["filename"],
                 media_type="application/x-upf",
-                provenance=selected.provenance,
+                provenance=selected["provenance"],
             )
         )
     pseudo_set, licence_text = _explicit_pseudopotential_set(metadata)
@@ -609,13 +611,13 @@ def _read_explicit_pseudo(metadata: PseudoMetadata) -> bytes:
 
 
 def _installed_pseudo_artifact(
-    selected: PseudopotentialSelection, installed: InstalledAsset
+    selected: JsonDict, installed: InstalledAsset
 ) -> JsonDict:
-    filepath = selected.filepath
-    filename = selected.filename
+    filepath = selected["filepath"]
+    filename = selected["filename"]
     if filepath is None or filename is None:
         raise ValueError(
-            f"Cannot assemble unresolved pseudopotential for {selected.element}."
+            f"Cannot assemble unresolved pseudopotential for {selected['element']}."
         )
     try:
         relative = Path(filepath).relative_to(installed.root).as_posix()
@@ -629,7 +631,7 @@ def _installed_pseudo_artifact(
         f"pseudo/{filename}",
         "pseudopotential",
         "application/x-upf",
-        provenance=selected.provenance,
+        provenance=selected["provenance"],
     )
 
 

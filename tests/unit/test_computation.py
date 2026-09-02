@@ -254,7 +254,7 @@ def test_service_computes_the_recommendation_preset_as_records() -> None:
         KPointSelection,
         SelectionRecord,
     )
-    assert result.records[KPointSelection].grid == (2, 2, 1)
+    assert result.records[KPointSelection]["grid"] == [2, 2, 1]
     assert result.selection == PresetSelection("recommend")
     assert result.task == "scf_single_point"
     assert result.task_revision == "1"
@@ -399,4 +399,4 @@ def test_one_call_compute_uses_the_same_result_contract() -> None:
         output=None,
     )
 
-    assert result.records[KPointSelection].grid == (2, 2, 1)
+    assert result.records[KPointSelection]["grid"] == [2, 2, 1]

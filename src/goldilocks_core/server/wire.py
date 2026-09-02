@@ -13,11 +13,12 @@ from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.calculation import CalculationHints, CalculationIntent
 from goldilocks_core.input_data import DftInputData
 from goldilocks_core.io.structures import Matrix3, Vector3
+from goldilocks_core.kmesh.resolve import KPointSelection
 from goldilocks_core.ml.models import ModelSpec
 from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.runtime.registry import record_types_by_id
-from goldilocks_core.selection import PseudopotentialSelection
+from goldilocks_core.selection import SelectionRecord
 from goldilocks_core.types import (
     CalcTask,
     CodeName,
@@ -25,6 +26,7 @@ from goldilocks_core.types import (
     ElectronicCharacter,
     JsonDict,
     KPointGrid,
+    KPointShift,
     PseudoAccuracy,
     PseudoType,
     RelativisticTreatment,
@@ -319,12 +321,35 @@ SerializedPseudoMetadataDocument = _serialized_model(
     exclude=frozenset({"filepath", "pseudo_info"}),
 )
 _SERIALIZED_MODELS[PseudoMetadata] = SerializedPseudoMetadataDocument
-SerializedPseudopotentialDocument = _serialized_model(
-    PseudopotentialSelection,
-    name="SerializedPseudopotentialSelection",
-    exclude=frozenset({"filepath"}),
+ProvenanceDocument = _serialized_model(Provenance)
+SerializedPseudopotentialSelectionDocument = create_model(
+    "SerializedPseudopotentialSelection",
+    __config__=_SERIALIZED,
+    element=(str, ...),
+    filename=(str | None, ...),
+    functional=(str | None, ...),
+    relativistic=(RelativisticTreatment | None, ...),
+    ecutwfc_ry=(float | None, ...),
+    ecutrho_ry=(float | None, ...),
+    provenance=(ProvenanceDocument, ...),
+    warnings=(tuple[str, ...], ...),
 )
-_SERIALIZED_MODELS[PseudopotentialSelection] = SerializedPseudopotentialDocument
+KPointSelectionDocument = create_model(
+    "KPointSelection",
+    __config__=_SERIALIZED,
+    grid=(KPointGrid, ...),
+    shift=(KPointShift, ...),
+    mesh_type=(str, ...),
+    provenance=(ProvenanceDocument, ...),
+)
+SelectionRecordDocument = create_model(
+    "SelectionRecord",
+    __config__=_SERIALIZED,
+    pseudopotentials=(tuple[SerializedPseudopotentialSelectionDocument, ...], ...),
+    warnings=(tuple[str, ...], ...),
+)
+_SERIALIZED_MODELS[KPointSelection] = KPointSelectionDocument
+_SERIALIZED_MODELS[SelectionRecord] = SelectionRecordDocument
 
 GeneratedArtifactSourceDocument = create_model(
     "GeneratedArtifactSource",
@@ -344,7 +369,6 @@ InstalledArtifactSourceDocument = create_model(
 ArtifactSourceDocument = (
     GeneratedArtifactSourceDocument | InstalledArtifactSourceDocument
 )
-ProvenanceDocument = _serialized_model(Provenance)
 _SmearingAdviceDocument = create_model(
     "SmearingAdvice",
     __config__=_SERIALIZED,

@@ -190,7 +190,7 @@ def test_compute_retains_the_same_normalized_structure_snapshot_as_inspection() 
         result = service.compute(request)
 
     assert result.draft.structure == inspection
-    assert result.records[KPointSelection].grid == (2, 2, 2)
+    assert result.records[KPointSelection]["grid"] == [2, 2, 2]
 
 
 def test_scf_load_stage_describes_consuming_the_normalized_structure() -> None:

@@ -105,7 +105,7 @@ def test_explicit_soc_couples_fully_relativistic_pseudos_to_qe_noncollinear_flag
     assert advice["spin_orbit"]["enabled"] is True
     assert advice["spin_orbit"]["consider"] is False
     assert advice["pseudopotential_requirements"]["relativistic"] == "full"
-    assert result.records[SelectionRecord].pseudopotentials[0].filename == "I.UPF"
+    assert result.records[SelectionRecord]["pseudopotentials"][0]["filename"] == "I.UPF"
     qe_input = result.records[GeneratedFiles][0].content
     assert "  noncolin = .true." in qe_input
     assert "  lspinorb = .true." in qe_input
@@ -133,5 +133,5 @@ def test_pseudopotential_functional_must_match_calculation_functional(
     selection = result.records[SelectionRecord]
 
     assert advice["pseudopotential_requirements"]["functional"] == "PBEsol"
-    assert selection.pseudopotentials[0].filepath == pbesol.filepath
-    assert selection.pseudopotentials[0].filepath != pbe.filepath
+    assert selection["pseudopotentials"][0]["filepath"] == pbesol.filepath
+    assert selection["pseudopotentials"][0]["filepath"] != pbe.filepath

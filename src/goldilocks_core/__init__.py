@@ -35,7 +35,7 @@ from goldilocks_core.runtime.graph import UnknownPreset
 from goldilocks_core.runtime.jobs import compute
 from goldilocks_core.runtime.models import KMeshService, Runtime
 from goldilocks_core.runtime.service import Service
-from goldilocks_core.selection import PseudopotentialSelection, SelectionRecord
+from goldilocks_core.selection import SelectionRecord
 
 __all__ = [
     "ArchiveOutput",
@@ -59,7 +59,6 @@ __all__ = [
     "PathStructureSource",
     "PresetSelection",
     "PseudoMetadata",
-    "PseudopotentialSelection",
     "RecordSelection",
     "Records",
     "Runtime",

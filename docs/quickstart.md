@@ -1,7 +1,7 @@
 # Quickstart
 
-This page takes you from a CIF file to a runnable Quantum ESPRESSO SCF
-calculation, showing the real output at every step. It uses the CLI; the
+This page generates a runnable Quantum ESPRESSO SCF calculation from a CIF
+file. It shows the real output at every step. It uses the CLI; the
 [tutorial](tutorial.md) does the same through the Python API.
 
 ## Install the package and assets
@@ -23,9 +23,12 @@ pseudopotentials/pseudodojo-pbesol-efficiency-sr@0.4: installed
 
 ## Generate inputs for silicon
 
+Use a bundled example structure. `uv run goldilocks examples path` prints the
+directory that holds them; copy one beside you, or point `compute` at any CIF
+or POSCAR:
+
 ```bash
-STRUCTURES="$(uv run goldilocks examples path)"
-uv run goldilocks compute "$STRUCTURES/Si.cif" --preset generate --out run
+uv run goldilocks compute Si.cif --preset generate --out run
 ```
 
 The command prints what it produced:
@@ -83,8 +86,8 @@ The interesting part of `run/inputs/qe.in`:
 /
 ```
 
-None of these values were chosen arbitrarily, and none of them were chosen
-by you. Each one comes from a stage that explains itself:
+The recommendations chose these values. Each one comes from a stage that
+records its provenance:
 
 - `ecutwfc = 48` and `ecutrho = 192` come from the PseudoDojo
   `pbesol-efficiency-sr` table, selected per element;
@@ -105,8 +108,7 @@ default.
 selection, and keeps the result in memory:
 
 ```bash
-STRUCTURES="$(uv run goldilocks examples path)"
-uv run goldilocks compute "$STRUCTURES/Si.cif" --preset recommend --no-out --json
+uv run goldilocks compute Si.cif --preset recommend --no-out --json
 ```
 
 With `--json`, the result is one document whose `records` map is keyed by

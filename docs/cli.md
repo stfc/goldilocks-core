@@ -120,7 +120,8 @@ selection and local-source licensing requirements.
 
 ```bash
 uv run goldilocks examples path
-uv run goldilocks inspect "$(uv run goldilocks examples path)/Si.cif" --json
+STRUCTURES="$(uv run goldilocks examples path)"
+uv run goldilocks inspect "$STRUCTURES/Si.cif" --json
 ```
 
 ## Optional transports

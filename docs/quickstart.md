@@ -24,7 +24,8 @@ pseudopotentials/pseudodojo-pbesol-efficiency-sr@0.4: installed
 ## Generate inputs for silicon
 
 ```bash
-uv run goldilocks compute "$(uv run goldilocks examples path)/Si.cif" --preset generate --out run
+STRUCTURES="$(uv run goldilocks examples path)"
+uv run goldilocks compute "$STRUCTURES/Si.cif" --preset generate --out run
 ```
 
 The command prints what it produced:
@@ -104,7 +105,8 @@ default.
 selection, and keeps the result in memory:
 
 ```bash
-uv run goldilocks compute "$(uv run goldilocks examples path)/Si.cif" --preset recommend --no-out --json
+STRUCTURES="$(uv run goldilocks examples path)"
+uv run goldilocks compute "$STRUCTURES/Si.cif" --preset recommend --no-out --json
 ```
 
 With `--json`, the result is one document whose `records` map is keyed by

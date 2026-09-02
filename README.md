@@ -35,7 +35,8 @@ uv run goldilocks assets verify default
 Generate SCF inputs for a bundled structure:
 
 ```bash
-uv run goldilocks compute "$(uv run goldilocks examples path)/Si.cif" --preset generate --out run
+STRUCTURES="$(uv run goldilocks examples path)"
+uv run goldilocks compute "$STRUCTURES/Si.cif" --preset generate --out run
 ```
 
 `run/` holds the generated input, the exact selected pseudopotential,

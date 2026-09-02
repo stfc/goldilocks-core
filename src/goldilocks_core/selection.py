@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 from pymatgen.core import Structure
 
-from goldilocks_core.advice.pseudo import PseudopotentialRequirements
 from goldilocks_core.functionals import normalize_functional_label
 from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.metadata import PseudoMetadata
@@ -110,7 +109,7 @@ _LANTHANIDE_ACTINIDE_REASON = (
 
 def select_pseudopotentials(
     structure: Structure,
-    requirements: PseudopotentialRequirements,
+    requirements: JsonDict,
     metadata: Sequence[PseudoMetadata],
 ) -> SelectionRecord:
     available = tuple(metadata)
@@ -128,24 +127,24 @@ def select_pseudopotentials(
 
 def _select_for_element(
     element: str,
-    requirements: PseudopotentialRequirements,
+    requirements: JsonDict,
     metadata: tuple[PseudoMetadata, ...],
 ) -> PseudopotentialSelection:
     candidates = [
         item
         for item in metadata
         if item.element == element
-        and item.functional == requirements.functional
+        and item.functional == requirements["functional"]
         and (
-            requirements.pseudo_type is None
-            or item.pseudo_type == requirements.pseudo_type
+            requirements["pseudo_type"] is None
+            or item.pseudo_type == requirements["pseudo_type"]
         )
         and _relativistic_compatible(item, requirements)
     ]
     if element in LANTHANIDES or element in ACTINIDES:
         candidates = [item for item in candidates if item.provider == "sssp"]
     exact_accuracy = [
-        item for item in candidates if item.accuracy == requirements.accuracy
+        item for item in candidates if item.accuracy == requirements["accuracy"]
     ]
     candidates = exact_accuracy or [
         item for item in candidates if item.accuracy is None
@@ -197,12 +196,12 @@ def _select_for_element(
 
 def _relativistic_compatible(
     metadata: PseudoMetadata,
-    requirements: PseudopotentialRequirements,
+    requirements: JsonDict,
 ) -> bool:
-    return metadata.relativistic == requirements.relativistic or (
+    return metadata.relativistic == requirements["relativistic"] or (
         metadata.provider == "sssp"
         and metadata.relativistic == "non-relativistic"
-        and requirements.relativistic == "scalar"
+        and requirements["relativistic"] == "scalar"
     )
 
 
@@ -224,19 +223,19 @@ def _candidate_rank(metadata: PseudoMetadata) -> tuple[int, int, str, str, str]:
 def _selection_warnings(
     element: str,
     selected: PseudoMetadata,
-    requirements: PseudopotentialRequirements,
+    requirements: JsonDict,
 ) -> tuple[str, ...]:
     warnings = list(selected.warnings)
-    if selected.relativistic != requirements.relativistic:
+    if selected.relativistic != requirements["relativistic"]:
         warnings.append(
             f"Selected SSSP pseudopotential for {element} declares "
             f"{selected.relativistic} treatment within a "
-            f"{requirements.relativistic} table; verify this compatibility."
+            f"{requirements['relativistic']} table; verify this compatibility."
         )
     if selected.accuracy is None:
         warnings.append(
             f"Selected custom pseudopotential for {element} has no registered "
-            f"accuracy tier; requested {requirements.accuracy}."
+            f"accuracy tier; requested {requirements['accuracy']}."
         )
     if selected.frozen_4f_core:
         warnings.append(
@@ -261,7 +260,7 @@ def _selection_warnings(
 
 def _missing_pseudo_warning(
     element: str,
-    requirements: PseudopotentialRequirements,
+    requirements: JsonDict,
     metadata: tuple[PseudoMetadata, ...],
 ) -> str:
     message = _missing_pseudo_reason(element, requirements, metadata)
@@ -272,7 +271,7 @@ def _missing_pseudo_warning(
 
 def _missing_pseudo_reason(
     element: str,
-    requirements: PseudopotentialRequirements,
+    requirements: JsonDict,
     metadata: tuple[PseudoMetadata, ...],
 ) -> str:
     candidates = [item for item in metadata if item.element == element]
@@ -280,7 +279,7 @@ def _missing_pseudo_reason(
         return f"No available pseudopotential contains element {element}."
 
     functional = [
-        item for item in candidates if item.functional == requirements.functional
+        item for item in candidates if item.functional == requirements["functional"]
     ]
     if not functional:
         available = ", ".join(
@@ -288,32 +287,32 @@ def _missing_pseudo_reason(
         )
         return (
             f"Available pseudopotentials for {element} do not match functional "
-            f"{requirements.functional}; available: {available}."
+            f"{requirements['functional']}; available: {available}."
         )
 
     relativistic = [
-        item for item in functional if item.relativistic == requirements.relativistic
+        item for item in functional if item.relativistic == requirements["relativistic"]
     ]
     if not relativistic:
         return (
-            f"No available {requirements.relativistic} "
-            f"{requirements.functional} pseudopotential covers {element}."
+            f"No available {requirements['relativistic']} "
+            f"{requirements['functional']} pseudopotential covers {element}."
         )
 
     typed = [
         item
         for item in relativistic
-        if requirements.pseudo_type is None
-        or item.pseudo_type == requirements.pseudo_type
+        if requirements["pseudo_type"] is None
+        or item.pseudo_type == requirements["pseudo_type"]
     ]
     if not typed:
         return (
             f"No available pseudopotential for {element} matches type "
-            f"{requirements.pseudo_type or 'any'}."
+            f"{requirements['pseudo_type'] or 'any'}."
         )
 
     return (
         f"No available pseudopotential for {element} matches registered "
-        f"accuracy {requirements.accuracy}; custom metadata with unknown accuracy "
+        f"accuracy {requirements['accuracy']}; custom metadata with unknown accuracy "
         "is also absent."
     )

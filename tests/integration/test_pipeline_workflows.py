@@ -56,7 +56,7 @@ def test_generate_crosses_every_in_memory_stage_with_real_backends(
         )
     )
 
-    assert result.records[StructureAnalysisRecord].elements == ("Cl", "Na")
+    assert result.records[StructureAnalysisRecord]["elements"] == ["Cl", "Na"]
     assert result.records[KPointSelection].grid == (4, 4, 4)
     assert {
         pseudo.element for pseudo in result.records[SelectionRecord].pseudopotentials

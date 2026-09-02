@@ -418,28 +418,28 @@ def _print_human_summary(result: ComputationResult) -> None:
     print(f"task: {result.draft.intent.task}")
     advice = result.records.get(ParameterAdvice)
     if advice is not None:
-        smearing = advice.smearing.smearing_type or "none"
-        if advice.smearing.width_ry is not None:
-            smearing = f"{smearing}@{advice.smearing.width_ry:g} Ry"
-        pseudo_type = advice.pseudopotential_requirements.pseudo_type or "any"
+        smearing = advice["smearing"]["smearing_type"] or "none"
+        if advice["smearing"]["width_ry"] is not None:
+            smearing = f"{smearing}@{advice['smearing']['width_ry']:g} Ry"
+        pseudo_type = advice["pseudopotential_requirements"]["pseudo_type"] or "any"
         soc = (
             "on"
-            if advice.spin_orbit.enabled
+            if advice["spin_orbit"]["enabled"]
             else "consider"
-            if advice.spin_orbit.consider
+            if advice["spin_orbit"]["consider"]
             else "off"
         )
         print(
             "advice: "
             f"smearing={smearing}; "
-            f"spin={'on' if advice.magnetism.spin_polarized else 'off'}; "
+            f"spin={'on' if advice['magnetism']['spin_polarized'] else 'off'}; "
             f"SOC={soc}; "
             "pseudo="
-            f"{advice.pseudopotential_requirements.functional}/"
-            f"{advice.pseudopotential_requirements.accuracy}/"
+            f"{advice['pseudopotential_requirements']['functional']}/"
+            f"{advice['pseudopotential_requirements']['accuracy']}/"
             f"{pseudo_type}/"
-            f"{advice.pseudopotential_requirements.relativistic}; "
-            f"vdW={'on' if advice.vdw.use_vdw else 'off'}"
+            f"{advice['pseudopotential_requirements']['relativistic']}; "
+            f"vdW={'on' if advice['vdw']['use_vdw'] else 'off'}"
         )
     k_points = result.records.get(KPointSelection)
     if k_points is not None:

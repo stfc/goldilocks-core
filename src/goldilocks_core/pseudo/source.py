@@ -4,18 +4,15 @@ from typing import Callable
 
 from pymatgen.core import Element, Structure
 
-from goldilocks_core.advice.pseudo import PseudopotentialRequirements
 from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.pseudo.installed import load_installed_table
 from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata
 from goldilocks_core.pseudo.registry import PseudoTable, load_tables
 from goldilocks_core.request import CalculationDraft
-from goldilocks_core.types import PathLike
+from goldilocks_core.types import JsonDict, PathLike
 
-PseudoSource = Callable[
-    [Structure, PseudopotentialRequirements], tuple[PseudoMetadata, ...]
-]
+PseudoSource = Callable[[Structure, JsonDict], tuple[PseudoMetadata, ...]]
 
 
 class PseudoTableMismatch(ValueError):
@@ -45,7 +42,7 @@ def _resolve_installed(
     table_id: str | None,
     registry_path: PathLike | None,
     structure: Structure,
-    requirements: PseudopotentialRequirements,
+    requirements: JsonDict,
 ) -> tuple[PseudoMetadata, ...]:
     tables = load_tables(registry_path)
     elements = {element.symbol for element in structure.composition.elements}
@@ -65,7 +62,7 @@ def select_compatible_table(
     *,
     table_id: str | None,
     elements: set[str],
-    requirements: PseudopotentialRequirements,
+    requirements: JsonDict,
 ) -> PseudoTable:
     """Select an explicit or preferred compatible pseudopotential table."""
     if table_id is None:
@@ -103,7 +100,7 @@ def is_table_eligible_for_elements(table: PseudoTable, elements: set[str]) -> bo
 def _automatic_table(
     tables: dict[str, PseudoTable],
     elements: set[str],
-    requirements: PseudopotentialRequirements,
+    requirements: JsonDict,
 ) -> PseudoTable:
     matches = [
         table
@@ -112,8 +109,8 @@ def _automatic_table(
     ]
     if not matches:
         requested = (
-            f"{requirements.functional} {requirements.accuracy} "
-            f"{requirements.relativistic}"
+            f"{requirements['functional']} {requirements['accuracy']} "
+            f"{requirements['relativistic']}"
         )
         raise PseudoTableMismatch(
             f"no pseudopotential table satisfies {requested} for "
@@ -136,21 +133,21 @@ def _requires_sssp(elements: set[str]) -> bool:
 def _table_problems(
     table: PseudoTable,
     elements: set[str],
-    requirements: PseudopotentialRequirements,
+    requirements: JsonDict,
 ) -> list[str]:
     problems: list[str] = []
-    if table.functional != requirements.functional:
+    if table.functional != requirements["functional"]:
         problems.append(
-            f"functional is {table.functional}, requested {requirements.functional}"
+            f"functional is {table.functional}, requested {requirements['functional']}"
         )
-    if table.accuracy != requirements.accuracy:
+    if table.accuracy != requirements["accuracy"]:
         problems.append(
-            f"accuracy is {table.accuracy}, requested {requirements.accuracy}"
+            f"accuracy is {table.accuracy}, requested {requirements['accuracy']}"
         )
-    if table.relativistic != requirements.relativistic:
+    if table.relativistic != requirements["relativistic"]:
         problems.append(
             f"relativistic treatment is {table.relativistic}, "
-            f"requested {requirements.relativistic}"
+            f"requested {requirements['relativistic']}"
         )
     if _requires_sssp(elements) and table.provider != "sssp":
         problems.append("lanthanide and actinide elements require an SSSP table")

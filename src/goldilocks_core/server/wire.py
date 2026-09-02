@@ -8,6 +8,8 @@ from typing import Any, Literal, TypeAliasType, get_args, get_origin, get_type_h
 
 from pydantic import BaseModel, ConfigDict, JsonValue, create_model, model_validator
 
+from goldilocks_core.advice.parameters import ParameterAdvice
+from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.calculation import CalculationHints, CalculationIntent
 from goldilocks_core.input_data import DftInputData
 from goldilocks_core.io.structures import Matrix3, Vector3
@@ -19,6 +21,8 @@ from goldilocks_core.selection import PseudopotentialSelection
 from goldilocks_core.types import (
     CalcTask,
     CodeName,
+    Dimensionality,
+    ElectronicCharacter,
     JsonDict,
     KPointGrid,
     PseudoAccuracy,
@@ -341,6 +345,89 @@ ArtifactSourceDocument = (
     GeneratedArtifactSourceDocument | InstalledArtifactSourceDocument
 )
 ProvenanceDocument = _serialized_model(Provenance)
+_SmearingAdviceDocument = create_model(
+    "SmearingAdvice",
+    __config__=_SERIALIZED,
+    smearing_type=(str | None, ...),
+    width_ry=(float | None, ...),
+    provenance=(ProvenanceDocument, ...),
+)
+_MagnetismAdviceDocument = create_model(
+    "MagnetismAdvice",
+    __config__=_SERIALIZED,
+    spin_polarized=(bool, ...),
+    magnetic_elements=(tuple[str, ...], ...),
+    provenance=(ProvenanceDocument, ...),
+)
+_SpinOrbitAdviceDocument = create_model(
+    "SpinOrbitAdvice",
+    __config__=_SERIALIZED,
+    enabled=(bool, ...),
+    consider=(bool, ...),
+    heavy_elements=(tuple[str, ...], ...),
+    provenance=(ProvenanceDocument, ...),
+)
+_PseudopotentialRequirementsDocument = create_model(
+    "PseudopotentialRequirements",
+    __config__=_SERIALIZED,
+    functional=(str, ...),
+    accuracy=(PseudoAccuracy, ...),
+    pseudo_type=(PseudoType | None, ...),
+    relativistic=(RelativisticTreatment, ...),
+    provenance=(ProvenanceDocument, ...),
+)
+_ConvergenceAdviceDocument = create_model(
+    "ConvergenceAdvice",
+    __config__=_SERIALIZED,
+    conv_thr=(float, ...),
+    provenance=(ProvenanceDocument, ...),
+    mixing_beta=(float, ...),
+    electron_maxstep=(int, ...),
+)
+_VdwAdviceDocument = create_model(
+    "VdwAdvice",
+    __config__=_SERIALIZED,
+    use_vdw=(bool, ...),
+    method=(VdwMethod | None, ...),
+    provenance=(ProvenanceDocument, ...),
+)
+ParameterAdviceDocument = create_model(
+    "ParameterAdvice",
+    __config__=_SERIALIZED,
+    smearing=(_SmearingAdviceDocument, ...),
+    magnetism=(_MagnetismAdviceDocument, ...),
+    spin_orbit=(_SpinOrbitAdviceDocument, ...),
+    pseudopotential_requirements=(_PseudopotentialRequirementsDocument, ...),
+    convergence=(_ConvergenceAdviceDocument, ...),
+    vdw=(_VdwAdviceDocument, ...),
+)
+StructureAnalysisRecordDocument = create_model(
+    "StructureAnalysisRecord",
+    __config__=_SERIALIZED,
+    formula=(str, ...),
+    reduced_formula=(str, ...),
+    site_count=(int, ...),
+    elements=(tuple[str, ...], ...),
+    contains_transition_metals=(bool, ...),
+    contains_lanthanides=(bool, ...),
+    contains_actinides=(bool, ...),
+    contains_heavy_elements=(bool, ...),
+    magnetic_elements=(tuple[str, ...], ...),
+    heavy_elements=(tuple[str, ...], ...),
+    disorder_warnings=(tuple[str, ...], ...),
+    disordered_site_count=(int, ...),
+    space_group_symbol=(str | int | None, ...),
+    space_group_number=(str | int | None, ...),
+    crystal_system=(str | int | None, ...),
+    dimensionality=(Dimensionality, ...),
+    low_dimensional=(bool, ...),
+    electronic_character=(ElectronicCharacter, ...),
+    electronic_character_source=(str, ...),
+    electronic_character_confidence=(float | None, ...),
+    analysis_warnings=(tuple[str, ...], ...),
+)
+_SERIALIZED_MODELS[ParameterAdvice] = ParameterAdviceDocument
+_SERIALIZED_MODELS[StructureAnalysisRecord] = StructureAnalysisRecordDocument
 SerializedInputArtifactDocument = create_model(
     "SerializedInputArtifact",
     __config__=_SERIALIZED,

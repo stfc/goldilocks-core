@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 
 from pymatgen.analysis.dimensionality import get_dimensionality_larsen
 from pymatgen.analysis.local_env import CrystalNN
@@ -13,46 +12,26 @@ from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from goldilocks_core.types import (
     Dimensionality,
     ElectronicCharacter,
+    JsonDict,
 )
 
 HEAVY_ELEMENT_MIN_ROW = 5
 """Lowest periodic-table row treated as heavy for spin-orbit advice."""
 
 
-@dataclass(frozen=True, slots=True)
 class StructureAnalysisRecord:
-    """Structure-derived facts feeding Advise and Select.
+    """Marker for the structure-analysis record; the value is a dict.
 
-    Symmetry fields carry ``None`` when not yet determined and when
-    symmetry analysis itself failed; an ``int``/``str`` value is a
-    successful determination. The electronic
-    character comes from the source named in ``electronic_character_source``
-    (``"heuristic"`` or a model classifier); ``electronic_character_confidence``
-    is ``None`` for heuristic classifications. Warnings are provenance-bearing:
-    they state what could not be determined, not what was chosen.
+    Keys: formula, reduced_formula, site_count, elements,
+    contains_transition_metals, contains_lanthanides, contains_actinides,
+    contains_heavy_elements, magnetic_elements, heavy_elements,
+    disorder_warnings, disordered_site_count, space_group_symbol,
+    space_group_number, crystal_system, dimensionality, low_dimensional,
+    electronic_character, electronic_character_source,
+    electronic_character_confidence, analysis_warnings.
+    Symmetry fields are ``None`` when not determined or when symmetry
+    analysis failed; warnings are provenance-bearing.
     """
-
-    formula: str
-    reduced_formula: str
-    site_count: int
-    elements: tuple[str, ...]
-    contains_transition_metals: bool
-    contains_lanthanides: bool
-    contains_actinides: bool
-    contains_heavy_elements: bool
-    magnetic_elements: tuple[str, ...]
-    heavy_elements: tuple[str, ...]
-    disorder_warnings: tuple[str, ...] = ()
-    disordered_site_count: int = 0
-    space_group_symbol: str | int | None = None
-    space_group_number: str | int | None = None
-    crystal_system: str | int | None = None
-    dimensionality: Dimensionality = "unknown"
-    low_dimensional: bool = False
-    electronic_character: ElectronicCharacter = "unknown"
-    electronic_character_source: str = "heuristic"
-    electronic_character_confidence: float | None = None
-    analysis_warnings: tuple[str, ...] = ()
 
 
 class DimensionalityClassificationError(Exception):
@@ -107,7 +86,7 @@ def analyze_structure(
         [Structure], tuple[ElectronicCharacter, str, float | None]
     ]
     | None = None,
-) -> StructureAnalysisRecord:
+) -> JsonDict:
     elements = tuple(
         sorted(element.symbol for element in structure.composition.elements)
     )
@@ -156,33 +135,31 @@ def analyze_structure(
         electronic_character, source=electronic_character_source
     )
 
-    return StructureAnalysisRecord(
-        formula=structure.composition.formula,
-        reduced_formula=structure.composition.reduced_formula,
-        site_count=len(structure),
-        elements=elements,
-        contains_transition_metals=bool(transition_metals),
-        contains_lanthanides=bool(lanthanides),
-        contains_actinides=bool(actinides),
-        contains_heavy_elements=bool(heavy_elements),
-        magnetic_elements=magnetic_elements,
-        heavy_elements=heavy_elements,
-        disorder_warnings=disorder_warnings,
-        disordered_site_count=len(disorder_warnings),
-        space_group_symbol=symmetry["space_group_symbol"],
-        space_group_number=symmetry["space_group_number"],
-        crystal_system=symmetry["crystal_system"],
-        dimensionality=dimensionality,
-        low_dimensional=low_dimensional,
-        electronic_character=electronic_character,
-        electronic_character_source=electronic_character_source,
-        electronic_character_confidence=electronic_character_confidence,
-        analysis_warnings=(
-            *electronic_warnings,
-            *dimensionality_warnings,
-            *symmetry_warnings,
+    return {
+        "formula": structure.composition.formula,
+        "reduced_formula": structure.composition.reduced_formula,
+        "site_count": len(structure),
+        "elements": list(elements),
+        "contains_transition_metals": bool(transition_metals),
+        "contains_lanthanides": bool(lanthanides),
+        "contains_actinides": bool(actinides),
+        "contains_heavy_elements": bool(heavy_elements),
+        "magnetic_elements": list(magnetic_elements),
+        "heavy_elements": list(heavy_elements),
+        "disorder_warnings": list(disorder_warnings),
+        "disordered_site_count": len(disorder_warnings),
+        "space_group_symbol": symmetry["space_group_symbol"],
+        "space_group_number": symmetry["space_group_number"],
+        "crystal_system": symmetry["crystal_system"],
+        "dimensionality": dimensionality,
+        "low_dimensional": low_dimensional,
+        "electronic_character": electronic_character,
+        "electronic_character_source": electronic_character_source,
+        "electronic_character_confidence": electronic_character_confidence,
+        "analysis_warnings": list(
+            (*electronic_warnings, *dimensionality_warnings, *symmetry_warnings)
         ),
-    )
+    }
 
 
 def _find_disorder_warnings(structure: Structure) -> tuple[str, ...]:

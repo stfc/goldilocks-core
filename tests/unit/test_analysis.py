@@ -18,17 +18,21 @@ def test_analyze_structure_reports_composition_and_element_facts() -> None:
 
     analysis = analyze_structure(structure)
 
-    assert analysis.reduced_formula == "FeI"
-    assert analysis.site_count == 2
-    assert analysis.elements == ("Fe", "I")
-    assert analysis.contains_transition_metals is True
-    assert analysis.contains_heavy_elements is True
-    assert analysis.magnetic_elements == ("Fe",)
-    assert analysis.heavy_elements == ("I",)
-    assert analysis.space_group_number is not None
-    assert analysis.crystal_system is not None
-    assert analysis.electronic_character == "unknown"
-    assert analysis.analysis_warnings
+    assert analysis["reduced_formula"] == "FeI"
+    assert analysis["site_count"] == 2
+    assert analysis["elements"] == ["Fe", "I"]
+    assert analysis["contains_transition_metals"] is True
+    assert analysis["contains_heavy_elements"] is True
+    assert analysis["magnetic_elements"] == [
+        "Fe",
+    ]
+    assert analysis["heavy_elements"] == [
+        "I",
+    ]
+    assert analysis["space_group_number"] is not None
+    assert analysis["crystal_system"] is not None
+    assert analysis["electronic_character"] == "unknown"
+    assert analysis["analysis_warnings"]
 
 
 def test_analyze_structure_reports_partial_occupancy_warnings() -> None:
@@ -40,11 +44,11 @@ def test_analyze_structure_reports_partial_occupancy_warnings() -> None:
 
     analysis = analyze_structure(structure)
 
-    assert analysis.disorder_warnings
-    assert analysis.disordered_site_count == 1
-    assert "partial occupancies" in analysis.disorder_warnings[0]
-    assert analysis.dimensionality == "unknown"
-    assert analysis.low_dimensional is False
+    assert analysis["disorder_warnings"]
+    assert analysis["disordered_site_count"] == 1
+    assert "partial occupancies" in analysis["disorder_warnings"][0]
+    assert analysis["dimensionality"] == "unknown"
+    assert analysis["low_dimensional"] is False
 
 
 def test_analyze_structure_marks_all_metal_compositions_as_likely_metal() -> None:
@@ -56,8 +60,8 @@ def test_analyze_structure_marks_all_metal_compositions_as_likely_metal() -> Non
 
     analysis = analyze_structure(structure)
 
-    assert analysis.electronic_character == "likely_metal"
-    assert "likely" in analysis.analysis_warnings[0]
+    assert analysis["electronic_character"] == "likely_metal"
+    assert "likely" in analysis["analysis_warnings"][0]
 
 
 def test_analyze_structure_raises_when_crystal_nn_fails(monkeypatch) -> None:
@@ -107,11 +111,11 @@ def test_analyze_structure_records_symmetry_unavailable_when_spglib_fails(
 
     analysis = analyze_structure(structure)
 
-    assert analysis.dimensionality == "3d"
-    assert analysis.crystal_system is None
-    assert analysis.space_group_symbol is None
-    assert analysis.space_group_number is None
-    assert analysis.analysis_warnings[-1] == (
+    assert analysis["dimensionality"] == "3d"
+    assert analysis["crystal_system"] is None
+    assert analysis["space_group_symbol"] is None
+    assert analysis["space_group_number"] is None
+    assert analysis["analysis_warnings"][-1] == (
         "Symmetry analysis failed: spglib cannot handle this structure."
     )
 
@@ -150,8 +154,8 @@ def test_analyze_structure_reports_3d_bulk_without_vacuum() -> None:
 
     analysis = analyze_structure(structure)
 
-    assert analysis.dimensionality == "3d"
-    assert analysis.low_dimensional is False
+    assert analysis["dimensionality"] == "3d"
+    assert analysis["low_dimensional"] is False
 
 
 def test_analyze_structure_reports_2d_slab_with_vacuum() -> None:
@@ -163,8 +167,8 @@ def test_analyze_structure_reports_2d_slab_with_vacuum() -> None:
 
     analysis = analyze_structure(structure)
 
-    assert analysis.dimensionality == "2d"
-    assert analysis.low_dimensional is True
+    assert analysis["dimensionality"] == "2d"
+    assert analysis["low_dimensional"] is True
 
 
 def test_analyze_structure_reports_molecule_with_vacuum() -> None:
@@ -176,5 +180,5 @@ def test_analyze_structure_reports_molecule_with_vacuum() -> None:
 
     analysis = analyze_structure(structure)
 
-    assert analysis.dimensionality == "molecule"
-    assert analysis.low_dimensional is True
+    assert analysis["dimensionality"] == "molecule"
+    assert analysis["low_dimensional"] is True

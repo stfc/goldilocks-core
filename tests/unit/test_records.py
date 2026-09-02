@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 
 from goldilocks_core.analysis import StructureAnalysisRecord
@@ -6,19 +8,19 @@ from goldilocks_core.result import Records
 from goldilocks_core.serialization import to_portable
 
 
-def _make_analysis() -> StructureAnalysisRecord:
-    return StructureAnalysisRecord(
-        formula="Si1",
-        reduced_formula="Si",
-        site_count=1,
-        elements=("Si",),
-        contains_transition_metals=False,
-        contains_lanthanides=False,
-        contains_actinides=False,
-        contains_heavy_elements=False,
-        magnetic_elements=(),
-        heavy_elements=(),
-    )
+def _make_analysis() -> dict[str, Any]:
+    return {
+        "formula": "Si1",
+        "reduced_formula": "Si",
+        "site_count": 1,
+        "elements": ["Si"],
+        "contains_transition_metals": False,
+        "contains_lanthanides": False,
+        "contains_actinides": False,
+        "contains_heavy_elements": False,
+        "magnetic_elements": [],
+        "heavy_elements": [],
+    }
 
 
 def test_core_records_maps_requested_types_and_serializes_record_names() -> None:

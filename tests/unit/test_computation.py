@@ -201,18 +201,18 @@ def test_result_retains_the_normalized_calculation_draft(tmp_path) -> None:
 
 def test_computation_result_serializes_records_without_scf_projection() -> None:
 
-    analysis = StructureAnalysisRecord(
-        formula="Si1",
-        reduced_formula="Si",
-        site_count=1,
-        elements=("Si",),
-        contains_transition_metals=False,
-        contains_lanthanides=False,
-        contains_actinides=False,
-        contains_heavy_elements=False,
-        magnetic_elements=(),
-        heavy_elements=(),
-    )
+    analysis = {
+        "formula": "Si1",
+        "reduced_formula": "Si",
+        "site_count": 1,
+        "elements": ["Si"],
+        "contains_transition_metals": False,
+        "contains_lanthanides": False,
+        "contains_actinides": False,
+        "contains_heavy_elements": False,
+        "magnetic_elements": [],
+        "heavy_elements": [],
+    }
     result = ComputationResult(
         draft=CalculationDraft(InMemoryStructureSource(make_structure())),
         task="scf_single_point",

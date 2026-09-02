@@ -373,7 +373,7 @@ def _used_model_material(
     uses_default_metallicity_model: bool,
 ) -> tuple[_ModelMaterial, ...]:
     kpoints_uses_model = k_points.provenance.source == "model"
-    analysis_uses_model = analysis.electronic_character_source == "model"
+    analysis_uses_model = analysis["electronic_character_source"] == "model"
     if not kpoints_uses_model and not analysis_uses_model:
         return ()
 

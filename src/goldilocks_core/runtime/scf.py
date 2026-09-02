@@ -7,7 +7,6 @@ from pymatgen.core import Structure
 
 from goldilocks_core.advice.kindex import ml_kmesh_advisor
 from goldilocks_core.advice.parameters import ParameterAdvice, advise_parameters
-from goldilocks_core.advice.pseudo import PseudopotentialRequirements
 from goldilocks_core.analysis import StructureAnalysisRecord, analyze_structure
 from goldilocks_core.calculation import CalculationHints, CalculationIntent
 from goldilocks_core.generation.files import GeneratedFiles
@@ -24,7 +23,7 @@ from goldilocks_core.runtime.graph import Preset, Stage, TaskGraph
 from goldilocks_core.runtime.models import Runtime
 from goldilocks_core.runtime.task import GraphHandler
 from goldilocks_core.selection import SelectionRecord, select_pseudopotentials
-from goldilocks_core.types import ElectronicCharacter
+from goldilocks_core.types import ElectronicCharacter, JsonDict
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +48,7 @@ class ScfContext:
     def resolve_pseudos(
         self,
         structure: Structure,
-        requirements: PseudopotentialRequirements,
+        requirements: JsonDict,
     ) -> tuple[PseudoMetadata, ...]:
         if not self.pseudo_cache:
             self.pseudo_cache.append(self.pseudo_source(structure, requirements))
@@ -112,8 +111,8 @@ SCF_TASK = TaskGraph(
             inputs=(Structure, ParameterAdvice),
             call=lambda structure, advice, *, ctx: select_pseudopotentials(
                 structure,
-                advice.pseudopotential_requirements,
-                ctx.resolve_pseudos(structure, advice.pseudopotential_requirements),
+                advice["pseudopotential_requirements"],
+                ctx.resolve_pseudos(structure, advice["pseudopotential_requirements"]),
             ),
             id="select_pseudopotentials",
             name="Select pseudopotentials",
@@ -223,7 +222,7 @@ def collect_scf_warnings(records: Records) -> tuple[str, ...]:
     groups: list[tuple[str, ...]] = []
     analysis = records.get(StructureAnalysisRecord)
     if analysis is not None:
-        groups.extend((analysis.disorder_warnings, analysis.analysis_warnings))
+        groups.extend((analysis["disorder_warnings"], analysis["analysis_warnings"]))
     advice = records.get(ParameterAdvice)
     if advice is not None:
         groups.append(_advice_warnings(advice))
@@ -238,12 +237,12 @@ def collect_scf_warnings(records: Records) -> tuple[str, ...]:
 
 def _advice_warnings(advice: ParameterAdvice) -> tuple[str, ...]:
     return _unique_warnings(
-        advice.smearing.provenance.warnings,
-        advice.magnetism.provenance.warnings,
-        advice.spin_orbit.provenance.warnings,
-        advice.pseudopotential_requirements.provenance.warnings,
-        advice.convergence.provenance.warnings,
-        advice.vdw.provenance.warnings,
+        advice["smearing"]["provenance"].warnings,
+        advice["magnetism"]["provenance"].warnings,
+        advice["spin_orbit"]["provenance"].warnings,
+        advice["pseudopotential_requirements"]["provenance"].warnings,
+        advice["convergence"]["provenance"].warnings,
+        advice["vdw"]["provenance"].warnings,
     )
 
 

@@ -5,12 +5,12 @@ import re
 from pymatgen.core import Structure
 from pymatgen.core.periodic_table import Element
 
-from goldilocks_core.advice.parameters import ParameterAdvice
 from goldilocks_core.calculation import CalculationIntent
 from goldilocks_core.generation.errors import GenerationError
 from goldilocks_core.generation.files import GeneratedFile
 from goldilocks_core.kmesh.resolve import KPointSelection
 from goldilocks_core.selection import SelectionRecord
+from goldilocks_core.types import JsonDict
 
 _QE_VDW_CORR = {
     "d3": ("grimme-d3", 3),
@@ -28,7 +28,7 @@ _QE_SMEARING = {
 def write_qe_scf(
     structure: Structure,
     intent: CalculationIntent,
-    advice: ParameterAdvice,
+    advice: JsonDict,
     selection: SelectionRecord,
     k_points: KPointSelection,
 ) -> tuple[GeneratedFile, ...]:
@@ -43,7 +43,7 @@ def write_qe_scf(
 def _render_qe_scf(
     structure: Structure,
     intent: CalculationIntent,
-    advice: ParameterAdvice,
+    advice: JsonDict,
     selection: SelectionRecord,
     k_points: KPointSelection,
 ) -> str:
@@ -55,11 +55,11 @@ def _render_qe_scf(
     elements = tuple(
         sorted(element.symbol for element in structure.composition.elements)
     )
-    if advice.pseudopotential_requirements.functional != intent.functional:
+    if advice["pseudopotential_requirements"]["functional"] != intent.functional:
         raise GenerationError(
             "Pseudopotential requirement functional mismatch: calculation "
             f"requires {intent.functional}, advice requires "
-            f"{advice.pseudopotential_requirements.functional}"
+            f"{advice['pseudopotential_requirements']['functional']}"
         )
     pseudo_by_element = {
         pseudo.element: pseudo for pseudo in selection.pseudopotentials
@@ -141,7 +141,7 @@ def _control_section() -> list[str]:
 def _system_section(
     *,
     structure: Structure,
-    advice: ParameterAdvice,
+    advice: JsonDict,
     ecutwfc: float,
     ecutrho: float,
 ) -> list[str]:
@@ -161,8 +161,8 @@ def _system_section(
     ]
 
 
-def _smearing_lines(advice: ParameterAdvice) -> list[str]:
-    smearing_type = advice.smearing.smearing_type
+def _smearing_lines(advice: JsonDict) -> list[str]:
+    smearing_type = advice["smearing"]["smearing_type"]
     if smearing_type in (None, "fixed"):
         return ["  occupations = 'fixed'"]
     qe_smearing = _QE_SMEARING.get(smearing_type)
@@ -171,26 +171,26 @@ def _smearing_lines(advice: ParameterAdvice) -> list[str]:
             "Quantum ESPRESSO smearing advice is invalid: unsupported "
             f"method {smearing_type!r}"
         )
-    if advice.smearing.width_ry is None:
+    if advice["smearing"]["width_ry"] is None:
         raise GenerationError("Smearing width is required when smearing is enabled")
     return [
         "  occupations = 'smearing'",
         f"  smearing = '{qe_smearing}'",
-        f"  degauss = {_format_float(advice.smearing.width_ry)}",
+        f"  degauss = {_format_float(advice['smearing']['width_ry'])}",
     ]
 
 
-def _spin_lines(advice: ParameterAdvice) -> list[str]:
-    if advice.spin_orbit.enabled:
+def _spin_lines(advice: JsonDict) -> list[str]:
+    if advice["spin_orbit"]["enabled"]:
         return ["  noncolin = .true.", "  lspinorb = .true."]
-    if advice.magnetism.spin_polarized:
+    if advice["magnetism"]["spin_polarized"]:
         return ["  nspin = 2"]
     return []
 
 
-def _vdw_lines(advice: ParameterAdvice) -> list[str]:
-    method = advice.vdw.method
-    if advice.vdw.use_vdw:
+def _vdw_lines(advice: JsonDict) -> list[str]:
+    method = advice["vdw"]["method"]
+    if advice["vdw"]["use_vdw"]:
         if method not in _QE_VDW_CORR:
             raise GenerationError(
                 "Quantum ESPRESSO vdW advice is invalid: enabled vdW requires "
@@ -209,12 +209,12 @@ def _vdw_lines(advice: ParameterAdvice) -> list[str]:
     return []
 
 
-def _electrons_section(advice: ParameterAdvice) -> list[str]:
+def _electrons_section(advice: JsonDict) -> list[str]:
     return [
         "&ELECTRONS",
-        f"  conv_thr = {_format_scientific(advice.convergence.conv_thr)}",
-        f"  mixing_beta = {_format_float(advice.convergence.mixing_beta)}",
-        f"  electron_maxstep = {advice.convergence.electron_maxstep}",
+        f"  conv_thr = {_format_scientific(advice['convergence']['conv_thr'])}",
+        f"  mixing_beta = {_format_float(advice['convergence']['mixing_beta'])}",
+        f"  electron_maxstep = {advice['convergence']['electron_maxstep']}",
         "/",
         "",
     ]

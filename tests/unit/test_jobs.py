@@ -67,9 +67,10 @@ def make_request(selection=None, **changes) -> ComputeRequest:
 def test_compute_recommendation_returns_selected_records() -> None:
     result = compute(make_request())
 
-    assert result.records[StructureAnalysisRecord].reduced_formula == "Si"
-    assert result.records[ParameterAdvice].pseudopotential_requirements.functional == (
-        "PBEsol"
+    assert result.records[StructureAnalysisRecord]["reduced_formula"] == "Si"
+    assert (
+        result.records[ParameterAdvice]["pseudopotential_requirements"]["functional"]
+        == "PBEsol"
     )
     assert GeneratedFiles not in result.records
 
@@ -152,7 +153,9 @@ def test_compute_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> None:
             runtime=runtime,
         )
 
-    assert result.records[StructureAnalysisRecord].electronic_character == "insulator"
+    assert (
+        result.records[StructureAnalysisRecord]["electronic_character"] == "insulator"
+    )
 
 
 def test_compute_rejects_unknown_task() -> None:

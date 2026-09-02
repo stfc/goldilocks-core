@@ -23,7 +23,6 @@ from goldilocks_core import (
     Runtime,
 )
 from goldilocks_core.advice.parameters import ParameterAdvice
-from goldilocks_core.advice.pseudo import PseudopotentialRequirements
 from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.assets.records import AssetFile, AssetSpec
 from goldilocks_core.assets.store import AssetStore
@@ -245,8 +244,8 @@ def test_recommendation_preset_returns_complete_selected_records() -> None:
     with Runtime() as runtime:
         result = Dispatcher(runtime).compute(make_request())
 
-    assert isinstance(result.records[StructureAnalysisRecord], StructureAnalysisRecord)
-    assert isinstance(result.records[ParameterAdvice], ParameterAdvice)
+    assert isinstance(result.records[StructureAnalysisRecord], dict)
+    assert isinstance(result.records[ParameterAdvice], dict)
     assert isinstance(result.records[KPointSelection], KPointSelection)
     assert isinstance(result.records[SelectionRecord], SelectionRecord)
     assert GeneratedFiles not in result.records
@@ -260,9 +259,9 @@ def test_analyze_uses_heuristic_without_an_installed_metallicity_model(
         result = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
 
     analysis = result.records[StructureAnalysisRecord]
-    assert analysis.electronic_character == "unknown"
-    assert analysis.electronic_character_source == "heuristic"
-    assert analysis.electronic_character_confidence is None
+    assert analysis["electronic_character"] == "unknown"
+    assert analysis["electronic_character_source"] == "heuristic"
+    assert analysis["electronic_character_confidence"] is None
 
 
 def test_analyze_uses_the_installed_default_metallicity_model(
@@ -311,10 +310,10 @@ def test_analyze_uses_the_installed_default_metallicity_model(
         )
 
     analysis = result.records[StructureAnalysisRecord]
-    assert analysis.electronic_character == "insulator"
-    assert analysis.electronic_character_source == "model"
-    assert analysis.electronic_character_confidence == 0.94
-    assert analysis.analysis_warnings == ()
+    assert analysis["electronic_character"] == "insulator"
+    assert analysis["electronic_character_source"] == "model"
+    assert analysis["electronic_character_confidence"] == 0.94
+    assert analysis["analysis_warnings"] == []
     assert len(calls) == 1
     assert calls[0][1:3] == (
         model,
@@ -365,9 +364,9 @@ def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
         result = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
 
     analysis = result.records[StructureAnalysisRecord]
-    assert analysis.electronic_character == "metal"
-    assert analysis.electronic_character_source == "model"
-    assert analysis.electronic_character_confidence == 0.92
+    assert analysis["electronic_character"] == "metal"
+    assert analysis["electronic_character_source"] == "model"
+    assert analysis["electronic_character_confidence"] == 0.92
     assert len(calls) == 1
     assert calls[0][1:3] == (model, "atom-init.json")
 
@@ -472,7 +471,7 @@ def test_compute_returns_each_requested_record_type(record_type: type) -> None:
         result = dispatcher.compute(make_query_request((record_type,)))
 
     assert tuple(result.records) == (record_type,)
-    assert isinstance(result.records[record_type], record_type)
+    assert isinstance(result.records[record_type], dict | record_type)
 
 
 def test_select_only_compute_does_not_invoke_kmesh(monkeypatch) -> None:
@@ -496,7 +495,7 @@ def test_analysis_query_does_not_resolve_pseudopotential_source(tmp_path) -> Non
     with Runtime(asset_store=AssetStore(tmp_path / "empty")) as runtime:
         result = Dispatcher(runtime).compute(request)
 
-    assert result.records[StructureAnalysisRecord].reduced_formula == "Si"
+    assert result.records[StructureAnalysisRecord]["reduced_formula"] == "Si"
 
 
 def test_explicit_metadata_selection_does_not_read_registry(
@@ -581,13 +580,13 @@ def test_automatic_table_selection_prefers_pseudodojo_for_ordinary_elements() ->
         accuracy="precision",
         elements=("Si",),
     )
-    requirements = PseudopotentialRequirements(
-        functional="PBE",
-        accuracy="precision",
-        pseudo_type=None,
-        relativistic="scalar",
-        provenance=Provenance(source="test", reason="test"),
-    )
+    requirements = {
+        "functional": "PBE",
+        "accuracy": "precision",
+        "pseudo_type": None,
+        "relativistic": "scalar",
+        "provenance": Provenance(source="test", reason="test"),
+    }
 
     selected = select_compatible_table(
         {dojo.id: dojo, sssp.id: sssp},
@@ -614,13 +613,13 @@ def test_automatic_table_selection_routes_f_block_elements_to_sssp() -> None:
         accuracy="efficiency",
         elements=("La",),
     )
-    requirements = PseudopotentialRequirements(
-        functional="PBEsol",
-        accuracy="efficiency",
-        pseudo_type=None,
-        relativistic="scalar",
-        provenance=Provenance(source="test", reason="test"),
-    )
+    requirements = {
+        "functional": "PBEsol",
+        "accuracy": "efficiency",
+        "pseudo_type": None,
+        "relativistic": "scalar",
+        "provenance": Provenance(source="test", reason="test"),
+    }
 
     selected = select_compatible_table(
         {dojo.id: dojo, sssp.id: sssp},
@@ -692,8 +691,8 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     second = dispatcher.compute(request)
 
     assert first.records[KPointSelection] == second.records[KPointSelection]
-    assert first.records[StructureAnalysisRecord].electronic_character == "metal"
-    assert second.records[StructureAnalysisRecord].electronic_character == "metal"
+    assert first.records[StructureAnalysisRecord]["electronic_character"] == "metal"
+    assert second.records[StructureAnalysisRecord]["electronic_character"] == "metal"
     assert backend.calls == 2
     assert model_loads == 1
     assert classifications == 2

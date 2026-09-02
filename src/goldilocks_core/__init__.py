@@ -1,12 +1,6 @@
 from __future__ import annotations
 
-from goldilocks_core.advice.convergence import ConvergenceAdvice
-from goldilocks_core.advice.magnetism import MagnetismAdvice
 from goldilocks_core.advice.parameters import ParameterAdvice
-from goldilocks_core.advice.pseudo import PseudopotentialRequirements
-from goldilocks_core.advice.smearing import SmearingAdvice
-from goldilocks_core.advice.soc import SpinOrbitAdvice
-from goldilocks_core.advice.vdw import VdwAdvice
 from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.calculation import CalculationHints, CalculationIntent
 from goldilocks_core.generation.files import GeneratedFile, GeneratedFiles
@@ -50,7 +44,6 @@ __all__ = [
     "CalculationIntent",
     "ComputationResult",
     "ComputeRequest",
-    "ConvergenceAdvice",
     "DftInputData",
     "DirectoryOutput",
     "Dispatcher",
@@ -60,27 +53,22 @@ __all__ = [
     "InlineStructureSource",
     "KMeshService",
     "KPointSelection",
-    "MagnetismAdvice",
     "ModelSpec",
     "OutputTarget",
     "ParameterAdvice",
     "PathStructureSource",
     "PresetSelection",
     "PseudoMetadata",
-    "PseudopotentialRequirements",
     "PseudopotentialSelection",
     "RecordSelection",
     "Records",
     "Runtime",
     "Service",
     "SelectionRecord",
-    "SmearingAdvice",
-    "SpinOrbitAdvice",
     "StructureAnalysisRecord",
     "StructureSource",
     "UnavailableRecord",
     "UnknownPreset",
     "UnknownTask",
-    "VdwAdvice",
     "compute",
 ]

@@ -1,7 +1,8 @@
+from typing import Any
+
 import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.advice.pseudo import PseudopotentialRequirements
 from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.selection import select_pseudopotentials
@@ -25,14 +26,14 @@ def make_requirements(
     accuracy: str = "efficiency",
     pseudo_type: str | None = "NC",
     relativistic: str = "scalar",
-) -> PseudopotentialRequirements:
-    return PseudopotentialRequirements(
-        functional=functional,
-        accuracy=accuracy,
-        pseudo_type=pseudo_type,
-        relativistic=relativistic,
-        provenance=Provenance(source="default", reason="test requirements"),
-    )
+) -> dict[str, Any]:
+    return {
+        "functional": functional,
+        "accuracy": accuracy,
+        "pseudo_type": pseudo_type,
+        "relativistic": relativistic,
+        "provenance": Provenance(source="default", reason="test requirements"),
+    }
 
 
 def make_metadata(
@@ -225,7 +226,7 @@ def test_reports_missing_cutoff_fields_without_sanitizing_values() -> None:
 def test_normalized_functional_aliases_match() -> None:
     selection = select_pseudopotentials(
         make_structure("Si"),
-        make_requirements(functional="PBE_SOL"),
+        make_requirements(functional="PBEsol"),
         [make_metadata(functional="PBESOL")],
     )
 

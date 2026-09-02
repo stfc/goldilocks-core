@@ -68,7 +68,7 @@ def select_from_advice(
 ):
     k_points = resolve_kpoints(structure, hints, _stub_backend)
     selection = select_pseudopotentials(
-        structure, advice.pseudopotential_requirements, metadata_list
+        structure, advice["pseudopotential_requirements"], metadata_list
     )
     return selection, k_points
 
@@ -498,14 +498,14 @@ def test_generate_inputs_rejects_unsupported_smearing_method() -> None:
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
-    advice = replace(
-        advice,
-        smearing=replace(
-            advice.smearing,
-            smearing_type="bogus",
-            width_ry=0.02,
-        ),
-    )
+    advice = {
+        **advice,
+        "smearing": {
+            **advice["smearing"],
+            "smearing_type": "bogus",
+            "width_ry": 0.02,
+        },
+    }
     selection, k_points = select_from_advice(
         structure,
         advice,
@@ -521,14 +521,14 @@ def test_generate_inputs_rejects_missing_smearing_width() -> None:
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
-    advice = replace(
-        advice,
-        smearing=replace(
-            advice.smearing,
-            smearing_type="gaussian",
-            width_ry=None,
-        ),
-    )
+    advice = {
+        **advice,
+        "smearing": {
+            **advice["smearing"],
+            "smearing_type": "gaussian",
+            "width_ry": None,
+        },
+    }
     selection, k_points = select_from_advice(
         structure,
         advice,
@@ -546,10 +546,10 @@ def test_generate_inputs_rejects_unsupported_vdw_method() -> None:
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
-    advice = replace(
-        advice,
-        vdw=replace(advice.vdw, use_vdw=True, method="bogus"),
-    )
+    advice = {
+        **advice,
+        "vdw": {**advice["vdw"], "use_vdw": True, "method": "bogus"},
+    }
     selection, k_points = select_from_advice(
         structure,
         advice,
@@ -567,10 +567,10 @@ def test_generate_inputs_rejects_disabled_vdw_with_method() -> None:
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
-    advice = replace(
-        advice,
-        vdw=replace(advice.vdw, use_vdw=False, method="d3"),
-    )
+    advice = {
+        **advice,
+        "vdw": {**advice["vdw"], "use_vdw": False, "method": "d3"},
+    }
     selection, k_points = select_from_advice(
         structure,
         advice,
@@ -609,7 +609,7 @@ def test_generate_inputs_rejects_incomplete_pseudopotential_selection() -> None:
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
     selection = select_pseudopotentials(
-        structure, advice.pseudopotential_requirements, ()
+        structure, advice["pseudopotential_requirements"], ()
     )
     k_points = KPointSelection(
         grid=(2, 2, 2),

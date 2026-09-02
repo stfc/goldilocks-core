@@ -15,7 +15,6 @@ from pathlib import Path
 import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.advice.pseudo import PseudopotentialRequirements
 from goldilocks_core.assets.records import AssetFile
 from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.calculation import CalculationHints
@@ -104,18 +103,17 @@ def test_default_table_serves_a_fresh_install(tmp_path: Path) -> None:
         structure=InMemoryStructureSource(structure),
         hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
     )
-    requirements = PseudopotentialRequirements(
-        functional=table.functional,
-        accuracy=table.accuracy,
-        pseudo_type=None,
-        relativistic=table.relativistic,
-        provenance=Provenance(
+    requirements = {
+        "functional": table.functional,
+        "accuracy": table.accuracy,
+        "pseudo_type": None,
+        "relativistic": table.relativistic,
+        "provenance": Provenance(
             source="default",
             reason="no explicit pseudopotential source in the request",
             data_source="shipped default table",
         ),
-    )
-
+    }
     resolver = source_for_draft(draft, store=store)
     metadata: tuple[PseudoMetadata, ...] = resolver(structure, requirements)
 

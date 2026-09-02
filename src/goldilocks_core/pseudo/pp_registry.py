@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 
-from goldilocks_core.contracts import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
 from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
 from goldilocks_core.pseudo.validation import (
     AmbiguousCutoffMetadata,

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from goldilocks_core.contracts.serial import to_jsonable
-from goldilocks_core.contracts.types import JsonDict, ProvenanceSource
+from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.types import JsonDict, ProvenanceSource
 
 
 @dataclass(frozen=True, slots=True)

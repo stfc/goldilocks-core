@@ -4,9 +4,9 @@ from pymatgen.core import Lattice, Structure
 import goldilocks_core.analysis as analysis_module
 from goldilocks_core.analysis import (
     DimensionalityClassificationError,
+    SymmetryUnavailable,
     analyze_structure,
 )
-from goldilocks_core.contracts import SymmetryUnavailable
 
 
 def test_analyze_structure_reports_composition_and_element_facts() -> None:

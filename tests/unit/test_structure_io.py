@@ -16,8 +16,8 @@ from goldilocks_core import (
     Service,
     StructureInspection,
 )
-from goldilocks_core.contracts import KPointSelection
 from goldilocks_core.io.structures import StructureInputError
+from goldilocks_core.kmesh.resolve import KPointSelection
 
 
 def make_si_structure() -> Structure:
@@ -201,10 +201,10 @@ def test_scf_load_stage_describes_consuming_the_normalized_structure() -> None:
     assert "parse" not in load_stage.description.lower()
 
 
-def test_contracts_expose_only_explicit_structure_source_variants() -> None:
-    import goldilocks_core.contracts as contracts
+def test_public_api_exposes_only_explicit_structure_source_variants() -> None:
+    import goldilocks_core
 
-    assert not hasattr(contracts, "StructureInput")
+    assert not hasattr(goldilocks_core, "StructureInput")
 
 
 def test_structure_source_variants_have_explicit_serialized_shapes() -> None:

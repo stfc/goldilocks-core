@@ -1,13 +1,10 @@
 import numpy as np
 import pytest
 
-from goldilocks_core.contracts import (
-    CalculationHints,
-    CalculationIntent,
-    Records,
-    StructureAnalysisRecord,
-    StructureFeatureVector,
-)
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.calculation import CalculationHints, CalculationIntent
+from goldilocks_core.ml.models import StructureFeatureVector
+from goldilocks_core.result import Records
 
 
 def _make_analysis() -> StructureAnalysisRecord:

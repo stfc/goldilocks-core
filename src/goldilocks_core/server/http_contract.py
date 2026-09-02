@@ -7,8 +7,10 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.responses import Response
 
-from goldilocks_core.contracts import Capabilities, DftInputData, StructureInspection
+from goldilocks_core.input_data import DftInputData
+from goldilocks_core.io.structures import StructureInspection
 from goldilocks_core.publication import Publisher
+from goldilocks_core.runtime.capabilities import Capabilities
 from goldilocks_core.runtime.service import Service
 from goldilocks_core.server.request import (
     RequestError,

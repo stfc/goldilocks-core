@@ -29,14 +29,11 @@ from goldilocks_core import (
     StructureSource,
     compute,
 )
-from goldilocks_core.contracts import (
-    KPointSelection,
-    ParameterAdvice,
-    PseudoCutoffs,
-    PseudoMetadata,
-    SelectionRecord,
-    StructureAnalysisRecord,
-)
+from goldilocks_core.advice.parameters import ParameterAdvice
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.selection import SelectionRecord
 
 
 def _make_si_structure() -> Structure:

@@ -3,16 +3,16 @@ from __future__ import annotations
 from dataclasses import replace
 from threading import Lock
 
-from goldilocks_core.contracts import (
-    CalculationTaskCapability,
-    ComputationResult,
-    ComputeRequest,
-    PresetSelection,
-)
-from goldilocks_core.contracts.registry import register_record_types
 from goldilocks_core.io.structures import normalize_structure
-from goldilocks_core.runtime.graph import describe_task, execute_graph
+from goldilocks_core.request import ComputeRequest, PresetSelection
+from goldilocks_core.result import ComputationResult
+from goldilocks_core.runtime.graph import (
+    CalculationTaskCapability,
+    describe_task,
+    execute_graph,
+)
 from goldilocks_core.runtime.models import Runtime
+from goldilocks_core.runtime.registry import register_record_types
 from goldilocks_core.runtime.task import GraphHandler
 
 

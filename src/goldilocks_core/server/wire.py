@@ -8,22 +8,21 @@ from typing import Any, Literal, TypeAliasType, get_args, get_origin, get_type_h
 
 from pydantic import BaseModel, ConfigDict, JsonValue, create_model, model_validator
 
-from goldilocks_core.contracts import (
-    CalculationHints,
-    CalculationIntent,
-    CalculationTaskCapability,
+from goldilocks_core.calculation import CalculationHints, CalculationIntent
+from goldilocks_core.input_data import (
     GeneratedContent,
     InputArtifact,
     InstalledArtifactReference,
-    ModelSpec,
-    PseudoMetadata,
-    PseudopotentialSelection,
-    Publication,
     RuntimeAssetIdentity,
     RuntimeIdentity,
-    StructureInspection,
 )
-from goldilocks_core.contracts.registry import record_types_by_id
+from goldilocks_core.io.structures import StructureInspection
+from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.pseudo.metadata import PseudoMetadata
+from goldilocks_core.publication import Publication
+from goldilocks_core.runtime.graph import CalculationTaskCapability
+from goldilocks_core.runtime.registry import record_types_by_id
+from goldilocks_core.selection import PseudopotentialSelection
 
 _STRICT = ConfigDict(extra="forbid", strict=True)
 

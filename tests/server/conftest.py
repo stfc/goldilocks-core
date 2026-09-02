@@ -9,7 +9,6 @@ import pytest
 from pymatgen.core import Structure
 
 from goldilocks_core.assets import AssetStore
-from goldilocks_core.contracts.registry import RECORD_TYPE_IDS
 from goldilocks_core.examples import structure
 from goldilocks_core.pseudo.registry import load_tables
 from goldilocks_core.runtime import (
@@ -20,6 +19,7 @@ from goldilocks_core.runtime import (
     Stage,
     TaskGraph,
 )
+from goldilocks_core.runtime.registry import RECORD_TYPE_IDS
 
 
 @dataclass(frozen=True, slots=True)

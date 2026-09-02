@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from pymatgen.core import Structure
 
-from goldilocks_core.contracts import ModelSpec, StructureFeatureVector
+from goldilocks_core.ml.models import ModelSpec, StructureFeatureVector
 
 
 def predict(model: object, features: StructureFeatureVector) -> float:

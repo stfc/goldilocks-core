@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from goldilocks_core.contracts import ComputationResult, ComputeRequest, OutputTarget
+from goldilocks_core.publication import OutputTarget
+from goldilocks_core.request import ComputeRequest
+from goldilocks_core.result import ComputationResult
 from goldilocks_core.runtime.models import Runtime
 from goldilocks_core.runtime.service import Service
 

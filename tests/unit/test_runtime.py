@@ -22,26 +22,17 @@ from goldilocks_core import (
     RecordSelection,
     Runtime,
 )
+from goldilocks_core.advice.parameters import ParameterAdvice
+from goldilocks_core.advice.pseudo import PseudopotentialRequirements
+from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.assets import AssetFile, AssetSpec, AssetStore
-from goldilocks_core.contracts import (
-    CalculationIntent,
-    GeneratedFiles,
-    KPointSelection,
-    ModelSpec,
-    ParameterAdvice,
-    Provenance,
-    PseudoCutoffs,
-    PseudoMetadata,
-    PseudopotentialRequirements,
-    SelectionRecord,
-    StructureAnalysisRecord,
-    resolve_output_types,
-)
-from goldilocks_core.contracts.registry import (
-    RECORD_TYPE_IDS,
-    register_record_types,
-)
+from goldilocks_core.calculation import CalculationIntent
+from goldilocks_core.generation.files import GeneratedFiles
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.installed import write_table_manifest
+from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
 from goldilocks_core.pseudo.registry import PseudoTable
 from goldilocks_core.pseudo.source import (
     PseudoTableMismatch,
@@ -53,6 +44,12 @@ from goldilocks_core.runtime import (
     Stage,
     TaskGraph,
 )
+from goldilocks_core.runtime.registry import (
+    RECORD_TYPE_IDS,
+    register_record_types,
+    resolve_output_types,
+)
+from goldilocks_core.selection import SelectionRecord
 
 
 @pytest.fixture

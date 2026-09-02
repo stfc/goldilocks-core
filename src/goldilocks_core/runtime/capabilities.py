@@ -1,19 +1,65 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from importlib.metadata import version as package_version
 
-from goldilocks_core.contracts import (
-    CalculationHints,
-    CalculationIntent,
-    Capabilities,
-    ModelCapability,
-    PseudopotentialSetCapability,
-)
+from goldilocks_core.calculation import CalculationHints, CalculationIntent
 from goldilocks_core.generation.registry import available_codes
 from goldilocks_core.ml.model_registry import registered_models
 from goldilocks_core.pseudo.registry import load_tables
 from goldilocks_core.runtime.dispatch import Dispatcher
+from goldilocks_core.runtime.graph import CalculationTaskCapability
 from goldilocks_core.runtime.models import Runtime
+from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.types import JsonDict
+
+
+@dataclass(frozen=True, slots=True)
+class ModelCapability:
+    id: str
+    name: str
+    version: str
+    role: str
+    model_type: str
+    target: str
+    feature_set: str
+    source: str
+    revision: str | None
+
+    def to_dict(self) -> JsonDict:
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class PseudopotentialSetCapability:
+    id: str
+    version: str
+    provider: str
+    upstream_name: str
+    functional: str
+    accuracy: str
+    relativistic_treatment: str
+    supported_elements: tuple[str, ...]
+    licence: str
+    citation: str
+    default: bool
+
+    def to_dict(self) -> JsonDict:
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class Capabilities:
+    core_version: str
+    tasks: tuple[CalculationTaskCapability, ...]
+    target_codes: tuple[str, ...]
+    models: tuple[ModelCapability, ...]
+    pseudopotential_sets: tuple[PseudopotentialSetCapability, ...]
+    default_intent: CalculationIntent
+    default_hints: CalculationHints
+
+    def to_dict(self) -> JsonDict:
+        return to_jsonable(self)
 
 
 def build_capabilities(dispatcher: Dispatcher, runtime: Runtime) -> Capabilities:

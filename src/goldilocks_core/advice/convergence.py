@@ -1,15 +1,27 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from goldilocks_core.advice._hints import has_hint
-from goldilocks_core.contracts import (
-    ConvergenceAdvice,
-    ConvergenceHints,
-    Provenance,
-)
+from goldilocks_core.calculation import ConvergenceHints
+from goldilocks_core.provenance import Provenance
+from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.types import JsonDict
 
 DEFAULT_CONV_THR = 1e-6
 DEFAULT_MIXING_BETA = 0.4
 DEFAULT_ELECTRON_MAXSTEP = 80
+
+
+@dataclass(frozen=True, slots=True)
+class ConvergenceAdvice:
+    conv_thr: float
+    provenance: Provenance
+    mixing_beta: float = 0.4
+    electron_maxstep: int = 80
+
+    def to_dict(self) -> JsonDict:
+        return to_jsonable(self)
 
 
 def advise_convergence(hints: ConvergenceHints) -> ConvergenceAdvice:

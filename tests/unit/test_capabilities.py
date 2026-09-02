@@ -6,18 +6,19 @@ from pathlib import Path
 import pytest
 
 from goldilocks_core import Service
-from goldilocks_core.contracts import (
-    CalculationHints,
-    CalculationIntent,
-    CalculationTaskCapability,
+from goldilocks_core.calculation import CalculationHints, CalculationIntent
+from goldilocks_core.runtime import GraphHandler, Preset, Runtime, Stage, TaskGraph
+from goldilocks_core.runtime.capabilities import (
     Capabilities,
     ModelCapability,
-    PresetCapability,
     PseudopotentialSetCapability,
+)
+from goldilocks_core.runtime.graph import (
+    CalculationTaskCapability,
+    PresetCapability,
     StageCapability,
 )
-from goldilocks_core.contracts.registry import RECORD_TYPE_IDS
-from goldilocks_core.runtime import GraphHandler, Preset, Runtime, Stage, TaskGraph
+from goldilocks_core.runtime.registry import RECORD_TYPE_IDS
 
 
 @pytest.fixture

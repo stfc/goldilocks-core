@@ -10,12 +10,10 @@ from goldilocks_core import (
     PresetSelection,
     compute,
 )
-from goldilocks_core.contracts import (
-    KPointSelection,
-    ParameterAdvice,
-    StructureAnalysisRecord,
-)
+from goldilocks_core.advice.parameters import ParameterAdvice
+from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.examples import available_structures, structure, structures_path
+from goldilocks_core.kmesh.resolve import KPointSelection
 
 
 def _recommend(name: str):

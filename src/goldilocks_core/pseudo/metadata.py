@@ -5,20 +5,19 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import PurePath, PurePosixPath, PureWindowsPath
 
-from goldilocks_core.contracts.provenance import Provenance
-from goldilocks_core.contracts.serial import to_jsonable
-from goldilocks_core.contracts.types import (
+from goldilocks_core.functionals import normalize_functional_label
+from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.types import (
     JsonDict,
     PseudoAccuracy,
     PseudoType,
     RelativisticTreatment,
 )
-from goldilocks_core.contracts.validate import (
-    _validate_finite_positive,
-    _validate_optional_nonempty_str,
-    _validate_relativistic_mode,
+from goldilocks_core.validation import (
+    validate_finite_positive,
+    validate_optional_nonempty_str,
+    validate_relativistic_mode,
 )
-from goldilocks_core.functionals import normalize_functional_label
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +29,7 @@ class PseudoCutoffs:
         for field_name in ("ecutwfc_ry", "ecutrho_ry"):
             value = getattr(self, field_name)
             if value is not None:
-                _validate_finite_positive(value, f"PseudoCutoffs.{field_name}")
+                validate_finite_positive(value, f"PseudoCutoffs.{field_name}")
                 object.__setattr__(self, field_name, float(value))
 
 
@@ -71,7 +70,7 @@ class PseudoMetadata:
         ):
             raise ValueError("PseudoMetadata.filename must be one filename")
         for field_name in ("provider", "element", "source_identifier", "table_id"):
-            _validate_optional_nonempty_str(
+            validate_optional_nonempty_str(
                 getattr(self, field_name), f"PseudoMetadata.{field_name}"
             )
         if self.source_identifier is not None and (
@@ -120,11 +119,11 @@ class PseudoMetadata:
                 "PseudoMetadata.pseudo_type must be NC, USPP, PAW, or None; "
                 f"got {self.pseudo_type!r}"
             )
-        _validate_relativistic_mode(self.relativistic, "PseudoMetadata.relativistic")
+        validate_relativistic_mode(self.relativistic, "PseudoMetadata.relativistic")
         functional = normalize_functional_label(self.functional)
         object.__setattr__(self, "functional", functional)
         if self.z_valence is not None:
-            _validate_finite_positive(self.z_valence, "PseudoMetadata.z_valence")
+            validate_finite_positive(self.z_valence, "PseudoMetadata.z_valence")
             object.__setattr__(self, "z_valence", float(self.z_valence))
         if self.cutoffs is not None and not isinstance(self.cutoffs, PseudoCutoffs):
             if not isinstance(self.cutoffs, Mapping):
@@ -165,75 +164,5 @@ class PseudoMetadata:
             "content_sha256": self.content_sha256,
             "content_size_bytes": self.content_size_bytes,
             "frozen_4f_core": self.frozen_4f_core,
-            "warnings": list(self.warnings),
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class PseudopotentialSelection:
-    element: str
-    filename: str | None
-    filepath: str | None
-    functional: str | None
-    relativistic: RelativisticTreatment | None
-    ecutwfc_ry: float | None
-    ecutrho_ry: float | None
-    provenance: Provenance
-    warnings: tuple[str, ...] = ()
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.element, str) or not self.element.strip():
-            raise ValueError(
-                "PseudopotentialSelection.element must be a non-empty string"
-            )
-        if (self.filename is None) != (self.filepath is None):
-            raise ValueError(
-                "PseudopotentialSelection filename and filepath must both be "
-                "present or both be None"
-            )
-        for field_name in ("filename", "filepath"):
-            _validate_optional_nonempty_str(
-                getattr(self, field_name), f"PseudopotentialSelection.{field_name}"
-            )
-        functional = normalize_functional_label(self.functional)
-        object.__setattr__(self, "functional", functional)
-        _validate_relativistic_mode(
-            self.relativistic, "PseudopotentialSelection.relativistic"
-        )
-        for field_name in ("ecutwfc_ry", "ecutrho_ry"):
-            value = getattr(self, field_name)
-            if value is not None:
-                _validate_finite_positive(
-                    value, f"PseudopotentialSelection.{field_name}"
-                )
-                object.__setattr__(self, field_name, float(value))
-        if self.filename is None and any(
-            value is not None
-            for value in (
-                self.functional,
-                self.relativistic,
-                self.ecutwfc_ry,
-                self.ecutrho_ry,
-            )
-        ):
-            raise ValueError(
-                "An unresolved PseudopotentialSelection cannot carry scientific "
-                "metadata"
-            )
-
-    def to_dict(self) -> JsonDict:
-        document = to_jsonable(self)
-        document.pop("filepath")
-        return document
-
-
-@dataclass(frozen=True, slots=True)
-class SelectionRecord:
-    pseudopotentials: tuple[PseudopotentialSelection, ...]
-    warnings: tuple[str, ...] = ()
-
-    def to_dict(self) -> JsonDict:
-        return {
-            "pseudopotentials": [item.to_dict() for item in self.pseudopotentials],
             "warnings": list(self.warnings),
         }

@@ -1,16 +1,92 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from pymatgen.core import Structure
 
-from goldilocks_core.contracts import (
-    Provenance,
-    PseudoMetadata,
-    PseudopotentialRequirements,
-    PseudopotentialSelection,
-    SelectionRecord,
+from goldilocks_core.advice.pseudo import PseudopotentialRequirements
+from goldilocks_core.functionals import normalize_functional_label
+from goldilocks_core.provenance import Provenance
+from goldilocks_core.pseudo.metadata import PseudoMetadata
+from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.types import JsonDict, RelativisticTreatment
+from goldilocks_core.validation import (
+    validate_finite_positive,
+    validate_optional_nonempty_str,
+    validate_relativistic_mode,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class PseudopotentialSelection:
+    element: str
+    filename: str | None
+    filepath: str | None
+    functional: str | None
+    relativistic: RelativisticTreatment | None
+    ecutwfc_ry: float | None
+    ecutrho_ry: float | None
+    provenance: Provenance
+    warnings: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.element, str) or not self.element.strip():
+            raise ValueError(
+                "PseudopotentialSelection.element must be a non-empty string"
+            )
+        if (self.filename is None) != (self.filepath is None):
+            raise ValueError(
+                "PseudopotentialSelection filename and filepath must both be "
+                "present or both be None"
+            )
+        for field_name in ("filename", "filepath"):
+            validate_optional_nonempty_str(
+                getattr(self, field_name), f"PseudopotentialSelection.{field_name}"
+            )
+        functional = normalize_functional_label(self.functional)
+        object.__setattr__(self, "functional", functional)
+        validate_relativistic_mode(
+            self.relativistic, "PseudopotentialSelection.relativistic"
+        )
+        for field_name in ("ecutwfc_ry", "ecutrho_ry"):
+            value = getattr(self, field_name)
+            if value is not None:
+                validate_finite_positive(
+                    value, f"PseudopotentialSelection.{field_name}"
+                )
+                object.__setattr__(self, field_name, float(value))
+        if self.filename is None and any(
+            value is not None
+            for value in (
+                self.functional,
+                self.relativistic,
+                self.ecutwfc_ry,
+                self.ecutrho_ry,
+            )
+        ):
+            raise ValueError(
+                "An unresolved PseudopotentialSelection cannot carry scientific "
+                "metadata"
+            )
+
+    def to_dict(self) -> JsonDict:
+        document = to_jsonable(self)
+        document.pop("filepath")
+        return document
+
+
+@dataclass(frozen=True, slots=True)
+class SelectionRecord:
+    pseudopotentials: tuple[PseudopotentialSelection, ...]
+    warnings: tuple[str, ...] = ()
+
+    def to_dict(self) -> JsonDict:
+        return {
+            "pseudopotentials": [item.to_dict() for item in self.pseudopotentials],
+            "warnings": list(self.warnings),
+        }
+
 
 LANTHANIDES = frozenset("La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu".split())
 ACTINIDES = frozenset("Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr".split())

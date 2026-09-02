@@ -45,7 +45,7 @@ resolution, input rendering, and publication touch the filesystem.
 | `server/wire.py` | Strict request shapes and mechanically derived Core response schemas. |
 | `server/http.py`, `server/http_contract.py` | Optional HTTP lifecycle, errors, and scientific route adapter. |
 | `server/mcp.py` | Optional local stdio MCP adapter. |
-| `server/capacity.py`, `server/readiness.py` | One Compute admission slot and cached asset readiness. |
+| `server/readiness.py` | Cached asset readiness for the Workbench profile. |
 | `web/` | React structure workspace, generated OpenAPI types, and browser-owned transient UI state. |
 | `Dockerfile` | One production image containing matching Core, Workbench, and pinned runtime assets. |
 
@@ -177,8 +177,9 @@ boundaries, concurrency safety, or the task extension model.
 - The SCF handler registers lazily on first dispatch so importing
   `runtime.dispatch` does not pull in stage implementations or their
   `ml.*` dependencies. Explicit registration wins over the default.
-- `Service` serializes dispatch with a re-entrant lock so model lazy
-  init and inference never overlap across concurrent requests.
+- `Service` executes Computations concurrently over one process-owned
+  `Runtime`. Model backends synchronize only their first lazy load, and the
+  `Dispatcher` synchronizes lazy default-task registration.
 - The top-level `compute` convenience reuses a caller-owned runtime when given
   one and otherwise closes its owned runtime after one call.
 - The runtime imports no task-specific code. New tasks bring their own

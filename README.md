@@ -1,10 +1,10 @@
 # goldilocks-core
 
-Goldilocks recommends DFT parameters for a crystal structure — k-point grid,
-smearing, convergence settings, pseudopotentials — and generates ready-to-run
-Quantum ESPRESSO SCF inputs. Every recommendation carries provenance naming
-its source, and publication includes the exact pseudopotential files and
-licences the inputs depend on.
+Goldilocks recommends DFT parameters for a crystal structure: k-point grid,
+smearing, convergence settings, and pseudopotentials. It generates
+ready-to-run Quantum ESPRESSO SCF inputs. Every recommendation carries
+provenance naming its source. Publication includes the exact pseudopotential
+files and licences the inputs depend on.
 
 - structure analysis with scientific warnings;
 - provenance-backed advice for k-points, smearing, magnetism, spin-orbit
@@ -35,13 +35,14 @@ uv run goldilocks assets verify default
 Generate SCF inputs for a bundled structure:
 
 ```bash
-STRUCTURES="$(uv run goldilocks examples path)"
-uv run goldilocks compute "$STRUCTURES/Si.cif" --preset generate --out run
+uv run goldilocks compute structure.cif --preset generate --out run
 ```
 
-`run/` holds the generated input, the exact selected pseudopotential,
-structures, licences, citations, and checksums; run `pw.x` from its root.
-The [quickstart](docs/quickstart.md) shows the full output and
+`structure.cif` is any CIF or POSCAR. `uv run goldilocks examples path`
+prints the directory of bundled examples. `run/` holds the generated input,
+the exact selected pseudopotential, structures, licences, citations, and
+checksums; run `pw.x` from its root. The
+[quickstart](docs/quickstart.md) shows the full output and
 [how recommendations are made](docs/science.md) explains where each value
 came from.
 

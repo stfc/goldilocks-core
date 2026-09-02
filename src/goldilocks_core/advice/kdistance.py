@@ -5,15 +5,13 @@ from threading import Lock
 from pymatgen.core import Structure
 
 from goldilocks_core.assets import AssetStore
-from goldilocks_core.contracts import (
-    KPointSelection,
-    PathLike,
-    Provenance,
-)
 from goldilocks_core.kmesh.math import k_distance_to_mesh
+from goldilocks_core.kmesh.resolve import KPointSelection
 from goldilocks_core.ml.model_registry import QrfKpointsConfig, load_default_qrf_config
 from goldilocks_core.ml.qrf import predict_kdistance_with_resources
 from goldilocks_core.ml.qrf.inference import QrfResources, load_qrf_resources
+from goldilocks_core.provenance import Provenance
+from goldilocks_core.types import PathLike
 
 
 def kdistance_to_selection(

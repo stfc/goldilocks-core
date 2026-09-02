@@ -10,7 +10,7 @@ from goldilocks_core.assets import (
     AssetStore,
 )
 from goldilocks_core.assets.runtime import WORKBENCH_PROFILE, catalogue, references
-from goldilocks_core.contracts import PathLike
+from goldilocks_core.types import PathLike
 
 
 @dataclass(frozen=True, slots=True)

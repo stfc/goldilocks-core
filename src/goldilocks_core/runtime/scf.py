@@ -6,34 +6,25 @@ from dataclasses import dataclass, field
 from pymatgen.core import Structure
 
 from goldilocks_core.advice import ml_kmesh_advisor
-from goldilocks_core.advice.parameters import advise_parameters
-from goldilocks_core.analysis import analyze_structure
-from goldilocks_core.contracts import (
-    CalculationHints,
-    CalculationIntent,
-    ComputeRequest,
-    DftInputData,
-    ElectronicCharacter,
-    GeneratedFiles,
-    KMeshAdvisor,
-    KPointSelection,
-    ModelSpec,
-    ParameterAdvice,
-    PseudoMetadata,
-    PseudopotentialRequirements,
-    Records,
-    SelectionRecord,
-    StructureAnalysisRecord,
-)
+from goldilocks_core.advice.parameters import ParameterAdvice, advise_parameters
+from goldilocks_core.advice.pseudo import PseudopotentialRequirements
+from goldilocks_core.analysis import StructureAnalysisRecord, analyze_structure
+from goldilocks_core.calculation import CalculationHints, CalculationIntent
+from goldilocks_core.generation.files import GeneratedFiles
 from goldilocks_core.generation.registry import generate_inputs
-from goldilocks_core.input_data import assemble_dft_input_data
+from goldilocks_core.input_data import DftInputData, assemble_dft_input_data
 from goldilocks_core.io.structures import NormalizedStructure
-from goldilocks_core.kmesh.resolve import resolve_kpoints
+from goldilocks_core.kmesh.resolve import KMeshAdvisor, KPointSelection, resolve_kpoints
+from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.pseudo.source import PseudoSource, source_for_draft
+from goldilocks_core.request import ComputeRequest
+from goldilocks_core.result import Records
 from goldilocks_core.runtime.graph import Preset, Stage, TaskGraph
 from goldilocks_core.runtime.models import Runtime
 from goldilocks_core.runtime.task import GraphHandler
-from goldilocks_core.selection import select_pseudopotentials
+from goldilocks_core.selection import SelectionRecord, select_pseudopotentials
+from goldilocks_core.types import ElectronicCharacter
 
 
 @dataclass(frozen=True, slots=True)

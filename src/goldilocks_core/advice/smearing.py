@@ -1,14 +1,34 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from goldilocks_core.advice._hints import has_hint
-from goldilocks_core.contracts import (
-    Provenance,
-    SmearingAdvice,
-    SmearingHints,
-    StructureAnalysisRecord,
-)
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.calculation import SmearingHints
+from goldilocks_core.provenance import Provenance
+from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.types import JsonDict
 
 METALLIC_SMEARING_WIDTH_RY = 0.01
+
+
+@dataclass(frozen=True, slots=True)
+class SmearingAdvice:
+    """Advised occupation treatment.
+
+    ``smearing_type`` ``None`` or ``"fixed"`` means fixed occupations; a
+    named smearing type activates ``width_ry``, which is in Rydberg and
+    ``None`` only alongside fixed occupations. ``provenance`` states the
+    source precedence: an operator hint wins over the structure analysis,
+    which wins over the package default.
+    """
+
+    smearing_type: str | None
+    width_ry: float | None
+    provenance: Provenance
+
+    def to_dict(self) -> JsonDict:
+        return to_jsonable(self)
 
 
 def advise_smearing(

@@ -2,21 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from goldilocks_core.advice.magnetism import advise_magnetism
-from goldilocks_core.advice.smearing import advise_smearing
-from goldilocks_core.advice.soc import advise_spin_orbit
-from goldilocks_core.advice.vdw import advise_vdw
-from goldilocks_core.contracts import (
-    MagnetismAdvice,
-    Provenance,
-    SmearingAdvice,
-    SmearingHints,
-    SpinHints,
-    SpinOrbitAdvice,
-    StructureAnalysisRecord,
-    VdwAdvice,
-    VdwHints,
-)
+from goldilocks_core.advice.magnetism import MagnetismAdvice, advise_magnetism
+from goldilocks_core.advice.smearing import SmearingAdvice, advise_smearing
+from goldilocks_core.advice.soc import SpinOrbitAdvice, advise_spin_orbit
+from goldilocks_core.advice.vdw import VdwAdvice, advise_vdw
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.calculation import SmearingHints, SpinHints, VdwHints
+from goldilocks_core.provenance import Provenance
 
 
 def analysis(

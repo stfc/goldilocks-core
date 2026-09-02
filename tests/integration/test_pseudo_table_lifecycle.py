@@ -15,18 +15,16 @@ from pathlib import Path
 import pytest
 from pymatgen.core import Lattice, Structure
 
+from goldilocks_core.advice.pseudo import PseudopotentialRequirements
 from goldilocks_core.assets import AssetFile, AssetStore
-from goldilocks_core.contracts import (
-    CalculationDraft,
-    CalculationHints,
-    InMemoryStructureSource,
-    Provenance,
-    PseudoMetadata,
-    PseudopotentialRequirements,
-)
+from goldilocks_core.calculation import CalculationHints
+from goldilocks_core.io.structures import InMemoryStructureSource
+from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.installed import load_installed_table, write_table_manifest
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.pseudo.registry import PseudoTable, default_table, load_tables
 from goldilocks_core.pseudo.source import source_for_draft
+from goldilocks_core.request import CalculationDraft
 
 pytestmark = pytest.mark.integration
 

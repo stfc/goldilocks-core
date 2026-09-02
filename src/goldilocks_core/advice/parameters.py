@@ -1,17 +1,33 @@
 from __future__ import annotations
 
-from goldilocks_core.advice.convergence import advise_convergence
-from goldilocks_core.advice.magnetism import advise_magnetism
-from goldilocks_core.advice.pseudo import advise_pseudopotential_requirements
-from goldilocks_core.advice.smearing import advise_smearing
-from goldilocks_core.advice.soc import advise_spin_orbit
-from goldilocks_core.advice.vdw import advise_vdw
-from goldilocks_core.contracts import (
-    CalculationHints,
-    CalculationIntent,
-    ParameterAdvice,
-    StructureAnalysisRecord,
+from dataclasses import dataclass
+
+from goldilocks_core.advice.convergence import ConvergenceAdvice, advise_convergence
+from goldilocks_core.advice.magnetism import MagnetismAdvice, advise_magnetism
+from goldilocks_core.advice.pseudo import (
+    PseudopotentialRequirements,
+    advise_pseudopotential_requirements,
 )
+from goldilocks_core.advice.smearing import SmearingAdvice, advise_smearing
+from goldilocks_core.advice.soc import SpinOrbitAdvice, advise_spin_orbit
+from goldilocks_core.advice.vdw import VdwAdvice, advise_vdw
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.calculation import CalculationHints, CalculationIntent
+from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.types import JsonDict
+
+
+@dataclass(frozen=True, slots=True)
+class ParameterAdvice:
+    smearing: SmearingAdvice
+    magnetism: MagnetismAdvice
+    spin_orbit: SpinOrbitAdvice
+    pseudopotential_requirements: PseudopotentialRequirements
+    convergence: ConvergenceAdvice
+    vdw: VdwAdvice
+
+    def to_dict(self) -> JsonDict:
+        return to_jsonable(self)
 
 
 def advise_parameters(
@@ -36,4 +52,4 @@ def advise_parameters(
     )
 
 
-__all__ = ["advise_parameters"]
+__all__ = ["ParameterAdvice", "advise_parameters"]

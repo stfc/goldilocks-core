@@ -4,13 +4,46 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from goldilocks_core.contracts import (
-    CalculationTaskCapability,
-    PresetCapability,
-    Records,
-    StageCapability,
-    record_type_id,
-)
+from goldilocks_core.result import Records
+from goldilocks_core.runtime.registry import record_type_id
+from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.types import JsonDict
+
+
+@dataclass(frozen=True, slots=True)
+class StageCapability:
+    id: str
+    name: str
+    description: str
+    input_record_ids: tuple[str, ...]
+    output_record_id: str
+
+    def to_dict(self) -> JsonDict:
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class PresetCapability:
+    id: str
+    name: str
+    output_record_ids: tuple[str, ...]
+
+    def to_dict(self) -> JsonDict:
+        return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class CalculationTaskCapability:
+    id: str
+    revision: str
+    name: str
+    description: str
+    stages: tuple[StageCapability, ...]
+    presets: tuple[PresetCapability, ...]
+    selectable_record_ids: tuple[str, ...]
+
+    def to_dict(self) -> JsonDict:
+        return to_jsonable(self)
 
 
 class UnknownPreset(ValueError):

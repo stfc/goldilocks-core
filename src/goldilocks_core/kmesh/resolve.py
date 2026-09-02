@@ -1,14 +1,29 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
+
 from pymatgen.core import Structure
 
-from goldilocks_core.contracts import (
-    KMeshAdvisor,
-    KmeshHints,
-    KPointSelection,
-    Provenance,
-)
+from goldilocks_core.calculation import KmeshHints
 from goldilocks_core.kmesh.math import k_distance_to_mesh
+from goldilocks_core.provenance import Provenance
+from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.types import JsonDict, KPointGrid, KPointShift
+
+
+@dataclass(frozen=True, slots=True)
+class KPointSelection:
+    grid: KPointGrid
+    shift: KPointShift
+    mesh_type: str
+    provenance: Provenance
+
+    def to_dict(self) -> JsonDict:
+        return to_jsonable(self)
+
+
+type KMeshAdvisor = Callable[[Structure], KPointSelection]
 
 
 def resolve_kpoints(
@@ -50,4 +65,4 @@ def resolve_kpoints(
     return backend(structure)
 
 
-__all__ = ["resolve_kpoints"]
+__all__ = ["KMeshAdvisor", "KPointSelection", "resolve_kpoints"]

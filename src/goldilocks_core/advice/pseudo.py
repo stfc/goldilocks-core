@@ -1,13 +1,58 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from goldilocks_core.advice._hints import has_hint
-from goldilocks_core.contracts import (
-    CalculationIntent,
-    Provenance,
-    PseudoHints,
-    PseudopotentialRequirements,
-    SpinOrbitAdvice,
+from goldilocks_core.advice.soc import SpinOrbitAdvice
+from goldilocks_core.calculation import CalculationIntent, PseudoHints
+from goldilocks_core.functionals import normalize_functional_label
+from goldilocks_core.provenance import Provenance
+from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.types import (
+    JsonDict,
+    PseudoAccuracy,
+    PseudoType,
+    RelativisticTreatment,
 )
+from goldilocks_core.validation import validate_relativistic_mode
+
+
+@dataclass(frozen=True, slots=True)
+class PseudopotentialRequirements:
+    functional: str
+    accuracy: PseudoAccuracy
+    pseudo_type: PseudoType | None
+    relativistic: RelativisticTreatment
+    provenance: Provenance
+
+    def __post_init__(self) -> None:
+        functional = normalize_functional_label(self.functional)
+        if functional is None:
+            raise ValueError(
+                "PseudopotentialRequirements.functional must be a non-empty "
+                f"string; got {self.functional!r}"
+            )
+        object.__setattr__(self, "functional", functional)
+        if self.accuracy not in {"efficiency", "precision"}:
+            raise ValueError(
+                "PseudopotentialRequirements.accuracy must be 'efficiency' or "
+                f"precision'; got {self.accuracy!r}"
+            )
+        if self.pseudo_type is not None and self.pseudo_type not in {
+            "NC",
+            "USPP",
+            "PAW",
+        }:
+            raise ValueError(
+                "PseudopotentialRequirements.pseudo_type must be NC, USPP, "
+                f"PAW, or None; got {self.pseudo_type!r}"
+            )
+        validate_relativistic_mode(
+            self.relativistic, "PseudopotentialRequirements.relativistic"
+        )
+
+    def to_dict(self) -> JsonDict:
+        return to_jsonable(self)
 
 
 def advise_pseudopotential_requirements(

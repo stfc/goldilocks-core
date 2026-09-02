@@ -1,11 +1,8 @@
 import pytest
 
 from goldilocks_core.advice import advise_parameters
-from goldilocks_core.contracts import (
-    CalculationHints,
-    CalculationIntent,
-    StructureAnalysisRecord,
-)
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.calculation import CalculationHints, CalculationIntent
 
 
 def make_analysis(

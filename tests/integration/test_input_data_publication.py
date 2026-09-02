@@ -23,23 +23,21 @@ from goldilocks_core import (
     Service,
 )
 from goldilocks_core.assets import AssetStore
-from goldilocks_core.contracts import (
+from goldilocks_core.input_data import (
     DftInputData,
     GeneratedContent,
     InputArtifact,
     InstalledArtifactReference,
-    KPointSelection,
-    ModelSpec,
-    Provenance,
-    PseudoCutoffs,
-    PseudoMetadata,
-    PseudopotentialSelection,
-    SelectionRecord,
 )
+from goldilocks_core.kmesh.resolve import KPointSelection
 from goldilocks_core.ml.model_registry import model_asset_specs
+from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.provenance import Provenance
+from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
 from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
 from goldilocks_core.pseudo.registry import load_tables
 from goldilocks_core.publication import Publisher
+from goldilocks_core.selection import PseudopotentialSelection, SelectionRecord
 
 
 def test_generation_assembles_complete_dft_input_data_without_host_paths(

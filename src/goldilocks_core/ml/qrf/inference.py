@@ -7,8 +7,8 @@ import numpy as np
 from pymatgen.core import Structure
 
 from goldilocks_core.assets import AssetStore
-from goldilocks_core.contracts import StructureFeatureVector
 from goldilocks_core.ml.model_registry import QrfKpointsConfig
+from goldilocks_core.ml.models import StructureFeatureVector
 
 __all__ = [
     "KDistancePrediction",

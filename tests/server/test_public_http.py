@@ -12,7 +12,8 @@ from threading import Event, Lock
 import pytest
 
 from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled, AssetReference
-from goldilocks_core.contracts import KPointSelection, Provenance
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.provenance import Provenance
 from goldilocks_core.runtime import Runtime, Service
 from goldilocks_core.server.http import create_app
 

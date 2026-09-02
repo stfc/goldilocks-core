@@ -18,15 +18,12 @@ from goldilocks_core import (
     compute,
 )
 from goldilocks_core.advice.kdistance import QrfBackend
-from goldilocks_core.contracts import (
-    GeneratedFiles,
-    ParameterAdvice,
-    PseudoCutoffs,
-    PseudoMetadata,
-    StructureAnalysisRecord,
-    StructureFeatureVector,
-)
+from goldilocks_core.advice.parameters import ParameterAdvice
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.generation.files import GeneratedFiles
 from goldilocks_core.ml.model_registry import load_default_qrf_config
+from goldilocks_core.ml.models import StructureFeatureVector
+from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
 
 
 def make_structure() -> Structure:

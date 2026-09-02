@@ -16,13 +16,11 @@ from goldilocks_core import (
     PresetSelection,
     compute,
 )
-from goldilocks_core.contracts import (
-    GeneratedFiles,
-    KPointSelection,
-    PseudoMetadata,
-    SelectionRecord,
-    StructureAnalysisRecord,
-)
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.generation.files import GeneratedFiles
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.pseudo.metadata import PseudoMetadata
+from goldilocks_core.selection import SelectionRecord
 
 
 def test_generate_crosses_every_in_memory_stage_with_real_backends(

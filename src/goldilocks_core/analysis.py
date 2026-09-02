@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from pymatgen.analysis.dimensionality import get_dimensionality_larsen
 from pymatgen.analysis.local_env import CrystalNN
@@ -9,15 +10,59 @@ from pymatgen.core.graphs import StructureGraph
 from pymatgen.core.periodic_table import Element
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
-from goldilocks_core.contracts import (
+from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.types import (
     Dimensionality,
     ElectronicCharacter,
-    StructureAnalysisRecord,
-    SymmetryUnavailable,
+    JsonDict,
 )
 
 HEAVY_ELEMENT_MIN_ROW = 5
 """Lowest periodic-table row treated as heavy for spin-orbit advice."""
+
+
+@dataclass(frozen=True, slots=True)
+class SymmetryUnavailable:
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class StructureAnalysisRecord:
+    """Structure-derived facts feeding Advise and Select.
+
+    Symmetry fields carry ``None`` when not yet determined and
+    :class:`SymmetryUnavailable` when symmetry analysis itself failed; an
+    ``int``/``str`` value is a successful determination. The electronic
+    character comes from the source named in ``electronic_character_source``
+    (``"heuristic"`` or a model classifier); ``electronic_character_confidence``
+    is ``None`` for heuristic classifications. Warnings are provenance-bearing:
+    they state what could not be determined, not what was chosen.
+    """
+
+    formula: str
+    reduced_formula: str
+    site_count: int
+    elements: tuple[str, ...]
+    contains_transition_metals: bool
+    contains_lanthanides: bool
+    contains_actinides: bool
+    contains_heavy_elements: bool
+    magnetic_elements: tuple[str, ...]
+    heavy_elements: tuple[str, ...]
+    disorder_warnings: tuple[str, ...] = ()
+    disordered_site_count: int = 0
+    space_group_symbol: str | int | SymmetryUnavailable | None = None
+    space_group_number: str | int | SymmetryUnavailable | None = None
+    crystal_system: str | int | SymmetryUnavailable | None = None
+    dimensionality: Dimensionality = "unknown"
+    low_dimensional: bool = False
+    electronic_character: ElectronicCharacter = "unknown"
+    electronic_character_source: str = "heuristic"
+    electronic_character_confidence: float | None = None
+    analysis_warnings: tuple[str, ...] = ()
+
+    def to_dict(self) -> JsonDict:
+        return to_jsonable(self)
 
 
 class DimensionalityClassificationError(Exception):

@@ -2,20 +2,21 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from goldilocks_core.contracts import (
-    ArchiveOutput,
-    Capabilities,
-    ComputationResult,
-    ComputeRequest,
-    DftInputData,
-    DirectoryOutput,
-    OutputTarget,
+from goldilocks_core.input_data import DftInputData
+from goldilocks_core.io.structures import (
     StructureInspection,
     StructureSource,
+    normalize_structure,
 )
-from goldilocks_core.io.structures import normalize_structure
-from goldilocks_core.publication import Publisher
-from goldilocks_core.runtime.capabilities import build_capabilities
+from goldilocks_core.publication import (
+    ArchiveOutput,
+    DirectoryOutput,
+    OutputTarget,
+    Publisher,
+)
+from goldilocks_core.request import ComputeRequest
+from goldilocks_core.result import ComputationResult
+from goldilocks_core.runtime.capabilities import Capabilities, build_capabilities
 from goldilocks_core.runtime.dispatch import Dispatcher
 from goldilocks_core.runtime.models import Runtime
 from goldilocks_core.runtime.task import GraphHandler

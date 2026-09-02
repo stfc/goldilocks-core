@@ -4,17 +4,14 @@ from typing import Callable
 
 from pymatgen.core import Structure
 
-from goldilocks_core.contracts import (
-    CalcTask,
-    CalculationIntent,
-    CodeName,
-    GeneratedFile,
-    KPointSelection,
-    ParameterAdvice,
-    SelectionRecord,
-)
+from goldilocks_core.advice.parameters import ParameterAdvice
+from goldilocks_core.calculation import CalculationIntent
 from goldilocks_core.generation.errors import GenerationError
+from goldilocks_core.generation.files import GeneratedFile
 from goldilocks_core.generation.qe.scf import write_qe_scf
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.selection import SelectionRecord
+from goldilocks_core.types import CalcTask, CodeName
 
 Writer = Callable[
     [Structure, CalculationIntent, ParameterAdvice, SelectionRecord, KPointSelection],

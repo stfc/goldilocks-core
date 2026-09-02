@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 
 from goldilocks_core.assets import AssetInstallation, AssetPreparer
-from goldilocks_core.contracts import PathLike
 from goldilocks_core.pseudo.import_pseudodojo import preparer as dojo_preparer
 from goldilocks_core.pseudo.import_sssp import preparer as sssp_preparer
 from goldilocks_core.pseudo.registry import (
@@ -11,6 +10,7 @@ from goldilocks_core.pseudo.registry import (
     PseudoTable,
     load_tables,
 )
+from goldilocks_core.types import PathLike
 
 _PREPARERS: Mapping[str, Callable[[PseudoTable], AssetPreparer]] = {
     "pseudodojo": dojo_preparer,

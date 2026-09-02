@@ -5,14 +5,12 @@ import re
 from pymatgen.core import Structure
 from pymatgen.core.periodic_table import Element
 
-from goldilocks_core.contracts import (
-    CalculationIntent,
-    GeneratedFile,
-    KPointSelection,
-    ParameterAdvice,
-    SelectionRecord,
-)
+from goldilocks_core.advice.parameters import ParameterAdvice
+from goldilocks_core.calculation import CalculationIntent
 from goldilocks_core.generation.errors import GenerationError
+from goldilocks_core.generation.files import GeneratedFile
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.selection import SelectionRecord
 
 _QE_VDW_CORR = {
     "d3": ("grimme-d3", 3),

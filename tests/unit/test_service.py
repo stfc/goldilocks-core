@@ -17,12 +17,9 @@ from goldilocks_core import (
     Runtime,
     Service,
 )
-from goldilocks_core.contracts import (
-    KPointSelection,
-    Provenance,
-    PseudoCutoffs,
-    PseudoMetadata,
-)
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.provenance import Provenance
+from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
 from goldilocks_core.runtime.dispatch import Dispatcher
 
 

@@ -14,17 +14,62 @@ import tempfile
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Literal
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from goldilocks_core.assets import AssetStore
-from goldilocks_core.contracts import (
+from goldilocks_core.input_data import (
     DftInputData,
-    DirectoryOutput,
     GeneratedContent,
     InputArtifact,
-    OutputTarget,
-    Publication,
 )
+from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.types import JsonDict
+
+
+@dataclass(frozen=True, slots=True)
+class DirectoryOutput:
+    path: str | Path | None = None
+
+    def __post_init__(self) -> None:
+        if self.path is not None:
+            _validate_destination(self.path)
+
+
+@dataclass(frozen=True, slots=True)
+class ArchiveOutput:
+    path: str | Path
+
+    def __post_init__(self) -> None:
+        _validate_destination(self.path)
+
+
+type OutputTarget = DirectoryOutput | ArchiveOutput
+
+
+def _validate_destination(path: str | Path) -> None:
+    if not isinstance(path, str | Path) or not str(path).strip():
+        raise ValueError("output destination must be a non-empty path")
+
+
+@dataclass(frozen=True, slots=True)
+class Publication:
+    """A published output bundle and its integrity facts.
+
+    ``path`` is the published location; ``files`` lists every published
+    path relative to it. ``manifest_sha256`` pins the archive manifest and
+    ``output_sha256`` pins the archive bytes; it is ``None`` for directory
+    publications.
+    """
+
+    kind: Literal["directory", "archive"]
+    path: str
+    files: tuple[str, ...]
+    manifest_sha256: str
+    output_sha256: str | None = None
+
+    def to_dict(self) -> JsonDict:
+        return to_jsonable(self)
 
 
 @dataclass(frozen=True, slots=True)

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from goldilocks_core.assets import AssetCorrupt, InstalledAsset
-from goldilocks_core.contracts import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
 from goldilocks_core.pseudo.registry import PseudoTable
 from goldilocks_core.pseudo.validation import (
     finite_positive_cutoff,

@@ -15,15 +15,13 @@ from goldilocks_core import (
     Runtime,
     compute,
 )
+from goldilocks_core.advice.parameters import ParameterAdvice
 from goldilocks_core.advice.smearing import METALLIC_SMEARING_WIDTH_RY
+from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.assets import AssetStore
-from goldilocks_core.contracts import (
-    GeneratedFiles,
-    ParameterAdvice,
-    PseudoMetadata,
-    SelectionRecord,
-    StructureAnalysisRecord,
-)
+from goldilocks_core.generation.files import GeneratedFiles
+from goldilocks_core.pseudo.metadata import PseudoMetadata
+from goldilocks_core.selection import SelectionRecord
 
 
 def test_elemental_metal_uses_modest_cold_smearing_in_qe_rydberg_units(

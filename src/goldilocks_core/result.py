@@ -2,29 +2,17 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
-from goldilocks_core.contracts.serial import to_jsonable
-from goldilocks_core.contracts.types import JsonDict
+from goldilocks_core.publication import Publication
+from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.types import JsonDict
 
 if TYPE_CHECKING:
-    from goldilocks_core.contracts.requests import (
+    from goldilocks_core.request import (
         CalculationDraft,
         ComputationSelection,
     )
-
-
-@dataclass(frozen=True, slots=True)
-class GeneratedFile:
-    path: str
-    content: str
-    role: str = "input"
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
-
-
-type GeneratedFiles = tuple[GeneratedFile, ...]
 
 
 class Records(Mapping[type, Any]):
@@ -43,7 +31,7 @@ class Records(Mapping[type, Any]):
         return len(self._records)
 
     def to_dict(self) -> JsonDict:
-        from goldilocks_core.contracts.registry import record_type_id
+        from goldilocks_core.runtime.registry import record_type_id
 
         return {
             record_type_id(record_type): (
@@ -51,26 +39,6 @@ class Records(Mapping[type, Any]):
             )
             for record_type, record in self._records.items()
         }
-
-
-@dataclass(frozen=True, slots=True)
-class Publication:
-    """A published output bundle and its integrity facts.
-
-    ``path`` is the published location; ``files`` lists every published
-    path relative to it. ``manifest_sha256`` pins the archive manifest and
-    ``output_sha256`` pins the archive bytes; it is ``None`` for directory
-    publications.
-    """
-
-    kind: Literal["directory", "archive"]
-    path: str
-    files: tuple[str, ...]
-    manifest_sha256: str
-    output_sha256: str | None = None
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 @dataclass(frozen=True, slots=True)

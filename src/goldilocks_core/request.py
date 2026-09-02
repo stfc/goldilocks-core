@@ -3,20 +3,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TypeAliasType
 
-from goldilocks_core.contracts.hints import CalculationHints, CalculationIntent
-from goldilocks_core.contracts.models import ModelSpec
-from goldilocks_core.contracts.registry import record_type_id
-from goldilocks_core.contracts.selection import PseudoMetadata
-from goldilocks_core.contracts.serial import to_jsonable
-from goldilocks_core.contracts.structure import (
+from goldilocks_core.calculation import CalculationHints, CalculationIntent
+from goldilocks_core.io.structures import (
     InlineStructureSource,
     InMemoryStructureSource,
     PathStructureSource,
     StructureInspection,
     StructureSource,
 )
-from goldilocks_core.contracts.types import JsonDict
-from goldilocks_core.contracts.validate import _validate_optional_nonempty_str
+from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.pseudo.metadata import PseudoMetadata
+from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.types import JsonDict
+from goldilocks_core.validation import validate_optional_nonempty_str
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +31,8 @@ class RecordSelection:
             raise ValueError("RecordSelection.records must contain types")
 
     def to_dict(self) -> JsonDict:
+        from goldilocks_core.runtime.registry import record_type_id
+
         return {"records": [record_type_id(item) for item in self.records]}
 
 
@@ -90,10 +91,8 @@ class CalculationDraft:
             self.pseudo_metadata, tuple
         ):
             object.__setattr__(self, "pseudo_metadata", tuple(self.pseudo_metadata))
-        _validate_optional_nonempty_str(
-            self.pseudo_root, "CalculationDraft.pseudo_root"
-        )
-        _validate_optional_nonempty_str(
+        validate_optional_nonempty_str(self.pseudo_root, "CalculationDraft.pseudo_root")
+        validate_optional_nonempty_str(
             self.pseudo_table, "CalculationDraft.pseudo_table"
         )
         _validate_pseudo_source(

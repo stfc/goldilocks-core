@@ -11,8 +11,8 @@ from typing import Any
 from pymatgen.core import Element
 
 from goldilocks_core.assets import AssetFile, AssetSpec
-from goldilocks_core.contracts import PathLike, PseudoAccuracy, RelativisticTreatment
 from goldilocks_core.functionals import normalize_functional_label
+from goldilocks_core.types import PathLike, PseudoAccuracy, RelativisticTreatment
 
 PSEUDO_REGISTRY_ENV = "GOLDILOCKS_PSEUDO_REGISTRY"
 _REGISTRY_RESOURCE = "registry.toml"

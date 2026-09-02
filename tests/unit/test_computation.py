@@ -8,16 +8,13 @@ from goldilocks_core import (
     InMemoryStructureSource,
     PathStructureSource,
 )
-from goldilocks_core.contracts import (
-    GeneratedFiles,
-    KPointSelection,
-    ModelSpec,
-    ParameterAdvice,
-    PseudoCutoffs,
-    PseudoMetadata,
-    SelectionRecord,
-    StructureAnalysisRecord,
-)
+from goldilocks_core.advice.parameters import ParameterAdvice
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.generation.files import GeneratedFiles
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.selection import SelectionRecord
 
 
 def make_structure() -> Structure:

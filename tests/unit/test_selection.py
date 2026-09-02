@@ -1,12 +1,9 @@
 import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.contracts import (
-    Provenance,
-    PseudoCutoffs,
-    PseudoMetadata,
-    PseudopotentialRequirements,
-)
+from goldilocks_core.advice.pseudo import PseudopotentialRequirements
+from goldilocks_core.provenance import Provenance
+from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
 from goldilocks_core.selection import select_pseudopotentials
 
 

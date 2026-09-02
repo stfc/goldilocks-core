@@ -1,5 +1,5 @@
 from goldilocks_core.advice._hints import has_hint
-from goldilocks_core.contracts import (
+from goldilocks_core.calculation import (
     ConvergenceHints,
     PseudoHints,
     SmearingHints,

@@ -23,10 +23,11 @@ From Python:
 from goldilocks_core import (
     CalculationDraft,
     ComputeRequest,
+    KPointSelection,
     PresetSelection,
     Service,
+    StructureAnalysisRecord,
 )
-from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
 from goldilocks_core.examples import structure
 
 request = ComputeRequest(

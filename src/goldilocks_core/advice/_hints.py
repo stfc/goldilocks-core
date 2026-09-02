@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import fields
 
-from goldilocks_core.contracts import (
+from goldilocks_core.calculation import (
     ConvergenceHints,
     KmeshHints,
     PseudoHints,

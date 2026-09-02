@@ -13,19 +13,16 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields
 from typing import Any, Literal
 
-from goldilocks_core.contracts import (
+from goldilocks_core.calculation import CalculationHints, CalculationIntent
+from goldilocks_core.io.structures import InlineStructureSource, StructureSource
+from goldilocks_core.publication import DirectoryOutput, OutputTarget
+from goldilocks_core.request import (
     CalculationDraft,
-    CalculationHints,
-    CalculationIntent,
     ComputeRequest,
-    DirectoryOutput,
-    InlineStructureSource,
-    OutputTarget,
     PresetSelection,
     RecordSelection,
-    StructureSource,
-    resolve_output_types,
 )
+from goldilocks_core.runtime.registry import resolve_output_types
 
 __all__ = [
     "RequestError",

@@ -11,9 +11,9 @@ from goldilocks_core.advice.kdistance import (
     QrfBackend,
     kdistance_to_selection,
 )
-from goldilocks_core.contracts import StructureFeatureVector
 from goldilocks_core.kmesh.math import k_distance_to_mesh
 from goldilocks_core.ml.model_registry import load_default_qrf_config
+from goldilocks_core.ml.models import StructureFeatureVector
 from goldilocks_core.ml.qrf.inference import _predict_kdistance_quantiles
 
 

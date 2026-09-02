@@ -5,8 +5,8 @@ import inspect
 import numpy as np
 from pymatgen.core import Structure
 
-from goldilocks_core.contracts import StructureFeatureVector
 from goldilocks_core.ml.model_registry import QrfFeatureSettings
+from goldilocks_core.ml.models import StructureFeatureVector
 
 QRF_FEATURE_COUNT = 483
 

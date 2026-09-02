@@ -5,34 +5,30 @@ import json
 import sys
 from pathlib import Path
 
+from goldilocks_core.advice.parameters import ParameterAdvice
 from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled, AssetStore
 from goldilocks_core.assets.runtime import install as install_assets
 from goldilocks_core.assets.runtime import statuses as asset_statuses
 from goldilocks_core.assets.runtime import verify as verify_assets
-from goldilocks_core.contracts import (
-    ArchiveOutput,
-    CalculationDraft,
-    CalculationHints,
-    CalculationIntent,
-    ComputationResult,
-    ComputeRequest,
-    DftInputData,
-    DirectoryOutput,
-    GeneratedFiles,
-    KPointSelection,
-    ModelSpec,
-    OutputTarget,
-    ParameterAdvice,
-    PathStructureSource,
-    PresetSelection,
-    RecordSelection,
-    SelectionRecord,
-    resolve_output_types,
-)
+from goldilocks_core.calculation import CalculationHints, CalculationIntent
 from goldilocks_core.examples import structures_path
 from goldilocks_core.generation import available_codes, available_tasks
-from goldilocks_core.io.structures import StructureInputError
+from goldilocks_core.generation.files import GeneratedFiles
+from goldilocks_core.input_data import DftInputData
+from goldilocks_core.io.structures import PathStructureSource, StructureInputError
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.publication import ArchiveOutput, DirectoryOutput, OutputTarget
+from goldilocks_core.request import (
+    CalculationDraft,
+    ComputeRequest,
+    PresetSelection,
+    RecordSelection,
+)
+from goldilocks_core.result import ComputationResult
 from goldilocks_core.runtime import Runtime, Service, compute
+from goldilocks_core.runtime.registry import resolve_output_types
+from goldilocks_core.selection import SelectionRecord
 
 
 def build_parser() -> argparse.ArgumentParser:

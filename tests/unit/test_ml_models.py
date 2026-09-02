@@ -5,9 +5,8 @@ import joblib
 import pytest
 
 from goldilocks_core.assets import AssetFile, AssetSpec, AssetStore
-from goldilocks_core.contracts import ModelSpec
 from goldilocks_core.ml.model_registry import load_default_qrf_config
-from goldilocks_core.ml.models import load_model
+from goldilocks_core.ml.models import ModelSpec, load_model
 from goldilocks_core.ml.qrf.inference import load_qrf_resources
 
 

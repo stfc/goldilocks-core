@@ -150,8 +150,10 @@ def test_recommendation_preset_runs_staged_core_pipeline() -> None:
     result = compute(_request(PresetSelection("recommend")))
 
     assert result.records[StructureAnalysisRecord]["reduced_formula"] == "Si"
-    assert result.records[KPointSelection].grid == (3, 3, 3)
-    assert result.records[SelectionRecord].pseudopotentials[0].filename == "Si.UPF"
+    assert result.records[KPointSelection]["grid"] == [3, 3, 3]
+    assert (
+        result.records[SelectionRecord]["pseudopotentials"][0]["filename"] == "Si.UPF"
+    )
     assert GeneratedFiles not in result.records
 
 

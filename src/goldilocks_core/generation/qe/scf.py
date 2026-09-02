@@ -8,8 +8,6 @@ from pymatgen.core.periodic_table import Element
 from goldilocks_core.calculation import CalculationIntent
 from goldilocks_core.generation.errors import GenerationError
 from goldilocks_core.generation.files import GeneratedFile
-from goldilocks_core.kmesh.resolve import KPointSelection
-from goldilocks_core.selection import SelectionRecord
 from goldilocks_core.types import JsonDict
 
 _QE_VDW_CORR = {
@@ -29,8 +27,8 @@ def write_qe_scf(
     structure: Structure,
     intent: CalculationIntent,
     advice: JsonDict,
-    selection: SelectionRecord,
-    k_points: KPointSelection,
+    selection: JsonDict,
+    k_points: JsonDict,
 ) -> tuple[GeneratedFile, ...]:
     return (
         GeneratedFile(
@@ -44,8 +42,8 @@ def _render_qe_scf(
     structure: Structure,
     intent: CalculationIntent,
     advice: JsonDict,
-    selection: SelectionRecord,
-    k_points: KPointSelection,
+    selection: JsonDict,
+    k_points: JsonDict,
 ) -> str:
     if not structure.is_ordered:
         raise GenerationError(
@@ -62,9 +60,9 @@ def _render_qe_scf(
             f"{advice['pseudopotential_requirements']['functional']}"
         )
     pseudo_by_element = {
-        pseudo.element: pseudo for pseudo in selection.pseudopotentials
+        pseudo["element"]: pseudo for pseudo in selection["pseudopotentials"]
     }
-    if len(pseudo_by_element) != len(selection.pseudopotentials):
+    if len(pseudo_by_element) != len(selection["pseudopotentials"]):
         raise GenerationError("Pseudopotential selection contains duplicate elements")
     missing_elements = sorted(set(elements) - set(pseudo_by_element))
     extra_elements = sorted(set(pseudo_by_element) - set(elements))
@@ -81,30 +79,30 @@ def _render_qe_scf(
         missing = [
             name
             for name, value in (
-                ("filename", pseudo.filename),
-                ("ecutwfc_ry", pseudo.ecutwfc_ry),
-                ("ecutrho_ry", pseudo.ecutrho_ry),
+                ("filename", pseudo["filename"]),
+                ("ecutwfc_ry", pseudo["ecutwfc_ry"]),
+                ("ecutrho_ry", pseudo["ecutrho_ry"]),
             )
             if value is None
         ]
         if missing:
             raise GenerationError(
-                f"Pseudopotential selection for {pseudo.element} is incomplete: "
+                f"Pseudopotential selection for {pseudo['element']} is incomplete: "
                 f"missing {', '.join(missing)}"
             )
-        if pseudo.functional != expected_functional:
+        if pseudo["functional"] != expected_functional:
             raise GenerationError(
-                f"Pseudopotential functional mismatch for {pseudo.element}: "
+                f"Pseudopotential functional mismatch for {pseudo['element']}: "
                 f"calculation requires {expected_functional}, selected "
-                f"{pseudo.functional or 'unknown'}"
+                f"{pseudo['functional'] or 'unknown'}"
             )
-        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", pseudo.filename) is None:
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", pseudo["filename"]) is None:
             raise GenerationError(
-                f"Unsafe pseudopotential filename: {pseudo.filename!r}"
+                f"Unsafe pseudopotential filename: {pseudo['filename']!r}"
             )
 
-    ecutwfc = max(float(pseudo.ecutwfc_ry) for pseudo in selected_pseudos)
-    ecutrho = max(float(pseudo.ecutrho_ry) for pseudo in selected_pseudos)
+    ecutwfc = max(float(pseudo["ecutwfc_ry"]) for pseudo in selected_pseudos)
+    ecutrho = max(float(pseudo["ecutrho_ry"]) for pseudo in selected_pseudos)
 
     lines: list[str] = []
     lines.extend(_control_section())
@@ -234,7 +232,7 @@ def _atomic_species(elements: tuple[str, ...], pseudo_by_element: dict) -> list[
         pseudo = pseudo_by_element[element]
         lines.append(
             f"  {element}  {_format_float(float(Element(element).atomic_mass))}  "
-            f"{pseudo.filename}"
+            f"{pseudo['filename']}"
         )
     lines.append("")
     return lines
@@ -249,9 +247,9 @@ def _atomic_positions(structure: Structure) -> list[str]:
     return lines
 
 
-def _k_points(k_points: KPointSelection) -> list[str]:
-    grid = k_points.grid
-    shift = k_points.shift
+def _k_points(k_points: JsonDict) -> list[str]:
+    grid = k_points["grid"]
+    shift = k_points["shift"]
     return [
         "K_POINTS automatic",
         f"  {grid[0]}  {grid[1]}  {grid[2]}  {shift[0]}  {shift[1]}  {shift[2]}",

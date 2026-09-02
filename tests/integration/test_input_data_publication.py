@@ -7,6 +7,7 @@ import json
 import zipfile
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pymatgen.core import Lattice, Structure
@@ -24,7 +25,6 @@ from goldilocks_core import (
 )
 from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.input_data import DftInputData
-from goldilocks_core.kmesh.resolve import KPointSelection
 from goldilocks_core.ml.model_registry import model_asset_specs
 from goldilocks_core.ml.models import ModelSpec
 from goldilocks_core.provenance import Provenance
@@ -32,7 +32,6 @@ from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
 from goldilocks_core.pseudo.registry import load_tables
 from goldilocks_core.publication import Publisher
-from goldilocks_core.selection import PseudopotentialSelection, SelectionRecord
 from goldilocks_core.serialization import to_portable
 
 
@@ -307,23 +306,24 @@ def test_selected_pseudo_binding_uses_source_identity_for_same_path_candidates(
         element="Si",
     )
     second = replace(first, provider="second-source")
-    selected = PseudopotentialSelection(
-        element="Si",
-        filename="Si.UPF",
-        filepath=str(path),
-        functional="PBEsol",
-        relativistic="scalar",
-        ecutwfc_ry=30,
-        ecutrho_ry=120,
-        provenance=Provenance(
+    selected = {
+        "element": "Si",
+        "filename": "Si.UPF",
+        "filepath": str(path),
+        "functional": "PBEsol",
+        "relativistic": "scalar",
+        "ecutwfc_ry": 30,
+        "ecutrho_ry": 120,
+        "provenance": Provenance(
             source="lookup",
             reason="Fixture selection.",
             data_source="first-source",
         ),
-    )
+        "warnings": [],
+    }
 
     assert _bind_selected_pseudo_metadata(
-        SelectionRecord((selected,)),
+        {"pseudopotentials": [selected], "warnings": []},
         (first, second),
     ) == (first,)
 
@@ -342,24 +342,25 @@ def test_selected_pseudo_rejects_zero_exact_metadata_candidates(
         element="Si",
         source_identifier="fixture-source",
     )
-    selected = PseudopotentialSelection(
-        element="Si",
-        filename="Si.UPF",
-        filepath=str(tmp_path / "other" / "Si.UPF"),
-        functional="PBEsol",
-        relativistic="scalar",
-        ecutwfc_ry=30,
-        ecutrho_ry=120,
-        provenance=Provenance(
+    selected = {
+        "element": "Si",
+        "filename": "Si.UPF",
+        "filepath": str(tmp_path / "other" / "Si.UPF"),
+        "functional": "PBEsol",
+        "relativistic": "scalar",
+        "ecutwfc_ry": 30,
+        "ecutrho_ry": 120,
+        "provenance": Provenance(
             source="lookup",
             reason="Fixture selection.",
             data_source="fixture",
         ),
-    )
+        "warnings": [],
+    }
 
     with pytest.raises(ValueError, match="no exact metadata candidate.*Si"):
         _bind_selected_pseudo_metadata(
-            SelectionRecord((selected,)),
+            {"pseudopotentials": [selected], "warnings": []},
             (candidate,),
         )
 
@@ -1581,18 +1582,18 @@ def test_model_runtime_identities_licences_and_citations_are_published(
             next(contents[file.path] for file in spec.files if file.role == "licence")
         )
 
-    def predict(self, structure: Structure) -> KPointSelection:
+    def predict(self, structure: Structure) -> dict[str, Any]:
         del self, structure
-        return KPointSelection(
-            grid=(4, 4, 4),
-            shift=(0, 0, 0),
-            mesh_type="monkhorst-pack",
-            provenance=Provenance(
+        return {
+            "grid": [4, 4, 4],
+            "shift": [0, 0, 0],
+            "mesh_type": "monkhorst-pack",
+            "provenance": Provenance(
                 source="model",
                 reason="Fixture model prediction.",
                 data_source="fixture-qrf",
             ),
-        )
+        }
 
     monkeypatch.setattr("goldilocks_core.advice.kdistance.QrfBackend.__call__", predict)
     request = _explicit_request(tmp_path, "model-Si.UPF")
@@ -1695,14 +1696,14 @@ def test_custom_registry_same_id_version_source_drift_is_rejected(
             {file.path: f"installed {file.role}\n".encode() for file in spec.files},
         )
 
-    def predict(self, structure: Structure) -> KPointSelection:
+    def predict(self, structure: Structure) -> dict[str, Any]:
         del self, structure
-        return KPointSelection(
-            grid=(4, 4, 4),
-            shift=(0, 0, 0),
-            mesh_type="monkhorst-pack",
-            provenance=Provenance(source="model", reason="Fixture prediction."),
-        )
+        return {
+            "grid": [4, 4, 4],
+            "shift": [0, 0, 0],
+            "mesh_type": "monkhorst-pack",
+            "provenance": Provenance(source="model", reason="Fixture prediction."),
+        }
 
     monkeypatch.setattr("goldilocks_core.advice.kdistance.QrfBackend.__call__", predict)
     request = _explicit_request(tmp_path, "registry-drift-Si.UPF")
@@ -1745,17 +1746,17 @@ def test_unidentified_runtime_kmesh_model_is_not_attributed_to_defaults(
     tmp_path: Path,
 ) -> None:
     class UnidentifiedModel:
-        def __call__(self, structure: Structure) -> KPointSelection:
+        def __call__(self, structure: Structure) -> dict[str, Any]:
             del structure
-            return KPointSelection(
-                grid=(4, 4, 4),
-                shift=(0, 0, 0),
-                mesh_type="monkhorst-pack",
-                provenance=Provenance(
+            return {
+                "grid": [4, 4, 4],
+                "shift": [0, 0, 0],
+                "mesh_type": "monkhorst-pack",
+                "provenance": Provenance(
                     source="model",
                     reason="Unidentified runtime model.",
                 ),
-            )
+            }
 
         def reset(self) -> None:
             pass

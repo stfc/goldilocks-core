@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from threading import Event, Lock
+from typing import Any
 
 import pytest
 from pymatgen.core import Lattice, Structure
@@ -120,7 +121,7 @@ def test_service_runs_concurrent_computations() -> None:
             self.release = Event()
             self.lock = Lock()
 
-        def __call__(self, structure: Structure) -> KPointSelection:
+        def __call__(self, structure: Structure) -> dict[str, Any]:
             del structure
             with self.lock:
                 self.calls += 1
@@ -130,12 +131,12 @@ def test_service_runs_concurrent_computations() -> None:
                 assert self.release.wait(timeout=2)
             else:
                 self.second_entered.set()
-            return KPointSelection(
-                grid=(2, 2, 2),
-                shift=(0, 0, 0),
-                mesh_type="monkhorst-pack",
-                provenance=Provenance(source="model", reason="test"),
-            )
+            return {
+                "grid": [2, 2, 2],
+                "shift": [0, 0, 0],
+                "mesh_type": "monkhorst-pack",
+                "provenance": Provenance(source="model", reason="test"),
+            }
 
         def close(self) -> None:
             pass
@@ -205,16 +206,16 @@ def test_capabilities_and_inspection_do_not_wait_for_computation() -> None:
             self.entered = Event()
             self.release = Event()
 
-        def __call__(self, structure: Structure) -> KPointSelection:
+        def __call__(self, structure: Structure) -> dict[str, Any]:
             del structure
             self.entered.set()
             assert self.release.wait(timeout=2)
-            return KPointSelection(
-                grid=(2, 2, 2),
-                shift=(0, 0, 0),
-                mesh_type="monkhorst-pack",
-                provenance=Provenance(source="model", reason="test"),
-            )
+            return {
+                "grid": [2, 2, 2],
+                "shift": [0, 0, 0],
+                "mesh_type": "monkhorst-pack",
+                "provenance": Provenance(source="model", reason="test"),
+            }
 
         def close(self) -> None:
             pass

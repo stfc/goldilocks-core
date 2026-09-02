@@ -1,5 +1,5 @@
 from dataclasses import replace
-from typing import get_args
+from typing import Any, get_args
 
 import pytest
 from pymatgen.core import Lattice, Structure
@@ -10,7 +10,7 @@ from goldilocks_core.calculation import CalculationHints, CalculationIntent
 from goldilocks_core.generation.errors import GenerationError
 from goldilocks_core.generation.qe.scf import _QE_SMEARING, _QE_VDW_CORR
 from goldilocks_core.generation.registry import generate_inputs
-from goldilocks_core.kmesh.resolve import KPointSelection, resolve_kpoints
+from goldilocks_core.kmesh.resolve import resolve_kpoints
 from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.selection import select_pseudopotentials
@@ -50,13 +50,13 @@ def make_metadata() -> PseudoMetadata:
     )
 
 
-def _stub_backend(structure: Structure) -> KPointSelection:
-    return KPointSelection(
-        grid=(4, 4, 4),
-        shift=(0, 0, 0),
-        mesh_type="monkhorst-pack",
-        provenance=Provenance(source="model", reason="stub"),
-    )
+def _stub_backend(structure: Structure) -> dict[str, Any]:
+    return {
+        "grid": [4, 4, 4],
+        "shift": [0, 0, 0],
+        "mesh_type": "monkhorst-pack",
+        "provenance": Provenance(source="model", reason="stub"),
+    }
 
 
 def select_from_advice(
@@ -124,8 +124,14 @@ def test_generate_inputs_rejects_selected_functional_disagreement() -> None:
         hints=hints,
         metadata_list=[make_metadata()],
     )
-    selected = replace(selection.pseudopotentials[0], functional="PBE")
-    mismatched = replace(selection, pseudopotentials=(selected,))
+    selected = {
+        **selection["pseudopotentials"][0],
+        "functional": "PBE",
+    }
+    mismatched = {
+        **selection,
+        "pseudopotentials": [selected],
+    }
 
     with pytest.raises(GenerationError, match="functional mismatch for Si"):
         generate_inputs(
@@ -148,12 +154,12 @@ def test_generate_inputs_writes_each_k_points_component_in_order(shift) -> None:
         hints=hints,
         metadata_list=[make_metadata()],
     )
-    k_points = KPointSelection(
-        grid=(2, 3, 4),
-        shift=shift,
-        mesh_type="monkhorst-pack",
-        provenance=Provenance(source="user_hint", reason="distinct components"),
-    )
+    k_points = {
+        "grid": [2, 3, 4],
+        "shift": list(shift),
+        "mesh_type": "monkhorst-pack",
+        "provenance": Provenance(source="user_hint", reason="distinct components"),
+    }
 
     files = generate_inputs(
         structure,
@@ -389,14 +395,17 @@ def test_generate_inputs_rejects_unsafe_pseudopotential_filename() -> None:
         hints=hints,
         metadata_list=[make_metadata()],
     )
-    pseudo = replace(selection.pseudopotentials[0], filename="Si.UPF\n/")
+    pseudo = {
+        **selection["pseudopotentials"][0],
+        "filename": "Si.UPF\n/",
+    }
 
     with pytest.raises(ValueError, match="Unsafe pseudopotential filename"):
         generate_inputs(
             structure,
             advice_context(),
             advice,
-            replace(selection, pseudopotentials=(pseudo,)),
+            {**selection, "pseudopotentials": [pseudo]},
             k_points=k_points,
         )
 
@@ -611,12 +620,12 @@ def test_generate_inputs_rejects_incomplete_pseudopotential_selection() -> None:
     selection = select_pseudopotentials(
         structure, advice["pseudopotential_requirements"], ()
     )
-    k_points = KPointSelection(
-        grid=(2, 2, 2),
-        shift=(0, 0, 0),
-        mesh_type="monkhorst-pack",
-        provenance=Provenance(source="model", reason="stub"),
-    )
+    k_points = {
+        "grid": [2, 2, 2],
+        "shift": [0, 0, 0],
+        "mesh_type": "monkhorst-pack",
+        "provenance": Provenance(source="model", reason="stub"),
+    }
 
     with pytest.raises(
         ValueError,

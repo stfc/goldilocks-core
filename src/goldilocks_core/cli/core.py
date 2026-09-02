@@ -443,13 +443,13 @@ def _print_human_summary(result: ComputationResult) -> None:
         )
     k_points = result.records.get(KPointSelection)
     if k_points is not None:
-        grid = k_points.grid
+        grid = k_points["grid"]
         print(f"k-grid: {grid[0]} {grid[1]} {grid[2]}")
     selection = result.records.get(SelectionRecord)
     if selection is not None:
         selected = ", ".join(
-            f"{pseudo.element}={pseudo.filename or 'unresolved'}"
-            for pseudo in selection.pseudopotentials
+            f"{pseudo['element']}={pseudo['filename'] or 'unresolved'}"
+            for pseudo in selection["pseudopotentials"]
         )
         print(f"selection: {selected or 'no pseudopotentials'}")
     input_data = result.records.get(DftInputData)

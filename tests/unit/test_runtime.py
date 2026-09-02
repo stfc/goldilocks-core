@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from threading import Event, Lock
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from pymatgen.core import Lattice, Structure
@@ -222,16 +223,16 @@ class TrackingBackend:
         self.closes = 0
         self.raise_on_call = raise_on_call
 
-    def __call__(self, structure: Structure) -> KPointSelection:
+    def __call__(self, structure: Structure) -> dict[str, Any]:
         self.calls += 1
         if self.raise_on_call:
             raise AssertionError("kmesh backend must not be called")
-        return KPointSelection(
-            grid=(2, 2, 2),
-            shift=(0, 0, 0),
-            mesh_type="monkhorst-pack",
-            provenance=Provenance(source="model", reason="test backend"),
-        )
+        return {
+            "grid": [2, 2, 2],
+            "shift": [0, 0, 0],
+            "mesh_type": "monkhorst-pack",
+            "provenance": Provenance(source="model", reason="test backend"),
+        }
 
     def reset(self) -> None:
         self.resets += 1
@@ -246,8 +247,8 @@ def test_recommendation_preset_returns_complete_selected_records() -> None:
 
     assert isinstance(result.records[StructureAnalysisRecord], dict)
     assert isinstance(result.records[ParameterAdvice], dict)
-    assert isinstance(result.records[KPointSelection], KPointSelection)
-    assert isinstance(result.records[SelectionRecord], SelectionRecord)
+    assert isinstance(result.records[KPointSelection], dict)
+    assert isinstance(result.records[SelectionRecord], dict)
     assert GeneratedFiles not in result.records
 
 
@@ -481,7 +482,7 @@ def test_select_only_compute_does_not_invoke_kmesh(monkeypatch) -> None:
         dispatcher = Dispatcher(runtime)
         result = dispatcher.compute(make_query_request((SelectionRecord,)))
 
-    assert isinstance(result.records[SelectionRecord], SelectionRecord)
+    assert isinstance(result.records[SelectionRecord], dict)
     assert backend.calls == 0
 
 
@@ -512,7 +513,9 @@ def test_explicit_metadata_selection_does_not_read_registry(
     with Runtime() as runtime:
         result = Dispatcher(runtime).compute(make_query_request((SelectionRecord,)))
 
-    assert result.records[SelectionRecord].pseudopotentials[0].filename == "Si.UPF"
+    assert (
+        result.records[SelectionRecord]["pseudopotentials"][0]["filename"] == "Si.UPF"
+    )
 
 
 def test_runtime_resolves_one_explicit_installed_table(
@@ -535,9 +538,9 @@ def test_runtime_resolves_one_explicit_installed_table(
     with Runtime(asset_store=store) as runtime:
         result = Dispatcher(runtime).compute(request)
 
-    selected = result.records[SelectionRecord].pseudopotentials[0]
-    assert selected.filename == "Si.upf"
-    assert selected.provenance.data_source == table.id
+    selected = result.records[SelectionRecord]["pseudopotentials"][0]
+    assert selected["filename"] == "Si.upf"
+    assert selected["provenance"].data_source == table.id
 
 
 def test_explicit_table_must_satisfy_scientific_requirements(

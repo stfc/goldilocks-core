@@ -99,10 +99,10 @@ def test_kdistance_selection_records_model_provenance() -> None:
         confidence=0.9,
     )
 
-    assert selection.grid == k_distance_to_mesh(structure, 0.25)
-    assert selection.provenance.source == "model"
-    assert selection.provenance.data_source == "qrf@revision"
-    assert selection.provenance.confidence == 0.9
+    assert selection["grid"] == list(k_distance_to_mesh(structure, 0.25))
+    assert selection["provenance"].source == "model"
+    assert selection["provenance"].data_source == "qrf@revision"
+    assert selection["provenance"].confidence == 0.9
 
 
 def test_qrf_backend_loads_lazily_and_reuses_resources(monkeypatch) -> None:
@@ -124,8 +124,8 @@ def test_qrf_backend_loads_lazily_and_reuses_resources(monkeypatch) -> None:
     first = backend(make_structure())
     second = backend(make_structure())
 
-    assert first.grid == second.grid
-    assert first.provenance.source == "model"
+    assert first["grid"] == second["grid"]
+    assert first["provenance"].source == "model"
     assert loads == 1
 
 
@@ -223,6 +223,6 @@ def test_qrf_backend_loads_registry_config_on_first_model_call(monkeypatch) -> N
     first = backend(make_structure())
     second = backend(make_structure())
 
-    assert first.provenance.source == "model"
-    assert first.grid == second.grid
+    assert first["provenance"].source == "model"
+    assert first["grid"] == second["grid"]
     assert loads == 1

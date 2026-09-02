@@ -1,95 +1,34 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
 
 from pymatgen.core import Structure
 
-from goldilocks_core.functionals import normalize_functional_label
 from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.metadata import PseudoMetadata
-from goldilocks_core.serialization import to_jsonable, to_portable
-from goldilocks_core.types import JsonDict, RelativisticTreatment
-from goldilocks_core.validation import (
-    validate_finite_positive,
-    validate_optional_nonempty_str,
-    validate_relativistic_mode,
-)
+from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.types import JsonDict
 
 
-@dataclass(frozen=True, slots=True)
-class PseudopotentialSelection:
-    element: str
-    filename: str | None
-    filepath: str | None
-    functional: str | None
-    relativistic: RelativisticTreatment | None
-    ecutwfc_ry: float | None
-    ecutrho_ry: float | None
-    provenance: Provenance
-    warnings: tuple[str, ...] = ()
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.element, str) or not self.element.strip():
-            raise ValueError(
-                "PseudopotentialSelection.element must be a non-empty string"
-            )
-        if (self.filename is None) != (self.filepath is None):
-            raise ValueError(
-                "PseudopotentialSelection filename and filepath must both be "
-                "present or both be None"
-            )
-        for field_name in ("filename", "filepath"):
-            validate_optional_nonempty_str(
-                getattr(self, field_name), f"PseudopotentialSelection.{field_name}"
-            )
-        functional = normalize_functional_label(self.functional)
-        object.__setattr__(self, "functional", functional)
-        validate_relativistic_mode(
-            self.relativistic, "PseudopotentialSelection.relativistic"
-        )
-        for field_name in ("ecutwfc_ry", "ecutrho_ry"):
-            value = getattr(self, field_name)
-            if value is not None:
-                validate_finite_positive(
-                    value, f"PseudopotentialSelection.{field_name}"
-                )
-                object.__setattr__(self, field_name, float(value))
-        if self.filename is None and any(
-            value is not None
-            for value in (
-                self.functional,
-                self.relativistic,
-                self.ecutwfc_ry,
-                self.ecutrho_ry,
-            )
-        ):
-            raise ValueError(
-                "An unresolved PseudopotentialSelection cannot carry scientific "
-                "metadata"
-            )
-
-
-@dataclass(frozen=True, slots=True)
 class SelectionRecord:
-    pseudopotentials: tuple[PseudopotentialSelection, ...]
-    warnings: tuple[str, ...] = ()
+    """Marker for the selection record; the value is a dict.
+
+    Keys: ``pseudopotentials`` (a list of per-element selection documents
+    carrying element, filename, filepath, functional, relativistic,
+    ecutwfc_ry, ecutrho_ry, provenance, warnings) and ``warnings``.
+    """
 
 
-@to_portable.register(PseudopotentialSelection)
-def _pseudopotential_selection_portable(
-    selection: PseudopotentialSelection,
-) -> JsonDict:
-    document = to_jsonable(selection)
-    document.pop("filepath")
-    return document
-
-
-@to_portable.register(SelectionRecord)
-def _selection_record_portable(record: SelectionRecord) -> JsonDict:
+def selection_portable(selection: JsonDict) -> JsonDict:
+    """Portable projection of a selection document: converts every value to
+    JSON-able form and drops each pseudopotential's host filepath."""
+    pseudopotentials = [
+        to_jsonable({key: value for key, value in item.items() if key != "filepath"})
+        for item in selection["pseudopotentials"]
+    ]
     return {
-        "pseudopotentials": [to_portable(item) for item in record.pseudopotentials],
-        "warnings": list(record.warnings),
+        "pseudopotentials": pseudopotentials,
+        "warnings": list(selection["warnings"]),
     }
 
 
@@ -111,25 +50,25 @@ def select_pseudopotentials(
     structure: Structure,
     requirements: JsonDict,
     metadata: Sequence[PseudoMetadata],
-) -> SelectionRecord:
+) -> JsonDict:
     available = tuple(metadata)
-    selections = tuple(
+    selections = [
         _select_for_element(element.symbol, requirements, available)
         for element in sorted(
             structure.composition.elements, key=lambda item: item.symbol
         )
-    )
-    warnings = tuple(
-        warning for selection in selections for warning in selection.warnings
-    )
-    return SelectionRecord(pseudopotentials=selections, warnings=warnings)
+    ]
+    warnings = [
+        warning for selection in selections for warning in selection["warnings"]
+    ]
+    return {"pseudopotentials": selections, "warnings": warnings}
 
 
 def _select_for_element(
     element: str,
     requirements: JsonDict,
     metadata: tuple[PseudoMetadata, ...],
-) -> PseudopotentialSelection:
+) -> JsonDict:
     candidates = [
         item
         for item in metadata
@@ -152,36 +91,36 @@ def _select_for_element(
 
     if not candidates:
         warning = _missing_pseudo_warning(element, requirements, metadata)
-        return PseudopotentialSelection(
-            element=element,
-            filename=None,
-            filepath=None,
-            functional=None,
-            relativistic=None,
-            ecutwfc_ry=None,
-            ecutrho_ry=None,
-            provenance=Provenance(
+        return {
+            "element": element,
+            "filename": None,
+            "filepath": None,
+            "functional": None,
+            "relativistic": None,
+            "ecutwfc_ry": None,
+            "ecutrho_ry": None,
+            "provenance": Provenance(
                 source="fallback",
                 reason="No pseudopotential satisfies the scientific requirements.",
                 warnings=(warning,),
             ),
-            warnings=(warning,),
-        )
+            "warnings": [warning],
+        }
 
     selected = min(candidates, key=_candidate_rank)
     ecutwfc = selected.cutoffs["ecutwfc_ry"] if selected.cutoffs else None
     ecutrho = selected.cutoffs["ecutrho_ry"] if selected.cutoffs else None
     warnings = _selection_warnings(element, selected, requirements)
     data_source = selected.table_id or selected.provider or selected.source_identifier
-    return PseudopotentialSelection(
-        element=element,
-        filename=selected.filename,
-        filepath=selected.filepath,
-        functional=selected.functional,
-        relativistic=selected.relativistic,
-        ecutwfc_ry=ecutwfc,
-        ecutrho_ry=ecutrho,
-        provenance=Provenance(
+    return {
+        "element": element,
+        "filename": selected.filename,
+        "filepath": selected.filepath,
+        "functional": selected.functional,
+        "relativistic": selected.relativistic,
+        "ecutwfc_ry": ecutwfc,
+        "ecutrho_ry": ecutrho,
+        "provenance": Provenance(
             source="lookup",
             reason=(
                 "Select the deterministic highest-ranked pseudopotential "
@@ -190,8 +129,8 @@ def _select_for_element(
             data_source=data_source,
             warnings=warnings,
         ),
-        warnings=warnings,
-    )
+        "warnings": list(warnings),
+    }
 
 
 def _relativistic_compatible(

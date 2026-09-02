@@ -4,6 +4,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from goldilocks_core.selection import SelectionRecord, selection_portable
 from goldilocks_core.serialization import to_jsonable, to_portable
 from goldilocks_core.types import JsonDict
 
@@ -62,13 +63,22 @@ class ComputationResult:
 
 @to_portable.register(ComputationResult)
 def _computation_result_portable(result: ComputationResult) -> JsonDict:
+    from goldilocks_core.runtime.registry import record_type_id
+
+    records = {}
+    for record_type, value in result.records.items():
+        record_id = record_type_id(record_type)
+        if record_type is SelectionRecord:
+            records[record_id] = selection_portable(value)
+        else:
+            records[record_id] = to_portable(value)
     return {
         "schema_version": result.schema_version,
         "draft": to_portable(result.draft),
         "task": result.task,
         "task_revision": result.task_revision,
         "selection": to_portable(result.selection),
-        "records": to_portable(result.records),
+        "records": records,
         "warnings": list(result.warnings),
         "publication": to_jsonable(result.publication),
     }

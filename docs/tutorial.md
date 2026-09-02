@@ -32,6 +32,7 @@ from goldilocks_core import (
     PresetSelection,
     Service,
 )
+from goldilocks_core.serialization import to_portable
 
 request = ComputeRequest(
     CalculationDraft(
@@ -45,8 +46,8 @@ request = ComputeRequest(
 with Service() as core:
     result = core.compute(request)
 
-print(result.records.to_dict()["analysis"]["reduced_formula"])
-print(result.records.to_dict()["k_points"]["grid"])
+print(to_portable(result.records)["analysis"]["reduced_formula"])
+print(to_portable(result.records)["k_points"]["grid"])
 print(result.warnings)
 ```
 
@@ -79,8 +80,11 @@ its root so `pseudo_dir = './pseudo'` resolves correctly.
 ## Select explicit Records
 
 ```python
-from goldilocks_core import RecordSelection
-from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
+from goldilocks_core import (
+    KPointSelection,
+    RecordSelection,
+    StructureAnalysisRecord,
+)
 
 query = ComputeRequest(
     request.draft,
@@ -103,8 +107,8 @@ with Service() as core:
 print([preset.id for preset in capabilities.tasks[0].presets])
 ```
 
-One Service reuses lazy model state and serializes Compute calls. Capabilities
-replaces separate task, code, and model discovery operations.
+One Service reuses lazy model state across concurrent Compute calls.
+Capabilities replaces separate task, code, and model discovery operations.
 
 ## CLI
 

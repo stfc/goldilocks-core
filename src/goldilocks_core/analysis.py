@@ -20,17 +20,12 @@ HEAVY_ELEMENT_MIN_ROW = 5
 
 
 @dataclass(frozen=True, slots=True)
-class SymmetryUnavailable:
-    reason: str
-
-
-@dataclass(frozen=True, slots=True)
 class StructureAnalysisRecord:
     """Structure-derived facts feeding Advise and Select.
 
-    Symmetry fields carry ``None`` when not yet determined and
-    :class:`SymmetryUnavailable` when symmetry analysis itself failed; an
-    ``int``/``str`` value is a successful determination. The electronic
+    Symmetry fields carry ``None`` when not yet determined and when
+    symmetry analysis itself failed; an ``int``/``str`` value is a
+    successful determination. The electronic
     character comes from the source named in ``electronic_character_source``
     (``"heuristic"`` or a model classifier); ``electronic_character_confidence``
     is ``None`` for heuristic classifications. Warnings are provenance-bearing:
@@ -49,9 +44,9 @@ class StructureAnalysisRecord:
     heavy_elements: tuple[str, ...]
     disorder_warnings: tuple[str, ...] = ()
     disordered_site_count: int = 0
-    space_group_symbol: str | int | SymmetryUnavailable | None = None
-    space_group_number: str | int | SymmetryUnavailable | None = None
-    crystal_system: str | int | SymmetryUnavailable | None = None
+    space_group_symbol: str | int | None = None
+    space_group_number: str | int | None = None
+    crystal_system: str | int | None = None
     dimensionality: Dimensionality = "unknown"
     low_dimensional: bool = False
     electronic_character: ElectronicCharacter = "unknown"
@@ -75,7 +70,8 @@ class DimensionalityClassificationError(Exception):
 
 class SymmetryAnalysisError(Exception):
     """Raised when spglib cannot analyze a structure.
-    ``analyze_structure`` catches this and records a ``SymmetryUnavailable``."""
+    ``analyze_structure`` catches this and records ``None`` symmetry
+    fields plus an analysis warning."""
 
     def __init__(self, structure: Structure, /, *, reason: str = "") -> None:
         self.structure = structure
@@ -136,15 +132,16 @@ def analyze_structure(
     dimensionality, low_dimensional, dimensionality_warnings = _analyze_dimensionality(
         structure
     )
+    symmetry_warnings: tuple[str, ...] = ()
     try:
         symmetry = _analyze_symmetry(structure)
     except SymmetryAnalysisError as error:
-        unavailable = SymmetryUnavailable(reason=error.reason)
         symmetry = {
-            "space_group_symbol": unavailable,
-            "space_group_number": unavailable,
-            "crystal_system": unavailable,
+            "space_group_symbol": None,
+            "space_group_number": None,
+            "crystal_system": None,
         }
+        symmetry_warnings = (f"Symmetry analysis failed: {error.reason}.",)
     if metallicity_classifier is None:
         electronic_character = heuristic_metallicity(structure)
         electronic_character_source = "heuristic"
@@ -180,7 +177,11 @@ def analyze_structure(
         electronic_character=electronic_character,
         electronic_character_source=electronic_character_source,
         electronic_character_confidence=electronic_character_confidence,
-        analysis_warnings=(*electronic_warnings, *dimensionality_warnings),
+        analysis_warnings=(
+            *electronic_warnings,
+            *dimensionality_warnings,
+            *symmetry_warnings,
+        ),
     )
 
 

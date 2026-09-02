@@ -121,4 +121,4 @@ def test_structure_file_to_publication_preserves_inputs_and_provenance(
     assert manifest["records"]["k_points"]["grid"] == [3, 5, 7]
     assert manifest["records"]["k_points"]["provenance"]["source"] == "user_hint"
     assert result.publication is not None
-    assert result.publication.path == str(destination.resolve())
+    assert result.publication["path"] == str(destination.resolve())

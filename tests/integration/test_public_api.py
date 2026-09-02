@@ -20,7 +20,6 @@ from goldilocks_core import (
     OutputTarget,
     PathStructureSource,
     PresetSelection,
-    Publication,
     Records,
     RecordSelection,
     Service,
@@ -30,7 +29,7 @@ from goldilocks_core import (
 from goldilocks_core.advice.parameters import ParameterAdvice
 from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.kmesh.resolve import KPointSelection
-from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.selection import SelectionRecord
 from goldilocks_core.serialization import to_portable
 
@@ -55,7 +54,7 @@ def _make_si_metadata(root: Path = Path("/pseudo")) -> PseudoMetadata:
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
+        cutoffs={"ecutwfc_ry": 30, "ecutrho_ry": 120},
         source_identifier="synthetic/Si.UPF",
         content_sha256=(hashlib.sha256(content).hexdigest() if materialized else None),
         content_size_bytes=len(content) if materialized else None,
@@ -106,7 +105,6 @@ def test_root_interface_exposes_three_operations_and_their_contracts() -> None:
         DftInputData,
         GeneratedFile,
         GeneratedFiles,
-        Publication,
         Records,
     }
 

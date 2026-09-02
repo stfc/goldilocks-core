@@ -26,7 +26,7 @@ class FakeQRF:
 
 
 def make_features() -> StructureFeatureVector:
-    return StructureFeatureVector(np.zeros(4), ["a", "b", "c", "d"])
+    return (np.zeros(4), ["a", "b", "c", "d"])
 
 
 def make_structure() -> Structure:
@@ -52,8 +52,9 @@ def patch_inference(monkeypatch, *, model=None) -> None:
     )
     monkeypatch.setattr(
         "goldilocks_core.ml.qrf.features.extract_qrf_features",
-        lambda structure, model, atom_init, settings: StructureFeatureVector(
-            np.zeros(483), [f"feature_{index}" for index in range(483)]
+        lambda structure, model, atom_init, settings: (
+            np.zeros(483),
+            [f"feature_{index}" for index in range(483)],
         ),
     )
 

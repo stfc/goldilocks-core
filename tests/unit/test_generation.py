@@ -12,7 +12,7 @@ from goldilocks_core.generation.qe.scf import _QE_SMEARING, _QE_VDW_CORR
 from goldilocks_core.generation.registry import generate_inputs
 from goldilocks_core.kmesh.resolve import KPointSelection, resolve_kpoints
 from goldilocks_core.provenance import Provenance
-from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.selection import select_pseudopotentials
 from goldilocks_core.types import SmearingType, VdwMethod
 
@@ -45,10 +45,7 @@ def make_metadata() -> PseudoMetadata:
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        cutoffs=PseudoCutoffs(
-            ecutwfc_ry=35,
-            ecutrho_ry=140,
-        ),
+        cutoffs={"ecutwfc_ry": 35, "ecutrho_ry": 140},
         source_identifier="synthetic/Si.UPF",
     )
 

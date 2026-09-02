@@ -33,7 +33,7 @@ from goldilocks_core.kmesh.resolve import KPointSelection
 from goldilocks_core.ml.models import ModelSpec
 from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.installed import write_table_manifest
-from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.pseudo.registry import PseudoTable
 from goldilocks_core.pseudo.source import (
     PseudoTableMismatch,
@@ -85,10 +85,7 @@ def make_metadata() -> PseudoMetadata:
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        cutoffs=PseudoCutoffs(
-            ecutwfc_ry=35,
-            ecutrho_ry=140,
-        ),
+        cutoffs={"ecutwfc_ry": 35, "ecutrho_ry": 140},
         source_identifier="synthetic/Si.UPF",
         pseudo_info={
             "licence": "CC-BY-4.0",

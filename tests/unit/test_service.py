@@ -18,7 +18,7 @@ from goldilocks_core import (
 )
 from goldilocks_core.kmesh.resolve import KPointSelection
 from goldilocks_core.provenance import Provenance
-from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.runtime.dispatch import Dispatcher
 
 
@@ -37,7 +37,7 @@ def make_metadata() -> PseudoMetadata:
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        cutoffs=PseudoCutoffs(ecutwfc_ry=35, ecutrho_ry=140),
+        cutoffs={"ecutwfc_ry": 35, "ecutrho_ry": 140},
         source_identifier="synthetic/Si.UPF",
     )
 

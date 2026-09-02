@@ -9,22 +9,17 @@ from typing import Any, Literal, TypeAliasType, get_args, get_origin, get_type_h
 from pydantic import BaseModel, ConfigDict, JsonValue, create_model, model_validator
 
 from goldilocks_core.calculation import CalculationHints, CalculationIntent
-from goldilocks_core.input_data import (
-    GeneratedContent,
-    InputArtifact,
-    InstalledArtifactReference,
-    RuntimeAssetIdentity,
-    RuntimeIdentity,
-)
+from goldilocks_core.input_data import DftInputData
 from goldilocks_core.io.structures import Matrix3, Vector3
 from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.metadata import PseudoMetadata
-from goldilocks_core.publication import Publication
 from goldilocks_core.runtime.registry import record_types_by_id
 from goldilocks_core.selection import PseudopotentialSelection
 from goldilocks_core.types import (
     CalcTask,
     CodeName,
+    JsonDict,
     KPointGrid,
     PseudoAccuracy,
     PseudoType,
@@ -342,17 +337,21 @@ InstalledArtifactSourceDocument = create_model(
     preparation_fingerprint=(str, ...),
     path=(str, ...),
 )
-_SERIALIZED_MODELS[GeneratedContent] = GeneratedArtifactSourceDocument
-_SERIALIZED_MODELS[InstalledArtifactReference] = InstalledArtifactSourceDocument
 ArtifactSourceDocument = (
     GeneratedArtifactSourceDocument | InstalledArtifactSourceDocument
 )
-SerializedInputArtifactDocument = _serialized_model(
-    InputArtifact,
-    name="SerializedInputArtifact",
-    overrides={"source": ArtifactSourceDocument},
+ProvenanceDocument = _serialized_model(Provenance)
+SerializedInputArtifactDocument = create_model(
+    "SerializedInputArtifact",
+    __config__=_SERIALIZED,
+    path=(str, ...),
+    role=(str, ...),
+    sha256=(str, ...),
+    size_bytes=(int, ...),
+    source=(ArtifactSourceDocument, ...),
+    media_type=(str | None, ...),
+    provenance=(ProvenanceDocument | None, ...),
 )
-_SERIALIZED_MODELS[InputArtifact] = SerializedInputArtifactDocument
 RuntimeAssetFileDocument = create_model(
     "RuntimeAssetFile",
     __config__=_SERIALIZED,
@@ -361,21 +360,56 @@ RuntimeAssetFileDocument = create_model(
     sha256=(str, ...),
     size_bytes=(int, ...),
 )
-SerializedRuntimeAssetDocument = _serialized_model(
-    RuntimeAssetIdentity,
-    name="SerializedRuntimeAsset",
-    overrides={
-        "model": SerializedModelDocument,
-        "files": list[RuntimeAssetFileDocument],
-    },
+SerializedRuntimeAssetDocument = create_model(
+    "SerializedRuntimeAsset",
+    __config__=_SERIALIZED,
+    id=(str, ...),
+    version=(str, ...),
+    role=(str, ...),
+    preparation_fingerprint=(str, ...),
+    model=(SerializedModelDocument, ...),
+    files=(list[RuntimeAssetFileDocument], ...),
 )
-_SERIALIZED_MODELS[RuntimeAssetIdentity] = SerializedRuntimeAssetDocument
-SerializedRuntimeDocument = _serialized_model(
-    RuntimeIdentity,
-    name="SerializedRuntime",
-    overrides={"models": list[SerializedModelDocument]},
+SerializedRuntimeDocument = create_model(
+    "SerializedRuntime",
+    __config__=_SERIALIZED,
+    core_version=(str, ...),
+    models=(list[SerializedModelDocument], ...),
+    assets=(list[SerializedRuntimeAssetDocument], ...),
 )
-_SERIALIZED_MODELS[RuntimeIdentity] = SerializedRuntimeDocument
+PseudopotentialSetDocument = create_model(
+    "PseudopotentialSetIdentity",
+    __config__=_SERIALIZED,
+    id=(str, ...),
+    version=(str | None, ...),
+    provider=(str, ...),
+    functional=(str, ...),
+    accuracy=(str, ...),
+    relativistic=(str, ...),
+    licence=(str, ...),
+    citation=(str, ...),
+    policy=(JsonDict, ...),
+)
+PublicationDocument = create_model(
+    "Publication",
+    __config__=_SERIALIZED,
+    kind=(Literal["directory", "archive"], ...),
+    path=(str, ...),
+    files=(list[str], ...),
+    manifest_sha256=(str, ...),
+    output_sha256=(str | None, ...),
+)
+DftInputDataDocument = create_model(
+    "DftInputData",
+    __config__=_SERIALIZED,
+    artifacts=(list[SerializedInputArtifactDocument], ...),
+    pseudopotential_set=(PseudopotentialSetDocument, ...),
+    runtime=(SerializedRuntimeDocument, ...),
+    citations=(list[str], ...),
+    manifest=(JsonDict, ...),
+    schema_version=(Literal[1], ...),
+)
+_SERIALIZED_MODELS[DftInputData] = DftInputDataDocument
 
 LocalPseudoRootDocument = create_model(
     "LocalPseudoRoot",
@@ -429,7 +463,7 @@ def computation_result_document(
         selection=(SelectionDocument, ...),
         records=(records_document, ...),
         warnings=(list[str], ...),
-        publication=(_serialized_annotation(Publication) | None, ...),
+        publication=(PublicationDocument | None, ...),
     )
 
 

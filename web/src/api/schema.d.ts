@@ -517,13 +517,6 @@ export interface components {
             /** Warnings */
             readonly warnings: readonly string[];
         };
-        /** PseudoCutoffs */
-        readonly PseudoCutoffs: {
-            /** Ecutrho Ry */
-            readonly ecutrho_ry: number | null;
-            /** Ecutwfc Ry */
-            readonly ecutwfc_ry: number | null;
-        };
         /** PseudopotentialRequirements */
         readonly PseudopotentialRequirements: {
             /**
@@ -752,7 +745,10 @@ export interface components {
             readonly content_sha256: string | null;
             /** Content Size Bytes */
             readonly content_size_bytes: number | null;
-            readonly cutoffs: components["schemas"]["PseudoCutoffs"] | null;
+            /** Cutoffs */
+            readonly cutoffs: {
+                readonly [key: string]: number | null;
+            } | null;
             /** Element */
             readonly element: string | null;
             /** Filename */
@@ -874,7 +870,7 @@ export interface components {
             /** Contains Transition Metals */
             readonly contains_transition_metals: boolean;
             /** Crystal System */
-            readonly crystal_system: string | number | components["schemas"]["SymmetryUnavailable"] | null;
+            readonly crystal_system: string | number | null;
             /**
              * Dimensionality
              * @enum {string}
@@ -908,9 +904,9 @@ export interface components {
             /** Site Count */
             readonly site_count: number;
             /** Space Group Number */
-            readonly space_group_number: string | number | components["schemas"]["SymmetryUnavailable"] | null;
+            readonly space_group_number: string | number | null;
             /** Space Group Symbol */
-            readonly space_group_symbol: string | number | components["schemas"]["SymmetryUnavailable"] | null;
+            readonly space_group_symbol: string | number | null;
         };
         /** StructureDocument */
         readonly StructureDocument: {
@@ -982,11 +978,6 @@ export interface components {
             readonly sha256: string | null;
             /** Size Bytes */
             readonly size_bytes: number | null;
-        };
-        /** SymmetryUnavailable */
-        readonly SymmetryUnavailable: {
-            /** Reason */
-            readonly reason: string;
         };
         /** VdwAdvice */
         readonly VdwAdvice: {

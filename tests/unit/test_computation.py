@@ -23,7 +23,7 @@ from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.generation.files import GeneratedFiles
 from goldilocks_core.kmesh.resolve import KPointSelection
 from goldilocks_core.ml.models import ModelSpec
-from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.selection import SelectionRecord
 from goldilocks_core.serialization import to_portable
 
@@ -43,7 +43,7 @@ def make_metadata() -> PseudoMetadata:
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        cutoffs=PseudoCutoffs(ecutwfc_ry=35, ecutrho_ry=140),
+        cutoffs={"ecutwfc_ry": 35, "ecutrho_ry": 140},
         source_identifier="synthetic/Si.UPF",
     )
 

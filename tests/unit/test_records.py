@@ -1,9 +1,7 @@
-import numpy as np
 import pytest
 
 from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.calculation import CalculationHints, CalculationIntent
-from goldilocks_core.ml.models import StructureFeatureVector
 from goldilocks_core.result import Records
 from goldilocks_core.serialization import to_portable
 
@@ -44,17 +42,6 @@ def test_hints_serialize_explicit_grid_as_list() -> None:
     data = to_portable(CalculationHints(k_grid=(2, 2, 1)))
 
     assert data["k_grid"] == [2, 2, 1]
-
-
-def test_feature_vectors_serialize_numpy_values_as_json_lists() -> None:
-    data = to_portable(
-        StructureFeatureVector(
-            values=np.array([1.0, 2.0]),
-            feature_names=["a", "b"],
-        )
-    )
-
-    assert data["values"] == [1.0, 2.0]
 
 
 def test_calculation_intent_defaults_to_pbesol() -> None:

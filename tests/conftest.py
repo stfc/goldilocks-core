@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 
 
 @pytest.fixture(autouse=True)
@@ -59,10 +59,7 @@ def pseudo_metadata_factory() -> Callable[..., PseudoMetadata]:
             pseudo_type=pseudo_type,
             functional=functional,
             relativistic=relativistic,
-            cutoffs=PseudoCutoffs(
-                ecutwfc_ry=ecutwfc_ry,
-                ecutrho_ry=ecutrho_ry,
-            ),
+            cutoffs={"ecutwfc_ry": ecutwfc_ry, "ecutrho_ry": ecutrho_ry},
             source_identifier=f"synthetic/{filename}",
             content_sha256=(
                 hashlib.sha256(content).hexdigest() if materialize else None

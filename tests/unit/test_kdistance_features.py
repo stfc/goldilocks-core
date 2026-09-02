@@ -48,8 +48,9 @@ def test_extract_qrf_features_assembles_483_values_and_names(monkeypatch) -> Non
         config.feature_settings,
     )
 
-    assert features.values.shape == (483,)
-    assert features.feature_names == [f"qrf_{index}" for index in range(483)]
+    values, names = features
+    assert values.shape == (483,)
+    assert names == [f"qrf_{index}" for index in range(483)]
 
 
 @pytest.mark.parametrize("value", [np.nan, np.inf, -np.inf])

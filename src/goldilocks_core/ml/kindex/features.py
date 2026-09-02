@@ -27,10 +27,7 @@ def extract_c_features(structure: Structure) -> StructureFeatureVector:
     feature_names = featurizer.feature_labels()
     values = np.array(featurizer.featurize(composition), dtype=float)
 
-    return StructureFeatureVector(
-        values=values,
-        feature_names=feature_names,
-    )
+    return values, feature_names
 
 
 def extract_s_features(structure: Structure) -> StructureFeatureVector:
@@ -61,10 +58,7 @@ def extract_s_features(structure: Structure) -> StructureFeatureVector:
     feature_names = [name for name, _ in filtered_pairs]
     values = np.array([value for _, value in filtered_pairs], dtype=float)
 
-    return StructureFeatureVector(
-        values=values,
-        feature_names=feature_names,
-    )
+    return values, feature_names
 
 
 def extract_l_features(structure: Structure) -> StructureFeatureVector:
@@ -93,10 +87,7 @@ def extract_l_features(structure: Structure) -> StructureFeatureVector:
         dtype=float,
     )
 
-    return StructureFeatureVector(
-        values=values,
-        feature_names=feature_names,
-    )
+    return values, feature_names
 
 
 def extract_r_features(structure: Structure) -> StructureFeatureVector:
@@ -173,10 +164,7 @@ def extract_r_features(structure: Structure) -> StructureFeatureVector:
         dtype=float,
     )
 
-    return StructureFeatureVector(
-        values=values,
-        feature_names=feature_names,
-    )
+    return values, feature_names
 
 
 def extract_cslr_features(structure: Structure) -> StructureFeatureVector:
@@ -185,23 +173,20 @@ def extract_cslr_features(structure: Structure) -> StructureFeatureVector:
     l_features = extract_l_features(structure)
     r_features = extract_r_features(structure)
 
-    feature_names = (
-        c_features.feature_names
-        + s_features.feature_names
-        + l_features.feature_names
-        + r_features.feature_names
-    )
+    c_values, c_names = c_features
+    s_values, s_names = s_features
+    l_values, l_names = l_features
+    r_values, r_names = r_features
+
+    feature_names = c_names + s_names + l_names + r_names
 
     values = np.concatenate(
         [
-            c_features.values,
-            s_features.values,
-            l_features.values,
-            r_features.values,
+            c_values,
+            s_values,
+            l_values,
+            r_values,
         ]
     )
 
-    return StructureFeatureVector(
-        values=values,
-        feature_names=feature_names,
-    )
+    return values, feature_names

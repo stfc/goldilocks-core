@@ -4,7 +4,6 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from goldilocks_core.publication import Publication
 from goldilocks_core.serialization import to_jsonable, to_portable
 from goldilocks_core.types import JsonDict
 
@@ -57,7 +56,7 @@ class ComputationResult:
     selection: ComputationSelection
     records: Records
     warnings: tuple[str, ...] = ()
-    publication: Publication | None = None
+    publication: JsonDict | None = None
     schema_version: int = field(default=1, init=False)
 
 

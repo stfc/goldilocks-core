@@ -148,8 +148,8 @@ def test_pseudodojo_normalizes_reports_and_verified_upfs(tmp_path: Path) -> None
     assert metadata[0].relativistic == "scalar"
     assert metadata[0].accuracy == "efficiency"
     assert metadata[0].cutoffs is not None
-    assert metadata[0].cutoffs.ecutwfc_ry == 40.0
-    assert metadata[0].cutoffs.ecutrho_ry == 160.0
+    assert metadata[0].cutoffs["ecutwfc_ry"] == 40.0
+    assert metadata[0].cutoffs["ecutrho_ry"] == 160.0
     assert metadata[0].table_id == "pseudopotentials/pseudodojo-fixture"
     assert not list(installed.root.rglob("*.tgz"))
     assert "CC BY 4.0" in installed.path("LICENSE.txt").read_text()
@@ -175,8 +175,8 @@ def test_sssp_normalizes_sidecar_and_verified_upfs(tmp_path: Path) -> None:
     assert metadata[0].provider == "sssp"
     assert metadata[0].source_identifier == "Si fixture"
     assert metadata[0].cutoffs is not None
-    assert metadata[0].cutoffs.ecutwfc_ry == 30.0
-    assert metadata[0].cutoffs.ecutrho_ry == 120.0
+    assert metadata[0].cutoffs["ecutwfc_ry"] == 30.0
+    assert metadata[0].cutoffs["ecutrho_ry"] == 120.0
     assert metadata[0].table_id == "pseudopotentials/sssp-fixture"
     assert not list(installed.root.rglob("*.tar.gz"))
     assert installed.path("LICENSE.txt").read_text() == "SSSP fixture licence\n"

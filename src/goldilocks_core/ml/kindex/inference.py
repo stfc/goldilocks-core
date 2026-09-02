@@ -10,7 +10,7 @@ def predict(model: object, features: StructureFeatureVector) -> float:
     if not hasattr(model, "predict"):
         raise AttributeError("Loaded model does not provide a 'predict' method.")
 
-    feature_values = np.asarray(features.values, dtype=float)
+    feature_values = np.asarray(features[0], dtype=float)
     if not np.isfinite(feature_values).all():
         raise ValueError("Model features must contain only finite values.")
 

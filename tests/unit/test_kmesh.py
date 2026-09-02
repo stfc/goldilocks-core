@@ -140,12 +140,12 @@ def test_build_kmesh_entries_returns_indexed_mesh_entries() -> None:
     assert len(entries) > 0
     # Rung 0 is the Gamma-only mesh; the base is load-bearing for every
     # consumer that maps a predicted k-index onto this table.
-    assert entries[0].k_index == 0
-    assert entries[0].mesh == (1, 1, 1)
-    assert entries[-1].k_index == len(entries) - 1
-    assert [entry.k_index for entry in entries] == list(range(len(entries)))
+    assert entries[0][0] == 0
+    assert entries[0][1] == (1, 1, 1)
+    assert entries[-1][0] == len(entries) - 1
+    assert [index for index, _ in entries] == list(range(len(entries)))
     # The mesh ordering is load-bearing: the ML k-index maps onto this table.
-    meshes = [entry.mesh for entry in entries]
+    meshes = [mesh for _, mesh in entries]
     assert meshes == [(index, index, index) for index in range(1, len(entries) + 1)]
 
 
@@ -159,7 +159,7 @@ def test_ladder_is_gap_free_for_an_anisotropic_cell() -> None:
     )
 
     candidates = generate_candidate_k_distances(structure, max_kpoints_per_axis=30)
-    meshes = [entry.mesh for entry in build_kmesh_entries(structure, candidates)]
+    meshes = [mesh for _, mesh in build_kmesh_entries(structure, candidates)]
 
     assert len(meshes) > 1
     for before, after in zip(meshes[:-1], meshes[1:], strict=True):
@@ -179,15 +179,15 @@ def test_raising_the_axis_cap_only_extends_the_ladder() -> None:
     )
 
     short = [
-        entry.mesh
-        for entry in build_kmesh_entries(
+        mesh
+        for _, mesh in build_kmesh_entries(
             structure,
             generate_candidate_k_distances(structure, max_kpoints_per_axis=20),
         )
     ]
     long = [
-        entry.mesh
-        for entry in build_kmesh_entries(
+        mesh
+        for _, mesh in build_kmesh_entries(
             structure,
             generate_candidate_k_distances(structure, max_kpoints_per_axis=60),
         )
@@ -212,7 +212,7 @@ def test_ladder_never_repeats_a_mesh_for_degenerate_axes() -> None:
     assert math.isclose(reciprocal.a, reciprocal.c)
 
     candidates = generate_candidate_k_distances(structure)
-    meshes = [entry.mesh for entry in build_kmesh_entries(structure, candidates)]
+    meshes = [mesh for _, mesh in build_kmesh_entries(structure, candidates)]
 
     assert len(meshes) == len(set(meshes))
     assert meshes[:4] == [(1, 1, 1), (1, 2, 1), (2, 2, 2), (2, 3, 2)]
@@ -231,7 +231,7 @@ def test_a_repeated_mesh_does_not_hide_a_gap() -> None:
     )
 
     candidates = generate_candidate_k_distances(structure)
-    meshes = [entry.mesh for entry in build_kmesh_entries(structure, candidates)]
+    meshes = [mesh for _, mesh in build_kmesh_entries(structure, candidates)]
 
     for before, after in zip(meshes[:-1], meshes[1:], strict=True):
         steps = [now - previous for previous, now in zip(before, after, strict=True)]

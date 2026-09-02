@@ -459,15 +459,17 @@ def _print_human_summary(result: ComputationResult) -> None:
             f"{len(input_data.citations)} citations"
         )
         pseudo_set = input_data.pseudopotential_set
-        version = f"@{pseudo_set.version}" if pseudo_set.version is not None else ""
-        print(f"pseudopotential set: {pseudo_set.id}{version}")
+        version = (
+            f"@{pseudo_set['version']}" if pseudo_set["version"] is not None else ""
+        )
+        print(f"pseudopotential set: {pseudo_set['id']}{version}")
     generated_files = result.records.get(GeneratedFiles, ())
     if generated_files:
         print("generated files:")
         for generated_file in generated_files:
             print(f"  {generated_file.path}")
     if result.publication is not None:
-        print(f"published {result.publication.kind}: {result.publication.path}")
+        print(f"published {result.publication['kind']}: {result.publication['path']}")
     if result.warnings:
         print("warnings:")
         for warning in result.warnings:

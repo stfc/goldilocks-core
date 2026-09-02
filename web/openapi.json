@@ -1400,39 +1400,6 @@
         "title": "Provenance",
         "type": "object"
       },
-      "PseudoCutoffs": {
-        "additionalProperties": false,
-        "properties": {
-          "ecutrho_ry": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ecutrho Ry"
-          },
-          "ecutwfc_ry": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ecutwfc Ry"
-          }
-        },
-        "required": [
-          "ecutwfc_ry",
-          "ecutrho_ry"
-        ],
-        "title": "PseudoCutoffs",
-        "type": "object"
-      },
       "PseudopotentialRequirements": {
         "additionalProperties": false,
         "properties": {
@@ -2283,12 +2250,23 @@
           "cutoffs": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/PseudoCutoffs"
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Cutoffs"
           },
           "element": {
             "anyOf": [
@@ -2764,9 +2742,6 @@
                 "type": "integer"
               },
               {
-                "$ref": "#/components/schemas/SymmetryUnavailable"
-              },
-              {
                 "type": "null"
               }
             ],
@@ -2865,9 +2840,6 @@
                 "type": "integer"
               },
               {
-                "$ref": "#/components/schemas/SymmetryUnavailable"
-              },
-              {
                 "type": "null"
               }
             ],
@@ -2880,9 +2852,6 @@
               },
               {
                 "type": "integer"
-              },
-              {
-                "$ref": "#/components/schemas/SymmetryUnavailable"
               },
               {
                 "type": "null"
@@ -3128,20 +3097,6 @@
           "size_bytes"
         ],
         "title": "StructureSourceDocument",
-        "type": "object"
-      },
-      "SymmetryUnavailable": {
-        "additionalProperties": false,
-        "properties": {
-          "reason": {
-            "title": "Reason",
-            "type": "string"
-          }
-        },
-        "required": [
-          "reason"
-        ],
-        "title": "SymmetryUnavailable",
         "type": "object"
       },
       "VdwAdvice": {

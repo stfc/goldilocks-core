@@ -990,7 +990,7 @@ def test_runtime_dispatches_a_registered_task_via_compute(
 
     assert document["selection"] == {"records": ["stub"]}
     assert resolve_output_types(["stub"]) == (StubRecord,)
-    assert result.draft.structure.source.origin == "path"
+    assert result.draft.structure["source"]["origin"] == "path"
     assert isinstance(result.records[StubRecord], StubRecord)
     assert result.records[StubRecord].value == "ran"
     assert to_portable(result)["records"] == {"stub": {"value": "ran"}}

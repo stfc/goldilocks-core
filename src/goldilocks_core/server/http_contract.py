@@ -8,7 +8,6 @@ from fastapi import FastAPI
 from fastapi.responses import Response
 
 from goldilocks_core.input_data import DftInputData
-from goldilocks_core.io.structures import StructureInspection
 from goldilocks_core.publication import Publisher
 from goldilocks_core.runtime.service import Service
 from goldilocks_core.serialization import to_portable
@@ -22,6 +21,7 @@ from goldilocks_core.server.wire import (
     ComputeRequestDocument,
     ErrorResponseDocument,
     InspectRequestDocument,
+    StructureInspectionDocument,
     computation_result_document,
     prepared_computation_document,
 )
@@ -58,7 +58,7 @@ def install_scientific_routes(app: FastAPI, service: Service) -> None:
 
     @app.post(
         "/inspect",
-        response_model=StructureInspection,
+        response_model=StructureInspectionDocument,
         responses={422: {"model": ErrorResponseDocument}},
     )
     def inspect(body: InspectRequestDocument) -> dict[str, Any]:

@@ -8,7 +8,6 @@ from goldilocks_core.io.structures import (
     InlineStructureSource,
     InMemoryStructureSource,
     PathStructureSource,
-    StructureInspection,
     StructureSource,
 )
 from goldilocks_core.ml.models import ModelSpec
@@ -82,7 +81,7 @@ class CalculationDraft:
     allowed for recommendation and rejected by generation.
     """
 
-    structure: StructureSource | StructureInspection
+    structure: StructureSource | JsonDict
     intent: CalculationIntent = field(default_factory=CalculationIntent)
     hints: CalculationHints = field(default_factory=CalculationHints)
     pseudo_metadata: tuple[PseudoMetadata, ...] | None = None

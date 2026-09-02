@@ -240,7 +240,10 @@ def test_capabilities_and_inspection_do_not_wait_for_computation() -> None:
             )
             try:
                 assert capabilities.result(timeout=0.5)["tasks"]
-                assert inspection.result(timeout=0.5).structure.reduced_formula == "Si"
+                assert (
+                    inspection.result(timeout=0.5)["structure"]["reduced_formula"]
+                    == "Si"
+                )
             finally:
                 backend.release.set()
             computation.result(timeout=2)

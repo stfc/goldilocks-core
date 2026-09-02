@@ -157,12 +157,12 @@ def assemble_dft_input_data(
     artifacts: list[InputArtifact] = []
     source = normalized_structure.source
     source_content = (
-        source.content.encode("utf-8")
-        if source.content is not None
+        source["content"].encode("utf-8")
+        if source["content"] is not None
         else normalized_structure.canonical_cif.encode("utf-8")
     )
     source_name = (
-        source.name if source.content is not None else "generated-structure.cif"
+        source["name"] if source["content"] is not None else "generated-structure.cif"
     )
     artifacts.append(
         _generated_artifact(
@@ -170,10 +170,10 @@ def assemble_dft_input_data(
             "structure_source",
             source_content,
             identity=f"structure-source:{hashlib.sha256(source_content).hexdigest()}",
-            media_type="chemical/x-cif" if source.format == "cif" else "text/plain",
+            media_type="chemical/x-cif" if source["format"] == "cif" else "text/plain",
             provenance=Provenance(
-                source="user_hint" if source.content is not None else "default",
-                reason=f"Preserved {source.origin} Structure Source.",
+                source="user_hint" if source["content"] is not None else "default",
+                reason=f"Preserved {source['origin']} Structure Source.",
             ),
         )
     )
@@ -228,13 +228,13 @@ def assemble_dft_input_data(
     citations = tuple(dict.fromkeys((pseudo_set.citation, *runtime_citations)))
     manifest = {
         "source": {
-            **to_portable(source),
+            **source,
             "content": None,
             "path": artifacts[0].path,
         },
         "canonical_structure": {
             "path": "structure/canonical.cif",
-            "metadata": to_portable(normalized_structure.canonical_structure),
+            "metadata": normalized_structure.canonical_structure,
         },
         "intent": to_portable(intent),
         "hints": to_portable(hints),

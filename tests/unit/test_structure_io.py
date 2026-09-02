@@ -195,11 +195,13 @@ def test_compute_retains_the_same_normalized_structure_snapshot_as_inspection() 
 
 def test_scf_load_stage_describes_consuming_the_normalized_structure() -> None:
     with Service() as service:
-        task = service.capabilities().tasks[0]
+        task = service.capabilities()["tasks"][0]
 
-    load_stage = next(stage for stage in task.stages if stage.id == "load_structure")
-    assert "normalized" in load_stage.description.lower()
-    assert "parse" not in load_stage.description.lower()
+    load_stage = next(
+        stage for stage in task["stages"] if stage["id"] == "load_structure"
+    )
+    assert "normalized" in load_stage["description"].lower()
+    assert "parse" not in load_stage["description"].lower()
 
 
 def test_public_api_exposes_only_explicit_structure_source_variants() -> None:

@@ -8,33 +8,6 @@ from goldilocks_core.result import Records
 from goldilocks_core.runtime.registry import record_type_id
 
 
-@dataclass(frozen=True, slots=True)
-class StageCapability:
-    id: str
-    name: str
-    description: str
-    input_record_ids: tuple[str, ...]
-    output_record_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class PresetCapability:
-    id: str
-    name: str
-    output_record_ids: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class CalculationTaskCapability:
-    id: str
-    revision: str
-    name: str
-    description: str
-    stages: tuple[StageCapability, ...]
-    presets: tuple[PresetCapability, ...]
-    selectable_record_ids: tuple[str, ...]
-
-
 class UnknownPreset(ValueError):
     pass
 
@@ -102,39 +75,37 @@ class TaskGraph:
         )
 
 
-def describe_task(task: TaskGraph) -> CalculationTaskCapability:
+def describe_task(task: TaskGraph) -> dict[str, Any]:
     """Serializes a TaskGraph to string-keyed IDs. Same input as execute()."""
-    stages = tuple(
-        StageCapability(
-            id=stage.id,
-            name=stage.name,
-            description=stage.description,
-            input_record_ids=tuple(task.record_id(item) for item in stage.inputs),
-            output_record_id=task.record_id(stage.output),
-        )
-        for stage in task.stages
-    )
-    presets = tuple(
-        PresetCapability(
-            id=preset.name,
-            name=preset.name,
-            output_record_ids=tuple(
-                task.record_id(output) for output in preset.outputs
-            ),
-        )
-        for preset in task.presets
-    )
-    return CalculationTaskCapability(
-        id=task.task,
-        revision=task.revision,
-        name=task.name,
-        description=task.description,
-        stages=stages,
-        presets=presets,
-        selectable_record_ids=tuple(
+    return {
+        "id": task.task,
+        "revision": task.revision,
+        "name": task.name,
+        "description": task.description,
+        "stages": [
+            {
+                "id": stage.id,
+                "name": stage.name,
+                "description": stage.description,
+                "input_record_ids": [task.record_id(item) for item in stage.inputs],
+                "output_record_id": task.record_id(stage.output),
+            }
+            for stage in task.stages
+        ],
+        "presets": [
+            {
+                "id": preset.name,
+                "name": preset.name,
+                "output_record_ids": [
+                    task.record_id(output) for output in preset.outputs
+                ],
+            }
+            for preset in task.presets
+        ],
+        "selectable_record_ids": [
             task.record_id(output) for output in task.selectable_outputs
-        ),
-    )
+        ],
+    }
 
 
 @dataclass(frozen=True, slots=True)

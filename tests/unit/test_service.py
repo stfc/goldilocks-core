@@ -94,11 +94,11 @@ def test_capabilities_unifies_task_code_and_model_discovery() -> None:
     with Service() as service:
         capabilities = service.capabilities()
 
-    assert len(capabilities.tasks) == 1
-    assert capabilities.tasks[0].id == "scf_single_point"
-    assert capabilities.tasks[0].name == "Single-point SCF"
-    assert "quantum_espresso" in capabilities.target_codes
-    assert {model.target for model in capabilities.models} == {
+    assert len(capabilities["tasks"]) == 1
+    assert capabilities["tasks"][0]["id"] == "scf_single_point"
+    assert capabilities["tasks"][0]["name"] == "Single-point SCF"
+    assert "quantum_espresso" in capabilities["target_codes"]
+    assert {model["target"] for model in capabilities["models"]} == {
         "k_distance",
         "metallicity",
     }
@@ -239,7 +239,7 @@ def test_capabilities_and_inspection_do_not_wait_for_computation() -> None:
                 InMemoryStructureSource(make_structure()),
             )
             try:
-                assert capabilities.result(timeout=0.5).tasks
+                assert capabilities.result(timeout=0.5)["tasks"]
                 assert inspection.result(timeout=0.5).structure.reduced_formula == "Si"
             finally:
                 backend.release.set()

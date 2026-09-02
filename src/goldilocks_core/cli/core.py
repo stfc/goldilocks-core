@@ -121,10 +121,10 @@ def main() -> None:
         if args.json:
             print(json.dumps(to_portable(capabilities), indent=2, sort_keys=True))
         else:
-            print(f"Goldilocks Core {capabilities.core_version}")
-            for task in capabilities.tasks:
-                presets = ", ".join(preset.id for preset in task.presets)
-                print(f"{task.id}: {presets}")
+            print(f"Goldilocks Core {capabilities['core_version']}")
+            for task in capabilities["tasks"]:
+                presets = ", ".join(preset["id"] for preset in task["presets"])
+                print(f"{task['id']}: {presets}")
         return
     if args.command == "inspect":
         try:

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 from threading import Lock
+from typing import Any
 
 from goldilocks_core.io.structures import normalize_structure
 from goldilocks_core.request import ComputeRequest, PresetSelection
 from goldilocks_core.result import ComputationResult
 from goldilocks_core.runtime.graph import (
-    CalculationTaskCapability,
     describe_task,
     execute_graph,
 )
@@ -133,7 +133,7 @@ class Dispatcher:
             warnings=handler.collect_warnings(execution.produced),
         )
 
-    def describe_tasks(self) -> tuple[CalculationTaskCapability, ...]:
+    def describe_tasks(self) -> tuple[dict[str, Any], ...]:
         self._ensure_default()
         return tuple(describe_task(handler.spec) for handler in self._tasks.values())
 

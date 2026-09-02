@@ -7,7 +7,7 @@ from goldilocks_core.advice.smearing import SmearingAdvice, advise_smearing
 from goldilocks_core.advice.soc import SpinOrbitAdvice, advise_spin_orbit
 from goldilocks_core.advice.vdw import VdwAdvice, advise_vdw
 from goldilocks_core.analysis import StructureAnalysisRecord
-from goldilocks_core.calculation import SmearingHints, SpinHints, VdwHints
+from goldilocks_core.calculation import CalculationHints
 from goldilocks_core.provenance import Provenance
 
 
@@ -43,8 +43,7 @@ def test_soc_operator_choice_is_complete_and_never_adds_consideration(
     enabled: bool,
 ) -> None:
     assert advise_spin_orbit(
-        analysis(heavy_elements=("I",)),
-        SpinHints(spin_orbit_coupling=enabled),
+        analysis(heavy_elements=("I",)), CalculationHints(spin_orbit_coupling=enabled)
     ) == SpinOrbitAdvice(
         enabled=enabled,
         consider=False,
@@ -58,7 +57,7 @@ def test_soc_operator_choice_is_complete_and_never_adds_consideration(
 
 def test_soc_heavy_element_advice_preserves_cost_warning() -> None:
     assert advise_spin_orbit(
-        analysis(heavy_elements=("I",)), SpinHints()
+        analysis(heavy_elements=("I",)), CalculationHints()
     ) == SpinOrbitAdvice(
         enabled=False,
         consider=True,
@@ -74,7 +73,7 @@ def test_soc_heavy_element_advice_preserves_cost_warning() -> None:
 
 
 def test_soc_default_records_absence_of_heavy_elements() -> None:
-    assert advise_spin_orbit(analysis(), SpinHints()) == SpinOrbitAdvice(
+    assert advise_spin_orbit(analysis(), CalculationHints()) == SpinOrbitAdvice(
         enabled=False,
         consider=False,
         heavy_elements=(),
@@ -87,7 +86,7 @@ def test_soc_default_records_absence_of_heavy_elements() -> None:
 
 def test_smearing_operator_choice_is_preserved_exactly() -> None:
     assert advise_smearing(
-        analysis(), SmearingHints(smearing_type="gaussian", smearing_width_ry=0.02)
+        analysis(), CalculationHints(smearing_type="gaussian", smearing_width_ry=0.02)
     ) == SmearingAdvice(
         smearing_type="gaussian",
         width_ry=0.02,
@@ -101,7 +100,7 @@ def test_smearing_operator_choice_is_preserved_exactly() -> None:
 def test_model_classified_metal_uses_smearing_without_a_heuristic_warning() -> None:
     assert advise_smearing(
         analysis(electronic_character="metal", electronic_character_source="model"),
-        SmearingHints(),
+        CalculationHints(),
     ) == SmearingAdvice(
         smearing_type="cold",
         width_ry=0.01,
@@ -114,7 +113,7 @@ def test_model_classified_metal_uses_smearing_without_a_heuristic_warning() -> N
 
 def test_heuristic_metallicity_keeps_its_uncertainty_warning() -> None:
     assert advise_smearing(
-        analysis(electronic_character="likely_metal"), SmearingHints()
+        analysis(electronic_character="likely_metal"), CalculationHints()
     ) == SmearingAdvice(
         smearing_type="cold",
         width_ry=0.01,
@@ -129,7 +128,7 @@ def test_heuristic_metallicity_keeps_its_uncertainty_warning() -> None:
 def test_model_classified_insulator_uses_analysis_backed_fixed_occupations() -> None:
     assert advise_smearing(
         analysis(electronic_character="insulator", electronic_character_source="model"),
-        SmearingHints(),
+        CalculationHints(),
     ) == SmearingAdvice(
         smearing_type="fixed",
         width_ry=None,
@@ -141,7 +140,7 @@ def test_model_classified_insulator_uses_analysis_backed_fixed_occupations() -> 
 
 
 def test_unknown_metallicity_defaults_to_fixed_occupations() -> None:
-    assert advise_smearing(analysis(), SmearingHints()) == SmearingAdvice(
+    assert advise_smearing(analysis(), CalculationHints()) == SmearingAdvice(
         smearing_type="fixed",
         width_ry=None,
         provenance=Provenance(
@@ -154,7 +153,7 @@ def test_unknown_metallicity_defaults_to_fixed_occupations() -> None:
 @pytest.mark.parametrize("enabled", [False, True])
 def test_magnetism_operator_choice_preserves_candidates(enabled: bool) -> None:
     assert advise_magnetism(
-        analysis(magnetic_elements=("Fe",)), SpinHints(spin_polarized=enabled)
+        analysis(magnetic_elements=("Fe",)), CalculationHints(spin_polarized=enabled)
     ) == MagnetismAdvice(
         spin_polarized=enabled,
         magnetic_elements=("Fe",),
@@ -167,7 +166,7 @@ def test_magnetism_operator_choice_preserves_candidates(enabled: bool) -> None:
 
 def test_magnetism_analysis_enables_spin_for_candidate_elements() -> None:
     assert advise_magnetism(
-        analysis(magnetic_elements=("Fe",)), SpinHints()
+        analysis(magnetic_elements=("Fe",)), CalculationHints()
     ) == MagnetismAdvice(
         spin_polarized=True,
         magnetic_elements=("Fe",),
@@ -179,7 +178,7 @@ def test_magnetism_analysis_enables_spin_for_candidate_elements() -> None:
 
 
 def test_magnetism_default_records_absence_of_candidates() -> None:
-    assert advise_magnetism(analysis(), SpinHints()) == MagnetismAdvice(
+    assert advise_magnetism(analysis(), CalculationHints()) == MagnetismAdvice(
         spin_polarized=False,
         magnetic_elements=(),
         provenance=Provenance(
@@ -206,7 +205,7 @@ def test_low_dimensional_vdw_advice_records_resolved_method(
     )
     assert advise_vdw(
         analysis(dimensionality="2d", low_dimensional=True),
-        VdwHints(vdw_method=method),
+        CalculationHints(vdw_method=method),
     ) == VdwAdvice(
         use_vdw=True,
         method=expected_method,
@@ -221,7 +220,7 @@ def test_vdw_operator_switch_overrides_structure_analysis(
 ) -> None:
     assert advise_vdw(
         analysis(dimensionality="2d", low_dimensional=True),
-        VdwHints(use_vdw=enabled),
+        CalculationHints(use_vdw=enabled),
     ) == VdwAdvice(
         use_vdw=enabled,
         method=method,
@@ -233,7 +232,7 @@ def test_vdw_operator_switch_overrides_structure_analysis(
 
 
 def test_vdw_method_without_enablement_is_rejected_by_provenance_warning() -> None:
-    assert advise_vdw(analysis(), VdwHints(vdw_method="ts")) == VdwAdvice(
+    assert advise_vdw(analysis(), CalculationHints(vdw_method="ts")) == VdwAdvice(
         use_vdw=False,
         method=None,
         provenance=Provenance(

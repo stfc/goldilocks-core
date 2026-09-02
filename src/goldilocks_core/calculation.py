@@ -25,44 +25,6 @@ from goldilocks_core.validation import (
 
 
 @dataclass(frozen=True, slots=True)
-class KmeshHints:
-    k_grid: KPointGrid | None = None
-    k_spacing: float | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class SmearingHints:
-    smearing_type: SmearingType | None = None
-    smearing_width_ry: float | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class SpinHints:
-    spin_polarized: bool | None = None
-    spin_orbit_coupling: bool | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class PseudoHints:
-    accuracy: PseudoAccuracy | None = None
-    pseudo_type: PseudoType | None = None
-    relativistic_mode: RelativisticTreatment | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class ConvergenceHints:
-    conv_thr: float | None = None
-    mixing_beta: float | None = None
-    electron_maxstep: int | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class VdwHints:
-    use_vdw: bool | None = None
-    vdw_method: VdwMethod | None = None
-
-
-@dataclass(frozen=True, slots=True)
 class CalculationIntent:
     code: CodeName = "quantum_espresso"
     task: CalcTask = "scf_single_point"
@@ -168,41 +130,3 @@ class CalculationHints:
         validate_relativistic_mode(
             self.relativistic_mode, "CalculationHints.relativistic_mode"
         )
-
-    @property
-    def kmesh(self) -> KmeshHints:
-        return KmeshHints(k_grid=self.k_grid, k_spacing=self.k_spacing)
-
-    @property
-    def smearing(self) -> SmearingHints:
-        return SmearingHints(
-            smearing_type=self.smearing_type,
-            smearing_width_ry=self.smearing_width_ry,
-        )
-
-    @property
-    def spin(self) -> SpinHints:
-        return SpinHints(
-            spin_polarized=self.spin_polarized,
-            spin_orbit_coupling=self.spin_orbit_coupling,
-        )
-
-    @property
-    def pseudo(self) -> PseudoHints:
-        return PseudoHints(
-            accuracy=self.pseudo_accuracy,
-            pseudo_type=self.pseudo_type,
-            relativistic_mode=self.relativistic_mode,
-        )
-
-    @property
-    def convergence(self) -> ConvergenceHints:
-        return ConvergenceHints(
-            conv_thr=self.conv_thr,
-            mixing_beta=self.mixing_beta,
-            electron_maxstep=self.electron_maxstep,
-        )
-
-    @property
-    def vdw(self) -> VdwHints:
-        return VdwHints(use_vdw=self.use_vdw, vdw_method=self.vdw_method)

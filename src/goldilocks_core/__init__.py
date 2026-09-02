@@ -8,16 +8,7 @@ from goldilocks_core.advice.smearing import SmearingAdvice
 from goldilocks_core.advice.soc import SpinOrbitAdvice
 from goldilocks_core.advice.vdw import VdwAdvice
 from goldilocks_core.analysis import StructureAnalysisRecord, SymmetryUnavailable
-from goldilocks_core.calculation import (
-    CalculationHints,
-    CalculationIntent,
-    ConvergenceHints,
-    KmeshHints,
-    PseudoHints,
-    SmearingHints,
-    SpinHints,
-    VdwHints,
-)
+from goldilocks_core.calculation import CalculationHints, CalculationIntent
 from goldilocks_core.generation.files import GeneratedFile, GeneratedFiles
 from goldilocks_core.input_data import DftInputData
 from goldilocks_core.io.structures import (
@@ -64,7 +55,6 @@ __all__ = [
     "ComputationResult",
     "ComputeRequest",
     "ConvergenceAdvice",
-    "ConvergenceHints",
     "DftInputData",
     "DirectoryOutput",
     "Dispatcher",
@@ -74,7 +64,6 @@ __all__ = [
     "InlineStructureSource",
     "KMeshService",
     "KPointSelection",
-    "KmeshHints",
     "MagnetismAdvice",
     "ModelSpec",
     "OutputTarget",
@@ -82,7 +71,6 @@ __all__ = [
     "PathStructureSource",
     "PresetSelection",
     "PseudoCutoffs",
-    "PseudoHints",
     "PseudoMetadata",
     "PseudopotentialRequirements",
     "PseudopotentialSelection",
@@ -93,8 +81,6 @@ __all__ = [
     "Service",
     "SelectionRecord",
     "SmearingAdvice",
-    "SmearingHints",
-    "SpinHints",
     "SpinOrbitAdvice",
     "StructureAnalysisRecord",
     "StructureInspection",
@@ -104,6 +90,5 @@ __all__ = [
     "UnknownPreset",
     "UnknownTask",
     "VdwAdvice",
-    "VdwHints",
     "compute",
 ]

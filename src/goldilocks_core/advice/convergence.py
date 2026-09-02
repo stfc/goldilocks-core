@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from goldilocks_core.advice._hints import has_hint
-from goldilocks_core.calculation import ConvergenceHints
+from goldilocks_core.calculation import CalculationHints
 from goldilocks_core.provenance import Provenance
 
 DEFAULT_CONV_THR = 1e-6
@@ -19,8 +18,12 @@ class ConvergenceAdvice:
     electron_maxstep: int = 80
 
 
-def advise_convergence(hints: ConvergenceHints) -> ConvergenceAdvice:
-    if has_hint(hints):
+def advise_convergence(hints: CalculationHints) -> ConvergenceAdvice:
+    if (
+        hints.conv_thr is not None
+        or hints.mixing_beta is not None
+        or hints.electron_maxstep is not None
+    ):
         return ConvergenceAdvice(
             conv_thr=hints.conv_thr if hints.conv_thr is not None else DEFAULT_CONV_THR,
             mixing_beta=hints.mixing_beta

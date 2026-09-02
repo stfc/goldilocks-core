@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from goldilocks_core.analysis import StructureAnalysisRecord
-from goldilocks_core.calculation import SpinHints
+from goldilocks_core.calculation import CalculationHints
 from goldilocks_core.provenance import Provenance
 
 
@@ -17,7 +17,7 @@ class SpinOrbitAdvice:
 
 def advise_spin_orbit(
     analysis: StructureAnalysisRecord,
-    hints: SpinHints,
+    hints: CalculationHints,
 ) -> SpinOrbitAdvice:
     """SOC is never auto-enabled. Heavy elements set ``consider=True``;
     the operator must set ``spin_orbit_coupling=True`` to enable it."""

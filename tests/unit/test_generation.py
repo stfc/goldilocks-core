@@ -69,7 +69,7 @@ def select_from_advice(
     hints: CalculationHints,
     metadata_list: list[PseudoMetadata],
 ):
-    k_points = resolve_kpoints(structure, hints.kmesh, _stub_backend)
+    k_points = resolve_kpoints(structure, hints, _stub_backend)
     selection = select_pseudopotentials(
         structure, advice.pseudopotential_requirements, metadata_list
     )

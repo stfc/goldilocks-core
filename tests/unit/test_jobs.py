@@ -104,7 +104,7 @@ def test_compute_reuses_caller_owned_runtime() -> None:
 
 def test_compute_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> None:
     class FakeQRF:
-        q = [0.05, 0.5, 0.95]
+        q = (0.05, 0.5, 0.95)
 
         def predict(self, features):
             return [[0.2], [0.25], [0.3]]

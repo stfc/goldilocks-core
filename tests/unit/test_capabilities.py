@@ -304,9 +304,11 @@ def test_custom_model_registry_rejects_path_like_source_labels(
         encoding="utf-8",
     )
 
-    with Runtime(registry_path=registry) as runtime:
-        with pytest.raises(ValueError, match="model source must be one of"):
-            Service(runtime).capabilities()
+    with (
+        Runtime(registry_path=registry) as runtime,
+        pytest.raises(ValueError, match="model source must be one of"),
+    ):
+        Service(runtime).capabilities()
 
 
 def test_duplicate_record_producers_are_rejected_at_task_declaration() -> None:
@@ -316,7 +318,7 @@ def test_duplicate_record_producers_are_rejected_at_task_declaration() -> None:
 
     with pytest.raises(
         ValueError,
-        match="exactly one producer.*DuplicateRecord",
+        match=r"exactly one producer.*DuplicateRecord",
     ):
         TaskGraph(
             task="duplicate_producers",

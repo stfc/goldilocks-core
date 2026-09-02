@@ -220,8 +220,10 @@ def _electrons_section(advice: JsonDict) -> list[str]:
 
 def _cell_parameters(structure: Structure) -> list[str]:
     lines = ["CELL_PARAMETERS angstrom"]
-    for vector in structure.lattice.matrix:
-        lines.append("  " + "  ".join(_format_float(value) for value in vector))
+    lines.extend(
+        "  " + "  ".join(_format_float(value) for value in vector)
+        for vector in structure.lattice.matrix
+    )
     lines.append("")
     return lines
 

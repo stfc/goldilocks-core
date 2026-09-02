@@ -380,7 +380,7 @@ def test_generate_inputs_rejects_unsupported_task() -> None:
     intent = CalculationIntent(task="relax")
 
     with pytest.raises(
-        ValueError, match="No input writer registered for .*task='relax'"
+        ValueError, match=r"No input writer registered for .*task='relax'"
     ):
         generate_inputs(structure, intent, advice, selection, k_points)
 

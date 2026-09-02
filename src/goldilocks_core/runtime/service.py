@@ -25,7 +25,7 @@ __all__ = ["Service"]
 
 
 class Service:
-    __slots__ = ("_runtime", "_dispatcher", "_owns_runtime", "_closed")
+    __slots__ = ("_closed", "_dispatcher", "_owns_runtime", "_runtime")
 
     def __init__(
         self,

@@ -25,14 +25,14 @@ class KMeshService(Protocol):
 
 class MetallicityModel:
     __slots__ = (
-        "_checkpoint",
-        "_atom_init",
-        "_registry_path",
         "_asset_store",
-        "_model",
+        "_atom_init",
+        "_checkpoint",
+        "_closed",
         "_graph_settings",
         "_load_lock",
-        "_closed",
+        "_model",
+        "_registry_path",
     )
 
     def __init__(
@@ -66,9 +66,9 @@ class MetallicityModel:
         )
 
         with self._load_lock:
-            if self._checkpoint is None or self._atom_init is None:
-                if not self._resolve_default_artifacts():
-                    return heuristic_metallicity(structure), "heuristic", None
+            missing_artifacts = self._checkpoint is None or self._atom_init is None
+            if missing_artifacts and not self._resolve_default_artifacts():
+                return heuristic_metallicity(structure), "heuristic", None
             if self._model is None:
                 self._model = load_metallicity_model(os.fspath(self._checkpoint))
             if self._graph_settings is None:

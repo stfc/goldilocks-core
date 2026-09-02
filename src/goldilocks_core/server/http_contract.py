@@ -10,7 +10,6 @@ from fastapi.responses import Response
 from goldilocks_core.input_data import DftInputData
 from goldilocks_core.io.structures import StructureInspection
 from goldilocks_core.publication import Publisher
-from goldilocks_core.runtime.capabilities import Capabilities
 from goldilocks_core.runtime.service import Service
 from goldilocks_core.serialization import to_portable
 from goldilocks_core.server.request import (
@@ -19,6 +18,7 @@ from goldilocks_core.server.request import (
     inspection_source_from_dict,
 )
 from goldilocks_core.server.wire import (
+    CapabilitiesDocument,
     ComputeRequestDocument,
     ErrorResponseDocument,
     InspectRequestDocument,
@@ -48,11 +48,11 @@ class PreparedMultipartResponse(Response):
 
 
 def install_scientific_routes(app: FastAPI, service: Service) -> None:
-    tasks = service.capabilities().tasks
+    tasks = service.capabilities()["tasks"]
     result_document = computation_result_document(tasks)
     prepared_document = prepared_computation_document(tasks)
 
-    @app.get("/capabilities", response_model=Capabilities)
+    @app.get("/capabilities", response_model=CapabilitiesDocument)
     def capabilities() -> dict[str, Any]:
         return to_portable(service.capabilities())
 

@@ -1,4 +1,4 @@
-from dataclasses import FrozenInstanceError, dataclass
+from dataclasses import dataclass
 from importlib import resources
 from importlib.metadata import version
 from pathlib import Path
@@ -7,17 +7,9 @@ import pytest
 
 from goldilocks_core import Service
 from goldilocks_core.calculation import CalculationHints, CalculationIntent
-from goldilocks_core.runtime.capabilities import (
-    Capabilities,
-    ModelCapability,
-    PseudopotentialSetCapability,
-)
 from goldilocks_core.runtime.graph import (
-    CalculationTaskCapability,
     Preset,
-    PresetCapability,
     Stage,
-    StageCapability,
     TaskGraph,
 )
 from goldilocks_core.runtime.models import Runtime
@@ -34,66 +26,66 @@ def isolated_record_registry():
     RECORD_TYPE_IDS.update(registered)
 
 
-def test_capabilities_contract_is_an_immutable_serializable_domain_value() -> None:
-    capabilities = Capabilities(
-        core_version="1.2.3",
-        tasks=(
-            CalculationTaskCapability(
-                id="future_task",
-                revision="2",
-                name="Future task",
-                description="Produce a future scientific Record.",
-                stages=(
-                    StageCapability(
-                        id="inspect",
-                        name="Inspect",
-                        description="Inspect the structure.",
-                        input_record_ids=("structure",),
-                        output_record_id="inspection",
-                    ),
-                ),
-                presets=(
-                    PresetCapability(
-                        id="review",
-                        name="review",
-                        output_record_ids=("inspection",),
-                    ),
-                ),
-                selectable_record_ids=("inspection",),
-            ),
-        ),
-        target_codes=("quantum_espresso",),
-        models=(
-            ModelCapability(
-                id="fixture-model",
-                name="Fixture model",
-                version="1",
-                role="structure_classification",
-                model_type="cgcnn",
-                target="metallicity",
-                feature_set="fixture_features",
-                source="local",
-                revision="abc123",
-            ),
-        ),
-        pseudopotential_sets=(
-            PseudopotentialSetCapability(
-                id="fixture-pseudos",
-                version="1",
-                provider="fixture",
-                upstream_name="Fixture Set",
-                functional="PBEsol",
-                accuracy="efficiency",
-                relativistic_treatment="scalar",
-                supported_elements=("Si",),
-                licence="CC-BY-4.0",
-                citation="Fixture et al. (2026)",
-                default=True,
-            ),
-        ),
-        default_intent=CalculationIntent(),
-        default_hints=CalculationHints(),
-    )
+def test_capabilities_document_pins_the_portable_shape() -> None:
+    capabilities = {
+        "core_version": "1.2.3",
+        "tasks": [
+            {
+                "id": "future_task",
+                "revision": "2",
+                "name": "Future task",
+                "description": "Produce a future scientific Record.",
+                "stages": [
+                    {
+                        "id": "inspect",
+                        "name": "Inspect",
+                        "description": "Inspect the structure.",
+                        "input_record_ids": ["structure"],
+                        "output_record_id": "inspection",
+                    }
+                ],
+                "presets": [
+                    {
+                        "id": "review",
+                        "name": "review",
+                        "output_record_ids": ["inspection"],
+                    }
+                ],
+                "selectable_record_ids": ["inspection"],
+            }
+        ],
+        "target_codes": ["quantum_espresso"],
+        "models": [
+            {
+                "id": "fixture-model",
+                "name": "Fixture model",
+                "version": "1",
+                "role": "structure_classification",
+                "model_type": "cgcnn",
+                "target": "metallicity",
+                "feature_set": "fixture_features",
+                "source": "local",
+                "revision": "abc123",
+            }
+        ],
+        "pseudopotential_sets": [
+            {
+                "id": "fixture-pseudos",
+                "version": "1",
+                "provider": "fixture",
+                "upstream_name": "Fixture Set",
+                "functional": "PBEsol",
+                "accuracy": "efficiency",
+                "relativistic_treatment": "scalar",
+                "supported_elements": ["Si"],
+                "licence": "CC-BY-4.0",
+                "citation": "Fixture et al. (2026)",
+                "default": True,
+            }
+        ],
+        "default_intent": CalculationIntent(),
+        "default_hints": CalculationHints(),
+    }
 
     assert to_portable(capabilities) == {
         "core_version": "1.2.3",
@@ -174,23 +166,21 @@ def test_capabilities_contract_is_an_immutable_serializable_domain_value() -> No
             "vdw_method": None,
         },
     }
-    with pytest.raises(FrozenInstanceError):
-        capabilities.core_version = "changed"
 
 
 def test_service_capabilities_describes_the_complete_core_catalog() -> None:
     with Service() as service:
         capabilities = service.capabilities()
 
-    assert capabilities.core_version == version("goldilocks-core")
-    assert capabilities.target_codes == ("quantum_espresso",)
-    assert capabilities.default_intent == CalculationIntent()
-    assert capabilities.default_hints == CalculationHints()
+    assert capabilities["core_version"] == version("goldilocks-core")
+    assert capabilities["target_codes"] == ["quantum_espresso"]
+    assert capabilities["default_intent"] == CalculationIntent()
+    assert capabilities["default_hints"] == CalculationHints()
 
-    assert len(capabilities.tasks) == 1
-    task = capabilities.tasks[0]
-    assert (task.id, task.revision) == ("scf_single_point", "1")
-    assert tuple(stage.id for stage in task.stages) == (
+    assert len(capabilities["tasks"]) == 1
+    task = capabilities["tasks"][0]
+    assert (task["id"], task["revision"]) == ("scf_single_point", "1")
+    assert tuple(stage["id"] for stage in task["stages"]) == (
         "load_structure",
         "analyze",
         "resolve_k_points",
@@ -199,29 +189,31 @@ def test_service_capabilities_describes_the_complete_core_catalog() -> None:
         "generate_inputs",
         "assemble_dft_input_data",
     )
-    assert {preset.id: preset.output_record_ids for preset in task.presets} == {
-        "recommend": ("analysis", "advice", "k_points", "selection"),
-        "generate": (
+    assert {
+        preset["id"]: preset["output_record_ids"] for preset in task["presets"]
+    } == {
+        "recommend": ["analysis", "advice", "k_points", "selection"],
+        "generate": [
             "analysis",
             "advice",
             "k_points",
             "selection",
             "generated_files",
             "dft_input_data",
-        ),
+        ],
     }
-    assert task.selectable_record_ids == (
+    assert task["selectable_record_ids"] == [
         "analysis",
         "advice",
         "k_points",
         "selection",
         "generated_files",
         "dft_input_data",
-    )
+    ]
 
     assert {
-        (model.id, model.role, model.name, model.target)
-        for model in capabilities.models
+        (model["id"], model["role"], model["name"], model["target"])
+        for model in capabilities["models"]
     } == {
         (
             "models/qrf-kpoints",
@@ -237,11 +229,11 @@ def test_service_capabilities_describes_the_complete_core_catalog() -> None:
         ),
     }
 
-    assert len(capabilities.pseudopotential_sets) == 15
+    assert len(capabilities["pseudopotential_sets"]) == 15
     default_set = next(
-        item for item in capabilities.pseudopotential_sets if item.default
+        item for item in capabilities["pseudopotential_sets"] if item["default"]
     )
-    set_metadata = to_portable(default_set)
+    set_metadata = dict(default_set)
     supported_elements = set_metadata.pop("supported_elements")
     assert set_metadata == {
         "id": "pseudodojo-pbesol-efficiency-sr",
@@ -379,12 +371,12 @@ def test_registered_future_task_appears_without_a_new_service_method(
     )
 
     with Service(task_handlers=(handler,)) as service:
-        tasks = {task.id: task for task in service.capabilities().tasks}
+        tasks = {task["id"]: task for task in service.capabilities()["tasks"]}
 
     assert set(tasks) == {"scf_single_point", "future_task"}
-    assert tasks["future_task"].revision == "7"
-    assert tasks["future_task"].presets[0].output_record_ids == ("future_record",)
-    assert tasks["future_task"].selectable_record_ids == ("future_record",)
+    assert tasks["future_task"]["revision"] == "7"
+    assert tasks["future_task"]["presets"][0]["output_record_ids"] == ["future_record"]
+    assert tasks["future_task"]["selectable_record_ids"] == ["future_record"]
 
 
 def test_capability_catalogs_use_deterministic_identity_order() -> None:
@@ -400,15 +392,15 @@ def test_capability_catalogs_use_deterministic_identity_order() -> None:
     with Service(task_handlers=(future_handler,)) as service:
         capabilities = service.capabilities()
 
-    task_ids = tuple(task.id for task in capabilities.tasks)
-    model_ids = tuple(model.id for model in capabilities.models)
-    set_ids = tuple(item.id for item in capabilities.pseudopotential_sets)
+    task_ids = tuple(task["id"] for task in capabilities["tasks"])
+    model_ids = tuple(model["id"] for model in capabilities["models"])
+    set_ids = tuple(item["id"] for item in capabilities["pseudopotential_sets"])
 
     assert task_ids == ("scf_single_point", "zzz_future_task")
-    assert capabilities.target_codes == tuple(sorted(capabilities.target_codes))
+    assert capabilities["target_codes"] == sorted(capabilities["target_codes"])
     assert model_ids == tuple(sorted(model_ids))
     assert set_ids == tuple(sorted(set_ids))
     assert all(
-        item.supported_elements == tuple(sorted(item.supported_elements))
-        for item in capabilities.pseudopotential_sets
+        item["supported_elements"] == sorted(item["supported_elements"])
+        for item in capabilities["pseudopotential_sets"]
     )

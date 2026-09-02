@@ -34,7 +34,6 @@ from goldilocks_core.request import (
     RecordSelection,
 )
 from goldilocks_core.result import ComputationResult, Records
-from goldilocks_core.runtime.capabilities import Capabilities
 from goldilocks_core.runtime.dispatch import (
     Dispatcher,
     UnavailableRecord,
@@ -51,7 +50,6 @@ __all__ = [
     "CalculationDraft",
     "CalculationHints",
     "CalculationIntent",
-    "Capabilities",
     "ComputationResult",
     "ComputeRequest",
     "ConvergenceAdvice",

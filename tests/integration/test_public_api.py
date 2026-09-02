@@ -9,7 +9,6 @@ from goldilocks_core import (
     ArchiveOutput,
     CalculationDraft,
     CalculationHints,
-    Capabilities,
     ComputationResult,
     ComputeRequest,
     DftInputData,
@@ -81,12 +80,11 @@ def _request(selection, pseudo_root: Path = Path("/pseudo")) -> ComputeRequest:
 
 
 def test_root_interface_exposes_three_operations_and_their_contracts() -> None:
-    assert Service.capabilities.__annotations__["return"] == "Capabilities"
+    assert Service.capabilities.__annotations__["return"] == "dict[str, Any]"
     assert Service.inspect_structure.__annotations__["return"] == (
         "StructureInspection"
     )
     assert Service.compute.__annotations__["return"] == "ComputationResult"
-    assert Capabilities is not None
     assert StructureInspection is not None
     assert ComputationResult is not None
     assert StructureSource is not None
@@ -145,8 +143,8 @@ def test_service_capabilities_and_inspection_share_the_root_interface() -> None:
         capabilities = core.capabilities()
         inspection = core.inspect_structure(source)
 
-    assert capabilities.tasks[0].id == "scf_single_point"
-    assert {preset.id for preset in capabilities.tasks[0].presets} == {
+    assert capabilities["tasks"][0]["id"] == "scf_single_point"
+    assert {preset["id"] for preset in capabilities["tasks"][0]["presets"]} == {
         "recommend",
         "generate",
     }

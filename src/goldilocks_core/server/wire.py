@@ -20,9 +20,18 @@ from goldilocks_core.io.structures import StructureInspection
 from goldilocks_core.ml.models import ModelSpec
 from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.publication import Publication
-from goldilocks_core.runtime.graph import CalculationTaskCapability
 from goldilocks_core.runtime.registry import record_types_by_id
 from goldilocks_core.selection import PseudopotentialSelection
+from goldilocks_core.types import (
+    CalcTask,
+    CodeName,
+    KPointGrid,
+    PseudoAccuracy,
+    PseudoType,
+    RelativisticTreatment,
+    SmearingType,
+    VdwMethod,
+)
 
 _STRICT = ConfigDict(extra="forbid", strict=True)
 
@@ -104,6 +113,92 @@ ComputeRequestDocument = create_model(
     __config__=_STRICT,
     draft=(DraftDocument, ...),
     selection=(SelectionDocument, ...),
+)
+
+_CapabilityStageDocument = create_model(
+    "StageCapability",
+    id=(str, ...),
+    name=(str, ...),
+    description=(str, ...),
+    input_record_ids=(tuple[str, ...], ...),
+    output_record_id=(str, ...),
+)
+_CapabilityPresetDocument = create_model(
+    "PresetCapability",
+    id=(str, ...),
+    name=(str, ...),
+    output_record_ids=(tuple[str, ...], ...),
+)
+_CapabilityTaskDocument = create_model(
+    "CalculationTaskCapability",
+    id=(str, ...),
+    revision=(str, ...),
+    name=(str, ...),
+    description=(str, ...),
+    stages=(tuple[_CapabilityStageDocument, ...], ...),
+    presets=(tuple[_CapabilityPresetDocument, ...], ...),
+    selectable_record_ids=(tuple[str, ...], ...),
+)
+_CapabilityModelDocument = create_model(
+    "ModelCapability",
+    id=(str, ...),
+    name=(str, ...),
+    version=(str, ...),
+    role=(str, ...),
+    model_type=(str, ...),
+    target=(str, ...),
+    feature_set=(str, ...),
+    source=(str, ...),
+    revision=(str | None, ...),
+)
+_CapabilityPseudopotentialSetDocument = create_model(
+    "PseudopotentialSetCapability",
+    id=(str, ...),
+    version=(str, ...),
+    provider=(str, ...),
+    upstream_name=(str, ...),
+    functional=(str, ...),
+    accuracy=(str, ...),
+    relativistic_treatment=(str, ...),
+    supported_elements=(tuple[str, ...], ...),
+    licence=(str, ...),
+    citation=(str, ...),
+    default=(bool, ...),
+)
+_CapabilityIntentDocument = create_model(
+    "CalculationIntent",
+    code=(CodeName, "quantum_espresso"),
+    task=(CalcTask, "scf_single_point"),
+    functional=(str, "PBEsol"),
+    pseudo_accuracy=(PseudoAccuracy, "efficiency"),
+)
+_CapabilityHintsDocument = create_model(
+    "CalculationHints",
+    __doc__=CalculationHints.__doc__,
+    k_spacing=(float | None, None),
+    k_grid=(KPointGrid | None, None),
+    smearing_type=(SmearingType | None, None),
+    smearing_width_ry=(float | None, None),
+    spin_polarized=(bool | None, None),
+    spin_orbit_coupling=(bool | None, None),
+    pseudo_accuracy=(PseudoAccuracy | None, None),
+    pseudo_type=(PseudoType | None, None),
+    relativistic_mode=(RelativisticTreatment | None, None),
+    conv_thr=(float | None, None),
+    mixing_beta=(float | None, None),
+    electron_maxstep=(int | None, None),
+    use_vdw=(bool | None, None),
+    vdw_method=(VdwMethod | None, None),
+)
+CapabilitiesDocument = create_model(
+    "Capabilities",
+    core_version=(str, ...),
+    tasks=(tuple[_CapabilityTaskDocument, ...], ...),
+    target_codes=(tuple[str, ...], ...),
+    models=(tuple[_CapabilityModelDocument, ...], ...),
+    pseudopotential_sets=(tuple[_CapabilityPseudopotentialSetDocument, ...], ...),
+    default_intent=(_CapabilityIntentDocument, ...),
+    default_hints=(_CapabilityHintsDocument, ...),
 )
 _SERIALIZED = ConfigDict(extra="forbid")
 _SERIALIZED_MODELS: dict[type | TypeAliasType, Any] = {}
@@ -255,17 +350,17 @@ SerializedCalculationDraftDocument = create_model(
 
 
 def computation_result_document(
-    tasks: tuple[CalculationTaskCapability, ...],
+    tasks: tuple[dict[str, Any], ...],
 ) -> type[BaseModel]:
     advertised_ids = dict.fromkeys(
         record_id
         for task in tasks
         for record_id in (
-            *task.selectable_record_ids,
+            *task["selectable_record_ids"],
             *(
                 output_id
-                for preset in task.presets
-                for output_id in preset.output_record_ids
+                for preset in task["presets"]
+                for output_id in preset["output_record_ids"]
             ),
         )
     )
@@ -293,7 +388,7 @@ def computation_result_document(
 
 
 def prepared_computation_document(
-    tasks: tuple[CalculationTaskCapability, ...],
+    tasks: tuple[dict[str, Any], ...],
 ) -> type[BaseModel]:
     return create_model(
         "PreparedComputation",

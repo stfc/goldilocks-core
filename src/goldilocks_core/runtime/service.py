@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any
 
 from goldilocks_core.input_data import DftInputData
 from goldilocks_core.io.structures import (
@@ -16,7 +17,7 @@ from goldilocks_core.publication import (
 )
 from goldilocks_core.request import ComputeRequest
 from goldilocks_core.result import ComputationResult
-from goldilocks_core.runtime.capabilities import Capabilities, build_capabilities
+from goldilocks_core.runtime.capabilities import build_capabilities
 from goldilocks_core.runtime.dispatch import Dispatcher
 from goldilocks_core.runtime.models import Runtime
 from goldilocks_core.runtime.task import GraphHandler
@@ -72,7 +73,7 @@ class Service:
         publication = Publisher(self._runtime.asset_store).publish(input_data, output)
         return replace(result, publication=publication)
 
-    def capabilities(self) -> Capabilities:
+    def capabilities(self) -> dict[str, Any]:
         self._ensure_open()
         return build_capabilities(self._dispatcher, self._runtime)
 

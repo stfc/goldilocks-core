@@ -23,8 +23,6 @@ from goldilocks_core.input_data import (
     GeneratedContent,
     InputArtifact,
 )
-from goldilocks_core.serialization import to_jsonable
-from goldilocks_core.types import JsonDict
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,9 +65,6 @@ class Publication:
     files: tuple[str, ...]
     manifest_sha256: str
     output_sha256: str | None = None
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 @dataclass(frozen=True, slots=True)

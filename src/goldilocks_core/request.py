@@ -13,7 +13,7 @@ from goldilocks_core.io.structures import (
 )
 from goldilocks_core.ml.models import ModelSpec
 from goldilocks_core.pseudo.metadata import PseudoMetadata
-from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.serialization import to_jsonable, to_portable
 from goldilocks_core.types import JsonDict
 from goldilocks_core.validation import validate_optional_nonempty_str
 
@@ -30,10 +30,12 @@ class RecordSelection:
         if any(not isinstance(record, type | TypeAliasType) for record in self.records):
             raise ValueError("RecordSelection.records must contain types")
 
-    def to_dict(self) -> JsonDict:
-        from goldilocks_core.runtime.registry import record_type_id
 
-        return {"records": [record_type_id(item) for item in self.records]}
+@to_portable.register(RecordSelection)
+def _record_selection_portable(selection: RecordSelection) -> JsonDict:
+    from goldilocks_core.runtime.registry import record_type_id
+
+    return {"records": [record_type_id(item) for item in selection.records]}
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,8 +46,10 @@ class PresetSelection:
         if not isinstance(self.preset, str) or not self.preset.strip():
             raise ValueError("PresetSelection.preset must be a non-empty string")
 
-    def to_dict(self) -> JsonDict:
-        return {"preset": self.preset}
+
+@to_portable.register(PresetSelection)
+def _preset_selection_portable(selection: PresetSelection) -> JsonDict:
+    return {"preset": selection.preset}
 
 
 type ComputationSelection = PresetSelection | RecordSelection
@@ -102,24 +106,26 @@ class CalculationDraft:
             "CalculationDraft",
         )
 
-    def to_dict(self) -> JsonDict:
-        return {
-            "structure": self.structure.to_dict(),
-            "intent": to_jsonable(self.intent),
-            "hints": to_jsonable(self.hints),
-            "pseudo_metadata": (
-                [item.to_dict() for item in self.pseudo_metadata]
-                if self.pseudo_metadata is not None
-                else None
-            ),
-            "pseudo_root": (
-                {"kind": "local_root"} if self.pseudo_root is not None else None
-            ),
-            "pseudo_table": self.pseudo_table,
-            "kmesh_model": (
-                self.kmesh_model.to_dict() if self.kmesh_model is not None else None
-            ),
-        }
+
+@to_portable.register(CalculationDraft)
+def _calculation_draft_portable(draft: CalculationDraft) -> JsonDict:
+    return {
+        "structure": to_portable(draft.structure),
+        "intent": to_jsonable(draft.intent),
+        "hints": to_jsonable(draft.hints),
+        "pseudo_metadata": (
+            [to_portable(item) for item in draft.pseudo_metadata]
+            if draft.pseudo_metadata is not None
+            else None
+        ),
+        "pseudo_root": (
+            {"kind": "local_root"} if draft.pseudo_root is not None else None
+        ),
+        "pseudo_table": draft.pseudo_table,
+        "kmesh_model": (
+            to_portable(draft.kmesh_model) if draft.kmesh_model is not None else None
+        ),
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,8 +154,10 @@ class ComputeRequest:
                 "ComputeRequest.selection must be a PresetSelection or RecordSelection"
             )
 
-    def to_dict(self) -> JsonDict:
-        return {
-            "draft": self.draft.to_dict(),
-            "selection": self.selection.to_dict(),
-        }
+
+@to_portable.register(ComputeRequest)
+def _compute_request_portable(request: ComputeRequest) -> JsonDict:
+    return {
+        "draft": to_portable(request.draft),
+        "selection": to_portable(request.selection),
+    }

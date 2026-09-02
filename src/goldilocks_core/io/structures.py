@@ -8,7 +8,7 @@ from typing import Literal
 
 from pymatgen.core import Structure
 
-from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.serialization import to_portable
 from goldilocks_core.types import JsonDict
 
 Vector3 = tuple[float, float, float]
@@ -37,14 +37,6 @@ class InlineStructureSource:
             raise ValueError("InlineStructureSource.content must be text")
         _validate_format(self.format)
 
-    def to_dict(self) -> JsonDict:
-        return {
-            "kind": "inline",
-            "name": self.name,
-            "content": self.content,
-            "format": self.format,
-        }
-
 
 @dataclass(frozen=True, slots=True)
 class PathStructureSource:
@@ -53,9 +45,6 @@ class PathStructureSource:
     def __post_init__(self) -> None:
         if not isinstance(self.path, str | Path) or not str(self.path).strip():
             raise ValueError("PathStructureSource.path must be a non-empty path")
-
-    def to_dict(self) -> JsonDict:
-        return {"kind": "path", "path": str(self.path)}
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,13 +57,32 @@ class InMemoryStructureSource:
                 "InMemoryStructureSource.structure must be a pymatgen Structure"
             )
 
-    def to_dict(self) -> JsonDict:
-        return {"kind": "in_memory", "structure": self.structure.as_dict()}
-
 
 type StructureSource = (
     InlineStructureSource | PathStructureSource | InMemoryStructureSource
 )
+
+
+@to_portable.register(InlineStructureSource)
+def _inline_structure_source_portable(source: InlineStructureSource) -> JsonDict:
+    return {
+        "kind": "inline",
+        "name": source.name,
+        "content": source.content,
+        "format": source.format,
+    }
+
+
+@to_portable.register(PathStructureSource)
+def _path_structure_source_portable(source: PathStructureSource) -> JsonDict:
+    return {"kind": "path", "path": str(source.path)}
+
+
+@to_portable.register(InMemoryStructureSource)
+def _in_memory_structure_source_portable(
+    source: InMemoryStructureSource,
+) -> JsonDict:
+    return {"kind": "in_memory", "structure": source.structure.as_dict()}
 
 
 def _validate_format(format_hint: str | None) -> None:
@@ -94,9 +102,6 @@ class StructureSourceDocument:
     sha256: str | None
     size_bytes: int | None
 
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
-
 
 @dataclass(frozen=True, slots=True)
 class SpeciesOccupancy:
@@ -105,18 +110,12 @@ class SpeciesOccupancy:
     occupancy: float
     oxidation_state: float | None = None
 
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
-
 
 @dataclass(frozen=True, slots=True)
 class StructureSiteDocument:
     fractional_coordinates: Vector3
     cartesian_coordinates_angstrom: Vector3
     species: tuple[SpeciesOccupancy, ...]
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,9 +124,6 @@ class LatticeDocument:
     lengths_angstrom: Vector3
     angles_degrees: Vector3
     volume_angstrom3: float
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,9 +136,6 @@ class StructureDocument:
     periodicity: tuple[bool, bool, bool]
     sites: tuple[StructureSiteDocument, ...]
 
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
-
 
 @dataclass(frozen=True, slots=True)
 class StructureInspection:
@@ -150,9 +143,6 @@ class StructureInspection:
     structure: StructureDocument
     canonical_cif: str
     schema_version: int = 1
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 SUPPORTED_STRUCTURE_FORMATS: tuple[StructureFormat, ...] = ("cif", "poscar")

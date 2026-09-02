@@ -19,6 +19,19 @@ def to_jsonable(value: Any) -> Any:
     return value
 
 
+@singledispatch
+def to_portable(value: Any) -> Any:
+    """Machine-independent projection of a record for publication and CLI.
+
+    Matches :func:`to_jsonable` except where a record carries host-local data
+    (filesystem paths, licence text); those are dropped or reduced so the
+    same computation produces the same bytes on any machine. The archive
+    manifest and CLI ``--json`` use this projection; tests and internals use
+    the complete :func:`to_jsonable` form.
+    """
+    return to_jsonable(value)
+
+
 @to_jsonable.register(tuple)
 def _to_jsonable_tuple(value: tuple) -> list:
     return [to_jsonable(item) for item in value]

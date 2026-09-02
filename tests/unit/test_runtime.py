@@ -50,6 +50,7 @@ from goldilocks_core.runtime.registry import (
     resolve_output_types,
 )
 from goldilocks_core.selection import SelectionRecord
+from goldilocks_core.serialization import to_portable
 
 
 @pytest.fixture
@@ -987,7 +988,7 @@ def test_runtime_dispatches_a_registered_task_via_compute(
     with Runtime() as runtime:
         dispatcher = Dispatcher(runtime)
         dispatcher.register(handler)
-        document = request.to_dict()
+        document = to_portable(request)
         result = dispatcher.compute(request)
 
     assert document["selection"] == {"records": ["stub"]}
@@ -995,7 +996,7 @@ def test_runtime_dispatches_a_registered_task_via_compute(
     assert result.draft.structure.source.origin == "path"
     assert isinstance(result.records[StubRecord], StubRecord)
     assert result.records[StubRecord].value == "ran"
-    assert result.to_dict()["records"] == {"stub": {"value": "ran"}}
+    assert to_portable(result)["records"] == {"stub": {"value": "ran"}}
 
 
 def test_runtime_recommend_dispatches_a_registered_task_preset(

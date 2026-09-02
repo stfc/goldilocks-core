@@ -19,7 +19,7 @@ from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.pseudo.registry import load_tables
 from goldilocks_core.selection import PseudopotentialSelection, SelectionRecord
-from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.serialization import to_jsonable, to_portable
 from goldilocks_core.types import JsonDict, PathLike
 
 
@@ -28,9 +28,6 @@ class GeneratedContent:
     content: bytes
     identity: str
 
-    def to_dict(self) -> JsonDict:
-        return {"kind": "generated", "identity": self.identity}
-
 
 @dataclass(frozen=True, slots=True)
 class InstalledArtifactReference:
@@ -38,15 +35,6 @@ class InstalledArtifactReference:
     asset_version: str
     preparation_fingerprint: str
     path: str
-
-    def to_dict(self) -> JsonDict:
-        return {
-            "kind": "installed",
-            "asset_id": self.asset_id,
-            "asset_version": self.asset_version,
-            "preparation_fingerprint": self.preparation_fingerprint,
-            "path": self.path,
-        }
 
 
 type ArtifactSource = GeneratedContent | InstalledArtifactReference
@@ -62,17 +50,6 @@ class InputArtifact:
     media_type: str | None = None
     provenance: Provenance | None = None
 
-    def to_dict(self) -> JsonDict:
-        return {
-            "path": self.path,
-            "role": self.role,
-            "sha256": self.sha256,
-            "size_bytes": self.size_bytes,
-            "media_type": self.media_type,
-            "provenance": to_jsonable(self.provenance),
-            "source": self.source.to_dict(),
-        }
-
 
 @dataclass(frozen=True, slots=True)
 class PseudopotentialSetIdentity:
@@ -86,9 +63,6 @@ class PseudopotentialSetIdentity:
     citation: str
     policy: JsonDict
 
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
-
 
 @dataclass(frozen=True, slots=True)
 class RuntimeAssetIdentity:
@@ -99,18 +73,12 @@ class RuntimeAssetIdentity:
     model: JsonDict
     files: tuple[JsonDict, ...]
 
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
-
 
 @dataclass(frozen=True, slots=True)
 class RuntimeIdentity:
     core_version: str
     models: tuple[JsonDict, ...] = ()
     assets: tuple[RuntimeAssetIdentity, ...] = ()
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,15 +90,48 @@ class DftInputData:
     manifest: JsonDict
     schema_version: Literal[1] = 1
 
-    def to_dict(self) -> JsonDict:
-        return {
-            "schema_version": self.schema_version,
-            "artifacts": [artifact.to_dict() for artifact in self.artifacts],
-            "pseudopotential_set": self.pseudopotential_set.to_dict(),
-            "runtime": self.runtime.to_dict(),
-            "citations": list(self.citations),
-            "manifest": to_jsonable(self.manifest),
-        }
+
+@to_portable.register(GeneratedContent)
+def _generated_content_portable(content: GeneratedContent) -> JsonDict:
+    return {"kind": "generated", "identity": content.identity}
+
+
+@to_portable.register(InstalledArtifactReference)
+def _installed_artifact_reference_portable(
+    reference: InstalledArtifactReference,
+) -> JsonDict:
+    return {
+        "kind": "installed",
+        "asset_id": reference.asset_id,
+        "asset_version": reference.asset_version,
+        "preparation_fingerprint": reference.preparation_fingerprint,
+        "path": reference.path,
+    }
+
+
+@to_portable.register(InputArtifact)
+def _input_artifact_portable(artifact: InputArtifact) -> JsonDict:
+    return {
+        "path": artifact.path,
+        "role": artifact.role,
+        "sha256": artifact.sha256,
+        "size_bytes": artifact.size_bytes,
+        "media_type": artifact.media_type,
+        "provenance": to_jsonable(artifact.provenance),
+        "source": to_portable(artifact.source),
+    }
+
+
+@to_portable.register(DftInputData)
+def _dft_input_data_portable(input_data: DftInputData) -> JsonDict:
+    return {
+        "schema_version": input_data.schema_version,
+        "artifacts": [to_portable(artifact) for artifact in input_data.artifacts],
+        "pseudopotential_set": to_portable(input_data.pseudopotential_set),
+        "runtime": to_portable(input_data.runtime),
+        "citations": list(input_data.citations),
+        "manifest": to_jsonable(input_data.manifest),
+    }
 
 
 def assemble_dft_input_data(
@@ -226,32 +227,32 @@ def assemble_dft_input_data(
     citations = tuple(dict.fromkeys((pseudo_set.citation, *runtime_citations)))
     manifest = {
         "source": {
-            **source.to_dict(),
+            **to_portable(source),
             "content": None,
             "path": artifacts[0].path,
         },
         "canonical_structure": {
             "path": "structure/canonical.cif",
-            "metadata": normalized_structure.canonical_structure.to_dict(),
+            "metadata": to_portable(normalized_structure.canonical_structure),
         },
-        "intent": intent.to_dict(),
-        "hints": hints.to_dict(),
+        "intent": to_portable(intent),
+        "hints": to_portable(hints),
         "records": {
-            "analysis": analysis.to_dict(),
-            "advice": advice.to_dict(),
-            "k_points": k_points.to_dict(),
-            "selection": selection.to_dict(),
+            "analysis": to_portable(analysis),
+            "advice": to_portable(advice),
+            "k_points": to_portable(k_points),
+            "selection": to_portable(selection),
             "generated_files": [
                 {"path": item.path, "role": item.role} for item in generated_files
             ],
         },
         "selected_artifacts": [
-            artifact.to_dict()
+            to_portable(artifact)
             for artifact in artifacts
             if artifact.role == "pseudopotential"
         ],
-        "pseudopotential_set": pseudo_set.to_dict(),
-        "runtime": runtime.to_dict(),
+        "pseudopotential_set": to_portable(pseudo_set),
+        "runtime": to_portable(runtime),
         "citations": list(citations),
     }
     return DftInputData(

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from goldilocks_core.publication import Publication
-from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.serialization import to_jsonable, to_portable
 from goldilocks_core.types import JsonDict
 
 if TYPE_CHECKING:
@@ -30,15 +30,15 @@ class Records(Mapping[type, Any]):
     def __len__(self) -> int:
         return len(self._records)
 
-    def to_dict(self) -> JsonDict:
-        from goldilocks_core.runtime.registry import record_type_id
 
-        return {
-            record_type_id(record_type): (
-                record.to_dict() if hasattr(record, "to_dict") else to_jsonable(record)
-            )
-            for record_type, record in self._records.items()
-        }
+@to_portable.register(Records)
+def _records_portable(records: Records) -> JsonDict:
+    from goldilocks_core.runtime.registry import record_type_id
+
+    return {
+        record_type_id(record_type): to_portable(record)
+        for record_type, record in records.items()
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,14 +60,16 @@ class ComputationResult:
     publication: Publication | None = None
     schema_version: int = field(default=1, init=False)
 
-    def to_dict(self) -> JsonDict:
-        return {
-            "schema_version": self.schema_version,
-            "draft": self.draft.to_dict(),
-            "task": self.task,
-            "task_revision": self.task_revision,
-            "selection": self.selection.to_dict(),
-            "records": self.records.to_dict(),
-            "warnings": list(self.warnings),
-            "publication": to_jsonable(self.publication),
-        }
+
+@to_portable.register(ComputationResult)
+def _computation_result_portable(result: ComputationResult) -> JsonDict:
+    return {
+        "schema_version": result.schema_version,
+        "draft": to_portable(result.draft),
+        "task": result.task,
+        "task_revision": result.task_revision,
+        "selection": to_portable(result.selection),
+        "records": to_portable(result.records),
+        "warnings": list(result.warnings),
+        "publication": to_jsonable(result.publication),
+    }

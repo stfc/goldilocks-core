@@ -29,6 +29,7 @@ from goldilocks_core.result import ComputationResult
 from goldilocks_core.runtime import Runtime, Service, compute
 from goldilocks_core.runtime.registry import resolve_output_types
 from goldilocks_core.selection import SelectionRecord
+from goldilocks_core.serialization import to_portable
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -114,7 +115,7 @@ def main() -> None:
         with Service() as service:
             capabilities = service.capabilities()
         if args.json:
-            print(json.dumps(capabilities.to_dict(), indent=2, sort_keys=True))
+            print(json.dumps(to_portable(capabilities), indent=2, sort_keys=True))
         else:
             print(f"Goldilocks Core {capabilities.core_version}")
             for task in capabilities.tasks:
@@ -132,7 +133,7 @@ def main() -> None:
             print(f"{parser.prog}: error: {error}", file=sys.stderr)
             raise SystemExit(2) from error
         if args.json:
-            print(json.dumps(inspection.to_dict(), indent=2, sort_keys=True))
+            print(json.dumps(to_portable(inspection), indent=2, sort_keys=True))
         else:
             print(f"structure: {inspection.source.name}")
             print(f"formula: {inspection.structure.reduced_formula}")
@@ -177,7 +178,7 @@ def main() -> None:
         raise SystemExit(2) from error
 
     if args.json:
-        print(json.dumps(output.to_dict(), indent=2, sort_keys=True))
+        print(json.dumps(to_portable(output), indent=2, sort_keys=True))
         return
 
     _print_human_summary(output)

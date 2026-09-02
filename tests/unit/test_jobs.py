@@ -24,6 +24,7 @@ from goldilocks_core.generation.files import GeneratedFiles
 from goldilocks_core.ml.model_registry import load_default_qrf_config
 from goldilocks_core.ml.models import StructureFeatureVector
 from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.serialization import to_portable
 
 
 def make_structure() -> Structure:
@@ -81,7 +82,7 @@ def test_compute_returns_only_explicitly_selected_records() -> None:
 
     result = compute(request)
 
-    assert request.to_dict()["selection"] == {
+    assert to_portable(request)["selection"] == {
         "records": ["analysis", "advice"],
     }
     assert tuple(result.records) == (StructureAnalysisRecord, ParameterAdvice)
@@ -97,7 +98,7 @@ def test_compute_reuses_caller_owned_runtime() -> None:
         second = compute(request, runtime=runtime)
         assert runtime.is_closed is False
 
-    assert first.to_dict() == second.to_dict()
+    assert to_portable(first) == to_portable(second)
     assert runtime.is_closed is True
 
 

@@ -9,7 +9,7 @@ from goldilocks_core.advice.pseudo import PseudopotentialRequirements
 from goldilocks_core.functionals import normalize_functional_label
 from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.metadata import PseudoMetadata
-from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.serialization import to_jsonable, to_portable
 from goldilocks_core.types import JsonDict, RelativisticTreatment
 from goldilocks_core.validation import (
     validate_finite_positive,
@@ -70,22 +70,28 @@ class PseudopotentialSelection:
                 "metadata"
             )
 
-    def to_dict(self) -> JsonDict:
-        document = to_jsonable(self)
-        document.pop("filepath")
-        return document
-
 
 @dataclass(frozen=True, slots=True)
 class SelectionRecord:
     pseudopotentials: tuple[PseudopotentialSelection, ...]
     warnings: tuple[str, ...] = ()
 
-    def to_dict(self) -> JsonDict:
-        return {
-            "pseudopotentials": [item.to_dict() for item in self.pseudopotentials],
-            "warnings": list(self.warnings),
-        }
+
+@to_portable.register(PseudopotentialSelection)
+def _pseudopotential_selection_portable(
+    selection: PseudopotentialSelection,
+) -> JsonDict:
+    document = to_jsonable(selection)
+    document.pop("filepath")
+    return document
+
+
+@to_portable.register(SelectionRecord)
+def _selection_record_portable(record: SelectionRecord) -> JsonDict:
+    return {
+        "pseudopotentials": [to_portable(item) for item in record.pseudopotentials],
+        "warnings": list(record.warnings),
+    }
 
 
 LANTHANIDES = frozenset("La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu".split())

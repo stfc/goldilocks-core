@@ -13,8 +13,6 @@ from goldilocks_core.advice.soc import SpinOrbitAdvice, advise_spin_orbit
 from goldilocks_core.advice.vdw import VdwAdvice, advise_vdw
 from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.calculation import CalculationHints, CalculationIntent
-from goldilocks_core.serialization import to_jsonable
-from goldilocks_core.types import JsonDict
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,9 +23,6 @@ class ParameterAdvice:
     pseudopotential_requirements: PseudopotentialRequirements
     convergence: ConvergenceAdvice
     vdw: VdwAdvice
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 def advise_parameters(

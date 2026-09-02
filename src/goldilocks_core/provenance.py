@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from goldilocks_core.serialization import to_jsonable
 from goldilocks_core.types import JsonDict, ProvenanceSource
 
 
@@ -14,6 +13,3 @@ class Provenance:
     confidence: float | None = None
     details: JsonDict | None = None
     warnings: tuple[str, ...] = ()
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)

@@ -3,11 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from goldilocks_core.functionals import normalize_functional_label
-from goldilocks_core.serialization import to_jsonable
 from goldilocks_core.types import (
     CalcTask,
     CodeName,
-    JsonDict,
     KPointGrid,
     PseudoAccuracy,
     PseudoType,
@@ -92,9 +90,6 @@ class CalculationIntent:
                 f"got {self.functional!r}"
             )
         object.__setattr__(self, "functional", functional)
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,6 +206,3 @@ class CalculationHints:
     @property
     def vdw(self) -> VdwHints:
         return VdwHints(use_vdw=self.use_vdw, vdw_method=self.vdw_method)
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)

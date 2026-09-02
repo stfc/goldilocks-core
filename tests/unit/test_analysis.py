@@ -7,6 +7,7 @@ from goldilocks_core.analysis import (
     SymmetryUnavailable,
     analyze_structure,
 )
+from goldilocks_core.serialization import to_portable
 
 
 def test_analyze_structure_reports_composition_and_element_facts() -> None:
@@ -115,7 +116,7 @@ def test_analyze_structure_records_symmetry_unavailable_when_spglib_fails(
     assert analysis.crystal_system.reason
 
     # SymmetryUnavailable must round-trip through the manifest serializer.
-    serialized = analysis.to_dict()
+    serialized = to_portable(analysis)
     assert serialized["crystal_system"] == {"reason": analysis.crystal_system.reason}
 
 

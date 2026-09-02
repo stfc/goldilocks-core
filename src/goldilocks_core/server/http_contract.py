@@ -12,6 +12,7 @@ from goldilocks_core.io.structures import StructureInspection
 from goldilocks_core.publication import Publisher
 from goldilocks_core.runtime.capabilities import Capabilities
 from goldilocks_core.runtime.service import Service
+from goldilocks_core.serialization import to_portable
 from goldilocks_core.server.request import (
     RequestError,
     compute_from_dict,
@@ -53,7 +54,7 @@ def install_scientific_routes(app: FastAPI, service: Service) -> None:
 
     @app.get("/capabilities", response_model=Capabilities)
     def capabilities() -> dict[str, Any]:
-        return service.capabilities().to_dict()
+        return to_portable(service.capabilities())
 
     @app.post(
         "/inspect",
@@ -67,7 +68,7 @@ def install_scientific_routes(app: FastAPI, service: Service) -> None:
             if isinstance(error, RequestError):
                 raise
             raise RequestError(str(error)) from error
-        return service.inspect_structure(source).to_dict()
+        return to_portable(service.inspect_structure(source))
 
     @app.post(
         "/compute",
@@ -85,7 +86,7 @@ def install_scientific_routes(app: FastAPI, service: Service) -> None:
             raise RequestError(str(error)) from error
         result = service.compute(request)
         result_payload = json.dumps(
-            result_document.model_validate(result.to_dict()).model_dump(
+            result_document.model_validate(to_portable(result)).model_dump(
                 mode="json", exclude_unset=True
             ),
             separators=(",", ":"),

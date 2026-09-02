@@ -15,6 +15,7 @@ from goldilocks_core.kmesh.resolve import KPointSelection
 from goldilocks_core.ml.models import ModelSpec
 from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
 from goldilocks_core.selection import SelectionRecord
+from goldilocks_core.serialization import to_portable
 
 
 def make_structure() -> Structure:
@@ -42,7 +43,7 @@ def test_preset_selection_serializes_one_named_preset() -> None:
 
     selection = PresetSelection("recommend")
 
-    assert selection.to_dict() == {"preset": "recommend"}
+    assert to_portable(selection) == {"preset": "recommend"}
 
 
 def test_preset_selection_rejects_an_empty_name() -> None:
@@ -57,7 +58,7 @@ def test_record_selection_serializes_stable_record_ids() -> None:
 
     selection = RecordSelection((StructureAnalysisRecord, ParameterAdvice))
 
-    assert selection.to_dict() == {"records": ["analysis", "advice"]}
+    assert to_portable(selection) == {"records": ["analysis", "advice"]}
 
 
 def test_record_selection_owns_an_immutable_record_tuple() -> None:
@@ -106,7 +107,7 @@ def test_pseudo_metadata_serialization_is_a_payload_free_review_snapshot() -> No
         },
     )
 
-    document = metadata.to_dict()
+    document = to_portable(metadata)
 
     assert document["filename"] == "Si.UPF"
     assert document["source_identifier"] == "synthetic/Si.UPF"
@@ -131,7 +132,7 @@ def test_model_spec_serialization_is_a_payload_free_review_snapshot() -> None:
         citation="Stable model citation.",
     )
 
-    document = model.to_dict()
+    document = to_portable(model)
 
     assert document == {
         "name": "operator-model",
@@ -169,7 +170,7 @@ def test_compute_request_serializes_the_draft_and_selection() -> None:
         selection=PresetSelection("generate"),
     )
 
-    data = request.to_dict()
+    data = to_portable(request)
     assert data["selection"] == {"preset": "generate"}
     assert data["draft"]["hints"]["k_grid"] == [2, 2, 1]
 
@@ -198,8 +199,8 @@ def test_result_retains_the_normalized_calculation_draft(tmp_path) -> None:
 
     assert result.draft.structure.source.origin == "path"
     assert result.draft.structure.structure.reduced_formula == "Si"
-    assert result.to_dict()["draft"]["structure"]["source"]["name"] == "Si.cif"
-    assert str(tmp_path) not in str(result.to_dict())
+    assert to_portable(result)["draft"]["structure"]["source"]["name"] == "Si.cif"
+    assert str(tmp_path) not in str(to_portable(result))
 
 
 def test_computation_result_serializes_records_without_scf_projection() -> None:
@@ -226,7 +227,7 @@ def test_computation_result_serializes_records_without_scf_projection() -> None:
         warnings=("Observed condition.",),
     )
 
-    data = result.to_dict()
+    data = to_portable(result)
     assert data["schema_version"] == 1
     assert data["task"] == "scf_single_point"
     assert data["task_revision"] == "1"

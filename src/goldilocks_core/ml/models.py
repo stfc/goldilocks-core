@@ -6,7 +6,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 
-from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.serialization import to_portable
 from goldilocks_core.types import JsonDict, ModelSource, ModelType
 
 
@@ -14,9 +14,6 @@ from goldilocks_core.types import JsonDict, ModelSource, ModelType
 class StructureFeatureVector:
     values: np.ndarray
     feature_names: list[str]
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 @dataclass(slots=True)
@@ -33,18 +30,20 @@ class ModelSpec:
     licence_text: str | None = None
     citation: str | None = None
 
-    def to_dict(self) -> JsonDict:
-        return {
-            "name": self.name,
-            "version": self.version,
-            "model_type": self.model_type,
-            "target": self.target,
-            "feature_set": self.feature_set,
-            "source": self.source,
-            "revision": self.revision,
-            "licence": self.licence,
-            "citation": self.citation,
-        }
+
+@to_portable.register(ModelSpec)
+def _model_spec_portable(spec: ModelSpec) -> JsonDict:
+    return {
+        "name": spec.name,
+        "version": spec.version,
+        "model_type": spec.model_type,
+        "target": spec.target,
+        "feature_set": spec.feature_set,
+        "source": spec.source,
+        "revision": spec.revision,
+        "licence": spec.licence,
+        "citation": spec.citation,
+    }
 
 
 def load_model(spec: ModelSpec) -> object:

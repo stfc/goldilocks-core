@@ -38,6 +38,7 @@ from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
 from goldilocks_core.pseudo.registry import load_tables
 from goldilocks_core.publication import Publisher
 from goldilocks_core.selection import PseudopotentialSelection, SelectionRecord
+from goldilocks_core.serialization import to_portable
 
 
 def test_generation_assembles_complete_dft_input_data_without_host_paths(
@@ -106,7 +107,7 @@ def test_generation_assembles_complete_dft_input_data_without_host_paths(
     assert input_data.manifest["records"]["generated_files"] == [
         {"path": "inputs/qe.in", "role": "input"}
     ]
-    serialized = input_data.to_dict()
+    serialized = to_portable(input_data)
     assert str(tmp_path) not in str(serialized)
     assert "filepath" not in str(serialized)
 
@@ -520,7 +521,7 @@ def test_pseudo_root_publication_uses_explicit_legal_sidecar(tmp_path: Path) -> 
         files["licences/explicit-local-pseudopotentials.txt"] == licence_text.encode()
     )
     assert citation.encode() in files["CITATIONS.md"]
-    serialized_result = json.dumps(result.to_dict())
+    serialized_result = json.dumps(to_portable(result))
     assert str(tmp_path) not in serialized_result
     assert licence_text not in serialized_result
     assert "operator-library/Si.custom.UPF" in serialized_result
@@ -1359,7 +1360,7 @@ def test_service_compute_applies_output_targets_and_returns_publication_info(
     assert published.publication.kind == "directory"
     assert published.publication.path == str(destination.resolve())
     assert published.publication.files[-1] == "structure/canonical.cif"
-    assert published.to_dict()["publication"]["manifest_sha256"]
+    assert to_portable(published)["publication"]["manifest_sha256"]
     assert memory.publication is None
     assert not (tmp_path / "recommendation").exists()
 
@@ -1511,7 +1512,7 @@ url = "{licence_source.as_uri()}"
     files = {item.path: item.content for item in Publisher(store).files(input_data)}
     assert files["pseudo/Si.UPF"] == pseudo_bytes
     assert files["licences/fixture-table.txt"] == b"Installed exact licence\n"
-    assert str(store.root) not in str(input_data.to_dict())
+    assert str(store.root) not in str(to_portable(input_data))
 
     manifest_path = (
         store.root / "pseudopotentials" / "fixture-table" / "1" / "manifest.json"
@@ -1645,7 +1646,7 @@ def test_model_runtime_identities_licences_and_citations_are_published(
     assert {path: files[path] for path in expected_licences} == expected_licences
     published_manifest = json.loads(files["goldilocks.json"])
     assert published_manifest["runtime"]["assets"] == [
-        identity.to_dict() for identity in input_data.runtime.assets
+        to_portable(identity) for identity in input_data.runtime.assets
     ]
     assert all(
         "preparation_fingerprint" in identity
@@ -1673,7 +1674,7 @@ def test_model_runtime_identities_licences_and_citations_are_published(
     assert set(input_data.citations) >= expected_citations
     assert input_data.citations.count(model_citation) == 1
     assert set(input_data.citations).isdisjoint(licence_urls)
-    assert str(store.root) not in str(input_data.to_dict())
+    assert str(store.root) not in str(to_portable(input_data))
 
 
 def test_custom_registry_same_id_version_source_drift_is_rejected(
@@ -1836,7 +1837,7 @@ def test_standalone_metallicity_publishes_only_its_explicit_material(
     assert files["licences/custom-metallicity-model.txt"] == (
         b"Operator metallicity model terms.\n"
     )
-    assert str(tmp_path) not in str(input_data.to_dict())
+    assert str(tmp_path) not in str(to_portable(input_data))
 
 
 def test_custom_kmesh_model_publishes_its_explicit_material_not_defaults(
@@ -1887,8 +1888,8 @@ def test_custom_kmesh_model_publishes_its_explicit_material_not_defaults(
     )
     files = {item.path: item.content for item in Publisher(store).files(input_data)}
     assert files["licences/custom-kmesh-model.txt"] == licence_text.encode()
-    assert str(tmp_path) not in str(input_data.to_dict())
-    serialized_result = json.dumps(result.to_dict())
+    assert str(tmp_path) not in str(to_portable(input_data))
+    serialized_result = json.dumps(to_portable(result))
     assert str(tmp_path) not in serialized_result
     assert licence_text not in serialized_result
 
@@ -2052,7 +2053,7 @@ def test_computation_result_serializes_input_data_without_payloads_or_host_paths
     with Service() as service:
         result = service.compute(request)
 
-    document = result.to_dict()
+    document = to_portable(result)
     json.dumps(document)
     serialized = str(document)
     assert str(tmp_path) not in serialized

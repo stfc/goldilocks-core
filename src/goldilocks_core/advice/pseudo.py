@@ -7,9 +7,7 @@ from goldilocks_core.advice.soc import SpinOrbitAdvice
 from goldilocks_core.calculation import CalculationIntent, PseudoHints
 from goldilocks_core.functionals import normalize_functional_label
 from goldilocks_core.provenance import Provenance
-from goldilocks_core.serialization import to_jsonable
 from goldilocks_core.types import (
-    JsonDict,
     PseudoAccuracy,
     PseudoType,
     RelativisticTreatment,
@@ -50,9 +48,6 @@ class PseudopotentialRequirements:
         validate_relativistic_mode(
             self.relativistic, "PseudopotentialRequirements.relativistic"
         )
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 def advise_pseudopotential_requirements(

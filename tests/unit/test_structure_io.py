@@ -18,6 +18,7 @@ from goldilocks_core import (
 )
 from goldilocks_core.io.structures import StructureInputError
 from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.serialization import to_portable
 
 
 def make_si_structure() -> Structure:
@@ -42,8 +43,8 @@ def test_inline_cif_inspection_preserves_source_and_canonical_structure() -> Non
     assert inspection.structure.site_count == 1
     canonical = Structure.from_str(inspection.canonical_cif, fmt="cif")
     assert canonical.matches(make_si_structure())
-    assert isinstance(json.dumps(inspection.to_dict()), str)
-    assert "pymatgen.core.structure" not in str(inspection.to_dict())
+    assert isinstance(json.dumps(to_portable(inspection)), str)
+    assert "pymatgen.core.structure" not in str(to_portable(inspection))
 
 
 def test_inline_cif_without_extension_or_hint_resolves_from_content() -> None:
@@ -77,7 +78,7 @@ def test_poscar_filename_preserves_source_metadata_before_content_inference(
         inspection = service.inspect_structure(source)
 
     source_bytes = content.encode()
-    assert inspection.source.to_dict() == {
+    assert to_portable(inspection.source) == {
         "origin": origin,
         "name": name,
         "format": "poscar",
@@ -113,7 +114,7 @@ def test_path_inspection_reads_once_without_serializing_the_host_path(
     assert inspection.source.name == "POSCAR"
     assert inspection.source.format == "poscar"
     assert inspection.source.content == content
-    assert str(tmp_path) not in str(inspection.to_dict())
+    assert str(tmp_path) not in str(to_portable(inspection))
 
 
 def test_path_inspection_rejects_non_utf8_content(tmp_path: Path) -> None:
@@ -130,7 +131,7 @@ def test_in_memory_inspection_has_truthful_generated_source_metadata() -> None:
     with Service() as service:
         inspection = service.inspect_structure(InMemoryStructureSource(structure))
 
-    assert inspection.source.to_dict() == {
+    assert to_portable(inspection.source) == {
         "origin": "generated",
         "name": "generated-structure",
         "format": "pymatgen",
@@ -210,19 +211,19 @@ def test_public_api_exposes_only_explicit_structure_source_variants() -> None:
 def test_structure_source_variants_have_explicit_serialized_shapes() -> None:
     structure = make_si_structure()
 
-    assert InlineStructureSource(
-        name="Si.cif", content="data_Si", format="cif"
-    ).to_dict() == {
+    assert to_portable(
+        InlineStructureSource(name="Si.cif", content="data_Si", format="cif")
+    ) == {
         "kind": "inline",
         "name": "Si.cif",
         "content": "data_Si",
         "format": "cif",
     }
-    assert PathStructureSource(Path("structures/Si.cif")).to_dict() == {
+    assert to_portable(PathStructureSource(Path("structures/Si.cif"))) == {
         "kind": "path",
         "path": "structures/Si.cif",
     }
-    assert InMemoryStructureSource(structure).to_dict() == {
+    assert to_portable(InMemoryStructureSource(structure)) == {
         "kind": "in_memory",
         "structure": structure.as_dict(),
     }

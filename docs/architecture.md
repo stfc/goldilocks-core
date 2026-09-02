@@ -23,14 +23,22 @@ resolution, input rendering, and publication touch the filesystem.
 | --- | --- |
 | `assets/` | Immutable asset records, profiles, download integrity, transactional installation, and verification. |
 | `ml/model_registry.py` | Complete model runtime configuration and model asset declarations. |
+| `ml/models.py` | `ModelSpec` and feature-vector records for registered models. |
 | `pseudo/registry.py`, `pseudo/import_*` | Complete pseudopotential table declarations and provider-specific normalization. |
+| `pseudo/metadata.py` | The pseudopotential metadata record and its cutoffs. |
 | `pseudo/source.py` | One source-resolution interface for request metadata, operator roots, and installed tables. |
-| `contracts/` | Data records and serialization shared between stages. |
-| `runtime/graph.py` | Stage-agnostic, type-keyed DAG executor (`TaskGraph`/`Stage`/`Preset`/`execute`). |
+| `provenance.py`, `types.py`, `validation.py` | Shared provenance record, shared type vocabulary, and operator-input validators. |
+| `calculation.py` | `CalculationIntent`, `CalculationHints`, and the per-stage hint views. |
+| `request.py` | `CalculationDraft`, `ComputeRequest`, and selection records. |
+| `result.py` | `ComputationResult` and the `Records` mapping. |
+| `serialization.py` | `to_jsonable` (complete form) and `to_portable` (publication/CLI projection). |
+| `runtime/graph.py` | Stage-agnostic, type-keyed DAG executor (`TaskGraph`/`Stage`/`Preset`/`execute`) and its capability records. |
 | `runtime/task.py` | `GraphHandler`: a task graph, context builder, and factual warning collector. |
 | `runtime/scf.py` | The SCF Calculation Task, stage graph, Presets, context, and warning collection. |
 | `runtime/models.py` | `Runtime`: kmesh/metallicity model lifecycle (load/reset/close), exposed as read-only services. |
 | `runtime/dispatch.py` | `Dispatcher`: task registry and dispatch by `intent.task` through `GraphHandler`s. |
+| `runtime/registry.py` | Stable record-ID registry and output-type resolution shared by transports. |
+| `runtime/capabilities.py` | Discovery records and the `Capabilities` assembly. |
 | `runtime/jobs.py` | Short-lived `compute` convenience entry point. |
 | `runtime/service.py` | `Service`: process-owned lifecycle, locking, Capabilities, Structure Inspection, Compute, and publication. |
 | `io/structures.py` | One Structure Source normalization path for Inspection and Compute. |
@@ -39,9 +47,10 @@ resolution, input rendering, and publication touch the filesystem.
 | `kmesh/` | K-point resolution and mesh mathematics. |
 | `selection.py` | Pseudopotentials and cutoffs. |
 | `generation/` | Calculation-specific file generation. |
+| `generation/files.py` | The `GeneratedFile` record shared by writers and the registry. |
 | `input_data.py` | Assembly of complete DFT Input Data from trusted Records and asset references. |
 | `publication.py` | One deterministic Ready-to-run Output layout for directories and ZIP archives. |
-| `server/request.py` | Shared HTTP/MCP conversion into Core contracts. |
+| `server/request.py` | Shared HTTP/MCP conversion into Core Records. |
 | `server/wire.py` | Strict request shapes and mechanically derived Core response schemas. |
 | `server/http.py`, `server/http_contract.py` | Optional HTTP lifecycle, errors, and scientific route adapter. |
 | `server/mcp.py` | Optional local stdio MCP adapter. |
@@ -55,9 +64,10 @@ class, and callers can invoke any stage function directly.
 ## Standard workflow
 
 `ComputeRequest` carries a `CalculationDraft` and exactly one
-`PresetSelection` or `RecordSelection`. `Service.compute` dispatches it through
-a process-owned `Runtime` and serializes execution so lazy model state is safe
-to reuse. `recommend` and `generate` are DAG Preset IDs only.
+`PresetSelection` or `RecordSelection`. `Service.compute` dispatches it
+concurrently over a process-owned `Runtime`; shared model backends
+synchronize only their first lazy load, so model state is safe to reuse.
+`recommend` and `generate` are DAG Preset IDs only.
 
 ```python
 request = ComputeRequest(
@@ -77,8 +87,8 @@ Handlers supply context and collect factual warnings.
 
 Python, CLI, HTTP, and MCP expose Capabilities, Structure Inspection, and
 Compute. `server/request.py` converts strict transport shapes into Core
-contracts; Core constructors validate domain values once. Responses serialize
-Core contracts mechanically.
+Records; Core constructors validate domain values once. Responses serialize
+Core Records mechanically through the portable projection.
 
 HTTP accepts inline structures and stable Pseudopotential Set IDs. Compute
 returns one multipart response containing the canonical `ComputationResult`
@@ -177,6 +187,18 @@ boundaries, concurrency safety, or the task extension model.
 - The SCF handler registers lazily on first dispatch so importing
   `runtime.dispatch` does not pull in stage implementations or their
   `ml.*` dependencies. Explicit registration wins over the default.
+- Code inside the package and the tests import from the module that
+  defines a name — for example
+  `from goldilocks_core.kmesh.resolve import resolve_kpoints` — not from
+  a package `__init__`. Only library users import from `goldilocks_core`
+  itself. This keeps each import cheap: it loads the module you asked
+  for, not the whole package.
+- Serialization has one policy and two serializers: `to_jsonable` is the
+  complete form for tests and internals; `to_portable` is the portable
+  projection for publication and CLI output, dropping host-local paths
+  and licence text. The archive manifest and CLI `--json` serialize
+  through `to_portable`, so identical computations produce identical
+  bytes on any machine.
 - `Service` executes Computations concurrently over one process-owned
   `Runtime`. Model backends synchronize only their first lazy load, and the
   `Dispatcher` synchronizes lazy default-task registration.
@@ -187,7 +209,7 @@ boundaries, concurrency safety, or the task extension model.
 - Importing `goldilocks_core` never imports FastAPI or the MCP SDK.
   The `[http]` and `[mcp]` extras are lazy boundaries.
 - `server/wire.py` rejects unknown fields and bad transport types;
-  `server/request.py` constructs Core contracts without revalidating Records.
+  `server/request.py` constructs Core Records without revalidating them.
 - `DimensionalityClassificationError` is an `Exception`, not a
   `ValueError`, so HTTP maps it explicitly to 422.
 - MCP maps only known stage errors to `ToolError`; internal defects

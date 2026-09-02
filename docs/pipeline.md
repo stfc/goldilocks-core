@@ -1,7 +1,7 @@
 # Pipeline and stage behavior
 
-Use one `Service` for repeated work. It owns lazy model state, serializes
-computation, and closes owned resources.
+Use one `Service` for repeated work. It owns lazy model state, executes
+Computations concurrently over that shared state, and closes owned resources.
 
 ```python
 from goldilocks_core import (
@@ -47,8 +47,11 @@ contracts. It owns a short-lived Runtime unless the caller supplies one.
 Use `RecordSelection` for a minimal subgraph:
 
 ```python
-from goldilocks_core import RecordSelection
-from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
+from goldilocks_core import (
+    KPointSelection,
+    RecordSelection,
+    StructureAnalysisRecord,
+)
 
 request = ComputeRequest(
     draft,

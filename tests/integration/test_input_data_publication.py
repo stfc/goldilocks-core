@@ -78,7 +78,7 @@ def test_generation_assembles_complete_dft_input_data_without_host_paths(
         result = service.compute(request)
 
     input_data = result.records[DftInputData]
-    artifacts = {artifact["path"]: artifact for artifact in input_data.artifacts}
+    artifacts = {artifact["path"]: artifact for artifact in input_data["artifacts"]}
     assert set(artifacts) == {
         "source/original.cif",
         "structure/canonical.cif",
@@ -93,12 +93,12 @@ def test_generation_assembles_complete_dft_input_data_without_host_paths(
         artifacts["licences/explicit-local-pseudopotentials.txt"]["source"]["content"]
         == b"Fixture licence text\n"
     )
-    assert input_data.pseudopotential_set["id"] == "explicit-local"
-    assert input_data.citations == ("Fixture pseudopotential citation.",)
-    assert input_data.runtime["core_version"]
-    assert input_data.manifest["intent"]["code"] == "quantum_espresso"
-    assert input_data.manifest["hints"]["k_grid"] == [3, 3, 3]
-    assert input_data.manifest["records"]["generated_files"] == [
+    assert input_data["pseudopotential_set"]["id"] == "explicit-local"
+    assert input_data["citations"] == ("Fixture pseudopotential citation.",)
+    assert input_data["runtime"]["core_version"]
+    assert input_data["manifest"]["intent"]["code"] == "quantum_espresso"
+    assert input_data["manifest"]["hints"]["k_grid"] == [3, 3, 3]
+    assert input_data["manifest"]["records"]["generated_files"] == [
         {"path": "inputs/qe.in", "role": "input"}
     ]
     serialized = to_portable(input_data)
@@ -232,19 +232,21 @@ def test_selected_pseudo_binds_to_one_exact_same_element_candidate(
     input_data = result.records[DftInputData]
     pseudo = next(
         artifact
-        for artifact in input_data.artifacts
+        for artifact in input_data["artifacts"]
         if artifact["role"] == "pseudopotential"
     )
     licence = next(
-        artifact for artifact in input_data.artifacts if artifact["role"] == "licence"
+        artifact
+        for artifact in input_data["artifacts"]
+        if artifact["role"] == "licence"
     )
     assert pseudo["source"]["kind"] == "generated"
     assert pseudo["source"]["identity"] == "a-source"
     assert pseudo["source"]["content"] == b"selected UPF\n"
     assert licence["source"]["kind"] == "generated"
     assert licence["source"]["content"] == b"a-source legal terms\n"
-    assert input_data.pseudopotential_set["licence"] == "a-source-licence"
-    assert input_data.citations == ("a-source citation",)
+    assert input_data["pseudopotential_set"]["licence"] == "a-source-licence"
+    assert input_data["citations"] == ("a-source citation",)
 
 
 def test_selected_pseudo_rejects_ambiguous_exact_metadata_candidates(
@@ -402,7 +404,7 @@ def test_publisher_builds_golden_layout_with_deterministic_zip_parity(
     assert manifest["citations"] == ["Fixture pseudopotential citation."]
     assert manifest["files"]["pseudo/Si.UPF"] == {
         "role": "pseudopotential",
-        "sha256": input_data.artifacts[3]["sha256"],
+        "sha256": input_data["artifacts"][3]["sha256"],
         "size_bytes": len(pseudo_bytes),
     }
     assert first_archive == second_archive
@@ -510,8 +512,8 @@ def test_pseudo_root_publication_uses_explicit_legal_sidecar(tmp_path: Path) -> 
 
     input_data = result.records[DftInputData]
     files = {item.path: item.content for item in Publisher().files(input_data)}
-    assert input_data.pseudopotential_set["licence"] == "Operator-Licence-1.0"
-    assert input_data.citations == (citation,)
+    assert input_data["pseudopotential_set"]["licence"] == "Operator-Licence-1.0"
+    assert input_data["citations"] == (citation,)
     assert files["pseudo/Si.custom.UPF"] == upf.read_bytes()
     assert (
         files["licences/explicit-local-pseudopotentials.txt"] == licence_text.encode()
@@ -525,7 +527,7 @@ def test_pseudo_root_publication_uses_explicit_legal_sidecar(tmp_path: Path) -> 
 
 def test_publisher_rejects_unsafe_and_duplicate_logical_paths(tmp_path: Path) -> None:
     input_data, _, _ = _explicit_input_data(tmp_path)
-    template = input_data.artifacts[0]
+    template = input_data["artifacts"][0]
     unsafe = {
         **template,
         "path": "../escaped.cif",
@@ -539,13 +541,13 @@ def test_publisher_rejects_unsafe_and_duplicate_logical_paths(tmp_path: Path) ->
     reserved = {**template, "path": "goldilocks.json"}
 
     cases = (
-        (replace(input_data, artifacts=(unsafe,)), "Unsafe publication path"),
+        ({**input_data, "artifacts": (unsafe,)}, "Unsafe publication path"),
         (
-            replace(input_data, artifacts=(*input_data.artifacts, duplicate)),
+            {**input_data, "artifacts": (*input_data["artifacts"], duplicate)},
             "Duplicate publication path",
         ),
         (
-            replace(input_data, artifacts=(*input_data.artifacts, reserved)),
+            {**input_data, "artifacts": (*input_data["artifacts"], reserved)},
             "Duplicate publication path",
         ),
     )
@@ -558,14 +560,14 @@ def test_publisher_rejects_control_characters_before_writing_checksums(
     tmp_path: Path,
 ) -> None:
     input_data, _, _ = _explicit_input_data(tmp_path)
-    template = input_data.artifacts[0]
+    template = input_data["artifacts"][0]
     injected = {
         **template,
         "path": f"source/structure.cif\n{'0' * 64}  forged/entry",
     }
 
     with pytest.raises(ValueError, match="Unsafe publication path"):
-        Publisher().files(replace(input_data, artifacts=(injected,)))
+        Publisher().files({**input_data, "artifacts": (injected,)})
 
 
 @pytest.mark.parametrize("control", ("\r", "\x00", "\x1f", "\x7f", "\x85"))
@@ -574,12 +576,12 @@ def test_publisher_rejects_every_control_character_in_paths(
 ) -> None:
     input_data, _, _ = _explicit_input_data(tmp_path)
     artifact = {
-        **input_data.artifacts[0],
+        **input_data["artifacts"][0],
         "path": f"source/a{control}b.cif",
     }
 
     with pytest.raises(ValueError, match="Unsafe publication path"):
-        Publisher().files(replace(input_data, artifacts=(artifact,)))
+        Publisher().files({**input_data, "artifacts": (artifact,)})
 
 
 def test_publisher_atomically_writes_explicit_destinations_without_overwrite(
@@ -617,13 +619,13 @@ def test_publisher_atomically_writes_explicit_destinations_without_overwrite(
             )
 
     too_long = {
-        **input_data.artifacts[0],
+        **input_data["artifacts"][0],
         "path": f"source/{'x' * 300}.cif",
     }
     failed_destination = tmp_path / "failed"
     with pytest.raises(OSError):
         publisher.publish(
-            replace(input_data, artifacts=(too_long,)),
+            {**input_data, "artifacts": (too_long,)},
             DirectoryOutput(failed_destination),
         )
     assert not failed_destination.exists()
@@ -1490,9 +1492,11 @@ url = "{licence_source.as_uri()}"
             result = service.compute(request)
     input_data = result.records[DftInputData]
     pseudo = next(
-        item for item in input_data.artifacts if item["role"] == "pseudopotential"
+        item for item in input_data["artifacts"] if item["role"] == "pseudopotential"
     )
-    licence = next(item for item in input_data.artifacts if item["role"] == "licence")
+    licence = next(
+        item for item in input_data["artifacts"] if item["role"] == "licence"
+    )
 
     assert pseudo["source"]["asset_id"] == "pseudopotentials/fixture-table"
     assert pseudo["source"]["asset_version"] == "1"
@@ -1500,8 +1504,8 @@ url = "{licence_source.as_uri()}"
     assert licence["source"]["asset_id"] == "pseudopotentials/fixture-table"
     assert licence["source"]["asset_version"] == "1"
     assert licence["source"]["path"] == "LICENSE.txt"
-    assert input_data.pseudopotential_set["id"] == "fixture-table"
-    assert input_data.pseudopotential_set["policy"] == {
+    assert input_data["pseudopotential_set"]["id"] == "fixture-table"
+    assert input_data["pseudopotential_set"]["policy"] == {
         "accuracy": "efficiency",
         "provider": "sssp",
         "relativistic": "scalar",
@@ -1606,20 +1610,20 @@ def test_model_runtime_identities_licences_and_citations_are_published(
             result = service.compute(request)
 
     input_data = result.records[DftInputData]
-    assert {item["id"] for item in input_data.runtime["assets"]} == {
+    assert {item["id"] for item in input_data["runtime"]["assets"]} == {
         "models/qrf-kpoints",
         "models/metallicity-cgcnn",
     }
-    assert {model["target"] for model in input_data.runtime["models"]} == {
+    assert {model["target"] for model in input_data["runtime"]["models"]} == {
         "k_distance",
         "metallicity",
     }
     specs = {spec.id: spec for spec in model_asset_specs()}
-    for identity in input_data.runtime["assets"]:
+    for identity in input_data["runtime"]["assets"]:
         spec = specs[identity["id"]]
         installed = store.verify_spec(spec)
         assert identity["preparation_fingerprint"] == spec.preparation_fingerprint
-        assert identity["model"] in input_data.runtime["models"]
+        assert identity["model"] in input_data["runtime"]["models"]
         assert identity["files"] == [
             {
                 "path": file.path,
@@ -1633,7 +1637,7 @@ def test_model_runtime_identities_licences_and_citations_are_published(
         ]
     licence_artifacts = {
         item["path"]: item
-        for item in input_data.artifacts
+        for item in input_data["artifacts"]
         if item["path"] in expected_licences
     }
     assert set(licence_artifacts) == set(expected_licences)
@@ -1645,7 +1649,7 @@ def test_model_runtime_identities_licences_and_citations_are_published(
     assert {path: files[path] for path in expected_licences} == expected_licences
     published_manifest = json.loads(files["goldilocks.json"])
     assert published_manifest["runtime"]["assets"] == [
-        to_portable(identity) for identity in input_data.runtime["assets"]
+        to_portable(identity) for identity in input_data["runtime"]["assets"]
     ]
     assert all(
         "preparation_fingerprint" in identity
@@ -1670,9 +1674,9 @@ def test_model_runtime_identities_licences_and_citations_are_published(
         for file in spec.files
         if file.role == "licence"
     }
-    assert set(input_data.citations) >= expected_citations
-    assert input_data.citations.count(model_citation) == 1
-    assert set(input_data.citations).isdisjoint(licence_urls)
+    assert set(input_data["citations"]) >= expected_citations
+    assert input_data["citations"].count(model_citation) == 1
+    assert set(input_data["citations"]).isdisjoint(licence_urls)
     assert str(store.root) not in str(to_portable(input_data))
 
 
@@ -1716,7 +1720,7 @@ def test_custom_registry_same_id_version_source_drift_is_rejected(
             original = service.compute(request).records[DftInputData]
     original_fingerprints = {
         asset["id"]: asset["preparation_fingerprint"]
-        for asset in original.runtime["assets"]
+        for asset in original["runtime"]["assets"]
     }
 
     registry.write_text(
@@ -1815,8 +1819,8 @@ def test_standalone_metallicity_publishes_only_its_explicit_material(
             result = service.compute(request)
 
     input_data = result.records[DftInputData]
-    assert input_data.runtime["assets"] == []
-    assert input_data.runtime["models"] == [
+    assert input_data["runtime"]["assets"] == []
+    assert input_data["runtime"]["models"] == [
         {
             "name": "operator-metallicity",
             "version": "2026.1",
@@ -1829,7 +1833,7 @@ def test_standalone_metallicity_publishes_only_its_explicit_material(
             "citation": citation,
         },
     ]
-    assert input_data.citations == (
+    assert input_data["citations"] == (
         "Fixture pseudopotential citation.",
         citation,
     )
@@ -1880,11 +1884,11 @@ def test_custom_kmesh_model_publishes_its_explicit_material_not_defaults(
             result = service.compute(request)
 
     input_data = result.records[DftInputData]
-    assert input_data.runtime["assets"] == []
-    assert [model["name"] for model in input_data.runtime["models"]] == [
+    assert input_data["runtime"]["assets"] == []
+    assert [model["name"] for model in input_data["runtime"]["models"]] == [
         "operator-kindex"
     ]
-    assert input_data.citations == (
+    assert input_data["citations"] == (
         "Fixture pseudopotential citation.",
         citation,
     )
@@ -1954,17 +1958,17 @@ def test_same_name_version_models_with_different_targets_and_revisions_are_disti
         with Service(runtime) as service:
             input_data = service.compute(request).records[DftInputData]
 
-    assert [model["target"] for model in input_data.runtime["models"]] == [
+    assert [model["target"] for model in input_data["runtime"]["models"]] == [
         "k_index",
         "metallicity",
     ]
-    assert [model["revision"] for model in input_data.runtime["models"]] == [
+    assert [model["revision"] for model in input_data["runtime"]["models"]] == [
         "kmesh-revision",
         "metallicity-revision",
     ]
     licence_paths = {
         artifact["path"]
-        for artifact in input_data.artifacts
+        for artifact in input_data["artifacts"]
         if artifact["role"] == "licence"
     }
     assert {
@@ -1972,7 +1976,7 @@ def test_same_name_version_models_with_different_targets_and_revisions_are_disti
         "licences/custom-metallicity-model.txt",
     } <= licence_paths
     assert {"K-mesh model citation.", "Metallicity model citation."} <= set(
-        input_data.citations
+        input_data["citations"]
     )
 
 

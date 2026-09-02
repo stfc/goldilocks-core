@@ -101,8 +101,8 @@ def test_generate_inputs_writes_qe_values_from_advice_and_selection() -> None:
     )
 
     assert len(files) == 1
-    assert files[0].path == "inputs/qe.in"
-    content = files[0].content
+    assert files[0]["path"] == "inputs/qe.in"
+    content = files[0]["content"]
     assert "ecutwfc = 35" in content
     assert "ecutrho = 140" in content
     assert "smearing = 'cold'" in content
@@ -169,7 +169,7 @@ def test_generate_inputs_writes_each_k_points_component_in_order(shift) -> None:
         k_points=k_points,
     )
 
-    assert f"  2  3  4  {shift[0]}  {shift[1]}  {shift[2]}" in files[0].content
+    assert f"  2  3  4  {shift[0]}  {shift[1]}  {shift[2]}" in files[0]["content"]
 
 
 def test_generate_inputs_uses_noncollinear_soc_without_nspin() -> None:
@@ -191,7 +191,7 @@ def test_generate_inputs_uses_noncollinear_soc_without_nspin() -> None:
 
     files = generate_inputs(structure, advice_context(), advice, selection, k_points)
 
-    content = files[0].content
+    content = files[0]["content"]
     assert "noncolin = .true." in content
     assert "lspinorb = .true." in content
     assert "nspin = 2" not in content
@@ -218,7 +218,7 @@ def test_generate_inputs_writes_vdw_corr_when_enabled() -> None:
 
     content = generate_inputs(structure, advice_context(), advice, selection, k_points)[
         0
-    ].content
+    ]["content"]
 
     # D3BJ is the default method: QE uses grimme-d3 with BJ damping (version 4).
     assert "vdw_corr = 'grimme-d3'" in content
@@ -240,7 +240,7 @@ def test_generate_inputs_writes_d3_zero_damping_version() -> None:
 
     content = generate_inputs(structure, advice_context(), advice, selection, k_points)[
         0
-    ].content
+    ]["content"]
 
     assert "vdw_corr = 'grimme-d3'" in content
     assert "dftd3_version = 3" in content
@@ -271,7 +271,7 @@ def test_generate_inputs_writes_non_d3_vdw_methods(
 
     content = generate_inputs(structure, advice_context(), advice, selection, k_points)[
         0
-    ].content
+    ]["content"]
 
     assert f"vdw_corr = '{qe_vdw_corr}'" in content
     assert "dftd3_version" not in content
@@ -290,7 +290,7 @@ def test_generate_inputs_omits_vdw_corr_by_default() -> None:
 
     content = generate_inputs(structure, advice_context(), advice, selection, k_points)[
         0
-    ].content
+    ]["content"]
 
     assert "vdw_corr" not in content
 
@@ -308,7 +308,7 @@ def test_generate_inputs_produces_full_expected_qe_input() -> None:
 
     content = generate_inputs(structure, advice_context(), advice, selection, k_points)[
         0
-    ].content
+    ]["content"]
 
     expected = r"""&CONTROL
   calculation = 'scf'
@@ -439,7 +439,7 @@ def test_generate_inputs_writes_smearing_lines(
 
     content = generate_inputs(structure, advice_context(), advice, selection, k_points)[
         0
-    ].content
+    ]["content"]
 
     assert "  occupations = 'smearing'" in content
     assert f"  smearing = '{qe_smearing}'" in content
@@ -463,7 +463,7 @@ def test_generate_inputs_writes_nspin_2_when_spin_polarized() -> None:
 
     content = generate_inputs(structure, advice_context(), advice, selection, k_points)[
         0
-    ].content
+    ]["content"]
 
     assert "  nspin = 2" in content
     assert "noncolin" not in content
@@ -491,7 +491,7 @@ def test_generate_inputs_system_block_orders_smearing_spin_vdw() -> None:
 
     content = generate_inputs(structure, advice_context(), advice, selection, k_points)[
         0
-    ].content
+    ]["content"]
 
     system = content.split("&SYSTEM")[1].split("/")[0]
     assert system == (
@@ -648,6 +648,6 @@ def test_write_qe_scf_returns_single_input_file_record() -> None:
     files = generate_inputs(structure, advice_context(), advice, selection, k_points)
 
     assert len(files) == 1
-    assert files[0].path == "inputs/qe.in"
-    assert files[0].role == "input"
-    assert files[0].content.endswith("\n")
+    assert files[0]["path"] == "inputs/qe.in"
+    assert files[0]["role"] == "input"
+    assert files[0]["content"].endswith("\n")

@@ -4,7 +4,6 @@ import hashlib
 from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
-from typing import Literal
 
 from goldilocks_core.advice.parameters import ParameterAdvice
 from goldilocks_core.analysis import StructureAnalysisRecord
@@ -26,12 +25,27 @@ from goldilocks_core.types import JsonDict, PathLike
 
 @dataclass(frozen=True, slots=True)
 class DftInputData:
-    artifacts: tuple[JsonDict, ...]
-    pseudopotential_set: JsonDict
-    runtime: JsonDict
-    citations: tuple[str, ...]
-    manifest: JsonDict
-    schema_version: Literal[1] = 1
+    """Marker for the DFT input-data record; the value is a dict.
+
+    Keys: schema_version, artifacts (rich documents whose generated
+    sources carry in-memory ``content``), pseudopotential_set, runtime,
+    citations, manifest.
+    """
+
+
+def input_data_portable(input_data: JsonDict) -> JsonDict:
+    """Portable projection of DFT input data: drops generated artifact
+    content and converts every remaining value to JSON-able form."""
+    return {
+        "schema_version": input_data["schema_version"],
+        "artifacts": [
+            _artifact_portable(artifact) for artifact in input_data["artifacts"]
+        ],
+        "pseudopotential_set": to_jsonable(input_data["pseudopotential_set"]),
+        "runtime": to_jsonable(input_data["runtime"]),
+        "citations": list(input_data["citations"]),
+        "manifest": to_jsonable(input_data["manifest"]),
+    }
 
 
 def _artifact_portable(artifact: JsonDict) -> JsonDict:
@@ -46,20 +60,6 @@ def _artifact_portable(artifact: JsonDict) -> JsonDict:
         "media_type": artifact["media_type"],
         "provenance": to_jsonable(artifact["provenance"]),
         "source": source,
-    }
-
-
-@to_portable.register(DftInputData)
-def _dft_input_data_portable(input_data: DftInputData) -> JsonDict:
-    return {
-        "schema_version": input_data.schema_version,
-        "artifacts": [
-            _artifact_portable(artifact) for artifact in input_data.artifacts
-        ],
-        "pseudopotential_set": to_jsonable(input_data.pseudopotential_set),
-        "runtime": to_jsonable(input_data.runtime),
-        "citations": list(input_data.citations),
-        "manifest": to_jsonable(input_data.manifest),
     }
 
 
@@ -119,13 +119,13 @@ def assemble_dft_input_data(
         )
     )
     for generated in generated_files:
-        payload = _validated_generated_input(generated.path, generated.content)
+        payload = _validated_generated_input(generated["path"], generated["content"])
         artifacts.append(
             _generated_artifact(
-                generated.path,
-                generated.role,
+                generated["path"],
+                generated["role"],
                 payload,
-                identity=f"generated-input:{generated.path}",
+                identity=f"generated-input:{generated['path']}",
                 media_type="text/plain; charset=utf-8",
                 provenance=Provenance(
                     source="analysis",
@@ -172,7 +172,7 @@ def assemble_dft_input_data(
             "k_points": to_portable(k_points),
             "selection": selection_portable(selection),
             "generated_files": [
-                {"path": item.path, "role": item.role} for item in generated_files
+                {"path": item["path"], "role": item["role"]} for item in generated_files
             ],
         },
         "selected_artifacts": [
@@ -184,13 +184,14 @@ def assemble_dft_input_data(
         "runtime": to_portable(runtime),
         "citations": list(citations),
     }
-    return DftInputData(
-        artifacts=tuple(artifacts),
-        pseudopotential_set=pseudo_set,
-        runtime=runtime,
-        citations=citations,
-        manifest=manifest,
-    )
+    return {
+        "schema_version": 1,
+        "artifacts": tuple(artifacts),
+        "pseudopotential_set": pseudo_set,
+        "runtime": runtime,
+        "citations": citations,
+        "manifest": manifest,
+    }
 
 
 def _bind_selected_pseudo_metadata(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 from pymatgen.core import Structure
 
@@ -18,7 +19,6 @@ from goldilocks_core.ml.models import ModelSpec
 from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.pseudo.source import PseudoSource, source_for_draft
 from goldilocks_core.request import ComputeRequest
-from goldilocks_core.result import Records
 from goldilocks_core.runtime.graph import Preset, Stage, TaskGraph
 from goldilocks_core.runtime.models import Runtime
 from goldilocks_core.runtime.task import GraphHandler
@@ -218,7 +218,7 @@ def build_scf_context(
     )
 
 
-def collect_scf_warnings(records: Records) -> tuple[str, ...]:
+def collect_scf_warnings(records: dict[type, Any]) -> tuple[str, ...]:
     groups: list[tuple[str, ...]] = []
     analysis = records.get(StructureAnalysisRecord)
     if analysis is not None:

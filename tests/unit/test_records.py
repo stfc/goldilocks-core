@@ -1,10 +1,13 @@
 from typing import Any
 
 import pytest
+from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.calculation import CalculationHints, CalculationIntent
-from goldilocks_core.result import Records
+from goldilocks_core.io.structures import InMemoryStructureSource
+from goldilocks_core.request import CalculationDraft, PresetSelection
+from goldilocks_core.result import ComputationResult
 from goldilocks_core.serialization import to_portable
 
 
@@ -25,11 +28,22 @@ def _make_analysis() -> dict[str, Any]:
 
 def test_core_records_maps_requested_types_and_serializes_record_names() -> None:
     analysis = _make_analysis()
-    records = Records({StructureAnalysisRecord: analysis})
+    records = {StructureAnalysisRecord: analysis}
 
     assert records[StructureAnalysisRecord] is analysis
     assert tuple(records) == (StructureAnalysisRecord,)
-    assert to_portable(records) == {
+    result = ComputationResult(
+        draft=CalculationDraft(
+            InMemoryStructureSource(
+                Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
+            )
+        ),
+        task="scf_single_point",
+        task_revision="1",
+        selection=PresetSelection("recommend"),
+        records=records,
+    )
+    assert to_portable(result)["records"] == {
         "analysis": to_portable(analysis),
     }
 

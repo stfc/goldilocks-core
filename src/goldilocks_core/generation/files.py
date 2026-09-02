@@ -1,13 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 
-
-@dataclass(frozen=True, slots=True)
-class GeneratedFile:
-    path: str
-    content: str
-    role: str = "input"
-
-
-type GeneratedFiles = tuple[GeneratedFile, ...]
+class GeneratedFiles:
+    """Marker for the generated-files record; the value is a tuple of
+    file documents carrying path, content, and role."""

@@ -63,7 +63,7 @@ def test_generate_crosses_every_in_memory_stage_with_real_backends(
         for pseudo in result.records[SelectionRecord]["pseudopotentials"]
     } == {"Na", "Cl"}
 
-    qe_input = result.records[GeneratedFiles][0].content
+    qe_input = result.records[GeneratedFiles][0]["content"]
     assert "  nat = 2" in qe_input
     assert "  ntyp = 2" in qe_input
     assert "  ecutwfc = 45" in qe_input
@@ -112,9 +112,9 @@ def test_structure_file_to_publication_preserves_inputs_and_provenance(
     generated_path = destination / "inputs" / "qe.in"
     manifest = json.loads((destination / "goldilocks.json").read_text())
 
-    assert generated_path.read_bytes() == result.records[GeneratedFiles][
-        0
-    ].content.encode("utf-8")
+    assert generated_path.read_bytes() == result.records[GeneratedFiles][0][
+        "content"
+    ].encode("utf-8")
     assert manifest["records"]["generated_files"][0] == {
         "path": "inputs/qe.in",
         "role": "input",

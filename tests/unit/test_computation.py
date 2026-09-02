@@ -10,7 +10,6 @@ from goldilocks_core import (
     InMemoryStructureSource,
     PathStructureSource,
     PresetSelection,
-    Records,
     RecordSelection,
     Service,
     UnavailableRecord,
@@ -218,7 +217,7 @@ def test_computation_result_serializes_records_without_scf_projection() -> None:
         task="scf_single_point",
         task_revision="1",
         selection=PresetSelection("recommend"),
-        records=Records({StructureAnalysisRecord: analysis}),
+        records={StructureAnalysisRecord: analysis},
         warnings=("Observed condition.",),
     )
 

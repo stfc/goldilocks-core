@@ -10,11 +10,9 @@ from pymatgen.core.graphs import StructureGraph
 from pymatgen.core.periodic_table import Element
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
-from goldilocks_core.serialization import to_jsonable
 from goldilocks_core.types import (
     Dimensionality,
     ElectronicCharacter,
-    JsonDict,
 )
 
 HEAVY_ELEMENT_MIN_ROW = 5
@@ -60,9 +58,6 @@ class StructureAnalysisRecord:
     electronic_character_source: str = "heuristic"
     electronic_character_confidence: float | None = None
     analysis_warnings: tuple[str, ...] = ()
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 class DimensionalityClassificationError(Exception):

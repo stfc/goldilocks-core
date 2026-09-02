@@ -12,6 +12,7 @@ from goldilocks_core.pseudo.source import PseudoTableMismatch
 from goldilocks_core.pseudo.validation import PseudoImportError
 from goldilocks_core.runtime import UnavailableRecord, UnknownPreset, UnknownTask
 from goldilocks_core.runtime.service import Service
+from goldilocks_core.serialization import to_portable
 from goldilocks_core.server.request import (
     compute_from_dict,
     inspection_source_from_dict,
@@ -102,7 +103,7 @@ def create_server(
     )
     async def capabilities() -> dict[str, Any]:
         record = await asyncio.to_thread(state.capabilities)
-        return record.to_dict()
+        return to_portable(record)
 
     @server.tool(description="Normalize and inspect an inline structure source.")
     async def inspect_structure(
@@ -116,7 +117,7 @@ def create_server(
             result = await asyncio.to_thread(state.inspect_structure, parsed)
         except StructureInputError as error:
             raise ToolError(str(error)) from error
-        return result.to_dict()
+        return to_portable(result)
 
     @server.tool(
         description=(
@@ -147,7 +148,7 @@ def create_server(
             )
         except _KNOWN_TOOL_ERRORS as error:
             raise ToolError(str(error)) from error
-        return result.to_dict()
+        return to_portable(result)
 
     return server
 

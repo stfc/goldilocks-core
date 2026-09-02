@@ -8,8 +8,7 @@ from pymatgen.core import Structure
 from goldilocks_core.calculation import KmeshHints
 from goldilocks_core.kmesh.math import k_distance_to_mesh
 from goldilocks_core.provenance import Provenance
-from goldilocks_core.serialization import to_jsonable
-from goldilocks_core.types import JsonDict, KPointGrid, KPointShift
+from goldilocks_core.types import KPointGrid, KPointShift
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,9 +17,6 @@ class KPointSelection:
     shift: KPointShift
     mesh_type: str
     provenance: Provenance
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 type KMeshAdvisor = Callable[[Structure], KPointSelection]

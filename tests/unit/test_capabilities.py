@@ -19,6 +19,7 @@ from goldilocks_core.runtime.graph import (
     StageCapability,
 )
 from goldilocks_core.runtime.registry import RECORD_TYPE_IDS
+from goldilocks_core.serialization import to_portable
 
 
 @pytest.fixture
@@ -90,7 +91,7 @@ def test_capabilities_contract_is_an_immutable_serializable_domain_value() -> No
         default_hints=CalculationHints(),
     )
 
-    assert capabilities.to_dict() == {
+    assert to_portable(capabilities) == {
         "core_version": "1.2.3",
         "tasks": [
             {
@@ -236,7 +237,7 @@ def test_service_capabilities_describes_the_complete_core_catalog() -> None:
     default_set = next(
         item for item in capabilities.pseudopotential_sets if item.default
     )
-    set_metadata = default_set.to_dict()
+    set_metadata = to_portable(default_set)
     supported_elements = set_metadata.pop("supported_elements")
     assert set_metadata == {
         "id": "pseudodojo-pbesol-efficiency-sr",
@@ -253,7 +254,7 @@ def test_service_capabilities_describes_the_complete_core_catalog() -> None:
     assert len(supported_elements) == 72
     assert {"H", "Si", "Pt"}.issubset(supported_elements)
 
-    serialized = capabilities.to_dict()
+    serialized = to_portable(capabilities)
     forbidden_fields = {
         "availability",
         "component",

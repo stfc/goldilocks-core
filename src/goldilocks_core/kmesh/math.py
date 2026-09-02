@@ -5,8 +5,7 @@ from dataclasses import dataclass
 
 from pymatgen.core import Structure
 
-from goldilocks_core.serialization import to_jsonable
-from goldilocks_core.types import JsonDict, KPointGrid
+from goldilocks_core.types import KPointGrid
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,9 +18,6 @@ class KMeshEntry:
 
     k_index: int
     mesh: KPointGrid
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 def k_distance_to_mesh(

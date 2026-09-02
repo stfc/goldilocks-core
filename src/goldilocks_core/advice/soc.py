@@ -5,8 +5,6 @@ from dataclasses import dataclass
 from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.calculation import SpinHints
 from goldilocks_core.provenance import Provenance
-from goldilocks_core.serialization import to_jsonable
-from goldilocks_core.types import JsonDict
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,9 +13,6 @@ class SpinOrbitAdvice:
     consider: bool
     heavy_elements: tuple[str, ...]
     provenance: Provenance
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 def advise_spin_orbit(

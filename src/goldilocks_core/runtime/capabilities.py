@@ -10,8 +10,6 @@ from goldilocks_core.pseudo.registry import load_tables
 from goldilocks_core.runtime.dispatch import Dispatcher
 from goldilocks_core.runtime.graph import CalculationTaskCapability
 from goldilocks_core.runtime.models import Runtime
-from goldilocks_core.serialization import to_jsonable
-from goldilocks_core.types import JsonDict
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,9 +23,6 @@ class ModelCapability:
     feature_set: str
     source: str
     revision: str | None
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,9 +39,6 @@ class PseudopotentialSetCapability:
     citation: str
     default: bool
 
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
-
 
 @dataclass(frozen=True, slots=True)
 class Capabilities:
@@ -57,9 +49,6 @@ class Capabilities:
     pseudopotential_sets: tuple[PseudopotentialSetCapability, ...]
     default_intent: CalculationIntent
     default_hints: CalculationHints
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 def build_capabilities(dispatcher: Dispatcher, runtime: Runtime) -> Capabilities:

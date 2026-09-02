@@ -6,8 +6,7 @@ from typing import cast
 from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.calculation import VdwHints
 from goldilocks_core.provenance import Provenance
-from goldilocks_core.serialization import to_jsonable
-from goldilocks_core.types import JsonDict, VdwMethod
+from goldilocks_core.types import VdwMethod
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,9 +14,6 @@ class VdwAdvice:
     use_vdw: bool
     method: VdwMethod | None
     provenance: Provenance
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 def advise_vdw(

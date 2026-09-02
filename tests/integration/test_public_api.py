@@ -34,6 +34,7 @@ from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.kmesh.resolve import KPointSelection
 from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
 from goldilocks_core.selection import SelectionRecord
+from goldilocks_core.serialization import to_portable
 
 
 def _make_si_structure() -> Structure:
@@ -176,7 +177,7 @@ def test_explicit_record_selection_returns_one_generic_result() -> None:
     )
 
     assert tuple(result.records) == (StructureAnalysisRecord, ParameterAdvice)
-    assert result.to_dict()["selection"] == {"records": ["analysis", "advice"]}
+    assert to_portable(result)["selection"] == {"records": ["analysis", "advice"]}
 
 
 def test_computation_result_serializes_stable_record_ids() -> None:
@@ -191,7 +192,7 @@ def test_computation_result_serializes_stable_record_ids() -> None:
             selection=PresetSelection("recommend"),
         )
     )
-    document = result.to_dict()
+    document = to_portable(result)
 
     assert document["records"]["analysis"]["heavy_elements"] == ["I"]
     assert document["records"]["advice"]["spin_orbit"]["consider"] is True

@@ -5,6 +5,7 @@ from goldilocks_core.advice.pseudo import PseudopotentialRequirements
 from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
 from goldilocks_core.selection import select_pseudopotentials
+from goldilocks_core.serialization import to_portable
 
 
 def make_structure(*species: str) -> Structure:
@@ -109,7 +110,7 @@ def test_pseudo_source_identity_retains_portable_provider_identifiers(
     )
 
     assert metadata.source_identifier == source_identifier
-    assert metadata.to_dict()["source_identifier"] == source_identifier
+    assert to_portable(metadata)["source_identifier"] == source_identifier
 
 
 def test_selects_complete_candidate_matching_every_requirement() -> None:

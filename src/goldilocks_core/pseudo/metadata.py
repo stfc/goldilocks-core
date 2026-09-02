@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import PurePath, PurePosixPath, PureWindowsPath
 
 from goldilocks_core.functionals import normalize_functional_label
-from goldilocks_core.serialization import to_jsonable
+from goldilocks_core.serialization import to_jsonable, to_portable
 from goldilocks_core.types import (
     JsonDict,
     PseudoAccuracy,
@@ -147,22 +147,24 @@ class PseudoMetadata:
         ):
             raise ValueError("PseudoMetadata.warnings must contain non-empty strings")
 
-    def to_dict(self) -> JsonDict:
-        return {
-            "filename": self.filename,
-            "header_format": self.header_format,
-            "provider": self.provider,
-            "accuracy": self.accuracy,
-            "element": self.element,
-            "pseudo_type": self.pseudo_type,
-            "functional": self.functional,
-            "relativistic": self.relativistic,
-            "z_valence": self.z_valence,
-            "table_id": self.table_id,
-            "cutoffs": to_jsonable(self.cutoffs),
-            "source_identifier": self.source_identifier,
-            "content_sha256": self.content_sha256,
-            "content_size_bytes": self.content_size_bytes,
-            "frozen_4f_core": self.frozen_4f_core,
-            "warnings": list(self.warnings),
-        }
+
+@to_portable.register(PseudoMetadata)
+def _pseudo_metadata_portable(metadata: PseudoMetadata) -> JsonDict:
+    return {
+        "filename": metadata.filename,
+        "header_format": metadata.header_format,
+        "provider": metadata.provider,
+        "accuracy": metadata.accuracy,
+        "element": metadata.element,
+        "pseudo_type": metadata.pseudo_type,
+        "functional": metadata.functional,
+        "relativistic": metadata.relativistic,
+        "z_valence": metadata.z_valence,
+        "table_id": metadata.table_id,
+        "cutoffs": to_jsonable(metadata.cutoffs),
+        "source_identifier": metadata.source_identifier,
+        "content_sha256": metadata.content_sha256,
+        "content_size_bytes": metadata.content_size_bytes,
+        "frozen_4f_core": metadata.frozen_4f_core,
+        "warnings": list(metadata.warnings),
+    }

@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from goldilocks_core.examples import structure
+from goldilocks_core.examples.structures import structure
 
 
 def _run_cli(

@@ -7,7 +7,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, cast, get_args
 
-from goldilocks_core.assets import AssetFile, AssetSpec
+from goldilocks_core.assets.records import AssetFile, AssetSpec
 from goldilocks_core.ml.models import ModelSpec
 from goldilocks_core.types import ModelSource, ModelType, PathLike
 

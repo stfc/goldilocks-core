@@ -25,7 +25,8 @@ from goldilocks_core import (
 from goldilocks_core.advice.parameters import ParameterAdvice
 from goldilocks_core.advice.pseudo import PseudopotentialRequirements
 from goldilocks_core.analysis import StructureAnalysisRecord
-from goldilocks_core.assets import AssetFile, AssetSpec, AssetStore
+from goldilocks_core.assets.records import AssetFile, AssetSpec
+from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.calculation import CalculationIntent
 from goldilocks_core.generation.files import GeneratedFiles
 from goldilocks_core.kmesh.resolve import KPointSelection
@@ -38,17 +39,13 @@ from goldilocks_core.pseudo.source import (
     PseudoTableMismatch,
     select_compatible_table,
 )
-from goldilocks_core.runtime import (
-    GraphHandler,
-    Preset,
-    Stage,
-    TaskGraph,
-)
+from goldilocks_core.runtime.graph import Preset, Stage, TaskGraph
 from goldilocks_core.runtime.registry import (
     RECORD_TYPE_IDS,
     register_record_types,
     resolve_output_types,
 )
+from goldilocks_core.runtime.task import GraphHandler
 from goldilocks_core.selection import SelectionRecord
 from goldilocks_core.serialization import to_portable
 

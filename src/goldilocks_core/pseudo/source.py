@@ -5,7 +5,7 @@ from typing import Callable
 from pymatgen.core import Element, Structure
 
 from goldilocks_core.advice.pseudo import PseudopotentialRequirements
-from goldilocks_core.assets import AssetStore
+from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.pseudo.installed import load_installed_table
 from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.pseudo.pp_registry import load_pseudo_metadata

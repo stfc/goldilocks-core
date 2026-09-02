@@ -8,7 +8,7 @@ from pymatgen.core import Structure
 
 from goldilocks_core.advice.kdistance import QrfBackend
 from goldilocks_core.analysis import heuristic_metallicity
-from goldilocks_core.assets import AssetNotInstalled, AssetStore
+from goldilocks_core.assets.store import AssetNotInstalled, AssetStore
 from goldilocks_core.kmesh.resolve import KPointSelection
 from goldilocks_core.ml.models import ModelSpec
 from goldilocks_core.types import ElectronicCharacter, PathLike

@@ -22,7 +22,7 @@ from goldilocks_core import (
     Runtime,
     Service,
 )
-from goldilocks_core.assets import AssetStore
+from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.input_data import (
     DftInputData,
     GeneratedContent,

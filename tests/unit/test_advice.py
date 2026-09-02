@@ -1,6 +1,6 @@
 import pytest
 
-from goldilocks_core.advice import advise_parameters
+from goldilocks_core.advice.parameters import advise_parameters
 from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.calculation import CalculationHints, CalculationIntent
 

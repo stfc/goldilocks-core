@@ -7,13 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from goldilocks_core.assets import (
-    AssetCorrupt,
-    AssetFile,
-    AssetSpec,
-    AssetStore,
-    InstalledAsset,
-)
+from goldilocks_core.assets.records import AssetFile, AssetSpec, InstalledAsset
+from goldilocks_core.assets.store import AssetCorrupt, AssetStore
 from goldilocks_core.pseudo.import_pseudodojo import preparer as dojo_preparer
 from goldilocks_core.pseudo.import_sssp import preparer as sssp_preparer
 from goldilocks_core.pseudo.installed import load_installed_table

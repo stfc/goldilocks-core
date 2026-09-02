@@ -17,7 +17,7 @@ from pathlib import Path, PurePosixPath
 from typing import Literal
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
-from goldilocks_core.assets import AssetStore
+from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.input_data import (
     DftInputData,
     GeneratedContent,

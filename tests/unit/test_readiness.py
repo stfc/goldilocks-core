@@ -2,12 +2,8 @@ from __future__ import annotations
 
 import os
 
-from goldilocks_core.assets import (
-    AssetFile,
-    AssetInstallation,
-    AssetSpec,
-    AssetStore,
-)
+from goldilocks_core.assets.records import AssetFile, AssetInstallation, AssetSpec
+from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.server.readiness import AssetReadiness
 
 

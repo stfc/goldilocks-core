@@ -8,7 +8,8 @@ from typing import Literal
 
 from goldilocks_core.advice.parameters import ParameterAdvice
 from goldilocks_core.analysis import StructureAnalysisRecord
-from goldilocks_core.assets import AssetSpec, AssetStore, InstalledAsset
+from goldilocks_core.assets.records import AssetSpec, InstalledAsset
+from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.calculation import CalculationHints, CalculationIntent
 from goldilocks_core.generation.files import GeneratedFiles
 from goldilocks_core.io.structures import NormalizedStructure

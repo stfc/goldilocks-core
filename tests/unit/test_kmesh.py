@@ -3,13 +3,12 @@ import math
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.calculation import KmeshHints
-from goldilocks_core.kmesh import resolve_kpoints
 from goldilocks_core.kmesh.math import (
     build_kmesh_entries,
     generate_candidate_k_distances,
     k_distance_to_mesh,
 )
-from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.kmesh.resolve import KPointSelection, resolve_kpoints
 from goldilocks_core.provenance import Provenance
 
 

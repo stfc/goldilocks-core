@@ -23,43 +23,45 @@ resolution, input rendering, and publication touch the filesystem.
 | --- | --- |
 | `assets/` | Immutable asset records, profiles, download integrity, transactional installation, and verification. |
 | `ml/model_registry.py` | Complete model runtime configuration and model asset declarations. |
-| `ml/models.py` | `ModelSpec` and feature-vector records for registered models. |
+| `ml/models.py` | `ModelSpec` and the feature-vector tuple type for registered models. |
 | `pseudo/registry.py`, `pseudo/import_*` | Complete pseudopotential table declarations and provider-specific normalization. |
 | `pseudo/metadata.py` | The pseudopotential metadata record and its cutoffs. |
 | `pseudo/source.py` | One source-resolution interface for request metadata, operator roots, and installed tables. |
 | `provenance.py`, `types.py`, `validation.py` | Shared provenance record, shared type vocabulary, and operator-input validators. |
-| `calculation.py` | `CalculationIntent`, `CalculationHints`, and the per-stage hint views. |
+| `calculation.py` | `CalculationIntent` and `CalculationHints` with validating constructors. |
 | `request.py` | `CalculationDraft`, `ComputeRequest`, and selection records. |
-| `result.py` | `ComputationResult` and the `Records` mapping. |
+| `result.py` | `ComputationResult`; its `records` field is a plain type-keyed dict. |
 | `serialization.py` | `to_jsonable` (complete form) and `to_portable` (publication/CLI projection). |
-| `runtime/graph.py` | Stage-agnostic, type-keyed DAG executor (`TaskGraph`/`Stage`/`Preset`/`execute`) and its capability records. |
+| `runtime/graph.py` | Stage-agnostic, type-keyed DAG executor (`TaskGraph`/`Stage`/`Preset`/`execute`) and its task-description documents. |
 | `runtime/task.py` | `GraphHandler`: a task graph, context builder, and factual warning collector. |
 | `runtime/scf.py` | The SCF Calculation Task, stage graph, Presets, context, and warning collection. |
 | `runtime/models.py` | `Runtime`: kmesh/metallicity model lifecycle (load/reset/close), exposed as read-only services. |
 | `runtime/dispatch.py` | `Dispatcher`: task registry and dispatch by `intent.task` through `GraphHandler`s. |
 | `runtime/registry.py` | Stable record-ID registry and output-type resolution shared by transports. |
-| `runtime/capabilities.py` | Discovery records and the `Capabilities` assembly. |
+| `runtime/capabilities.py` | The `capabilities` document assembly (tasks, models, pseudopotential sets, defaults). |
 | `runtime/jobs.py` | Short-lived `compute` convenience entry point. |
 | `runtime/service.py` | `Service`: process-owned lifecycle, locking, Capabilities, Structure Inspection, Compute, and publication. |
 | `io/structures.py` | One Structure Source normalization path for Inspection and Compute. |
-| `analysis.py` | Structure facts. |
-| `advice/` | Scientific and numerical recommendations. |
+| `analysis.py` | The `StructureAnalysisRecord` marker and structure-fact analysis. |
+| `advice/` | Scientific and numerical recommendations, ending in the `ParameterAdvice` marker. |
 | `kmesh/` | K-point resolution and mesh mathematics. |
-| `selection.py` | Pseudopotentials and cutoffs. |
+| `selection.py` | Pseudopotential selection; the `SelectionRecord` marker and its portable projection. |
 | `generation/` | Calculation-specific file generation. |
-| `generation/files.py` | The `GeneratedFile` record shared by writers and the registry. |
-| `input_data.py` | Assembly of complete DFT Input Data from trusted Records and asset references. |
+| `generation/files.py` | The `GeneratedFiles` record marker; writers produce file documents (path, content, role). |
+| `input_data.py` | Assembly of complete DFT input data from trusted stage documents and asset references, plus its portable projection. |
 | `publication.py` | One deterministic Ready-to-run Output layout for directories and ZIP archives. |
 | `server/request.py` | Shared HTTP/MCP conversion into Core Records. |
-| `server/wire.py` | Strict request shapes and mechanically derived Core response schemas. |
+| `server/wire.py` | Strict request shapes and the hand-written Core response schemas — the single wire contract. |
 | `server/http.py`, `server/http_contract.py` | Optional HTTP lifecycle, errors, and scientific route adapter. |
 | `server/mcp.py` | Optional local stdio MCP adapter. |
 | `server/readiness.py` | Cached asset readiness for the Workbench profile. |
 | `web/` | React structure workspace, generated OpenAPI types, and browser-owned transient UI state. |
 | `Dockerfile` | One production image containing matching Core, Workbench, and pinned runtime assets. |
 
-Stages communicate through dataclasses. They do not need to inherit from a Core
-class, and callers can invoke any stage function directly.
+Stages communicate through plain dict documents keyed by bare record-marker
+classes. They do not need to inherit from a Core class, and callers can
+invoke any stage function directly. Operator-facing constructors remain
+validating dataclasses.
 
 ## Standard workflow
 
@@ -88,7 +90,9 @@ Handlers supply context and collect factual warnings.
 Python, CLI, HTTP, and MCP expose Capabilities, Structure Inspection, and
 Compute. `server/request.py` converts strict transport shapes into Core
 Records; Core constructors validate domain values once. Responses serialize
-Core Records mechanically through the portable projection.
+Core record documents through the portable projection; the selection and
+input-data documents carry explicit portable projections that strip
+generated artifact content and host file paths.
 
 HTTP accepts inline structures and stable Pseudopotential Set IDs. Compute
 returns one multipart response containing the canonical `ComputationResult`
@@ -142,17 +146,18 @@ and licensing model.
 
 ## Boundaries
 
-Validate where data enters or causes side effects:
+Validate where data enters or causes side effects — types validate the
+operator boundary, dicts flow inside:
 
 - request records validate operator controls and external pseudopotential
   metadata;
-- source adapters validate provider data before producing internal records;
+- source adapters validate provider data before producing internal documents;
 - generators reject unsupported or incomplete inputs before rendering;
 - publication writes atomically to new destinations and confines logical paths.
 
-Intermediate records remain ordinary Python data. Custom stage authors are
-responsible for returning coherent records; Core does not defensively re-check
-every possible malformed internal object.
+Intermediate stage currency is plain dict documents trusted by construction.
+Custom stage authors are responsible for returning coherent documents; Core
+does not defensively re-check every possible malformed internal object.
 
 Scientific choices belong in Analyze, Advise, Kmesh, and Select. Select
 resolves the configured source and chooses a concrete pseudopotential per
@@ -199,6 +204,14 @@ boundaries, concurrency safety, or the task extension model.
   and licence text. The archive manifest and CLI `--json` serialize
   through `to_portable`, so identical computations produce identical
   bytes on any machine.
+- Types validate the operator boundary; dicts flow inside. Operator input
+  (`CalculationHints`, `CalculationIntent`, drafts, requests, selections,
+  structure sources, output targets, `PseudoMetadata`, `Provenance`,
+  `ModelSpec`) gets validating constructors; internal stage currency is
+  plain dict documents keyed by bare record markers, trusted by
+  construction. `server/wire.py` is the single schema for every wire
+  shape — response models are hand-written there and drift is caught by
+  the OpenAPI export and byte-comparison gates.
 - `Service` executes Computations concurrently over one process-owned
   `Runtime`. Model backends synchronize only their first lazy load, and the
   `Dispatcher` synchronizes lazy default-task registration.

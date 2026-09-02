@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from goldilocks_core.advice._hints import has_hint
 from goldilocks_core.analysis import StructureAnalysisRecord
-from goldilocks_core.calculation import SmearingHints
+from goldilocks_core.calculation import CalculationHints
 from goldilocks_core.provenance import Provenance
 
 METALLIC_SMEARING_WIDTH_RY = 0.01
@@ -28,9 +27,9 @@ class SmearingAdvice:
 
 def advise_smearing(
     analysis: StructureAnalysisRecord,
-    hints: SmearingHints,
+    hints: CalculationHints,
 ) -> SmearingAdvice:
-    if has_hint(hints):
+    if hints.smearing_type is not None or hints.smearing_width_ry is not None:
         return SmearingAdvice(
             smearing_type=hints.smearing_type,
             width_ry=hints.smearing_width_ry,

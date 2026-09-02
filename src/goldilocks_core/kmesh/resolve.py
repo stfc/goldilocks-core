@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from pymatgen.core import Structure
 
-from goldilocks_core.calculation import KmeshHints
+from goldilocks_core.calculation import CalculationHints
 from goldilocks_core.kmesh.math import k_distance_to_mesh
 from goldilocks_core.provenance import Provenance
 from goldilocks_core.types import KPointGrid, KPointShift
@@ -24,7 +24,7 @@ type KMeshAdvisor = Callable[[Structure], KPointSelection]
 
 def resolve_kpoints(
     structure: Structure,
-    hints: KmeshHints,
+    hints: CalculationHints,
     backend: KMeshAdvisor,
 ) -> KPointSelection:
     """``k_grid`` wins over ``k_spacing``; both bypass the model backend.

@@ -91,7 +91,7 @@ SCF_TASK = TaskGraph(
             output=KPointSelection,
             inputs=(Structure,),
             call=lambda structure, *, ctx: resolve_kpoints(
-                structure, ctx.hints.kmesh, ctx.kmesh_advisor
+                structure, ctx.hints, ctx.kmesh_advisor
             ),
             id="resolve_k_points",
             name="Resolve k-points",

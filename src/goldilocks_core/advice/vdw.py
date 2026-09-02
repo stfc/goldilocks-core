@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import cast
 
 from goldilocks_core.analysis import StructureAnalysisRecord
-from goldilocks_core.calculation import VdwHints
+from goldilocks_core.calculation import CalculationHints
 from goldilocks_core.provenance import Provenance
 from goldilocks_core.types import VdwMethod
 
@@ -18,7 +18,7 @@ class VdwAdvice:
 
 def advise_vdw(
     analysis: StructureAnalysisRecord,
-    hints: VdwHints,
+    hints: CalculationHints,
 ) -> VdwAdvice:
     """Low-dimensional structures default to D3BJ;
     3D/unknown defaults to no correction. Operator hints always win."""
@@ -78,5 +78,5 @@ def advise_vdw(
     )
 
 
-def _resolve_vdw_method(hints: VdwHints) -> VdwMethod:
+def _resolve_vdw_method(hints: CalculationHints) -> VdwMethod:
     return cast(VdwMethod, hints.vdw_method or "d3bj")

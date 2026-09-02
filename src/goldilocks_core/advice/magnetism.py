@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from goldilocks_core.analysis import StructureAnalysisRecord
-from goldilocks_core.calculation import SpinHints
+from goldilocks_core.calculation import CalculationHints
 from goldilocks_core.provenance import Provenance
 
 
@@ -16,7 +16,7 @@ class MagnetismAdvice:
 
 def advise_magnetism(
     analysis: StructureAnalysisRecord,
-    hints: SpinHints,
+    hints: CalculationHints,
 ) -> MagnetismAdvice:
     if hints.spin_polarized is not None:
         return MagnetismAdvice(

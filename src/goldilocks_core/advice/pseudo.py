@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from goldilocks_core.advice._hints import has_hint
 from goldilocks_core.advice.soc import SpinOrbitAdvice
-from goldilocks_core.calculation import CalculationIntent, PseudoHints
+from goldilocks_core.calculation import CalculationHints, CalculationIntent
 from goldilocks_core.functionals import normalize_functional_label
 from goldilocks_core.provenance import Provenance
 from goldilocks_core.types import (
@@ -52,14 +51,19 @@ class PseudopotentialRequirements:
 
 def advise_pseudopotential_requirements(
     intent: CalculationIntent,
-    hints: PseudoHints,
+    hints: CalculationHints,
     spin_orbit: SpinOrbitAdvice,
 ) -> PseudopotentialRequirements:
-    accuracy = hints.accuracy or intent.pseudo_accuracy
+    accuracy = hints.pseudo_accuracy or intent.pseudo_accuracy
     relativistic = hints.relativistic_mode or (
         "full" if spin_orbit.enabled else "scalar"
     )
-    source = "user_hint" if has_hint(hints) else "default"
+    hinted = (
+        hints.pseudo_accuracy is not None
+        or hints.pseudo_type is not None
+        or hints.relativistic_mode is not None
+    )
+    source = "user_hint" if hinted else "default"
     warnings: tuple[str, ...] = ()
 
     if spin_orbit.enabled and hints.relativistic_mode is None:

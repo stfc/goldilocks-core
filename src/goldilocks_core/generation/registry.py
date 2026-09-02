@@ -7,15 +7,14 @@ from pymatgen.core import Structure
 from goldilocks_core.advice.parameters import ParameterAdvice
 from goldilocks_core.calculation import CalculationIntent
 from goldilocks_core.generation.errors import GenerationError
-from goldilocks_core.generation.files import GeneratedFile
 from goldilocks_core.generation.qe.scf import write_qe_scf
 from goldilocks_core.kmesh.resolve import KPointSelection
 from goldilocks_core.selection import SelectionRecord
-from goldilocks_core.types import CalcTask, CodeName
+from goldilocks_core.types import CalcTask, CodeName, JsonDict
 
 Writer = Callable[
     [Structure, CalculationIntent, ParameterAdvice, SelectionRecord, KPointSelection],
-    tuple[GeneratedFile, ...],
+    tuple[JsonDict, ...],
 ]
 
 _WRITERS: tuple[tuple[CodeName, CalcTask, Writer], ...] = (
@@ -49,7 +48,7 @@ def generate_inputs(
     advice: ParameterAdvice,
     selection: SelectionRecord,
     k_points: KPointSelection,
-) -> tuple[GeneratedFile, ...]:
+) -> tuple[JsonDict, ...]:
     return writer_for(intent.code, intent.task)(
         structure, intent, advice, selection, k_points
     )

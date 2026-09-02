@@ -455,10 +455,10 @@ def _print_human_summary(result: ComputationResult) -> None:
     input_data = result.records.get(DftInputData)
     if input_data is not None:
         print(
-            f"dft input data: {len(input_data.artifacts)} artifacts, "
-            f"{len(input_data.citations)} citations"
+            f"dft input data: {len(input_data['artifacts'])} artifacts, "
+            f"{len(input_data['citations'])} citations"
         )
-        pseudo_set = input_data.pseudopotential_set
+        pseudo_set = input_data["pseudopotential_set"]
         version = (
             f"@{pseudo_set['version']}" if pseudo_set["version"] is not None else ""
         )
@@ -467,7 +467,7 @@ def _print_human_summary(result: ComputationResult) -> None:
     if generated_files:
         print("generated files:")
         for generated_file in generated_files:
-            print(f"  {generated_file.path}")
+            print(f"  {generated_file['path']}")
     if result.publication is not None:
         print(f"published {result.publication['kind']}: {result.publication['path']}")
     if result.warnings:

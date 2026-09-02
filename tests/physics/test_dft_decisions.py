@@ -47,7 +47,7 @@ def test_elemental_metal_uses_modest_cold_smearing_in_qe_rydberg_units(
     assert analysis["electronic_character"] == "likely_metal"
     assert advice["smearing"]["smearing_type"] == "cold"
     assert advice["smearing"]["width_ry"] == METALLIC_SMEARING_WIDTH_RY == 0.01
-    qe_input = result.records[GeneratedFiles][0].content
+    qe_input = result.records[GeneratedFiles][0]["content"]
     assert "  occupations = 'smearing'" in qe_input
     assert "  smearing = 'cold'" in qe_input
     assert "  degauss = 0.01" in qe_input
@@ -106,7 +106,7 @@ def test_explicit_soc_couples_fully_relativistic_pseudos_to_qe_noncollinear_flag
     assert advice["spin_orbit"]["consider"] is False
     assert advice["pseudopotential_requirements"]["relativistic"] == "full"
     assert result.records[SelectionRecord]["pseudopotentials"][0]["filename"] == "I.UPF"
-    qe_input = result.records[GeneratedFiles][0].content
+    qe_input = result.records[GeneratedFiles][0]["content"]
     assert "  noncolin = .true." in qe_input
     assert "  lspinorb = .true." in qe_input
     assert "  nspin = 2" not in qe_input

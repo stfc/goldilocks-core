@@ -454,7 +454,7 @@ def test_generation_preset_returns_generated_files(tmp_path) -> None:
         result = Dispatcher(runtime).compute(request)
 
     assert result.records[GeneratedFiles]
-    assert result.records[GeneratedFiles][0].path == "inputs/qe.in"
+    assert result.records[GeneratedFiles][0]["path"] == "inputs/qe.in"
 
 
 @pytest.mark.parametrize(

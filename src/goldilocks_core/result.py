@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from goldilocks_core.input_data import input_data_portable
 from goldilocks_core.selection import SelectionRecord, selection_portable
 from goldilocks_core.serialization import to_jsonable, to_portable
 from goldilocks_core.types import JsonDict
@@ -13,32 +13,6 @@ if TYPE_CHECKING:
         CalculationDraft,
         ComputationSelection,
     )
-
-
-class Records(Mapping[type, Any]):
-    __slots__ = ("_records",)
-
-    def __init__(self, records: Mapping[type, Any] | None = None) -> None:
-        self._records = dict(records or {})
-
-    def __getitem__(self, record_type: type) -> Any:
-        return self._records[record_type]
-
-    def __iter__(self) -> Iterator[type]:
-        return iter(self._records)
-
-    def __len__(self) -> int:
-        return len(self._records)
-
-
-@to_portable.register(Records)
-def _records_portable(records: Records) -> JsonDict:
-    from goldilocks_core.runtime.registry import record_type_id
-
-    return {
-        record_type_id(record_type): to_portable(record)
-        for record_type, record in records.items()
-    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,7 +29,7 @@ class ComputationResult:
     task: str
     task_revision: str
     selection: ComputationSelection
-    records: Records
+    records: dict[type, Any]
     warnings: tuple[str, ...] = ()
     publication: JsonDict | None = None
     schema_version: int = field(default=1, init=False)
@@ -63,6 +37,7 @@ class ComputationResult:
 
 @to_portable.register(ComputationResult)
 def _computation_result_portable(result: ComputationResult) -> JsonDict:
+    from goldilocks_core.input_data import DftInputData
     from goldilocks_core.runtime.registry import record_type_id
 
     records = {}
@@ -70,6 +45,8 @@ def _computation_result_portable(result: ComputationResult) -> JsonDict:
         record_id = record_type_id(record_type)
         if record_type is SelectionRecord:
             records[record_id] = selection_portable(value)
+        elif record_type is DftInputData:
+            records[record_id] = input_data_portable(value)
         else:
             records[record_id] = to_portable(value)
     return {

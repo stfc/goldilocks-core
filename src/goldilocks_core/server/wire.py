@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, JsonValue, create_model, model_valid
 from goldilocks_core.advice.parameters import ParameterAdvice
 from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.calculation import CalculationHints, CalculationIntent
+from goldilocks_core.generation.files import GeneratedFiles
 from goldilocks_core.input_data import DftInputData
 from goldilocks_core.io.structures import Matrix3, Vector3
 from goldilocks_core.kmesh.resolve import KPointSelection
@@ -349,6 +350,14 @@ SelectionRecordDocument = create_model(
     warnings=(tuple[str, ...], ...),
 )
 _SERIALIZED_MODELS[KPointSelection] = KPointSelectionDocument
+GeneratedFileDocument = create_model(
+    "GeneratedFile",
+    __config__=_SERIALIZED,
+    path=(str, ...),
+    content=(str, ...),
+    role=(str, ...),
+)
+_SERIALIZED_MODELS[GeneratedFiles] = tuple[GeneratedFileDocument, ...]
 _SERIALIZED_MODELS[SelectionRecord] = SelectionRecordDocument
 
 GeneratedArtifactSourceDocument = create_model(

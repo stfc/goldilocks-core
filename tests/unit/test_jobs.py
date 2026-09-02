@@ -185,5 +185,5 @@ def test_compute_generation_preset_produces_generated_inputs(tmp_path) -> None:
         )
     )
 
-    assert result.records[GeneratedFiles][0].path == "inputs/qe.in"
-    assert "2  2  1  0  0  0" in result.records[GeneratedFiles][0].content
+    assert result.records[GeneratedFiles][0]["path"] == "inputs/qe.in"
+    assert "2  2  1  0  0  0" in result.records[GeneratedFiles][0]["content"]

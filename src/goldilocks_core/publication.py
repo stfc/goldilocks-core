@@ -17,7 +17,6 @@ from pathlib import Path, PurePosixPath
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from goldilocks_core.assets.store import AssetStore
-from goldilocks_core.input_data import DftInputData
 from goldilocks_core.types import JsonDict
 
 
@@ -58,9 +57,9 @@ class Publisher:
     def __init__(self, asset_store: AssetStore | None = None) -> None:
         self._asset_store = asset_store
 
-    def files(self, input_data: DftInputData) -> tuple[PublishedFile, ...]:
+    def files(self, input_data: JsonDict) -> tuple[PublishedFile, ...]:
         files: dict[str, tuple[bytes, str]] = {}
-        for artifact in input_data.artifacts:
+        for artifact in input_data["artifacts"]:
             _validate_publication_path(artifact["path"])
             _add(files, artifact["path"], self._content(artifact), artifact["role"])
 
@@ -73,7 +72,7 @@ class Publisher:
         _add(files, "README.md", _readme(input_data).encode("utf-8"), "readme")
         manifest = {
             "schema_version": 1,
-            **input_data.manifest,
+            **input_data["manifest"],
             "files": {
                 path: {
                     "role": role,
@@ -109,7 +108,7 @@ class Publisher:
             for path, (content, role) in sorted(files.items())
         )
 
-    def publish(self, input_data: DftInputData, output: OutputTarget) -> JsonDict:
+    def publish(self, input_data: JsonDict, output: OutputTarget) -> JsonDict:
         files = self.files(input_data)
         if isinstance(output, DirectoryOutput):
             if output.path is None:
@@ -117,7 +116,7 @@ class Publisher:
             return self._publish_directory(files, Path(output.path))
         return self._publish_archive(files, Path(output.path))
 
-    def archive_bytes(self, input_data: DftInputData) -> bytes:
+    def archive_bytes(self, input_data: JsonDict) -> bytes:
         return _archive_bytes(self.files(input_data))
 
     def _publish_automatic_directory(
@@ -733,8 +732,8 @@ def _sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
-def _citations(input_data: DftInputData) -> str:
-    entries = "".join(f"- {citation}\n" for citation in input_data.citations)
+def _citations(input_data: JsonDict) -> str:
+    entries = "".join(f"- {citation}\n" for citation in input_data["citations"])
     return (
         "# Citations\n\n"
         "Goldilocks records complete provenance in `goldilocks.json`. Cite the "
@@ -743,10 +742,10 @@ def _citations(input_data: DftInputData) -> str:
     )
 
 
-def _readme(input_data: DftInputData) -> str:
+def _readme(input_data: JsonDict) -> str:
     source_path = next(
         artifact["path"]
-        for artifact in input_data.artifacts
+        for artifact in input_data["artifacts"]
         if artifact["role"] == "structure_source"
     )
     return (

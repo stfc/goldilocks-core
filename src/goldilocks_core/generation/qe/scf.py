@@ -7,7 +7,6 @@ from pymatgen.core.periodic_table import Element
 
 from goldilocks_core.calculation import CalculationIntent
 from goldilocks_core.generation.errors import GenerationError
-from goldilocks_core.generation.files import GeneratedFile
 from goldilocks_core.types import JsonDict
 
 _QE_VDW_CORR = {
@@ -29,12 +28,13 @@ def write_qe_scf(
     advice: JsonDict,
     selection: JsonDict,
     k_points: JsonDict,
-) -> tuple[GeneratedFile, ...]:
+) -> tuple[JsonDict, ...]:
     return (
-        GeneratedFile(
-            path="inputs/qe.in",
-            content=_render_qe_scf(structure, intent, advice, selection, k_points),
-        ),
+        {
+            "path": "inputs/qe.in",
+            "content": _render_qe_scf(structure, intent, advice, selection, k_points),
+            "role": "input",
+        },
     )
 
 

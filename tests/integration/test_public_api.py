@@ -13,14 +13,12 @@ from goldilocks_core import (
     ComputeRequest,
     DftInputData,
     DirectoryOutput,
-    GeneratedFile,
     GeneratedFiles,
     InlineStructureSource,
     InMemoryStructureSource,
     OutputTarget,
     PathStructureSource,
     PresetSelection,
-    Records,
     RecordSelection,
     Service,
     StructureSource,
@@ -103,9 +101,7 @@ def test_root_interface_exposes_three_operations_and_their_contracts() -> None:
         DirectoryOutput,
         ArchiveOutput,
         DftInputData,
-        GeneratedFile,
         GeneratedFiles,
-        Records,
     }
 
 
@@ -162,8 +158,8 @@ def test_generation_preset_runs_pipeline_through_generated_files(
 ) -> None:
     result = compute(_request(PresetSelection("generate"), tmp_path))
 
-    assert result.records[GeneratedFiles][0].path == "inputs/qe.in"
-    assert "3  3  3  0  0  0" in result.records[GeneratedFiles][0].content
+    assert result.records[GeneratedFiles][0]["path"] == "inputs/qe.in"
+    assert "3  3  3  0  0  0" in result.records[GeneratedFiles][0]["content"]
 
 
 def test_explicit_record_selection_returns_one_generic_result() -> None:

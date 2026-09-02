@@ -4,7 +4,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from goldilocks_core.result import Records
 from goldilocks_core.runtime.registry import record_type_id
 
 
@@ -110,8 +109,8 @@ def describe_task(task: TaskGraph) -> dict[str, Any]:
 
 @dataclass(frozen=True, slots=True)
 class GraphExecution:
-    records: Records
-    produced: Records
+    records: dict[type, Any]
+    produced: dict[type, Any]
 
 
 def execute_graph(
@@ -152,8 +151,8 @@ def execute_graph(
         memo[stage.output] = stage.call(*arguments, ctx=context)
 
     return GraphExecution(
-        records=Records({output_type: memo[output_type] for output_type in outputs}),
-        produced=Records(memo),
+        records={output_type: memo[output_type] for output_type in outputs},
+        produced=memo,
     )
 
 
@@ -161,5 +160,5 @@ def execute(
     task: TaskGraph,
     outputs: tuple[type, ...],
     context: Any,
-) -> Records:
+) -> dict[type, Any]:
     return execute_graph(task, outputs, context).records

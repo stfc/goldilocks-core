@@ -5,8 +5,18 @@ from goldilocks_core import (
     CalculationDraft,
     CalculationHints,
     CalculationIntent,
+    ComputationResult,
+    ComputeRequest,
     InMemoryStructureSource,
     PathStructureSource,
+    PresetSelection,
+    Records,
+    RecordSelection,
+    Service,
+    UnavailableRecord,
+    UnknownPreset,
+    UnknownTask,
+    compute,
 )
 from goldilocks_core.advice.parameters import ParameterAdvice
 from goldilocks_core.analysis import StructureAnalysisRecord
@@ -39,7 +49,6 @@ def make_metadata() -> PseudoMetadata:
 
 
 def test_preset_selection_serializes_one_named_preset() -> None:
-    from goldilocks_core import PresetSelection
 
     selection = PresetSelection("recommend")
 
@@ -47,14 +56,12 @@ def test_preset_selection_serializes_one_named_preset() -> None:
 
 
 def test_preset_selection_rejects_an_empty_name() -> None:
-    from goldilocks_core import PresetSelection
 
     with pytest.raises(ValueError, match="PresetSelection.preset"):
         PresetSelection("  ")
 
 
 def test_record_selection_serializes_stable_record_ids() -> None:
-    from goldilocks_core import RecordSelection
 
     selection = RecordSelection((StructureAnalysisRecord, ParameterAdvice))
 
@@ -62,7 +69,6 @@ def test_record_selection_serializes_stable_record_ids() -> None:
 
 
 def test_record_selection_owns_an_immutable_record_tuple() -> None:
-    from goldilocks_core import RecordSelection
 
     records = [StructureAnalysisRecord]
     selection = RecordSelection(records)
@@ -72,14 +78,12 @@ def test_record_selection_owns_an_immutable_record_tuple() -> None:
 
 
 def test_record_selection_rejects_non_type_members() -> None:
-    from goldilocks_core import RecordSelection
 
     with pytest.raises(ValueError, match="RecordSelection.records must contain types"):
         RecordSelection(("analysis",))
 
 
 def test_record_selection_rejects_an_empty_record_set() -> None:
-    from goldilocks_core import RecordSelection
 
     with pytest.raises(ValueError, match="RecordSelection.records"):
         RecordSelection(())
@@ -150,7 +154,6 @@ def test_model_spec_serialization_is_a_payload_free_review_snapshot() -> None:
 
 
 def test_compute_request_rejects_an_invalid_selection_type() -> None:
-    from goldilocks_core import ComputeRequest
 
     with pytest.raises(ValueError, match="ComputeRequest.selection"):
         ComputeRequest(
@@ -160,7 +163,6 @@ def test_compute_request_rejects_an_invalid_selection_type() -> None:
 
 
 def test_compute_request_serializes_the_draft_and_selection() -> None:
-    from goldilocks_core import ComputeRequest, PresetSelection
 
     request = ComputeRequest(
         draft=CalculationDraft(
@@ -176,12 +178,6 @@ def test_compute_request_serializes_the_draft_and_selection() -> None:
 
 
 def test_result_retains_the_normalized_calculation_draft(tmp_path) -> None:
-    from goldilocks_core import (
-        CalculationDraft,
-        ComputeRequest,
-        PresetSelection,
-        Service,
-    )
 
     source = tmp_path / "Si.cif"
     source.write_text(make_structure().to(fmt="cif"), encoding="utf-8")
@@ -204,7 +200,6 @@ def test_result_retains_the_normalized_calculation_draft(tmp_path) -> None:
 
 
 def test_computation_result_serializes_records_without_scf_projection() -> None:
-    from goldilocks_core import ComputationResult, PresetSelection, Records
 
     analysis = StructureAnalysisRecord(
         formula="Si1",
@@ -239,12 +234,6 @@ def test_computation_result_serializes_records_without_scf_projection() -> None:
 
 
 def test_service_computes_the_recommendation_preset_as_records() -> None:
-    from goldilocks_core import (
-        ComputationResult,
-        ComputeRequest,
-        PresetSelection,
-        Service,
-    )
 
     request = ComputeRequest(
         draft=CalculationDraft(
@@ -272,7 +261,6 @@ def test_service_computes_the_recommendation_preset_as_records() -> None:
 
 
 def test_computation_result_collects_factual_task_warnings() -> None:
-    from goldilocks_core import ComputeRequest, PresetSelection, Service
 
     request = ComputeRequest(
         draft=CalculationDraft(
@@ -297,7 +285,6 @@ def test_computation_result_collects_factual_task_warnings() -> None:
 
 
 def test_explicit_records_collect_warnings_from_executed_dependencies() -> None:
-    from goldilocks_core import ComputeRequest, RecordSelection, Service
 
     request = ComputeRequest(
         draft=CalculationDraft(
@@ -322,7 +309,6 @@ def test_explicit_records_collect_warnings_from_executed_dependencies() -> None:
 
 
 def test_computation_omits_generic_scientific_reminders() -> None:
-    from goldilocks_core import ComputeRequest, PresetSelection, Service
 
     request = ComputeRequest(
         draft=CalculationDraft(
@@ -340,7 +326,6 @@ def test_computation_omits_generic_scientific_reminders() -> None:
 
 
 def test_compute_rejects_an_unknown_preset_at_the_task_seam() -> None:
-    from goldilocks_core import ComputeRequest, PresetSelection, Service, UnknownPreset
 
     request = ComputeRequest(
         draft=CalculationDraft(InMemoryStructureSource(make_structure())),
@@ -358,12 +343,6 @@ def test_compute_rejects_an_unknown_preset_at_the_task_seam() -> None:
 
 
 def test_compute_rejects_an_unknown_calculation_task() -> None:
-    from goldilocks_core import (
-        ComputeRequest,
-        PresetSelection,
-        Service,
-        UnknownTask,
-    )
 
     request = ComputeRequest(
         draft=CalculationDraft(
@@ -384,12 +363,6 @@ def test_compute_rejects_an_unknown_calculation_task() -> None:
 
 
 def test_compute_rejects_a_record_not_selectable_for_the_task() -> None:
-    from goldilocks_core import (
-        ComputeRequest,
-        RecordSelection,
-        Service,
-        UnavailableRecord,
-    )
 
     class FirstUnsupportedRecord:
         pass
@@ -413,7 +386,6 @@ def test_compute_rejects_a_record_not_selectable_for_the_task() -> None:
 
 
 def test_one_call_compute_uses_the_same_result_contract() -> None:
-    from goldilocks_core import ComputeRequest, PresetSelection, compute
 
     result = compute(
         ComputeRequest(

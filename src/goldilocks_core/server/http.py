@@ -68,6 +68,8 @@ def create_app(
         from fastapi.staticfiles import StaticFiles
     except ImportError as error:
         raise ImportError(_MISSING_HTTP_EXTRA) from error
+    # http_contract imports FastAPI at module level, so it stays deferred
+    # behind the [http] extra check above.
     from goldilocks_core.server.http_contract import install_scientific_routes
 
     owns_service = service is None

@@ -208,6 +208,10 @@ boundaries, concurrency safety, or the task extension model.
   context and stage graph; they do not edit the generic executor.
 - Importing `goldilocks_core` never imports FastAPI or the MCP SDK.
   The `[http]` and `[mcp]` extras are lazy boundaries.
+- Two lazy-import patterns are deliberate and should not be "fixed": heavy
+  ML dependencies (torch, matminer, dscribe) load at first model use, and
+  optional transport extras import inside their serve paths with
+  `ImportError` guidance. Both keep `import goldilocks_core` cheap.
 - `server/wire.py` rejects unknown fields and bad transport types;
   `server/request.py` constructs Core Records without revalidating them.
 - `DimensionalityClassificationError` is an `Exception`, not a

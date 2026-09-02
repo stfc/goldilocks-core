@@ -8,11 +8,7 @@ from pathlib import Path
 from goldilocks_core.advice.parameters import ParameterAdvice
 from goldilocks_core.assets.runtime import (
     install as install_assets,
-)
-from goldilocks_core.assets.runtime import (
     statuses as asset_statuses,
-)
-from goldilocks_core.assets.runtime import (
     verify as verify_assets,
 )
 from goldilocks_core.assets.store import AssetCorrupt, AssetNotInstalled, AssetStore

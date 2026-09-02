@@ -123,3 +123,6 @@ goldilocks_core = [
     "examples/structures/README.md",
 ]
 
+
+[tool.ruff.lint.isort]
+combine-as-imports = true

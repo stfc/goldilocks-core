@@ -21,19 +21,6 @@ from goldilocks_core.validation import (
 
 
 @dataclass(frozen=True, slots=True)
-class PseudoCutoffs:
-    ecutwfc_ry: float | None = None
-    ecutrho_ry: float | None = None
-
-    def __post_init__(self) -> None:
-        for field_name in ("ecutwfc_ry", "ecutrho_ry"):
-            value = getattr(self, field_name)
-            if value is not None:
-                validate_finite_positive(value, f"PseudoCutoffs.{field_name}")
-                object.__setattr__(self, field_name, float(value))
-
-
-@dataclass(frozen=True, slots=True)
 class PseudoMetadata:
     filepath: str
     filename: str
@@ -46,7 +33,7 @@ class PseudoMetadata:
     relativistic: RelativisticTreatment | None = None
     z_valence: float | None = None
     table_id: str | None = None
-    cutoffs: PseudoCutoffs | None = None
+    cutoffs: dict[str, float | None] | None = None
     source_identifier: str | None = None
     content_sha256: str | None = None
     content_size_bytes: int | None = None
@@ -125,16 +112,25 @@ class PseudoMetadata:
         if self.z_valence is not None:
             validate_finite_positive(self.z_valence, "PseudoMetadata.z_valence")
             object.__setattr__(self, "z_valence", float(self.z_valence))
-        if self.cutoffs is not None and not isinstance(self.cutoffs, PseudoCutoffs):
+        if self.cutoffs is not None:
             if not isinstance(self.cutoffs, Mapping):
+                raise ValueError("PseudoMetadata.cutoffs must be a mapping or None")
+            unknown = set(self.cutoffs) - {"ecutwfc_ry", "ecutrho_ry"}
+            if unknown:
                 raise ValueError(
-                    "PseudoMetadata.cutoffs must be PseudoCutoffs, an object, or None"
+                    "PseudoMetadata.cutoffs accepts only ecutwfc_ry and "
+                    f"ecutrho_ry; got {sorted(unknown)!r}"
                 )
-            try:
-                cutoffs = PseudoCutoffs(**dict(self.cutoffs))
-            except TypeError as error:
-                raise ValueError(f"Invalid PseudoMetadata.cutoffs: {error}") from error
-            object.__setattr__(self, "cutoffs", cutoffs)
+            normalized = {}
+            for field_name in ("ecutwfc_ry", "ecutrho_ry"):
+                value = dict(self.cutoffs).get(field_name)
+                if value is not None:
+                    validate_finite_positive(
+                        value, f"PseudoMetadata.cutoffs.{field_name}"
+                    )
+                    value = float(value)
+                normalized[field_name] = value
+            object.__setattr__(self, "cutoffs", normalized)
         if not isinstance(self.frozen_4f_core, bool):
             raise ValueError("PseudoMetadata.frozen_4f_core must be a boolean")
         if not isinstance(self.pseudo_info, dict):

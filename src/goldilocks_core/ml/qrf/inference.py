@@ -89,7 +89,7 @@ def _predict_kdistance_quantiles(
     correction: float = 0.0,
 ) -> tuple[float, float, float]:
     raw = np.asarray(
-        model.predict(np.asarray(features.values, dtype=float).reshape(1, -1)),
+        model.predict(np.asarray(features[0], dtype=float).reshape(1, -1)),
         dtype=float,
     )
     if raw.size != 3:

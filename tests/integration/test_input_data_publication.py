@@ -23,17 +23,12 @@ from goldilocks_core import (
     Service,
 )
 from goldilocks_core.assets.store import AssetStore
-from goldilocks_core.input_data import (
-    DftInputData,
-    GeneratedContent,
-    InputArtifact,
-    InstalledArtifactReference,
-)
+from goldilocks_core.input_data import DftInputData
 from goldilocks_core.kmesh.resolve import KPointSelection
 from goldilocks_core.ml.model_registry import model_asset_specs
 from goldilocks_core.ml.models import ModelSpec
 from goldilocks_core.provenance import Provenance
-from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
 from goldilocks_core.pseudo.registry import load_tables
 from goldilocks_core.publication import Publisher
@@ -59,7 +54,7 @@ def test_generation_assembles_complete_dft_input_data_without_host_paths(
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
+        cutoffs={"ecutwfc_ry": 30, "ecutrho_ry": 120},
         source_identifier="fixture/Si.UPF",
         content_sha256=hashlib.sha256(pseudo_bytes).hexdigest(),
         content_size_bytes=len(pseudo_bytes),
@@ -84,7 +79,7 @@ def test_generation_assembles_complete_dft_input_data_without_host_paths(
         result = service.compute(request)
 
     input_data = result.records[DftInputData]
-    artifacts = {artifact.path: artifact for artifact in input_data.artifacts}
+    artifacts = {artifact["path"]: artifact for artifact in input_data.artifacts}
     assert set(artifacts) == {
         "source/original.cif",
         "structure/canonical.cif",
@@ -92,16 +87,16 @@ def test_generation_assembles_complete_dft_input_data_without_host_paths(
         "pseudo/Si.UPF",
         "licences/explicit-local-pseudopotentials.txt",
     }
-    assert isinstance(artifacts["pseudo/Si.UPF"].source, GeneratedContent)
-    assert artifacts["source/original.cif"].source.content == source_text.encode()
-    assert artifacts["pseudo/Si.UPF"].source.content == pseudo_bytes
+    assert artifacts["pseudo/Si.UPF"]["source"]["kind"] == "generated"
+    assert artifacts["source/original.cif"]["source"]["content"] == source_text.encode()
+    assert artifacts["pseudo/Si.UPF"]["source"]["content"] == pseudo_bytes
     assert (
-        artifacts["licences/explicit-local-pseudopotentials.txt"].source.content
+        artifacts["licences/explicit-local-pseudopotentials.txt"]["source"]["content"]
         == b"Fixture licence text\n"
     )
-    assert input_data.pseudopotential_set.id == "explicit-local"
+    assert input_data.pseudopotential_set["id"] == "explicit-local"
     assert input_data.citations == ("Fixture pseudopotential citation.",)
-    assert input_data.runtime.core_version
+    assert input_data.runtime["core_version"]
     assert input_data.manifest["intent"]["code"] == "quantum_espresso"
     assert input_data.manifest["hints"]["k_grid"] == [3, 3, 3]
     assert input_data.manifest["records"]["generated_files"] == [
@@ -132,7 +127,7 @@ def test_explicit_pseudo_changed_after_metadata_selection_fails_before_publicati
         parse_upf_metadata(pseudo_path),
         provider="fixture",
         accuracy="efficiency",
-        cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
+        cutoffs={"ecutwfc_ry": 30, "ecutrho_ry": 120},
         source_identifier="fixture/Si.UPF",
         pseudo_info={
             "licence": "CC-BY-4.0",
@@ -212,7 +207,7 @@ def test_selected_pseudo_binds_to_one_exact_same_element_candidate(
                 pseudo_type="NC",
                 functional="PBEsol",
                 relativistic="scalar",
-                cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
+                cutoffs={"ecutwfc_ry": 30, "ecutrho_ry": 120},
                 source_identifier=identity,
                 content_sha256=hashlib.sha256(payload).hexdigest(),
                 content_size_bytes=len(payload),
@@ -239,17 +234,17 @@ def test_selected_pseudo_binds_to_one_exact_same_element_candidate(
     pseudo = next(
         artifact
         for artifact in input_data.artifacts
-        if artifact.role == "pseudopotential"
+        if artifact["role"] == "pseudopotential"
     )
     licence = next(
-        artifact for artifact in input_data.artifacts if artifact.role == "licence"
+        artifact for artifact in input_data.artifacts if artifact["role"] == "licence"
     )
-    assert isinstance(pseudo.source, GeneratedContent)
-    assert pseudo.source.identity == "a-source"
-    assert pseudo.source.content == b"selected UPF\n"
-    assert isinstance(licence.source, GeneratedContent)
-    assert licence.source.content == b"a-source legal terms\n"
-    assert input_data.pseudopotential_set.licence == "a-source-licence"
+    assert pseudo["source"]["kind"] == "generated"
+    assert pseudo["source"]["identity"] == "a-source"
+    assert pseudo["source"]["content"] == b"selected UPF\n"
+    assert licence["source"]["kind"] == "generated"
+    assert licence["source"]["content"] == b"a-source legal terms\n"
+    assert input_data.pseudopotential_set["licence"] == "a-source-licence"
     assert input_data.citations == ("a-source citation",)
 
 
@@ -269,7 +264,7 @@ def test_selected_pseudo_rejects_ambiguous_exact_metadata_candidates(
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
+        cutoffs={"ecutwfc_ry": 30, "ecutrho_ry": 120},
         source_identifier="same-source",
         pseudo_info={
             "licence": "first",
@@ -406,7 +401,7 @@ def test_publisher_builds_golden_layout_with_deterministic_zip_parity(
     assert manifest["citations"] == ["Fixture pseudopotential citation."]
     assert manifest["files"]["pseudo/Si.UPF"] == {
         "role": "pseudopotential",
-        "sha256": input_data.artifacts[3].sha256,
+        "sha256": input_data.artifacts[3]["sha256"],
         "size_bytes": len(pseudo_bytes),
     }
     assert first_archive == second_archive
@@ -435,7 +430,7 @@ def _explicit_input_data(tmp_path: Path) -> tuple[DftInputData, str, bytes]:
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
+        cutoffs={"ecutwfc_ry": 30, "ecutrho_ry": 120},
         source_identifier="fixture/Si.UPF",
         content_sha256=hashlib.sha256(pseudo_bytes).hexdigest(),
         content_size_bytes=len(pseudo_bytes),
@@ -514,7 +509,7 @@ def test_pseudo_root_publication_uses_explicit_legal_sidecar(tmp_path: Path) -> 
 
     input_data = result.records[DftInputData]
     files = {item.path: item.content for item in Publisher().files(input_data)}
-    assert input_data.pseudopotential_set.licence == "Operator-Licence-1.0"
+    assert input_data.pseudopotential_set["licence"] == "Operator-Licence-1.0"
     assert input_data.citations == (citation,)
     assert files["pseudo/Si.custom.UPF"] == upf.read_bytes()
     assert (
@@ -530,19 +525,17 @@ def test_pseudo_root_publication_uses_explicit_legal_sidecar(tmp_path: Path) -> 
 def test_publisher_rejects_unsafe_and_duplicate_logical_paths(tmp_path: Path) -> None:
     input_data, _, _ = _explicit_input_data(tmp_path)
     template = input_data.artifacts[0]
-    unsafe = replace(
-        template,
-        path="../escaped.cif",
-        source=GeneratedContent(b"escape", "unsafe-test"),
-    )
-    duplicate = InputArtifact(
-        path=template.path,
-        role="duplicate",
-        sha256=template.sha256,
-        size_bytes=template.size_bytes,
-        source=template.source,
-    )
-    reserved = replace(template, path="goldilocks.json")
+    unsafe = {
+        **template,
+        "path": "../escaped.cif",
+        "source": {
+            "kind": "generated",
+            "identity": "unsafe-test",
+            "content": b"escape",
+        },
+    }
+    duplicate = {**template, "role": "duplicate"}
+    reserved = {**template, "path": "goldilocks.json"}
 
     cases = (
         (replace(input_data, artifacts=(unsafe,)), "Unsafe publication path"),
@@ -565,10 +558,10 @@ def test_publisher_rejects_control_characters_before_writing_checksums(
 ) -> None:
     input_data, _, _ = _explicit_input_data(tmp_path)
     template = input_data.artifacts[0]
-    injected = replace(
-        template,
-        path=(f"source/structure.cif\n{'0' * 64}  forged/entry"),
-    )
+    injected = {
+        **template,
+        "path": f"source/structure.cif\n{'0' * 64}  forged/entry",
+    }
 
     with pytest.raises(ValueError, match="Unsafe publication path"):
         Publisher().files(replace(input_data, artifacts=(injected,)))
@@ -579,7 +572,10 @@ def test_publisher_rejects_every_control_character_in_paths(
     tmp_path: Path, control: str
 ) -> None:
     input_data, _, _ = _explicit_input_data(tmp_path)
-    artifact = replace(input_data.artifacts[0], path=f"source/a{control}b.cif")
+    artifact = {
+        **input_data.artifacts[0],
+        "path": f"source/a{control}b.cif",
+    }
 
     with pytest.raises(ValueError, match="Unsafe publication path"):
         Publisher().files(replace(input_data, artifacts=(artifact,)))
@@ -597,13 +593,13 @@ def test_publisher_atomically_writes_explicit_destinations_without_overwrite(
     archive_info = publisher.publish(input_data, ArchiveOutput(archive))
 
     expected = {item.path: item.content for item in publisher.files(input_data)}
-    assert directory_info.kind == "directory"
-    assert directory_info.path == str(directory.resolve())
-    assert directory_info.files == tuple(sorted(expected))
-    assert directory_info.manifest_sha256
-    assert archive_info.kind == "archive"
-    assert archive_info.path == str(archive.resolve())
-    assert archive_info.output_sha256
+    assert directory_info["kind"] == "directory"
+    assert directory_info["path"] == str(directory.resolve())
+    assert directory_info["files"] == sorted(expected)
+    assert directory_info["manifest_sha256"]
+    assert archive_info["kind"] == "archive"
+    assert archive_info["path"] == str(archive.resolve())
+    assert archive_info["output_sha256"]
     assert {
         path.relative_to(directory).as_posix(): path.read_bytes()
         for path in directory.rglob("*")
@@ -619,10 +615,10 @@ def test_publisher_atomically_writes_explicit_destinations_without_overwrite(
                 else ArchiveOutput(occupied),
             )
 
-    too_long = replace(
-        input_data.artifacts[0],
-        path=f"source/{'x' * 300}.cif",
-    )
+    too_long = {
+        **input_data.artifacts[0],
+        "path": f"source/{'x' * 300}.cif",
+    }
     failed_destination = tmp_path / "failed"
     with pytest.raises(OSError):
         publisher.publish(
@@ -657,7 +653,7 @@ def test_directory_publication_uses_windows_private_path_writer(
 
     publication = Publisher().publish(input_data, DirectoryOutput(destination))
 
-    assert publication.path == str(destination)
+    assert publication["path"] == str(destination)
     assert len(calls) == 1
     assert calls[0][1] == destination
     assert (destination / "goldilocks.json").is_file()
@@ -831,11 +827,11 @@ def test_automatic_directory_allocation_uses_occupancy_and_is_concurrency_safe(
             )
         )
 
-    assert Path(first.path).name == "goldilocks_out_3"
-    assert {Path(item.path).name for item in publications} == {
+    assert Path(first["path"]).name == "goldilocks_out_3"
+    assert {Path(item["path"]).name for item in publications} == {
         *(f"goldilocks_out_{index}" for index in range(4, 12))
     }
-    assert len({item.path for item in publications}) == 8
+    assert len({item["path"] for item in publications}) == 8
     assert (tmp_path / "goldilocks_out").read_text() == "occupied"
     assert (tmp_path / "goldilocks_out_2").is_symlink()
 
@@ -928,7 +924,7 @@ def test_automatic_directory_allocation_advances_after_no_replace_race(
 
     publication = Publisher().publish(input_data, DirectoryOutput())
 
-    assert Path(publication.path).name == "goldilocks_out_1"
+    assert Path(publication["path"]).name == "goldilocks_out_1"
     assert (tmp_path / "goldilocks_out" / "foreign.txt").read_text() == "foreign"
     assert (tmp_path / "goldilocks_out_1" / "goldilocks.json").is_file()
 
@@ -1357,9 +1353,9 @@ def test_service_compute_applies_output_targets_and_returns_publication_info(
             )
 
     assert published.publication is not None
-    assert published.publication.kind == "directory"
-    assert published.publication.path == str(destination.resolve())
-    assert published.publication.files[-1] == "structure/canonical.cif"
+    assert published.publication["kind"] == "directory"
+    assert published.publication["path"] == str(destination.resolve())
+    assert published.publication["files"][-1] == "structure/canonical.cif"
     assert to_portable(published)["publication"]["manifest_sha256"]
     assert memory.publication is None
     assert not (tmp_path / "recommendation").exists()
@@ -1387,7 +1383,7 @@ def _explicit_request(tmp_path: Path, pseudo_name: str) -> ComputeRequest:
                     pseudo_type="NC",
                     functional="PBEsol",
                     relativistic="scalar",
-                    cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
+                    cutoffs={"ecutwfc_ry": 30, "ecutrho_ry": 120},
                     source_identifier="fixture/Si.UPF",
                     content_sha256=hashlib.sha256(pseudo_bytes).hexdigest(),
                     content_size_bytes=len(pseudo_bytes),
@@ -1493,18 +1489,18 @@ url = "{licence_source.as_uri()}"
             result = service.compute(request)
     input_data = result.records[DftInputData]
     pseudo = next(
-        item for item in input_data.artifacts if item.role == "pseudopotential"
+        item for item in input_data.artifacts if item["role"] == "pseudopotential"
     )
-    licence = next(item for item in input_data.artifacts if item.role == "licence")
+    licence = next(item for item in input_data.artifacts if item["role"] == "licence")
 
-    assert pseudo.source.asset_id == "pseudopotentials/fixture-table"
-    assert pseudo.source.asset_version == "1"
-    assert pseudo.source.path == "pseudos/Si.UPF"
-    assert licence.source.asset_id == "pseudopotentials/fixture-table"
-    assert licence.source.asset_version == "1"
-    assert licence.source.path == "LICENSE.txt"
-    assert input_data.pseudopotential_set.id == "fixture-table"
-    assert input_data.pseudopotential_set.policy == {
+    assert pseudo["source"]["asset_id"] == "pseudopotentials/fixture-table"
+    assert pseudo["source"]["asset_version"] == "1"
+    assert pseudo["source"]["path"] == "pseudos/Si.UPF"
+    assert licence["source"]["asset_id"] == "pseudopotentials/fixture-table"
+    assert licence["source"]["asset_version"] == "1"
+    assert licence["source"]["path"] == "LICENSE.txt"
+    assert input_data.pseudopotential_set["id"] == "fixture-table"
+    assert input_data.pseudopotential_set["policy"] == {
         "accuracy": "efficiency",
         "provider": "sssp",
         "relativistic": "scalar",
@@ -1541,7 +1537,10 @@ url = "{licence_source.as_uri()}"
 
     with pytest.raises(ValueError, match="differs from its DFT Input Data descriptor"):
         Publisher(store).files(input_data)
-    assert pseudo.source.preparation_fingerprint == table.asset.preparation_fingerprint
+    assert (
+        pseudo["source"]["preparation_fingerprint"]
+        == table.asset.preparation_fingerprint
+    )
 
 
 def _stub_metallicity(
@@ -1606,21 +1605,21 @@ def test_model_runtime_identities_licences_and_citations_are_published(
             result = service.compute(request)
 
     input_data = result.records[DftInputData]
-    assert {item.id for item in input_data.runtime.assets} == {
+    assert {item["id"] for item in input_data.runtime["assets"]} == {
         "models/qrf-kpoints",
         "models/metallicity-cgcnn",
     }
-    assert {model["target"] for model in input_data.runtime.models} == {
+    assert {model["target"] for model in input_data.runtime["models"]} == {
         "k_distance",
         "metallicity",
     }
     specs = {spec.id: spec for spec in model_asset_specs()}
-    for identity in input_data.runtime.assets:
-        spec = specs[identity.id]
+    for identity in input_data.runtime["assets"]:
+        spec = specs[identity["id"]]
         installed = store.verify_spec(spec)
-        assert identity.preparation_fingerprint == spec.preparation_fingerprint
-        assert identity.model in input_data.runtime.models
-        assert identity.files == tuple(
+        assert identity["preparation_fingerprint"] == spec.preparation_fingerprint
+        assert identity["model"] in input_data.runtime["models"]
+        assert identity["files"] == [
             {
                 "path": file.path,
                 "role": next(
@@ -1630,23 +1629,22 @@ def test_model_runtime_identities_licences_and_citations_are_published(
                 "size_bytes": file.size,
             }
             for file in installed.files
-        )
+        ]
     licence_artifacts = {
-        item.path: item
+        item["path"]: item
         for item in input_data.artifacts
-        if item.path in expected_licences
+        if item["path"] in expected_licences
     }
     assert set(licence_artifacts) == set(expected_licences)
     assert all(
-        isinstance(item.source, InstalledArtifactReference)
-        for item in licence_artifacts.values()
+        item["source"]["kind"] == "installed" for item in licence_artifacts.values()
     )
     published_files = Publisher(store).files(input_data)
     files = {item.path: item.content for item in published_files}
     assert {path: files[path] for path in expected_licences} == expected_licences
     published_manifest = json.loads(files["goldilocks.json"])
     assert published_manifest["runtime"]["assets"] == [
-        to_portable(identity) for identity in input_data.runtime.assets
+        to_portable(identity) for identity in input_data.runtime["assets"]
     ]
     assert all(
         "preparation_fingerprint" in identity
@@ -1716,7 +1714,8 @@ def test_custom_registry_same_id_version_source_drift_is_rejected(
         with Service(runtime) as service:
             original = service.compute(request).records[DftInputData]
     original_fingerprints = {
-        asset.id: asset.preparation_fingerprint for asset in original.runtime.assets
+        asset["id"]: asset["preparation_fingerprint"]
+        for asset in original.runtime["assets"]
     }
 
     registry.write_text(
@@ -1815,8 +1814,8 @@ def test_standalone_metallicity_publishes_only_its_explicit_material(
             result = service.compute(request)
 
     input_data = result.records[DftInputData]
-    assert input_data.runtime.assets == ()
-    assert input_data.runtime.models == (
+    assert input_data.runtime["assets"] == []
+    assert input_data.runtime["models"] == [
         {
             "name": "operator-metallicity",
             "version": "2026.1",
@@ -1828,7 +1827,7 @@ def test_standalone_metallicity_publishes_only_its_explicit_material(
             "licence": "Operator-Model-Licence-1.0",
             "citation": citation,
         },
-    )
+    ]
     assert input_data.citations == (
         "Fixture pseudopotential citation.",
         citation,
@@ -1880,8 +1879,10 @@ def test_custom_kmesh_model_publishes_its_explicit_material_not_defaults(
             result = service.compute(request)
 
     input_data = result.records[DftInputData]
-    assert input_data.runtime.assets == ()
-    assert [model["name"] for model in input_data.runtime.models] == ["operator-kindex"]
+    assert input_data.runtime["assets"] == []
+    assert [model["name"] for model in input_data.runtime["models"]] == [
+        "operator-kindex"
+    ]
     assert input_data.citations == (
         "Fixture pseudopotential citation.",
         citation,
@@ -1952,16 +1953,18 @@ def test_same_name_version_models_with_different_targets_and_revisions_are_disti
         with Service(runtime) as service:
             input_data = service.compute(request).records[DftInputData]
 
-    assert [model["target"] for model in input_data.runtime.models] == [
+    assert [model["target"] for model in input_data.runtime["models"]] == [
         "k_index",
         "metallicity",
     ]
-    assert [model["revision"] for model in input_data.runtime.models] == [
+    assert [model["revision"] for model in input_data.runtime["models"]] == [
         "kmesh-revision",
         "metallicity-revision",
     ]
     licence_paths = {
-        artifact.path for artifact in input_data.artifacts if artifact.role == "licence"
+        artifact["path"]
+        for artifact in input_data.artifacts
+        if artifact["role"] == "licence"
     }
     assert {
         "licences/custom-kmesh-model.txt",

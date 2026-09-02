@@ -1,17 +1,10 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 
 from pymatgen.core import Structure
 
 from goldilocks_core.types import KPointGrid
-
-
-@dataclass(frozen=True, slots=True)
-class KMeshEntry:
-    k_index: int
-    mesh: KPointGrid
 
 
 def k_distance_to_mesh(
@@ -59,12 +52,9 @@ def generate_candidate_k_distances(
 def build_kmesh_entries(
     structure: Structure,
     candidate_distances: list[float],
-) -> list[KMeshEntry]:
+) -> list[tuple[int, KPointGrid]]:
     meshes = _candidate_meshes(structure, candidate_distances)
-    return [
-        KMeshEntry(k_index=index, mesh=mesh)
-        for index, mesh in enumerate(meshes, start=1)
-    ]
+    return list(enumerate(meshes, start=1))
 
 
 def _candidate_meshes(

@@ -14,15 +14,11 @@ import tempfile
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Literal
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from goldilocks_core.assets.store import AssetStore
-from goldilocks_core.input_data import (
-    DftInputData,
-    GeneratedContent,
-    InputArtifact,
-)
+from goldilocks_core.input_data import DftInputData
+from goldilocks_core.types import JsonDict
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,23 +47,6 @@ def _validate_destination(path: str | Path) -> None:
 
 
 @dataclass(frozen=True, slots=True)
-class Publication:
-    """A published output bundle and its integrity facts.
-
-    ``path`` is the published location; ``files`` lists every published
-    path relative to it. ``manifest_sha256`` pins the archive manifest and
-    ``output_sha256`` pins the archive bytes; it is ``None`` for directory
-    publications.
-    """
-
-    kind: Literal["directory", "archive"]
-    path: str
-    files: tuple[str, ...]
-    manifest_sha256: str
-    output_sha256: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
 class PublishedFile:
     path: str
     content: bytes
@@ -82,8 +61,8 @@ class Publisher:
     def files(self, input_data: DftInputData) -> tuple[PublishedFile, ...]:
         files: dict[str, tuple[bytes, str]] = {}
         for artifact in input_data.artifacts:
-            _validate_publication_path(artifact.path)
-            _add(files, artifact.path, self._content(artifact), artifact.role)
+            _validate_publication_path(artifact["path"])
+            _add(files, artifact["path"], self._content(artifact), artifact["role"])
 
         _add(
             files,
@@ -130,7 +109,7 @@ class Publisher:
             for path, (content, role) in sorted(files.items())
         )
 
-    def publish(self, input_data: DftInputData, output: OutputTarget) -> Publication:
+    def publish(self, input_data: DftInputData, output: OutputTarget) -> JsonDict:
         files = self.files(input_data)
         if isinstance(output, DirectoryOutput):
             if output.path is None:
@@ -143,7 +122,7 @@ class Publisher:
 
     def _publish_automatic_directory(
         self, files: tuple[PublishedFile, ...]
-    ) -> Publication:
+    ) -> JsonDict:
         index = 0
         while True:
             suffix = "" if index == 0 else f"_{index}"
@@ -156,7 +135,7 @@ class Publisher:
 
     def _publish_directory(
         self, files: tuple[PublishedFile, ...], destination: Path
-    ) -> Publication:
+    ) -> JsonDict:
         target = destination.expanduser().absolute()
         platform = _publication_platform()
         if platform == "unsupported_unix":
@@ -177,7 +156,7 @@ class Publisher:
         self,
         files: tuple[PublishedFile, ...],
         destination: Path,
-    ) -> Publication:
+    ) -> JsonDict:
         target = destination.expanduser().absolute()
         target.parent.mkdir(parents=True, exist_ok=True)
         descriptor, staging_name = tempfile.mkstemp(
@@ -211,24 +190,28 @@ class Publisher:
                 os.close(descriptor)
         return _publication("archive", target, files, _sha256(payload))
 
-    def _content(self, artifact: InputArtifact) -> bytes:
-        source = artifact.source
-        if isinstance(source, GeneratedContent):
-            payload = source.content
+    def _content(self, artifact: JsonDict) -> bytes:
+        source = artifact["source"]
+        if source["kind"] == "generated":
+            payload = source["content"]
         else:
             if self._asset_store is None:
                 raise ValueError(
                     "An AssetStore is required to publish installed artifact references"
                 )
             installed = self._asset_store.verify(
-                source.asset_id,
-                source.asset_version,
-                preparation_fingerprint=source.preparation_fingerprint,
+                source["asset_id"],
+                source["asset_version"],
+                preparation_fingerprint=source["preparation_fingerprint"],
             )
-            payload = installed.path(source.path).read_bytes()
-        if len(payload) != artifact.size_bytes or _sha256(payload) != artifact.sha256:
+            payload = installed.path(source["path"]).read_bytes()
+        if (
+            len(payload) != artifact["size_bytes"]
+            or _sha256(payload) != artifact["sha256"]
+        ):
             raise ValueError(
-                f"Artifact {artifact.path!r} differs from its DFT Input Data descriptor"
+                f"Artifact {artifact['path']!r} differs from its "
+                "DFT Input Data descriptor"
             )
         return payload
 
@@ -698,15 +681,15 @@ def _publication(
     target: Path,
     files: tuple[PublishedFile, ...],
     output_sha256: str | None = None,
-) -> Publication:
+) -> JsonDict:
     manifest = next(file for file in files if file.path == "goldilocks.json")
-    return Publication(
-        kind=kind,
-        path=str(target.resolve()),
-        files=tuple(file.path for file in files),
-        manifest_sha256=manifest.sha256,
-        output_sha256=output_sha256,
-    )
+    return {
+        "kind": kind,
+        "path": str(target.resolve()),
+        "files": [file.path for file in files],
+        "manifest_sha256": manifest.sha256,
+        "output_sha256": output_sha256,
+    }
 
 
 def _verify_directory(root: Path, files: tuple[PublishedFile, ...]) -> None:
@@ -762,9 +745,9 @@ def _citations(input_data: DftInputData) -> str:
 
 def _readme(input_data: DftInputData) -> str:
     source_path = next(
-        artifact.path
+        artifact["path"]
         for artifact in input_data.artifacts
-        if artifact.role == "structure_source"
+        if artifact["role"] == "structure_source"
     )
     return (
         "# Goldilocks DFT Input Data\n\n"

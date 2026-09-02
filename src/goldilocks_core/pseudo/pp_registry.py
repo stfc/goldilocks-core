@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 
-from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
 from goldilocks_core.pseudo.validation import (
     AmbiguousCutoffMetadata,
@@ -22,7 +22,7 @@ _PUBLICATION_SIDECAR = "goldilocks-pseudopotentials.json"
 class _DiscoveredCutoffs:
     provider: str
     source_identifier: str | None
-    cutoffs: PseudoCutoffs
+    cutoffs: dict[str, float | None]
 
 
 def load_pseudo_metadata(root: str | Path) -> list[PseudoMetadata]:
@@ -198,9 +198,7 @@ def _load_dojo_sidecar(
     return _DiscoveredCutoffs(
         provider="pseudodojo",
         source_identifier=sidecar.name,
-        cutoffs=PseudoCutoffs(
-            ecutwfc_ry=high,
-        ),
+        cutoffs={"ecutwfc_ry": high, "ecutrho_ry": None},
     )
 
 
@@ -235,16 +233,16 @@ def _load_sssp_sidecar(
     return _DiscoveredCutoffs(
         provider="sssp",
         source_identifier=entry.get("pseudopotential"),
-        cutoffs=PseudoCutoffs(
-            ecutwfc_ry=finite_positive_cutoff(
+        cutoffs={
+            "ecutwfc_ry": finite_positive_cutoff(
                 entry.get("ecutwfc_ry", entry.get("cutoff_wfc")),
                 f"{sidecar.name} cutoff_wfc",
             ),
-            ecutrho_ry=finite_positive_cutoff(
+            "ecutrho_ry": finite_positive_cutoff(
                 entry.get("ecutrho_ry", entry.get("cutoff_rho")),
                 f"{sidecar.name} cutoff_rho",
             ),
-        ),
+        },
     )
 
 

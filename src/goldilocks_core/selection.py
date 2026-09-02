@@ -170,8 +170,8 @@ def _select_for_element(
         )
 
     selected = min(candidates, key=_candidate_rank)
-    ecutwfc = selected.cutoffs.ecutwfc_ry if selected.cutoffs else None
-    ecutrho = selected.cutoffs.ecutrho_ry if selected.cutoffs else None
+    ecutwfc = selected.cutoffs["ecutwfc_ry"] if selected.cutoffs else None
+    ecutrho = selected.cutoffs["ecutrho_ry"] if selected.cutoffs else None
     warnings = _selection_warnings(element, selected, requirements)
     data_source = selected.table_id or selected.provider or selected.source_identifier
     return PseudopotentialSelection(
@@ -209,8 +209,8 @@ def _relativistic_compatible(
 def _candidate_rank(metadata: PseudoMetadata) -> tuple[int, int, str, str, str]:
     complete_cutoffs = (
         metadata.cutoffs is not None
-        and metadata.cutoffs.ecutwfc_ry is not None
-        and metadata.cutoffs.ecutrho_ry is not None
+        and metadata.cutoffs["ecutwfc_ry"] is not None
+        and metadata.cutoffs["ecutrho_ry"] is not None
     )
     return (
         0 if complete_cutoffs else 1,
@@ -246,9 +246,9 @@ def _selection_warnings(
         )
 
     missing = []
-    if selected.cutoffs is None or selected.cutoffs.ecutwfc_ry is None:
+    if selected.cutoffs is None or selected.cutoffs["ecutwfc_ry"] is None:
         missing.append("ecutwfc_ry")
-    if selected.cutoffs is None or selected.cutoffs.ecutrho_ry is None:
+    if selected.cutoffs is None or selected.cutoffs["ecutrho_ry"] is None:
         missing.append("ecutrho_ry")
     if missing:
         warnings.append(

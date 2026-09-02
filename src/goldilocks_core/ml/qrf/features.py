@@ -85,9 +85,9 @@ def extract_qrf_features(
             f"QRF feature extractor expected {QRF_FEATURE_COUNT} values; "
             f"got {values.size}."
         )
-    return StructureFeatureVector(
-        values=values,
-        feature_names=[f"qrf_{index}" for index in range(values.size)],
+    return (
+        values,
+        [f"qrf_{index}" for index in range(values.size)],
     )
 
 

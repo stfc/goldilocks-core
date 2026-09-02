@@ -35,7 +35,7 @@ def test_predict_runs_on_cslr_features() -> None:
     result = predict(DummyModel(), features)
 
     assert isinstance(result, float)
-    assert result == float(len(features.values))
+    assert result == float(len(features[0]))
 
 
 @pytest.mark.parametrize("value", [np.nan, np.inf, -np.inf])
@@ -51,7 +51,7 @@ def test_predict_rejects_mutated_non_finite_features_before_calling_model(
             return [1.0]
 
     features = extract_l_features(make_si_structure())
-    features.values[0] = value
+    features[0][0] = value
     model = PredictSpy()
 
     with pytest.raises(ValueError, match="features.*finite"):

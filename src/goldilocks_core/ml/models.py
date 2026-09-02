@@ -9,11 +9,8 @@ import numpy as np
 from goldilocks_core.serialization import to_portable
 from goldilocks_core.types import JsonDict, ModelSource, ModelType
 
-
-@dataclass(slots=True)
-class StructureFeatureVector:
-    values: np.ndarray
-    feature_names: list[str]
+type StructureFeatureVector = tuple[np.ndarray, list[str]]
+"""Feature values and their names, in matching order."""
 
 
 @dataclass(slots=True)

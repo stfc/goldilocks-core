@@ -138,9 +138,9 @@ def test_build_kmesh_entries_returns_indexed_mesh_entries() -> None:
     entries = build_kmesh_entries(structure, candidates)
 
     assert len(entries) > 0
-    assert entries[0].k_index == 1
-    assert entries[0].mesh == (1, 1, 1)
-    assert entries[-1].k_index == len(entries)
+    assert entries[0][0] == 1
+    assert entries[0][1] == (1, 1, 1)
+    assert entries[-1][0] == len(entries)
     # The mesh ordering is load-bearing: the ML k-index maps onto this table.
-    meshes = [entry.mesh for entry in entries]
+    meshes = [mesh for _, mesh in entries]
     assert meshes == [(index, index, index) for index in range(1, len(entries) + 1)]

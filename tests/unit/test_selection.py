@@ -3,7 +3,7 @@ from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.advice.pseudo import PseudopotentialRequirements
 from goldilocks_core.provenance import Provenance
-from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.selection import select_pseudopotentials
 from goldilocks_core.serialization import to_portable
 
@@ -51,10 +51,7 @@ def make_metadata(
     cutoffs = (
         None
         if ecutwfc_ry is None and ecutrho_ry is None
-        else PseudoCutoffs(
-            ecutwfc_ry=ecutwfc_ry,
-            ecutrho_ry=ecutrho_ry,
-        )
+        else {"ecutwfc_ry": ecutwfc_ry, "ecutrho_ry": ecutrho_ry}
     )
     return PseudoMetadata(
         filepath=f"/pseudo/{filename}",

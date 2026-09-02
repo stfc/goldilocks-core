@@ -8,7 +8,7 @@ from typing import Any
 
 from goldilocks_core.assets.records import InstalledAsset
 from goldilocks_core.assets.store import AssetCorrupt
-from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.pseudo.registry import PseudoTable
 from goldilocks_core.pseudo.validation import (
     finite_positive_cutoff,
@@ -169,14 +169,14 @@ def load_installed_table(
                     relativistic=entry_relativistic,
                     z_valence=entry["z_valence"],
                     table_id=data["id"],
-                    cutoffs=PseudoCutoffs(
-                        ecutwfc_ry=finite_positive_cutoff(
+                    cutoffs={
+                        "ecutwfc_ry": finite_positive_cutoff(
                             entry["ecutwfc_ry"], f"{element} ecutwfc_ry"
                         ),
-                        ecutrho_ry=finite_positive_cutoff(
+                        "ecutrho_ry": finite_positive_cutoff(
                             entry["ecutrho_ry"], f"{element} ecutrho_ry"
                         ),
-                    ),
+                    },
                     source_identifier=entry["source_identifier"],
                     frozen_4f_core=entry["frozen_4f_core"],
                     pseudo_info={

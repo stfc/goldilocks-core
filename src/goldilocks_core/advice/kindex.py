@@ -5,7 +5,6 @@ import math
 from pymatgen.core import Structure
 
 from goldilocks_core.kmesh.math import (
-    KMeshEntry,
     build_kmesh_entries,
     generate_candidate_k_distances,
 )
@@ -13,14 +12,15 @@ from goldilocks_core.kmesh.resolve import KMeshAdvisor, KPointSelection
 from goldilocks_core.ml.kindex.inference import predict_kindex
 from goldilocks_core.ml.models import ModelSpec
 from goldilocks_core.provenance import Provenance
+from goldilocks_core.types import KPointGrid
 
 
 def _select_kmesh_entry(
-    entries: list[KMeshEntry],
+    entries: list[tuple[int, KPointGrid]],
     predicted_k_index: float,
-) -> KMeshEntry:
+) -> tuple[int, KPointGrid]:
     target_index = max(1, math.ceil(predicted_k_index))
-    max_index = entries[-1].k_index
+    max_index = entries[-1][0]
     target_index = min(target_index, max_index)
 
     return entries[target_index - 1]
@@ -45,7 +45,7 @@ def advise_kpoints(
 
     return KPointSelection(
         mesh_type="monkhorst-pack",
-        grid=selected_entry.mesh,
+        grid=selected_entry[1],
         shift=(0, 0, 0),
         provenance=Provenance(
             source="model",

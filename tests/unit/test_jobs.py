@@ -22,8 +22,7 @@ from goldilocks_core.advice.parameters import ParameterAdvice
 from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.generation.files import GeneratedFiles
 from goldilocks_core.ml.model_registry import load_default_qrf_config
-from goldilocks_core.ml.models import StructureFeatureVector
-from goldilocks_core.pseudo.metadata import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.serialization import to_portable
 
 
@@ -42,7 +41,7 @@ def make_metadata() -> PseudoMetadata:
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        cutoffs=PseudoCutoffs(ecutwfc_ry=35, ecutrho_ry=140),
+        cutoffs={"ecutwfc_ry": 35, "ecutrho_ry": 140},
         source_identifier="synthetic/Si.UPF",
         pseudo_info={
             "licence": "CC-BY-4.0",
@@ -132,9 +131,9 @@ def test_compute_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> None:
     )
     monkeypatch.setattr(
         "goldilocks_core.ml.qrf.features.extract_qrf_features",
-        lambda structure, model, atom_init, settings: StructureFeatureVector(
-            values=np.zeros(483),
-            feature_names=[f"feature_{index}" for index in range(483)],
+        lambda structure, model, atom_init, settings: (
+            np.zeros(483),
+            [f"feature_{index}" for index in range(483)],
         ),
     )
 

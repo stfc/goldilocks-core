@@ -25,101 +25,27 @@ from goldilocks_core.types import JsonDict, PathLike
 
 
 @dataclass(frozen=True, slots=True)
-class GeneratedContent:
-    content: bytes
-    identity: str
-
-
-@dataclass(frozen=True, slots=True)
-class InstalledArtifactReference:
-    asset_id: str
-    asset_version: str
-    preparation_fingerprint: str
-    path: str
-
-
-type ArtifactSource = GeneratedContent | InstalledArtifactReference
-
-
-@dataclass(frozen=True, slots=True)
-class InputArtifact:
-    path: str
-    role: str
-    sha256: str
-    size_bytes: int
-    source: ArtifactSource
-    media_type: str | None = None
-    provenance: Provenance | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class PseudopotentialSetIdentity:
-    id: str
-    version: str | None
-    provider: str
-    functional: str
-    accuracy: str
-    relativistic: str
-    licence: str
-    citation: str
-    policy: JsonDict
-
-
-@dataclass(frozen=True, slots=True)
-class RuntimeAssetIdentity:
-    id: str
-    version: str
-    role: str
-    preparation_fingerprint: str
-    model: JsonDict
-    files: tuple[JsonDict, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class RuntimeIdentity:
-    core_version: str
-    models: tuple[JsonDict, ...] = ()
-    assets: tuple[RuntimeAssetIdentity, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
 class DftInputData:
-    artifacts: tuple[InputArtifact, ...]
-    pseudopotential_set: PseudopotentialSetIdentity
-    runtime: RuntimeIdentity
+    artifacts: tuple[JsonDict, ...]
+    pseudopotential_set: JsonDict
+    runtime: JsonDict
     citations: tuple[str, ...]
     manifest: JsonDict
     schema_version: Literal[1] = 1
 
 
-@to_portable.register(GeneratedContent)
-def _generated_content_portable(content: GeneratedContent) -> JsonDict:
-    return {"kind": "generated", "identity": content.identity}
-
-
-@to_portable.register(InstalledArtifactReference)
-def _installed_artifact_reference_portable(
-    reference: InstalledArtifactReference,
-) -> JsonDict:
-    return {
-        "kind": "installed",
-        "asset_id": reference.asset_id,
-        "asset_version": reference.asset_version,
-        "preparation_fingerprint": reference.preparation_fingerprint,
-        "path": reference.path,
+def _artifact_portable(artifact: JsonDict) -> JsonDict:
+    source = {
+        key: value for key, value in artifact["source"].items() if key != "content"
     }
-
-
-@to_portable.register(InputArtifact)
-def _input_artifact_portable(artifact: InputArtifact) -> JsonDict:
     return {
-        "path": artifact.path,
-        "role": artifact.role,
-        "sha256": artifact.sha256,
-        "size_bytes": artifact.size_bytes,
-        "media_type": artifact.media_type,
-        "provenance": to_jsonable(artifact.provenance),
-        "source": to_portable(artifact.source),
+        "path": artifact["path"],
+        "role": artifact["role"],
+        "sha256": artifact["sha256"],
+        "size_bytes": artifact["size_bytes"],
+        "media_type": artifact["media_type"],
+        "provenance": to_jsonable(artifact["provenance"]),
+        "source": source,
     }
 
 
@@ -127,9 +53,11 @@ def _input_artifact_portable(artifact: InputArtifact) -> JsonDict:
 def _dft_input_data_portable(input_data: DftInputData) -> JsonDict:
     return {
         "schema_version": input_data.schema_version,
-        "artifacts": [to_portable(artifact) for artifact in input_data.artifacts],
-        "pseudopotential_set": to_portable(input_data.pseudopotential_set),
-        "runtime": to_portable(input_data.runtime),
+        "artifacts": [
+            _artifact_portable(artifact) for artifact in input_data.artifacts
+        ],
+        "pseudopotential_set": to_jsonable(input_data.pseudopotential_set),
+        "runtime": to_jsonable(input_data.runtime),
         "citations": list(input_data.citations),
         "manifest": to_jsonable(input_data.manifest),
     }
@@ -154,7 +82,7 @@ def assemble_dft_input_data(
     metallicity_model: ModelSpec | None,
     uses_default_metallicity_model: bool,
 ) -> DftInputData:
-    artifacts: list[InputArtifact] = []
+    artifacts: list[JsonDict] = []
     source = normalized_structure.source
     source_content = (
         source["content"].encode("utf-8")
@@ -225,12 +153,12 @@ def assemble_dft_input_data(
         uses_default_metallicity_model=uses_default_metallicity_model,
     )
     artifacts.extend(runtime_artifacts)
-    citations = tuple(dict.fromkeys((pseudo_set.citation, *runtime_citations)))
+    citations = tuple(dict.fromkeys((pseudo_set["citation"], *runtime_citations)))
     manifest = {
         "source": {
             **source,
             "content": None,
-            "path": artifacts[0].path,
+            "path": artifacts[0]["path"],
         },
         "canonical_structure": {
             "path": "structure/canonical.cif",
@@ -248,9 +176,9 @@ def assemble_dft_input_data(
             ],
         },
         "selected_artifacts": [
-            to_portable(artifact)
+            _artifact_portable(artifact)
             for artifact in artifacts
-            if artifact.role == "pseudopotential"
+            if artifact["role"] == "pseudopotential"
         ],
         "pseudopotential_set": to_portable(pseudo_set),
         "runtime": to_portable(runtime),
@@ -305,16 +233,16 @@ def _generated_artifact(
     identity: str,
     media_type: str | None = None,
     provenance: Provenance | None = None,
-) -> InputArtifact:
-    return InputArtifact(
-        path=path,
-        role=role,
-        sha256=hashlib.sha256(payload).hexdigest(),
-        size_bytes=len(payload),
-        source=GeneratedContent(payload, identity),
-        media_type=media_type,
-        provenance=provenance,
-    )
+) -> JsonDict:
+    return {
+        "path": path,
+        "role": role,
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "size_bytes": len(payload),
+        "source": {"kind": "generated", "identity": identity, "content": payload},
+        "media_type": media_type,
+        "provenance": provenance,
+    }
 
 
 def _validated_generated_input(path: str, content: str) -> bytes:
@@ -357,7 +285,7 @@ def _runtime_material(
     uses_default_kmesh_model: bool,
     custom_metallicity_model: ModelSpec | None,
     uses_default_metallicity_model: bool,
-) -> tuple[list[InputArtifact], RuntimeIdentity, tuple[str, ...]]:
+) -> tuple[list[JsonDict], JsonDict, tuple[str, ...]]:
     materials = _used_model_material(
         analysis,
         k_points,
@@ -368,10 +296,14 @@ def _runtime_material(
         uses_default_metallicity_model=uses_default_metallicity_model,
     )
     if not materials:
-        return [], RuntimeIdentity(core_version=version("goldilocks-core")), ()
+        return (
+            [],
+            {"core_version": version("goldilocks-core"), "models": [], "assets": []},
+            (),
+        )
 
-    artifacts: list[InputArtifact] = []
-    identities: list[RuntimeAssetIdentity] = []
+    artifacts: list[JsonDict] = []
+    identities: list[JsonDict] = []
     citations: list[str] = []
     for material in materials:
         model = material.spec
@@ -421,11 +353,11 @@ def _runtime_material(
         identities.append(_runtime_asset_identity(material, installed))
     return (
         artifacts,
-        RuntimeIdentity(
-            core_version=version("goldilocks-core"),
-            models=tuple(_published_model_identity(item.spec) for item in materials),
-            assets=tuple(identities),
-        ),
+        {
+            "core_version": version("goldilocks-core"),
+            "models": [_published_model_identity(item.spec) for item in materials],
+            "assets": identities,
+        },
         tuple(citations),
     )
 
@@ -542,7 +474,7 @@ def _model_material_identity(material: _ModelMaterial) -> tuple[object, ...]:
 
 def _runtime_asset_identity(
     material: _ModelMaterial, installed: InstalledAsset
-) -> RuntimeAssetIdentity:
+) -> JsonDict:
     assert material.asset is not None
     roles = {file.path: file.role for file in material.asset.files}
     installed_paths = {file.path for file in installed.files}
@@ -551,13 +483,13 @@ def _runtime_asset_identity(
             f"Installed model asset inventory differs from registered roles for "
             f"{installed.id}@{installed.version}"
         )
-    return RuntimeAssetIdentity(
-        id=installed.id,
-        version=installed.version,
-        role="model",
-        preparation_fingerprint=installed.preparation_fingerprint,
-        model=_published_model_identity(material.spec),
-        files=tuple(
+    return {
+        "id": installed.id,
+        "version": installed.version,
+        "role": "model",
+        "preparation_fingerprint": installed.preparation_fingerprint,
+        "model": _published_model_identity(material.spec),
+        "files": [
             {
                 "path": file.path,
                 "role": roles[file.path],
@@ -565,8 +497,8 @@ def _runtime_asset_identity(
                 "size_bytes": file.size,
             }
             for file in installed.files
-        ),
-    )
+        ],
+    }
 
 
 def _published_model_identity(model: ModelSpec) -> JsonDict:
@@ -589,7 +521,7 @@ def _pseudopotential_material(
     *,
     asset_store: AssetStore,
     registry_path: PathLike | None,
-) -> tuple[list[InputArtifact], PseudopotentialSetIdentity]:
+) -> tuple[list[JsonDict], JsonDict]:
     table_ids = {item.table_id for item in metadata}
     if len(table_ids) == 1 and None not in table_ids:
         table_id = next(iter(table_ids))
@@ -611,25 +543,25 @@ def _pseudopotential_material(
                 "text/plain; charset=utf-8",
             )
         )
-        return artifacts, PseudopotentialSetIdentity(
-            id=table.id,
-            version=table.version,
-            provider=table.provider,
-            functional=table.functional,
-            accuracy=table.accuracy,
-            relativistic=table.relativistic,
-            licence=table.licence,
-            citation=table.citation,
-            policy={
+        return artifacts, {
+            "id": table.id,
+            "version": table.version,
+            "provider": table.provider,
+            "functional": table.functional,
+            "accuracy": table.accuracy,
+            "relativistic": table.relativistic,
+            "licence": table.licence,
+            "citation": table.citation,
+            "policy": {
                 "accuracy": table.accuracy,
                 "provider": table.provider,
                 "relativistic": table.relativistic,
             },
-        )
+        }
     if None not in table_ids:
         raise ValueError("Selected pseudopotentials must come from one installed set")
 
-    artifacts: list[InputArtifact] = []
+    artifacts: list[JsonDict] = []
     for selected, item in zip(selection.pseudopotentials, metadata, strict=True):
         if selected.filepath is None or selected.filename is None:
             raise ValueError(
@@ -678,7 +610,7 @@ def _read_explicit_pseudo(metadata: PseudoMetadata) -> bytes:
 
 def _installed_pseudo_artifact(
     selected: PseudopotentialSelection, installed: InstalledAsset
-) -> InputArtifact:
+) -> JsonDict:
     filepath = selected.filepath
     filename = selected.filename
     if filepath is None or filename is None:
@@ -709,28 +641,29 @@ def _installed_artifact(
     media_type: str,
     *,
     provenance: Provenance | None = None,
-) -> InputArtifact:
+) -> JsonDict:
     installed.path(relative_path)
     file = next(item for item in installed.files if item.path == relative_path)
-    return InputArtifact(
-        path=output_path,
-        role=role,
-        sha256=file.sha256,
-        size_bytes=file.size,
-        source=InstalledArtifactReference(
-            installed.id,
-            installed.version,
-            installed.preparation_fingerprint,
-            relative_path,
-        ),
-        media_type=media_type,
-        provenance=provenance,
-    )
+    return {
+        "path": output_path,
+        "role": role,
+        "sha256": file.sha256,
+        "size_bytes": file.size,
+        "source": {
+            "kind": "installed",
+            "asset_id": installed.id,
+            "asset_version": installed.version,
+            "preparation_fingerprint": installed.preparation_fingerprint,
+            "path": relative_path,
+        },
+        "media_type": media_type,
+        "provenance": provenance,
+    }
 
 
 def _explicit_pseudopotential_set(
     metadata: tuple[PseudoMetadata, ...],
-) -> tuple[PseudopotentialSetIdentity, str]:
+) -> tuple[JsonDict, str]:
     details = tuple(item.pseudo_info for item in metadata)
     licences = _one_value(details, "licence")
     licence_text = _one_value(details, "licence_text")
@@ -740,17 +673,17 @@ def _explicit_pseudopotential_set(
     accuracies = sorted({item.accuracy or "unknown" for item in metadata})
     relativistic = sorted({item.relativistic or "unknown" for item in metadata})
     return (
-        PseudopotentialSetIdentity(
-            id="explicit-local",
-            version=None,
-            provider=",".join(providers),
-            functional=",".join(functionals),
-            accuracy=",".join(accuracies),
-            relativistic=",".join(relativistic),
-            licence=licences,
-            citation=citation,
-            policy={"source": "operator_supplied", "selection": "per_element"},
-        ),
+        {
+            "id": "explicit-local",
+            "version": None,
+            "provider": ",".join(providers),
+            "functional": ",".join(functionals),
+            "accuracy": ",".join(accuracies),
+            "relativistic": ",".join(relativistic),
+            "licence": licences,
+            "citation": citation,
+            "policy": {"source": "operator_supplied", "selection": "per_element"},
+        },
         licence_text,
     )
 

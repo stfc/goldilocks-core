@@ -4,7 +4,6 @@ from pymatgen.core import Lattice, Structure
 import goldilocks_core.analysis as analysis_module
 from goldilocks_core.analysis import (
     DimensionalityClassificationError,
-    SymmetryUnavailable,
     analyze_structure,
 )
 from goldilocks_core.serialization import to_portable
@@ -96,7 +95,6 @@ def test_analyze_structure_raises_when_larsen_fails(monkeypatch) -> None:
 def test_analyze_structure_records_symmetry_unavailable_when_spglib_fails(
     monkeypatch,
 ) -> None:
-
     def fail_spglib(_structure: Structure) -> None:
         raise TypeError("spglib cannot handle this structure")
 
@@ -110,14 +108,19 @@ def test_analyze_structure_records_symmetry_unavailable_when_spglib_fails(
     analysis = analyze_structure(structure)
 
     assert analysis.dimensionality == "3d"
-    assert isinstance(analysis.crystal_system, SymmetryUnavailable)
-    assert isinstance(analysis.space_group_symbol, SymmetryUnavailable)
-    assert isinstance(analysis.space_group_number, SymmetryUnavailable)
-    assert analysis.crystal_system.reason
+    assert analysis.crystal_system is None
+    assert analysis.space_group_symbol is None
+    assert analysis.space_group_number is None
+    assert analysis.analysis_warnings[-1] == (
+        "Symmetry analysis failed: spglib cannot handle this structure."
+    )
 
-    # SymmetryUnavailable must round-trip through the manifest serializer.
+    # The failed determination must round-trip through the manifest serializer.
     serialized = to_portable(analysis)
-    assert serialized["crystal_system"] == {"reason": analysis.crystal_system.reason}
+    assert serialized["crystal_system"] is None
+    assert serialized["analysis_warnings"][-1] == (
+        "Symmetry analysis failed: spglib cannot handle this structure."
+    )
 
 
 def test_analyze_structure_propagates_unexpected_dimensionality_assertion(

@@ -147,7 +147,7 @@ def test_partial_query_returns_only_requested_records() -> None:
 def test_missing_producer_raises_value_error() -> None:
     task = TaskGraph(task="missing", stages=(), presets=())
 
-    with pytest.raises(ValueError, match="No stage produces.*MissingRecord"):
+    with pytest.raises(ValueError, match=r"No stage produces.*MissingRecord"):
         execute(task, (MissingRecord,), SimpleNamespace())
 
 
@@ -158,7 +158,7 @@ def test_missing_dependency_producer_raises_value_error() -> None:
         presets=(),
     )
 
-    with pytest.raises(ValueError, match="No stage produces.*MissingRecord"):
+    with pytest.raises(ValueError, match=r"No stage produces.*MissingRecord"):
         execute(task, (StubB,), SimpleNamespace())
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import math
 
 from pymatgen.core import Structure
@@ -21,12 +22,10 @@ def k_distance_to_mesh(
         reciprocal_lattice.c,
     )
 
-    mesh = tuple(
+    return tuple(
         max(1, math.ceil(round(length / k_distance, 5)))
         for length in reciprocal_lengths
     )
-
-    return mesh
 
 
 def generate_candidate_k_distances(
@@ -65,8 +64,8 @@ def _candidate_meshes(
     meshes: list[tuple[int, int, int]] = [
         k_distance_to_mesh(structure, max_candidate + 1.0)
     ]
-    for upper, lower in zip(
-        candidate_distances[:-1], candidate_distances[1:], strict=True
-    ):
-        meshes.append(k_distance_to_mesh(structure, 0.5 * (upper + lower)))
+    meshes.extend(
+        k_distance_to_mesh(structure, 0.5 * (upper + lower))
+        for upper, lower in itertools.pairwise(candidate_distances)
+    )
     return meshes

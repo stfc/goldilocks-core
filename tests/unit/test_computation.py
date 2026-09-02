@@ -56,7 +56,7 @@ def test_preset_selection_serializes_one_named_preset() -> None:
 
 def test_preset_selection_rejects_an_empty_name() -> None:
 
-    with pytest.raises(ValueError, match="PresetSelection.preset"):
+    with pytest.raises(ValueError, match=r"PresetSelection.preset"):
         PresetSelection("  ")
 
 
@@ -78,13 +78,13 @@ def test_record_selection_owns_an_immutable_record_tuple() -> None:
 
 def test_record_selection_rejects_non_type_members() -> None:
 
-    with pytest.raises(ValueError, match="RecordSelection.records must contain types"):
+    with pytest.raises(ValueError, match=r"RecordSelection.records must contain types"):
         RecordSelection(("analysis",))
 
 
 def test_record_selection_rejects_an_empty_record_set() -> None:
 
-    with pytest.raises(ValueError, match="RecordSelection.records"):
+    with pytest.raises(ValueError, match=r"RecordSelection.records"):
         RecordSelection(())
 
 
@@ -154,7 +154,7 @@ def test_model_spec_serialization_is_a_payload_free_review_snapshot() -> None:
 
 def test_compute_request_rejects_an_invalid_selection_type() -> None:
 
-    with pytest.raises(ValueError, match="ComputeRequest.selection"):
+    with pytest.raises(ValueError, match=r"ComputeRequest.selection"):
         ComputeRequest(
             draft=CalculationDraft(InMemoryStructureSource(make_structure())),
             selection=object(),
@@ -378,7 +378,9 @@ def test_compute_rejects_a_record_not_selectable_for_the_task() -> None:
         Service() as service,
         pytest.raises(
             UnavailableRecord,
-            match=("FirstUnsupportedRecord, SecondUnsupportedRecord.*scf_single_point"),
+            match=(
+                r"FirstUnsupportedRecord, SecondUnsupportedRecord.*scf_single_point"
+            ),
         ),
     ):
         service.compute(request)

@@ -69,9 +69,7 @@ class Dispatcher:
                 for record_type in preset.outputs
             }
         )
-        record_types.update(
-            {record_type: None for record_type in task.selectable_outputs}
-        )
+        record_types.update(dict.fromkeys(task.selectable_outputs))
         for record_type in record_types:
             try:
                 task.record_id(record_type)

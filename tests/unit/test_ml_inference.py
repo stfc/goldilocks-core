@@ -54,7 +54,7 @@ def test_predict_rejects_mutated_non_finite_features_before_calling_model(
     features[0][0] = value
     model = PredictSpy()
 
-    with pytest.raises(ValueError, match="features.*finite"):
+    with pytest.raises(ValueError, match=r"features.*finite"):
         predict(model, features)
 
     assert model.called is False

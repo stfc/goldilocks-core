@@ -175,7 +175,7 @@ def test_explicit_pseudo_without_content_binding_fails_before_publication(
 
     with (
         Service() as service,
-        pytest.raises(ValueError, match="lacks.*content binding"),
+        pytest.raises(ValueError, match=r"lacks.*content binding"),
     ):
         service.compute(request, output=DirectoryOutput(destination))
 
@@ -290,7 +290,7 @@ def test_selected_pseudo_rejects_ambiguous_exact_metadata_candidates(
         PresetSelection("generate"),
     )
 
-    with Service() as service, pytest.raises(ValueError, match="ambiguous.*Si"):
+    with Service() as service, pytest.raises(ValueError, match=r"ambiguous.*Si"):
         service.compute(request)
 
 
@@ -360,7 +360,7 @@ def test_selected_pseudo_rejects_zero_exact_metadata_candidates(
         "warnings": [],
     }
 
-    with pytest.raises(ValueError, match="no exact metadata candidate.*Si"):
+    with pytest.raises(ValueError, match=r"no exact metadata candidate.*Si"):
         _bind_selected_pseudo_metadata(
             {"pseudopotentials": [selected], "warnings": []},
             (candidate,),
@@ -1487,9 +1487,11 @@ url = "{licence_source.as_uri()}"
         PresetSelection("generate"),
     )
 
-    with Runtime(asset_store=store, pseudo_registry_path=registry) as runtime:
-        with Service(runtime) as service:
-            result = service.compute(request)
+    with (
+        Runtime(asset_store=store, pseudo_registry_path=registry) as runtime,
+        Service(runtime) as service,
+    ):
+        result = service.compute(request)
     input_data = result.records[DftInputData]
     pseudo = next(
         item for item in input_data["artifacts"] if item["role"] == "pseudopotential"
@@ -1605,9 +1607,8 @@ def test_model_runtime_identities_licences_and_citations_are_published(
         replace(request.draft, hints=CalculationHints(pseudo_type="NC")),
         request.selection,
     )
-    with Runtime(asset_store=store) as runtime:
-        with Service(runtime) as service:
-            result = service.compute(request)
+    with Runtime(asset_store=store) as runtime, Service(runtime) as service:
+        result = service.compute(request)
 
     input_data = result.records[DftInputData]
     assert {item["id"] for item in input_data["runtime"]["assets"]} == {
@@ -1715,9 +1716,11 @@ def test_custom_registry_same_id_version_source_drift_is_rejected(
         replace(request.draft, hints=CalculationHints(pseudo_type="NC")),
         request.selection,
     )
-    with Runtime(asset_store=store, registry_path=registry) as runtime:
-        with Service(runtime) as service:
-            original = service.compute(request).records[DftInputData]
+    with (
+        Runtime(asset_store=store, registry_path=registry) as runtime,
+        Service(runtime) as service,
+    ):
+        original = service.compute(request).records[DftInputData]
     original_fingerprints = {
         asset["id"]: asset["preparation_fingerprint"]
         for asset in original["runtime"]["assets"]
@@ -1740,10 +1743,12 @@ def test_custom_registry_same_id_version_source_drift_is_rejected(
         != original_fingerprints[drifted.model_asset.id]
     )
 
-    with Runtime(asset_store=store, registry_path=registry) as runtime:
-        with Service(runtime) as service:
-            with pytest.raises(ValueError, match="installed preparation differs"):
-                service.compute(request)
+    with (
+        Runtime(asset_store=store, registry_path=registry) as runtime,
+        Service(runtime) as service,
+        pytest.raises(ValueError, match="installed preparation differs"),
+    ):
+        service.compute(request)
 
 
 def test_unidentified_runtime_kmesh_model_is_not_attributed_to_defaults(
@@ -1773,16 +1778,18 @@ def test_unidentified_runtime_kmesh_model_is_not_attributed_to_defaults(
         replace(request.draft, hints=CalculationHints(pseudo_type="NC")),
         request.selection,
     )
-    with Runtime(
-        asset_store=AssetStore(tmp_path / "empty-assets"),
-        kmesh_service=UnidentifiedModel(),
-    ) as runtime:
-        with Service(runtime) as service:
-            with pytest.raises(
-                ValueError,
-                match="Custom KMeshService produced a model result without identity",
-            ):
-                service.compute(request)
+    with (
+        Runtime(
+            asset_store=AssetStore(tmp_path / "empty-assets"),
+            kmesh_service=UnidentifiedModel(),
+        ) as runtime,
+        Service(runtime) as service,
+        pytest.raises(
+            ValueError,
+            match="Custom KMeshService produced a model result without identity",
+        ),
+    ):
+        service.compute(request)
 
 
 def test_standalone_metallicity_publishes_only_its_explicit_material(
@@ -1809,14 +1816,16 @@ def test_standalone_metallicity_publishes_only_its_explicit_material(
         citation=citation,
     )
     request = _explicit_request(tmp_path, "identified-metallicity-Si.UPF")
-    with Runtime(
-        asset_store=AssetStore(tmp_path / "empty-assets"),
-        metallicity_checkpoint="model.ckpt",
-        metallicity_atom_init="atom-init.json",
-        metallicity_model=model,
-    ) as runtime:
-        with Service(runtime) as service:
-            result = service.compute(request)
+    with (
+        Runtime(
+            asset_store=AssetStore(tmp_path / "empty-assets"),
+            metallicity_checkpoint="model.ckpt",
+            metallicity_atom_init="atom-init.json",
+            metallicity_model=model,
+        ) as runtime,
+        Service(runtime) as service,
+    ):
+        result = service.compute(request)
 
     input_data = result.records[DftInputData]
     assert input_data["runtime"]["assets"] == []
@@ -1879,9 +1888,11 @@ def test_custom_kmesh_model_publishes_its_explicit_material_not_defaults(
     unused_registry = tmp_path / "unused-default-models.toml"
     unused_registry.write_text("[defaults]\n", encoding="utf-8")
 
-    with Runtime(asset_store=store, registry_path=unused_registry) as runtime:
-        with Service(runtime) as service:
-            result = service.compute(request)
+    with (
+        Runtime(asset_store=store, registry_path=unused_registry) as runtime,
+        Service(runtime) as service,
+    ):
+        result = service.compute(request)
 
     input_data = result.records[DftInputData]
     assert input_data["runtime"]["assets"] == []
@@ -1949,14 +1960,16 @@ def test_same_name_version_models_with_different_targets_and_revisions_are_disti
         request.selection,
     )
 
-    with Runtime(
-        asset_store=AssetStore(tmp_path / "same-name-assets"),
-        metallicity_checkpoint="metallicity.ckpt",
-        metallicity_atom_init="atom-init.json",
-        metallicity_model=metallicity_model,
-    ) as runtime:
-        with Service(runtime) as service:
-            input_data = service.compute(request).records[DftInputData]
+    with (
+        Runtime(
+            asset_store=AssetStore(tmp_path / "same-name-assets"),
+            metallicity_checkpoint="metallicity.ckpt",
+            metallicity_atom_init="atom-init.json",
+            metallicity_model=metallicity_model,
+        ) as runtime,
+        Service(runtime) as service,
+    ):
+        input_data = service.compute(request).records[DftInputData]
 
     assert [model["target"] for model in input_data["runtime"]["models"]] == [
         "k_index",
@@ -2005,16 +2018,18 @@ def test_custom_kmesh_model_without_publication_material_fails_clearly(
         request.selection,
     )
 
-    with Runtime(asset_store=AssetStore(tmp_path / "empty-assets")) as runtime:
-        with Service(runtime) as service:
-            with pytest.raises(
-                ValueError,
-                match=(
-                    "Model 'incomplete-operator-model' used for publication must "
-                    "declare non-empty licence, licence_text, and citation"
-                ),
-            ):
-                service.compute(request)
+    with (
+        Runtime(asset_store=AssetStore(tmp_path / "empty-assets")) as runtime,
+        Service(runtime) as service,
+        pytest.raises(
+            ValueError,
+            match=(
+                "Model 'incomplete-operator-model' used for publication must "
+                "declare non-empty licence, licence_text, and citation"
+            ),
+        ),
+    ):
+        service.compute(request)
 
 
 def _create_installed_asset(

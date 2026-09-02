@@ -80,14 +80,14 @@ def test_caller_owned_runtime_is_not_closed_by_service() -> None:
 def test_compute_after_close_raises() -> None:
     service = Service()
     service.close()
-    with pytest.raises(RuntimeError, match="Service is closed."):
+    with pytest.raises(RuntimeError, match=r"Service is closed."):
         service.compute(make_request())
 
 
 def test_capabilities_after_close_raises() -> None:
     service = Service()
     service.close()
-    with pytest.raises(RuntimeError, match="Service is closed."):
+    with pytest.raises(RuntimeError, match=r"Service is closed."):
         service.capabilities()
 
 
@@ -151,17 +151,20 @@ def test_service_runs_concurrent_computations() -> None:
         selection=PresetSelection("recommend"),
     )
 
-    with Runtime(kmesh_service=backend) as runtime, Service(runtime) as service:
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            first = pool.submit(service.compute, request)
-            assert backend.entered.wait(timeout=2)
-            second = pool.submit(service.compute, request)
-            try:
-                assert backend.second_entered.wait(timeout=2)
-            finally:
-                backend.release.set()
-            first.result(timeout=2)
-            second.result(timeout=2)
+    with (
+        Runtime(kmesh_service=backend) as runtime,
+        Service(runtime) as service,
+        ThreadPoolExecutor(max_workers=2) as pool,
+    ):
+        first = pool.submit(service.compute, request)
+        assert backend.entered.wait(timeout=2)
+        second = pool.submit(service.compute, request)
+        try:
+            assert backend.second_entered.wait(timeout=2)
+        finally:
+            backend.release.set()
+        first.result(timeout=2)
+        second.result(timeout=2)
 
     assert backend.calls == 2
 
@@ -230,24 +233,26 @@ def test_capabilities_and_inspection_do_not_wait_for_computation() -> None:
         selection=PresetSelection("recommend"),
     )
 
-    with Runtime(kmesh_service=backend) as runtime, Service(runtime) as service:
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            computation = pool.submit(service.compute, request)
-            assert backend.entered.wait(timeout=2)
-            capabilities = pool.submit(service.capabilities)
-            inspection = pool.submit(
-                service.inspect_structure,
-                InMemoryStructureSource(make_structure()),
+    with (
+        Runtime(kmesh_service=backend) as runtime,
+        Service(runtime) as service,
+        ThreadPoolExecutor(max_workers=3) as pool,
+    ):
+        computation = pool.submit(service.compute, request)
+        assert backend.entered.wait(timeout=2)
+        capabilities = pool.submit(service.capabilities)
+        inspection = pool.submit(
+            service.inspect_structure,
+            InMemoryStructureSource(make_structure()),
+        )
+        try:
+            assert capabilities.result(timeout=0.5)["tasks"]
+            assert (
+                inspection.result(timeout=0.5)["structure"]["reduced_formula"] == "Si"
             )
-            try:
-                assert capabilities.result(timeout=0.5)["tasks"]
-                assert (
-                    inspection.result(timeout=0.5)["structure"]["reduced_formula"]
-                    == "Si"
-                )
-            finally:
-                backend.release.set()
-            computation.result(timeout=2)
+        finally:
+            backend.release.set()
+        computation.result(timeout=2)
 
 
 def test_one_service_reuses_its_runtime_across_computations() -> None:

@@ -32,8 +32,44 @@ def selection_portable(selection: JsonDict) -> JsonDict:
     }
 
 
-LANTHANIDES = frozenset("La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu".split())
-ACTINIDES = frozenset("Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr".split())
+LANTHANIDES = frozenset(
+    [
+        "La",
+        "Ce",
+        "Pr",
+        "Nd",
+        "Pm",
+        "Sm",
+        "Eu",
+        "Gd",
+        "Tb",
+        "Dy",
+        "Ho",
+        "Er",
+        "Tm",
+        "Yb",
+        "Lu",
+    ]
+)
+ACTINIDES = frozenset(
+    [
+        "Ac",
+        "Th",
+        "Pa",
+        "U",
+        "Np",
+        "Pu",
+        "Am",
+        "Cm",
+        "Bk",
+        "Cf",
+        "Es",
+        "Fm",
+        "Md",
+        "No",
+        "Lr",
+    ]
+)
 
 _LANTHANIDE_ACTINIDE_REASON = (
     "is a lanthanide/actinide: only SSSP pseudopotentials are used for these "

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import ctypes
 import errno
 import hashlib
@@ -339,8 +340,11 @@ def _verify_directory_path(root: Path, files: tuple[PublishedFile, ...]) -> None
         raise OSError("Completed directory path write differs")
 
 
+_POSIX_ROOT = PurePosixPath()
+
+
 def _path_inventory(
-    root: Path, prefix: PurePosixPath = PurePosixPath()
+    root: Path, prefix: PurePosixPath = _POSIX_ROOT
 ) -> dict[str, tuple[str, int]]:
     inventory: dict[str, tuple[str, int]] = {}
     for child in root.iterdir():
@@ -364,10 +368,8 @@ def _write_directory(descriptor: int, files: tuple[PublishedFile, ...]) -> None:
         parent = os.dup(descriptor)
         try:
             for part in parts[:-1]:
-                try:
+                with contextlib.suppress(FileExistsError):
                     os.mkdir(part, mode=0o700, dir_fd=parent)
-                except FileExistsError:
-                    pass
                 child = os.open(
                     part,
                     os.O_RDONLY
@@ -429,7 +431,7 @@ def _verify_directory_descriptor(
 
 
 def _descriptor_inventory(
-    descriptor: int, prefix: PurePosixPath = PurePosixPath()
+    descriptor: int, prefix: PurePosixPath = _POSIX_ROOT
 ) -> dict[str, tuple[str, int]]:
     inventory: dict[str, tuple[str, int]] = {}
     for name in os.listdir(descriptor):
@@ -528,10 +530,8 @@ def _quarantine_owned_directory(target: Path, identity: tuple[int, int]) -> Path
         return None
     if _has_identity(quarantine, identity):
         return quarantine
-    try:
+    with contextlib.suppress(FileExistsError):
         _native_rename_no_replace(quarantine, target)
-    except FileExistsError:
-        pass
     return None
 
 
@@ -578,7 +578,7 @@ def _native_rename_no_replace(source: Path, destination: Path) -> None:
 
 
 def _windows_rename_no_replace(source: Path, destination: Path) -> None:
-    win_dll = getattr(ctypes, "WinDLL")
+    win_dll = ctypes.WinDLL
     kernel32 = win_dll("kernel32", use_last_error=True)
     move_file = kernel32.MoveFileExW
     move_file.argtypes = (ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint)

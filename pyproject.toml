@@ -113,7 +113,22 @@ pytest_add_cli_args = ["-q"]
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+select = [
+    "E", "F", "I", # baseline
+    "B",            # bugbear: real footguns
+    "UP",           # modern python; ceremony prevention
+    "C4",           # comprehensions over loops
+    "SIM",          # collapse ceremony
+    "RET",          # return discipline
+    "PIE",          # useless constructs
+    "PERF",         # needless work
+    "TID",          # import hygiene, banned modules
+    "RUF",          # ruff-specific: noqa discipline, mutable defaults
+    "BLE",          # no blind exception catches
+]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"goldilocks_core.contracts".msg = "the contracts package was dissolved; import from the domain module that defines the name"
 
 [tool.setuptools.package-data]
 goldilocks_core = [

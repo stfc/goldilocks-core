@@ -140,7 +140,7 @@ class CGCNN_PyG(nn.Module):
 
         crystal_features = self.conv_to_fc_softplus(self.conv_to_fc(crystal_features))
         if hasattr(self, "fcs"):
-            for fc, softplus in zip(self.fcs, self.softpluses):
+            for fc, softplus in zip(self.fcs, self.softpluses, strict=True):
                 crystal_features = softplus(fc(crystal_features))
         logits = self.fc_out(crystal_features)
         return F.softmax(logits, dim=1)

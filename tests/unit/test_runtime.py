@@ -739,7 +739,7 @@ def test_record_registration_is_atomic_when_an_id_conflicts() -> None:
             )
         )
 
-    assert RECORD_TYPE_IDS == registered
+    assert registered == RECORD_TYPE_IDS
 
 
 def test_task_registration_rejects_empty_stage_ids(monkeypatch) -> None:
@@ -941,7 +941,7 @@ def test_task_registration_requires_stable_ids_for_custom_records(
         Runtime() as runtime,
         pytest.raises(
             ValueError,
-            match="stable record id.*StubRecord",
+            match=r"stable record id.*StubRecord",
         ),
     ):
         Dispatcher(runtime).register(handler)

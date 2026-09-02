@@ -253,10 +253,10 @@ def test_advise_parameters_records_convergence_hints() -> None:
 
 def test_calculation_hints_validate_before_advice() -> None:
     """Reject invalid hint values at the request contract boundary."""
-    with pytest.raises(ValueError, match="CalculationHints.k_spacing"):
+    with pytest.raises(ValueError, match=r"CalculationHints.k_spacing"):
         CalculationHints(k_spacing=0.0)
 
-    with pytest.raises(ValueError, match="CalculationHints.conv_thr"):
+    with pytest.raises(ValueError, match=r"CalculationHints.conv_thr"):
         CalculationHints(conv_thr=0.0)
 
 
@@ -316,7 +316,7 @@ def test_advise_parameters_warns_when_vdw_method_set_without_use_vdw() -> None:
 
 def test_calculation_hints_reject_unknown_vdw_method() -> None:
     """Reject an unknown vdW method at hint construction."""
-    with pytest.raises(ValueError, match="CalculationHints.vdw_method"):
+    with pytest.raises(ValueError, match=r"CalculationHints.vdw_method"):
         CalculationHints(vdw_method="xyz")
 
 

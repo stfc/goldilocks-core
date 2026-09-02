@@ -156,9 +156,11 @@ def analyze_structure(
         "electronic_character": electronic_character,
         "electronic_character_source": electronic_character_source,
         "electronic_character_confidence": electronic_character_confidence,
-        "analysis_warnings": list(
-            (*electronic_warnings, *dimensionality_warnings, *symmetry_warnings)
-        ),
+        "analysis_warnings": [
+            *electronic_warnings,
+            *dimensionality_warnings,
+            *symmetry_warnings,
+        ],
     }
 
 

@@ -59,7 +59,7 @@ Everything `pw.x` needs is in there. The generated `run/inputs/qe.in` sets
 pw.x < run/inputs/qe.in
 ```
 
-## What the input contains
+## Read the generated input
 
 The interesting part of `run/inputs/qe.in`:
 
@@ -82,8 +82,8 @@ The interesting part of `run/inputs/qe.in`:
 /
 ```
 
-None of these values were chosen arbitrarily, and none of them were chosen by
-you. Each one comes from a stage that explains itself:
+None of these values were chosen arbitrarily, and none of them were chosen
+by you. Each one comes from a stage that explains itself:
 
 - `ecutwfc = 48` and `ecutrho = 192` come from the PseudoDojo
   `pbesol-efficiency-sr` table, selected per element;
@@ -98,7 +98,7 @@ decided it, from what source, and why. Override any of it with hints — see the
 [How recommendations are made](science.md) for the reasoning behind each
 default.
 
-## See the recommendations without generating anything
+## Recommend without generating files
 
 `--preset recommend` runs analysis, advice, k-points, and pseudopotential
 selection, and keeps the result in memory:
@@ -122,7 +122,7 @@ and the pseudopotential selection names its source:
                 "data_source": "pseudopotentials/pseudodojo-pbesol-efficiency-sr", ... }
 ```
 
-## Where to next
+## Next steps
 
 - [Tutorial](tutorial.md) — the same workflow through the Python API, plus
   record selection and output targets

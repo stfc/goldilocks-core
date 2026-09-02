@@ -56,13 +56,11 @@ The smearing advice reads the electronic character from analysis:
 - **unknown character** → fixed occupations, and a warning asking you to
   verify.
 
-Silicon is a useful honesty check: the default model classifies Si as
-metallic (confidence ≈ 0.5), so the quickstart example gets cold smearing.
-That is what the model says, the provenance says the model said it, and you
-can override it with `--smearing-type` or
-`CalculationHints(smearing_type=...)`. Treat surprising classifications the
-way you would treat a colleague's suggestion: check the confidence, compare
-against what you know about the material, and override when you disagree.
+The default model classifies silicon as metallic (confidence ≈ 0.5), so the
+quickstart example gets cold smearing. Provenance makes that visible; the
+confidence, the fallback warnings, and `--smearing-type` or
+`CalculationHints(smearing_type=...)` exist so you can check and override any
+classification you disagree with.
 
 ## Convergence defaults
 

@@ -84,10 +84,11 @@ from goldilocks_core import (
     PresetSelection,
     Service,
 )
+from goldilocks_core.examples.structures import structures_path
 
 request = ComputeRequest(
     CalculationDraft(
-        PathStructureSource("structure.cif"),
+        PathStructureSource(structures_path() / "Si.cif"),
         hints=CalculationHints(spin_orbit_coupling=True),
         pseudo_table="pseudodojo-pbesol-efficiency-fr",
     ),
@@ -150,6 +151,14 @@ uv run goldilocks assets verify pseudodojo-pbesol-efficiency-fr
 
 The state is `installed`, `missing`, or `corrupt`. Run `assets install` again
 to replace a corrupt table transactionally.
+
+Asset stores installed by older releases used `schema_version: 1` manifests
+and bare or namespaced table directories; they are incompatible with the
+strict manifest reader. Reinstall affected assets:
+
+```bash
+uv run goldilocks assets install workbench
+```
 
 ## Use your own UPF files
 

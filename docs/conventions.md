@@ -1,77 +1,89 @@
 # Scientific conventions
 
-This document records the physical and numerical conventions used by goldilocks-core. These are the invisible choices that affect correctness but are easy to overlook.
+This page records the physical and numerical conventions behind the
+recommendations: units, defaults, and the policies that affect correctness.
+For how each recommendation is produced and provenanced, see
+[How recommendations are made](science.md).
 
 ## Units
 
-| Quantity | Unit | Where used |
+| Quantity | Unit | Where it appears |
 | --- | --- | --- |
 | k-point spacing | Å⁻¹ | `CalculationHints.k_spacing` |
-| Smearing width | Rydberg | `CalculationHints.smearing_width_ry`, `SmearingAdvice.width_ry` |
-| Wavefunction cutoff | Rydberg | `PseudopotentialSelection.ecutwfc_ry` |
-| Charge-density cutoff | Rydberg | `PseudopotentialSelection.ecutrho_ry` |
-| Convergence threshold | Rydberg | `CalculationHints.conv_thr`, `ConvergenceAdvice.conv_thr` |
-| Mixing beta | dimensionless | `CalculationHints.mixing_beta`, `ConvergenceAdvice.mixing_beta` |
+| Smearing width | Rydberg | advice `smearing.width_ry`, `CalculationHints.smearing_width_ry` |
+| Wavefunction cutoff | Rydberg | selection `pseudopotentials[].ecutwfc_ry` |
+| Charge-density cutoff | Rydberg | selection `pseudopotentials[].ecutrho_ry` |
+| Convergence threshold | Rydberg | advice `convergence.conv_thr`, `CalculationHints.conv_thr` |
+| Mixing beta | dimensionless | advice `convergence.mixing_beta`, `CalculationHints.mixing_beta` |
 
-All current cutoffs, smearing widths, and SCF energy thresholds follow the
-Quantum ESPRESSO convention (Rydberg atomic units), not Hartree. Only Quantum
-ESPRESSO SCF generation is currently implemented.
+All cutoffs, smearing widths, and SCF energy thresholds follow the Quantum
+ESPRESSO convention (Rydberg atomic units), not Hartree. Quantum ESPRESSO SCF
+is the only implemented target code.
 
 ## K-point spacing convention
 
-goldilocks-core uses the **VASP KSPACING convention** for k-point spacing:
+k-point spacing uses the **VASP KSPACING convention**:
 
-- Spacing is in units of Å⁻¹ (inverse angstroms).
-- Mesh sizes are computed from **solid-state reciprocal lattice lengths** that include the 2π factor: `reciprocal_lattice.a`, `.b`, `.c` from pymatgen.
-- The mesh for each direction is `max(1, ceil(recip_length / k_spacing))`.
+- Spacing is in Å⁻¹.
+- Mesh sizes come from solid-state reciprocal lattice lengths including the
+  2π factor (`reciprocal_lattice.a`, `.b`, `.c` from pymatgen).
+- The mesh in each direction is `max(1, ceil(recip_length / k_spacing))`.
 
-This is the same convention as VASP's `KSPACING` tag. It differs from some codes that use 2π/a-style spacing without the 2π factor in the reciprocal lattice vector.
+This matches VASP's `KSPACING` tag. It differs from conventions that use
+2π/a-style spacing without the 2π factor.
 
 ## Default values
 
-| Parameter | Default | Unit | Where defined |
+| Parameter | Default | Unit | Defined in |
 | --- | --- | --- | --- |
-| convergence threshold | 1e-6 | Ry | `advice/convergence.py` `DEFAULT_CONV_THR` |
-| mixing beta | 0.4 | — | `advice/convergence.py` `DEFAULT_MIXING_BETA` |
-| electron max steps | 80 | — | `advice/convergence.py` `DEFAULT_ELECTRON_MAXSTEP` |
-| metallic smearing width | 0.01 | Ry | `advice/smearing.py` `METALLIC_SMEARING_WIDTH_RY` |
-| smearing type (metallic) | cold | — | `advice/smearing.py` |
-| smearing type (unknown) | fixed | — | `advice/smearing.py` |
-| pseudo mode | efficiency | — | `CalculationIntent.pseudo_mode` |
+| convergence threshold | 1e-6 | Ry | `advice/convergence.py` |
+| mixing beta | 0.4 | — | `advice/convergence.py` |
+| electron max steps | 80 | — | `advice/convergence.py` |
+| metallic smearing width | 0.01 | Ry | `advice/smearing.py` |
+| smearing type (metallic) | `cold` | — | `advice/smearing.py` |
+| smearing type (unknown character) | `fixed` | — | `advice/smearing.py` |
+| pseudopotential accuracy | `efficiency` | — | `CalculationIntent.pseudo_accuracy` |
 | functional | PBEsol | — | `CalculationIntent.functional` |
-
-## Heavy-element heuristic
-
-`contains_heavy_elements` and `heavy_elements` classify period-5-and-heavier
-elements as heavy. This includes elements such as iodine that can need SOC
-consideration.
 
 ## Electronic character classification
 
-Runtime uses the installed metallicity classifier for ordered structures and
-records `model` provenance, confidence, and either `metal` or `insulator`.
-Without that asset, or for a disordered structure the model cannot represent,
-Core falls back to a conservative composition heuristic:
+The analysis stage classifies each structure as `metal` or `insulator` to
+drive the smearing recommendation. With the default metallicity model asset
+installed, an ordered structure is classified by the model, and the advice
+provenance records `source: analysis` with the model's confidence. Without
+that asset, or for a disordered structure the model cannot represent, the
+core falls back to a conservative composition heuristic:
 
 - **`likely_metal`**: all composition elements are metallic according to
-  pymatgen. A warning records that this is not confirmed by electronic-structure
-  data.
+  pymatgen. A warning records that this is not confirmed by
+  electronic-structure data.
 - **`unknown`**: composition alone cannot determine electronic character.
-  Callers should verify manually.
+  The smearing advice falls back to fixed occupations and callers should
+  verify manually.
 
-The heuristic never returns `metal` or `insulator`; only the model does.
+The heuristic never returns `metal` or `insulator`; only the model does. See
+[How recommendations are made](science.md) for when to distrust the model.
 
-## Spin-orbit coupling policy
+## Heavy elements and spin-orbit coupling
 
-SOC is **never enabled automatically**, even when heavy elements are present. Instead:
+`contains_heavy_elements` and `heavy_elements` classify period-5-and-heavier
+elements as heavy. Such elements can need SOC consideration.
 
-- `SpinOrbitAdvice.consider` is set to `True` when heavy elements are detected.
-- `SpinOrbitAdvice.enabled` remains `False` unless the operator explicitly sets `CalculationHints(spin_orbit_coupling=True)`.
+SOC is **never enabled automatically**, even when heavy elements are present:
 
-SOC changes calculation cost, convergence, and pseudopotential requirements.
-The operator must enable it explicitly. A low-dimensional structure can enable
-the lower-cost D3BJ dispersion correction by default; the operator can override
-that choice.
+- the advice document sets `spin_orbit.consider = True` when heavy elements
+  are detected;
+- `spin_orbit.enabled` stays `False` unless you set
+  `CalculationHints(spin_orbit_coupling=True)`.
+
+SOC changes calculation cost, convergence, and pseudopotential requirements,
+so the operator must enable it explicitly. Enabling SOC without an explicit
+`CalculationHints.relativistic_mode` makes the pseudopotential requirements
+demand fully relativistic (`full`) pseudopotentials with the same
+`user_hint` provenance as the SOC decision.
+
+A low-dimensional structure enables the lower-cost D3BJ dispersion correction
+by default; the operator can override that choice.
 
 ## Pseudopotential relativistic modes
 
@@ -81,4 +93,5 @@ that choice.
 | `full` | Fully relativistic (required when SOC is enabled) |
 | `non-relativistic` | No relativistic treatment (rarely used) |
 
-When `SpinOrbitAdvice.enabled` is `True` but `CalculationHints.relativistic_mode` is not set, the Advise stage automatically sets `PseudopotentialAdvice.relativistic_mode` to `"full"` and inherits the SOC decision's `user_hint` provenance.
+See [Pseudopotential tables](pseudopotentials.md) for which registered tables
+provide fully relativistic files.

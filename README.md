@@ -1,15 +1,19 @@
 # goldilocks-core
 
-`goldilocks-core` recommends DFT parameters and generates Quantum ESPRESSO SCF inputs from crystal structures, calculation intent, operator hints, and pseudopotential metadata.
+Goldilocks turns a crystal structure into a ready-to-run Quantum ESPRESSO SCF
+calculation. It recommends the parameters you would otherwise pick by hand —
+k-point grid, smearing, convergence settings, pseudopotentials — records where
+every choice came from, and publishes runnable inputs together with the exact
+pseudopotential files and licences they depend on.
 
-It provides:
-
-- structure analysis and scientific warnings;
-- advice for k-points, smearing, magnetism, SOC, convergence, vdW, and pseudopotentials;
-- a default Quantile Random Forest k-point model;
-- deterministic pseudopotential selection and QE input generation;
-- Python, CLI, HTTP, and local stdio MCP entry points over one process-owned
-  service.
+- structure analysis with scientific warnings;
+- advice for k-points, smearing, magnetism, spin-orbit coupling, convergence,
+  and dispersion, each carrying provenance;
+- a default quantile-random-forest k-point model and a metallicity classifier;
+- deterministic pseudopotential selection and Quantum ESPRESSO input
+  generation;
+- Python, CLI, HTTP, and local stdio MCP entry points over one service;
+- the Goldilocks Workbench, a browser interface for the same operations.
 
 ## Install
 
@@ -19,17 +23,55 @@ This project uses [uv](https://docs.astral.sh/uv/):
 uv sync
 ```
 
-For development dependencies:
+## Sixty seconds to a runnable calculation
+
+Install the default runtime assets once — two models and a PseudoDojo
+pseudopotential table:
 
 ```bash
-uv sync --group dev
+uv run goldilocks assets install default
+uv run goldilocks assets verify default
 ```
+
+Run a bundled example structure:
+
+```bash
+uv run goldilocks compute "$(uv run goldilocks examples path)/Si.cif" --preset generate --out run
+```
+
+`run/` now holds everything needed to execute the calculation:
+
+```text
+run/
+inputs/qe.in                 the generated SCF input
+pseudo/Si.upf                the exact pseudopotential selected
+structure/canonical.cif      the normalized structure
+source/Si.cif                the file you gave it
+licences/  CITATIONS.md  goldilocks.json  checksums.sha256
+```
+
+The generated input (abridged) already reflects the recommendations:
+
+```text
+&SYSTEM
+  ibrav = 0
+  nat = 8
+  ecutwfc = 48        from the PseudoDojo table
+  ecutrho = 192
+  occupations = 'smearing'
+  smearing = 'cold'   the metallicity model classified Si as metallic
+  degauss = 0.01
+/
+```
+
+Every recommendation carries provenance naming its source — model, lookup, or
+your own hint. [How recommendations are made](docs/science.md) explains each
+choice and how to override it.
 
 ## Python API
 
-`Service` is the reusable Python interface. It exposes Capabilities, Structure
-Inspection, and Compute. `recommend` and `generate` are preset IDs, not
-operations.
+`Service` is the reusable Python interface with three operations:
+`capabilities`, `inspect_structure`, and `compute`.
 
 ```python
 from goldilocks_core import (
@@ -41,10 +83,11 @@ from goldilocks_core import (
     PresetSelection,
     Service,
 )
+from goldilocks_core.examples.structures import structures_path
 
 request = ComputeRequest(
     draft=CalculationDraft(
-        structure=PathStructureSource("path/to/structure.cif"),
+        structure=PathStructureSource(structures_path() / "Si.cif"),
         hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
         pseudo_table="pseudodojo-pbesol-efficiency-sr",
     ),
@@ -57,100 +100,67 @@ with Service() as core:
     result = core.compute(request, output=DirectoryOutput("run"))
 ```
 
-Use `RecordSelection` instead of `PresetSelection` to request specific Records.
-Pass `ArchiveOutput`, `DirectoryOutput`, or `None` to select archive, directory,
-or memory-only output. The top-level `compute()` convenience uses the same
-Compute contract.
+`recommend` and `generate` are preset IDs, not operations. Use
+`RecordSelection` instead of `PresetSelection` to request specific records.
+Pass `ArchiveOutput`, `DirectoryOutput`, or `None` to select archive,
+directory, or memory-only output. The top-level `compute()` convenience uses
+the same contracts.
 
-See the [tutorial](docs/tutorial.md) and
-[pipeline reference](docs/pipeline.md) for complete examples.
+See the [tutorial](docs/tutorial.md) for a guided Python walkthrough.
 
-## CLI and transports
-
-Install the default runtime assets once:
-
-```bash
-uv run goldilocks assets install default
-uv run goldilocks assets verify default
-uv run goldilocks assets install pseudodojo-pbesol-efficiency-sr
-```
-Inspect a structure, query Records, or run a named Preset. Without an explicit
-pseudopotential source, Core chooses a compatible registered table. Use
-`--pseudo-table` or `--pseudo-root` to override that choice:
+## CLI
 
 ```bash
 uv run goldilocks capabilities --json
 uv run goldilocks inspect structure.cif --json
-uv run goldilocks compute structure.cif --outputs analysis,k_points --no-out --json
-uv run goldilocks compute structure.cif --preset generate --pseudo-table sssp-pbesol-efficiency-sr --out run --json
+uv run goldilocks compute structure.cif --preset recommend --no-out --json
+uv run goldilocks compute structure.cif --preset generate --out run
 ```
 
-The default asset store is `$XDG_DATA_HOME/goldilocks/assets`, or
-`~/.local/share/goldilocks/assets` when `XDG_DATA_HOME` is not set. Set
-`GOLDILOCKS_ASSET_ROOT` to use a different location. See the
-[CLI reference](docs/cli.md) for all controls.
+Without an explicit pseudopotential source, the core chooses a compatible
+registered table. Use `--pseudo-table` or `--pseudo-root` to override that
+choice. The [CLI reference](docs/cli.md) lists every flag.
 
-Example structures are installed with the package:
+## Serving the Workbench
 
-```bash
-uv run goldilocks inspect "$(uv run goldilocks examples path)/Si.cif" --json
-```
-
-HTTP and MCP are optional:
+The HTTP process can serve the built browser interface after the Core routes:
 
 ```bash
 uv sync --all-extras
-uv run goldilocks serve http --host 127.0.0.1 --port 8000
-uv run goldilocks serve mcp
+uv run goldilocks serve http --host 127.0.0.1 --port 8000 --static-root web/dist
 ```
 
-HTTP publishes `/capabilities`, `/inspect`, `/compute`, `/health`, and `/ready`.
-Compute returns one multipart response containing canonical Result JSON and,
-when complete DFT Input Data was requested, its exact in-memory ZIP. It never
-creates a server output directory. MCP publishes `capabilities`,
-`inspect_structure`, and `compute` as local stdio tools.
-
-HTTP and MCP accept inline structures and may select one registered
-pseudopotential table by stable ID. They do not accept structure paths,
-pseudopotential roots or metadata payloads, model locations, or publication
-paths. Python and CLI retain trusted local path and publication controls.
-
-## Static application serving
-
-The HTTP process can serve a built static application after the Core routes.
-Core remains authoritative for structure data, scientific defaults, selection,
-provenance, and generated inputs.
-
-Pass `--static-root DIRECTORY` or set
-`GOLDILOCKS_WORKBENCH_STATIC_ROOT` to a directory containing `index.html`.
-Static files are mounted after Core routes, so they cannot shadow the HTTP
-contract. `/health` reports process liveness; `/ready` verifies every registered
-runtime asset required by Workbench. The server stores no projects, sessions,
-Results, archives, or run history.
-
-Build the production image to compile Workbench and install the complete asset
-profile:
+Or run the production image, which compiles the Workbench and installs the
+complete asset profile:
 
 ```bash
 docker build --tag goldilocks-workbench .
 docker run --rm --publish 8000:8000 goldilocks-workbench
 ```
 
-The container runs as an unprivileged user and serves Workbench and Core from
-`http://127.0.0.1:8000/`. A Ready-to-run Output uses one directory/ZIP layout:
+The server stores nothing between requests — no sessions, results, archives,
+or run history.
 
-```text
-source/  structure/  inputs/  pseudo/  licences/
-CITATIONS.md  README.md  goldilocks.json  checksums.sha256
-```
+## Transports and trust boundary
+
+Python and the CLI are trusted local tools: they accept filesystem paths,
+local pseudopotential roots, and publication destinations. HTTP and MCP are
+untrusted boundaries: they accept inline structure content and registered
+pseudopotential table IDs only — never paths, metadata payloads, model
+locations, or publication destinations. The
+[CLI reference](docs/cli.md#optional-transports) states the exact contract.
 
 ## Documentation
 
-- [Tutorial](docs/tutorial.md)
-- [Pipeline and stage behavior](docs/pipeline.md)
-- [Scientific conventions](docs/conventions.md)
-- [Pseudopotential tables, storage, and licensing](docs/pseudopotentials.md)
+- [Quickstart](docs/quickstart.md) — from CIF to runnable inputs with real
+  output at every step
+- [Tutorial](docs/tutorial.md) — the Python API, guided
+- [How recommendations are made](docs/science.md) — models, defaults, and
+  provenance
 - [CLI reference](docs/cli.md)
+- [Scientific conventions](docs/conventions.md) — units, defaults, and
+  physical policy
+- [Pseudopotential tables, storage, and licensing](docs/pseudopotentials.md)
 - [Architecture and extension points](docs/architecture.md)
 
 ## Development
@@ -167,7 +177,8 @@ uv run python scripts/validate_distribution.py dist
 uv run pre-commit run --all-files
 ```
 
-Tests use synthetic structures, temporary files, small UPF snippets, and fake models. They must not depend on private datasets or machine-specific paths.
+Tests use synthetic structures, temporary files, small UPF snippets, and fake
+models. They must not depend on private datasets or machine-specific paths.
 
 ## Licence
 

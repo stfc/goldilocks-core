@@ -139,9 +139,9 @@ def main() -> None:
         if args.json:
             print(json.dumps(to_portable(inspection), indent=2, sort_keys=True))
         else:
-            print(f"structure: {inspection.source.name}")
-            print(f"formula: {inspection.structure.reduced_formula}")
-            print(f"sites: {inspection.structure.site_count}")
+            print(f"structure: {inspection['source']['name']}")
+            print(f"formula: {inspection['structure']['reduced_formula']}")
+            print(f"sites: {inspection['structure']['site_count']}")
         return
     if args.command == "examples":
         print(structures_path())
@@ -412,8 +412,8 @@ def _parse_optional_bool(value: str | None) -> bool | None:
 
 def _print_human_summary(result: ComputationResult) -> None:
     structure = result.draft.structure
-    print(f"structure: {structure.source.name}")
-    print(f"formula: {structure.structure.reduced_formula}")
+    print(f"structure: {structure['source']['name']}")
+    print(f"formula: {structure['structure']['reduced_formula']}")
     print(f"code: {result.draft.intent.code}")
     print(f"task: {result.draft.intent.task}")
     advice = result.records.get(ParameterAdvice)

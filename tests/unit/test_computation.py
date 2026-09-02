@@ -193,8 +193,8 @@ def test_result_retains_the_normalized_calculation_draft(tmp_path) -> None:
     with Service() as service:
         result = service.compute(request)
 
-    assert result.draft.structure.source.origin == "path"
-    assert result.draft.structure.structure.reduced_formula == "Si"
+    assert result.draft.structure["source"]["origin"] == "path"
+    assert result.draft.structure["structure"]["reduced_formula"] == "Si"
     assert to_portable(result)["draft"]["structure"]["source"]["name"] == "Si.cif"
     assert str(tmp_path) not in str(to_portable(result))
 

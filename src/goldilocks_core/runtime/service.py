@@ -5,7 +5,6 @@ from typing import Any
 
 from goldilocks_core.input_data import DftInputData
 from goldilocks_core.io.structures import (
-    StructureInspection,
     StructureSource,
     normalize_structure,
 )
@@ -77,7 +76,7 @@ class Service:
         self._ensure_open()
         return build_capabilities(self._dispatcher, self._runtime)
 
-    def inspect_structure(self, source: StructureSource) -> StructureInspection:
+    def inspect_structure(self, source: StructureSource) -> dict[str, Any]:
         self._ensure_open()
         return normalize_structure(source).inspection
 

@@ -94,55 +94,20 @@ def _validate_format(format_hint: str | None) -> None:
 
 
 @dataclass(frozen=True, slots=True)
-class StructureSourceDocument:
-    origin: Literal["inline", "path", "generated"]
-    name: str
-    format: str
-    content: str | None
-    sha256: str | None
-    size_bytes: int | None
-
-
-@dataclass(frozen=True, slots=True)
-class SpeciesOccupancy:
-    symbol: str
-    label: str
-    occupancy: float
-    oxidation_state: float | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class StructureSiteDocument:
-    fractional_coordinates: Vector3
-    cartesian_coordinates_angstrom: Vector3
-    species: tuple[SpeciesOccupancy, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class LatticeDocument:
-    vectors_angstrom: Matrix3
-    lengths_angstrom: Vector3
-    angles_degrees: Vector3
-    volume_angstrom3: float
-
-
-@dataclass(frozen=True, slots=True)
-class StructureDocument:
-    schema_version: int
-    formula: str
-    reduced_formula: str
-    site_count: int
-    lattice: LatticeDocument
-    periodicity: tuple[bool, bool, bool]
-    sites: tuple[StructureSiteDocument, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class StructureInspection:
-    source: StructureSourceDocument
-    structure: StructureDocument
+class NormalizedStructure:
+    structure: Structure
+    source: JsonDict
+    canonical_structure: JsonDict
     canonical_cif: str
-    schema_version: int = 1
+
+    @property
+    def inspection(self) -> JsonDict:
+        return {
+            "source": self.source,
+            "structure": self.canonical_structure,
+            "canonical_cif": self.canonical_cif,
+            "schema_version": 1,
+        }
 
 
 SUPPORTED_STRUCTURE_FORMATS: tuple[StructureFormat, ...] = ("cif", "poscar")
@@ -150,22 +115,6 @@ SUPPORTED_STRUCTURE_FORMATS: tuple[StructureFormat, ...] = ("cif", "poscar")
 
 class StructureInputError(ValueError):
     pass
-
-
-@dataclass(frozen=True, slots=True)
-class NormalizedStructure:
-    structure: Structure
-    source: StructureSourceDocument
-    canonical_structure: StructureDocument
-    canonical_cif: str
-
-    @property
-    def inspection(self) -> StructureInspection:
-        return StructureInspection(
-            source=self.source,
-            structure=self.canonical_structure,
-            canonical_cif=self.canonical_cif,
-        )
 
 
 def normalize_structure(source: StructureSource) -> NormalizedStructure:
@@ -266,44 +215,44 @@ def parse_structure_content(
         ) from error
 
 
-def structure_document(structure: Structure) -> StructureDocument:
+def structure_document(structure: Structure) -> JsonDict:
     lattice = structure.lattice
-    sites = tuple(
-        StructureSiteDocument(
-            fractional_coordinates=_vector(site.frac_coords),
-            cartesian_coordinates_angstrom=_vector(site.coords),
-            species=tuple(
-                SpeciesOccupancy(
-                    symbol=species.symbol,
-                    label=str(species),
-                    occupancy=float(occupancy),
-                    oxidation_state=(
+    sites = [
+        {
+            "fractional_coordinates": list(_vector(site.frac_coords)),
+            "cartesian_coordinates_angstrom": list(_vector(site.coords)),
+            "species": [
+                {
+                    "symbol": species.symbol,
+                    "label": str(species),
+                    "occupancy": float(occupancy),
+                    "oxidation_state": (
                         float(species.oxi_state)
                         if getattr(species, "oxi_state", None) is not None
                         else None
                     ),
-                )
+                }
                 for species, occupancy in sorted(
                     site.species.items(), key=lambda item: str(item[0])
                 )
-            ),
-        )
+            ],
+        }
         for site in structure
-    )
-    return StructureDocument(
-        schema_version=1,
-        formula=structure.composition.formula,
-        reduced_formula=structure.composition.reduced_formula,
-        site_count=len(structure),
-        lattice=LatticeDocument(
-            vectors_angstrom=tuple(_vector(row) for row in lattice.matrix),
-            lengths_angstrom=_vector(lattice.abc),
-            angles_degrees=_vector(lattice.angles),
-            volume_angstrom3=float(lattice.volume),
-        ),
-        periodicity=(True, True, True),
-        sites=sites,
-    )
+    ]
+    return {
+        "schema_version": 1,
+        "formula": structure.composition.formula,
+        "reduced_formula": structure.composition.reduced_formula,
+        "site_count": len(structure),
+        "lattice": {
+            "vectors_angstrom": [list(_vector(row)) for row in lattice.matrix],
+            "lengths_angstrom": list(_vector(lattice.abc)),
+            "angles_degrees": list(_vector(lattice.angles)),
+            "volume_angstrom3": float(lattice.volume),
+        },
+        "periodicity": [True, True, True],
+        "sites": sites,
+    }
 
 
 def _resolve_format(
@@ -333,24 +282,24 @@ def _source_document(
     name: str,
     source_format: str,
     content: str | None,
-) -> StructureSourceDocument:
+) -> JsonDict:
     source_bytes = content.encode("utf-8") if content is not None else None
-    return StructureSourceDocument(
-        origin=origin,
-        name=name,
-        format=source_format,
-        content=content,
-        sha256=(
+    return {
+        "origin": origin,
+        "name": name,
+        "format": source_format,
+        "content": content,
+        "sha256": (
             hashlib.sha256(source_bytes).hexdigest()
             if source_bytes is not None
             else None
         ),
-        size_bytes=len(source_bytes) if source_bytes is not None else None,
-    )
+        "size_bytes": len(source_bytes) if source_bytes is not None else None,
+    }
 
 
 def _normalized_structure(
-    structure: Structure, source: StructureSourceDocument
+    structure: Structure, source: JsonDict
 ) -> NormalizedStructure:
     canonical_cif = structure.to(fmt="cif")
     return NormalizedStructure(

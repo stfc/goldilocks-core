@@ -15,7 +15,6 @@ from goldilocks_core.io.structures import (
     InlineStructureSource,
     InMemoryStructureSource,
     PathStructureSource,
-    StructureInspection,
     StructureSource,
 )
 from goldilocks_core.kmesh.resolve import KPointSelection
@@ -81,7 +80,6 @@ __all__ = [
     "SmearingAdvice",
     "SpinOrbitAdvice",
     "StructureAnalysisRecord",
-    "StructureInspection",
     "StructureSource",
     "SymmetryUnavailable",
     "UnavailableRecord",

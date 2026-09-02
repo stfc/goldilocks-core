@@ -16,7 +16,7 @@ from goldilocks_core.input_data import (
     RuntimeAssetIdentity,
     RuntimeIdentity,
 )
-from goldilocks_core.io.structures import StructureInspection
+from goldilocks_core.io.structures import Matrix3, Vector3
 from goldilocks_core.ml.models import ModelSpec
 from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.publication import Publication
@@ -89,6 +89,52 @@ InspectRequestDocument = create_model(
     "StructureInspectionRequest",
     __config__=_STRICT,
     source=(InlineStructureDocument, ...),
+)
+_SpeciesOccupancyDocument = create_model(
+    "SpeciesOccupancy",
+    symbol=(str, ...),
+    label=(str, ...),
+    occupancy=(float, ...),
+    oxidation_state=(float | None, None),
+)
+_StructureSiteDocument = create_model(
+    "StructureSiteDocument",
+    fractional_coordinates=(Vector3, ...),
+    cartesian_coordinates_angstrom=(Vector3, ...),
+    species=(tuple[_SpeciesOccupancyDocument, ...], ...),
+)
+_LatticeDocument = create_model(
+    "LatticeDocument",
+    vectors_angstrom=(Matrix3, ...),
+    lengths_angstrom=(Vector3, ...),
+    angles_degrees=(Vector3, ...),
+    volume_angstrom3=(float, ...),
+)
+_StructureDocument = create_model(
+    "StructureDocument",
+    schema_version=(int, ...),
+    formula=(str, ...),
+    reduced_formula=(str, ...),
+    site_count=(int, ...),
+    lattice=(_LatticeDocument, ...),
+    periodicity=(tuple[bool, bool, bool], ...),
+    sites=(tuple[_StructureSiteDocument, ...], ...),
+)
+StructureSourceDocument = create_model(
+    "StructureSourceDocument",
+    origin=(Literal["inline", "path", "generated"], ...),
+    name=(str, ...),
+    format=(str, ...),
+    content=(str | None, ...),
+    sha256=(str | None, ...),
+    size_bytes=(int | None, ...),
+)
+StructureInspectionDocument = create_model(
+    "StructureInspection",
+    source=(StructureSourceDocument, ...),
+    structure=(_StructureDocument, ...),
+    canonical_cif=(str, ...),
+    schema_version=(int, 1),
 )
 DraftDocument = create_model(
     "CalculationDraft",
@@ -339,7 +385,7 @@ LocalPseudoRootDocument = create_model(
 SerializedCalculationDraftDocument = create_model(
     "SerializedCalculationDraft",
     __config__=_SERIALIZED,
-    structure=(StructureInspection, ...),
+    structure=(StructureInspectionDocument, ...),
     intent=(SerializedIntentDocument, ...),
     hints=(SerializedHintsDocument, ...),
     pseudo_metadata=(list[SerializedPseudoMetadataDocument] | None, ...),

@@ -24,7 +24,6 @@ from goldilocks_core import (
     Records,
     RecordSelection,
     Service,
-    StructureInspection,
     StructureSource,
     compute,
 )
@@ -81,11 +80,9 @@ def _request(selection, pseudo_root: Path = Path("/pseudo")) -> ComputeRequest:
 
 def test_root_interface_exposes_three_operations_and_their_contracts() -> None:
     assert Service.capabilities.__annotations__["return"] == "dict[str, Any]"
-    assert Service.inspect_structure.__annotations__["return"] == (
-        "StructureInspection"
-    )
+    assert Service.inspect_structure.__annotations__["return"] == "dict[str, Any]"
     assert Service.compute.__annotations__["return"] == "ComputationResult"
-    assert StructureInspection is not None
+    assert StructureSource is not None
     assert ComputationResult is not None
     assert StructureSource is not None
     assert OutputTarget is not None
@@ -148,7 +145,7 @@ def test_service_capabilities_and_inspection_share_the_root_interface() -> None:
         "recommend",
         "generate",
     }
-    assert inspection.structure.reduced_formula == "Si"
+    assert inspection["structure"]["reduced_formula"] == "Si"
 
 
 def test_recommendation_preset_runs_staged_core_pipeline() -> None:

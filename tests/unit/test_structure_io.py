@@ -14,7 +14,6 @@ from goldilocks_core import (
     PathStructureSource,
     RecordSelection,
     Service,
-    StructureInspection,
 )
 from goldilocks_core.io.structures import StructureInputError
 from goldilocks_core.kmesh.resolve import KPointSelection
@@ -32,16 +31,17 @@ def test_inline_cif_inspection_preserves_source_and_canonical_structure() -> Non
     with Service() as service:
         inspection = service.inspect_structure(source)
 
-    assert isinstance(inspection, StructureInspection)
-    assert inspection.source.origin == "inline"
-    assert inspection.source.name == "silicon.cif"
-    assert inspection.source.format == "cif"
-    assert inspection.source.content == content
-    assert inspection.source.sha256 == hashlib.sha256(content.encode()).hexdigest()
-    assert inspection.source.size_bytes == len(content.encode())
-    assert inspection.structure.reduced_formula == "Si"
-    assert inspection.structure.site_count == 1
-    canonical = Structure.from_str(inspection.canonical_cif, fmt="cif")
+    assert inspection["source"]["origin"] == "inline"
+    assert inspection["source"]["name"] == "silicon.cif"
+    assert inspection["source"]["format"] == "cif"
+    assert inspection["source"]["content"] == content
+    assert (
+        inspection["source"]["sha256"] == hashlib.sha256(content.encode()).hexdigest()
+    )
+    assert inspection["source"]["size_bytes"] == len(content.encode())
+    assert inspection["structure"]["reduced_formula"] == "Si"
+    assert inspection["structure"]["site_count"] == 1
+    canonical = Structure.from_str(inspection["canonical_cif"], fmt="cif")
     assert canonical.matches(make_si_structure())
     assert isinstance(json.dumps(to_portable(inspection)), str)
     assert "pymatgen.core.structure" not in str(to_portable(inspection))
@@ -56,8 +56,8 @@ def test_inline_cif_without_extension_or_hint_resolves_from_content() -> None:
     with Service() as service:
         inspection = service.inspect_structure(source)
 
-    assert inspection.source.format == "cif"
-    assert inspection.structure.reduced_formula == "Si"
+    assert inspection["source"]["format"] == "cif"
+    assert inspection["structure"]["reduced_formula"] == "Si"
 
 
 @pytest.mark.parametrize("origin", ["inline", "path"])
@@ -78,7 +78,7 @@ def test_poscar_filename_preserves_source_metadata_before_content_inference(
         inspection = service.inspect_structure(source)
 
     source_bytes = content.encode()
-    assert to_portable(inspection.source) == {
+    assert inspection["source"] == {
         "origin": origin,
         "name": name,
         "format": "poscar",
@@ -86,7 +86,7 @@ def test_poscar_filename_preserves_source_metadata_before_content_inference(
         "sha256": hashlib.sha256(source_bytes).hexdigest(),
         "size_bytes": len(source_bytes),
     }
-    assert inspection.structure.reduced_formula == "Si"
+    assert inspection["structure"]["reduced_formula"] == "Si"
 
 
 def test_path_inspection_reads_once_without_serializing_the_host_path(
@@ -110,10 +110,10 @@ def test_path_inspection_reads_once_without_serializing_the_host_path(
         inspection = service.inspect_structure(PathStructureSource(path))
 
     assert reads == 1
-    assert inspection.source.origin == "path"
-    assert inspection.source.name == "POSCAR"
-    assert inspection.source.format == "poscar"
-    assert inspection.source.content == content
+    assert inspection["source"]["origin"] == "path"
+    assert inspection["source"]["name"] == "POSCAR"
+    assert inspection["source"]["format"] == "poscar"
+    assert inspection["source"]["content"] == content
     assert str(tmp_path) not in str(to_portable(inspection))
 
 
@@ -131,7 +131,7 @@ def test_in_memory_inspection_has_truthful_generated_source_metadata() -> None:
     with Service() as service:
         inspection = service.inspect_structure(InMemoryStructureSource(structure))
 
-    assert to_portable(inspection.source) == {
+    assert inspection["source"] == {
         "origin": "generated",
         "name": "generated-structure",
         "format": "pymatgen",
@@ -139,7 +139,7 @@ def test_in_memory_inspection_has_truthful_generated_source_metadata() -> None:
         "sha256": None,
         "size_bytes": None,
     }
-    assert inspection.structure.reduced_formula == "Si"
+    assert inspection["structure"]["reduced_formula"] == "Si"
 
 
 def test_inspection_and_compute_each_parse_inline_content_once(

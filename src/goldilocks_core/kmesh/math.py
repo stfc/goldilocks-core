@@ -53,11 +53,13 @@ def build_kmesh_entries(
     structure: Structure,
     candidate_distances: list[float],
 ) -> list[KMeshEntry]:
+    """Build the ordered k-mesh ladder for ``structure``.
+
+    ``k_index`` is 0-based: rung 0 is the Γ-only ``(1, 1, 1)`` mesh, which the
+    first probe at ``max(candidate_distances) + 1.0`` always yields because that
+    distance exceeds every ``|b_i|``."""
     meshes = _candidate_meshes(structure, candidate_distances)
-    return [
-        KMeshEntry(k_index=index, mesh=mesh)
-        for index, mesh in enumerate(meshes, start=1)
-    ]
+    return [KMeshEntry(k_index=index, mesh=mesh) for index, mesh in enumerate(meshes)]
 
 
 def _candidate_meshes(

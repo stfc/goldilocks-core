@@ -9,6 +9,12 @@ from goldilocks_core.contracts.types import JsonDict, KPointGrid, KPointShift
 
 @dataclass(frozen=True, slots=True)
 class KMeshEntry:
+    """One rung of a structure's ordered k-mesh ladder.
+
+    ``k_index`` is 0-based: rung 0 is the Γ-only ``(1, 1, 1)`` mesh, and each
+    step up is the next denser mesh the reciprocal lattice admits.
+    """
+
     k_index: int
     mesh: KPointGrid
 

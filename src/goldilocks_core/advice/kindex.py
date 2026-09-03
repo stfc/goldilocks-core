@@ -23,8 +23,8 @@ def _select_kmesh_entry(
     predicted_k_index: float,
 ) -> KMeshEntry:
     target_index = max(0, math.ceil(predicted_k_index))
-    max_index = entries[-1].k_index
-    target_index = min(target_index, max_index)
+    max_k_index = entries[-1].k_index
+    target_index = min(target_index, max_k_index)
 
     return entries[target_index]
 

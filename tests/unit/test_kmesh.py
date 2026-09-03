@@ -120,7 +120,7 @@ def test_generate_candidate_k_distances_returns_sorted_values() -> None:
         coords=[[0.0, 0.0, 0.0]],
     )
 
-    candidates = generate_candidate_k_distances(structure, max_index=3)
+    candidates = generate_candidate_k_distances(structure, max_kpoints_per_axis=3)
 
     reciprocal_length = structure.lattice.reciprocal_lattice.a
 
@@ -137,7 +137,7 @@ def test_build_kmesh_entries_returns_indexed_mesh_entries() -> None:
         coords=[[0.0, 0.0, 0.0]],
     )
 
-    candidates = generate_candidate_k_distances(structure, max_index=4)
+    candidates = generate_candidate_k_distances(structure, max_kpoints_per_axis=4)
     entries = build_kmesh_entries(structure, candidates)
 
     assert len(entries) > 0
@@ -150,3 +150,51 @@ def test_build_kmesh_entries_returns_indexed_mesh_entries() -> None:
     # The mesh ordering is load-bearing: the ML k-index maps onto this table.
     meshes = [entry.mesh for entry in entries]
     assert meshes == [(index, index, index) for index in range(1, len(entries) + 1)]
+
+
+def test_ladder_is_gap_free_for_an_anisotropic_cell() -> None:
+    # A cell whose axes differ enough that the long axis exhausts its
+    # enumerated quotients while the short axis is still stepping.
+    structure = Structure(
+        lattice=Lattice.orthorhombic(2.0, 2.0, 8.0),
+        species=["Si"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+
+    candidates = generate_candidate_k_distances(structure, max_kpoints_per_axis=30)
+    meshes = [entry.mesh for entry in build_kmesh_entries(structure, candidates)]
+
+    assert len(meshes) > 1
+    for before, after in zip(meshes[:-1], meshes[1:], strict=True):
+        steps = [now - previous for previous, now in zip(before, after, strict=True)]
+        # Denser by at least one k-point, and never skipping a reachable mesh.
+        assert max(steps) == 1, f"{before} -> {after} skips a mesh"
+        assert min(steps) >= 0, f"{before} -> {after} is not monotonic"
+
+
+def test_raising_the_axis_cap_only_extends_the_ladder() -> None:
+    # k_index is published and trained on, so a larger enumeration must never
+    # renumber a rung that already existed.
+    structure = Structure(
+        lattice=Lattice.orthorhombic(2.0, 2.0, 8.0),
+        species=["Si"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+
+    short = [
+        entry.mesh
+        for entry in build_kmesh_entries(
+            structure,
+            generate_candidate_k_distances(structure, max_kpoints_per_axis=20),
+        )
+    ]
+    long = [
+        entry.mesh
+        for entry in build_kmesh_entries(
+            structure,
+            generate_candidate_k_distances(structure, max_kpoints_per_axis=60),
+        )
+    ]
+
+    assert len(long) > len(short)
+    assert long[: len(short)] == short

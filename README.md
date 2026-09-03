@@ -100,9 +100,18 @@ boundary.
 
 ## Serve the Workbench
 
+For development, one task installs assets, serves the backend on :8000, and
+runs the Vite dev server on :5173:
+
 ```bash
 uv sync --all-extras
-uv run goldilocks serve http --host 127.0.0.1 --port 8000 --static-root web/dist
+uv run poe workbench
+```
+
+To serve the compiled bundle without the Node dev server:
+
+```bash
+uv run poe stage
 ```
 
 The production image compiles the Workbench and installs the complete asset
@@ -128,12 +137,12 @@ The server stores nothing between requests.
 ## Development
 
 ```bash
-uv run pytest
+uv run poe check
 uv run pytest -m integration
 uv run pytest -m physics
 uv run pytest --cov --cov-report=term-missing
 uv run mutmut run --max-children 4
-cd web && npm ci && npm run check && cd ..
+uv run poe web-check
 uv build --no-sources
 uv run python scripts/validate_distribution.py dist
 uv run pre-commit run --all-files

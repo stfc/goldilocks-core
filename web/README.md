@@ -7,8 +7,16 @@ and archive bytes are held only for the current view.
 
 ## Run it
 
-Build the backend assets and start an HTTP server with a static root, then
-run the Vite dev server against it:
+One task does the backend steps and starts both processes — assets install,
+Core HTTP backend on :8000, Vite dev server on :5173 (assumes `npm ci` has
+run once in `web/`):
+
+```bash
+uv sync --all-extras
+uv run poe workbench
+```
+
+Or run the two processes by hand:
 
 ```bash
 uv sync --all-extras
@@ -26,12 +34,11 @@ The dev server runs on `http://127.0.0.1:5173` and proxies `/capabilities`,
 `/inspect`, `/compute`, `/health`, `/ready`, and `/openapi.json` to the
 backend on port 8000 (see `vite.config.ts`).
 
-For a production check without Node, build `web/dist` and let the HTTP
-process serve it:
+To exercise the compiled bundle against the backend without the Vite dev
+server (builds the bundle, then serves it via `serve http --static-root`):
 
 ```bash
-npm run build
-uv run goldilocks serve http --port 8000 --static-root web/dist
+uv run poe stage
 ```
 
 ## Checks

@@ -37,9 +37,77 @@ mcp = ["mcp"]
 [project.scripts]
 goldilocks = "goldilocks_core.cli.core:main"
 
+[tool.poe.tasks.fmt]
+help = "Format src, tests, and scripts with ruff"
+cmd = "ruff format src tests scripts"
+
+[tool.poe.tasks.lint]
+help = "Ruff lint and format check, matching the CI gate"
+sequence = [
+    { cmd = "ruff check src tests scripts" },
+    { cmd = "ruff format --check src tests scripts" },
+]
+
+[tool.poe.tasks.test]
+help = "Run the pytest suite"
+cmd = "pytest"
+
+[tool.poe.tasks.check]
+help = "Lint and test, the local pre-PR gate"
+sequence = [
+    { ref = "lint" },
+    { ref = "test" },
+]
+
+[tool.poe.tasks.serve]
+help = "Install assets and serve the Core HTTP backend on :8000"
+shell = """
+if curl -s -m1 http://127.0.0.1:8000/ >/dev/null 2>&1; then
+    echo "port 8000 is already in use - stop the other server (poe workbench, poe serve, or poe stage)" >&2
+    exit 1
+fi
+set -e
+goldilocks assets install workbench
+exec goldilocks serve http --host 127.0.0.1 --port 8000
+"""
+
+[tool.poe.tasks.stage]
+help = "Build the Workbench bundle and serve it from the Core HTTP process on :8000"
+shell = """
+if curl -s -m1 http://127.0.0.1:8000/ >/dev/null 2>&1; then
+    echo "port 8000 is already in use - stop the other server (poe workbench, poe serve, or poe stage)" >&2
+    exit 1
+fi
+set -e
+cd web && npm run build
+cd ..
+goldilocks assets install workbench
+exec goldilocks serve http --host 127.0.0.1 --port 8000 --static-root web/dist
+"""
+
+[tool.poe.tasks.workbench]
+help = "Install assets, serve the Core HTTP backend on :8000, and run the Vite dev server on :5173"
+shell = """
+if curl -s -m1 http://127.0.0.1:8000/ >/dev/null 2>&1; then
+    echo "port 8000 is already in use - stop the other server (poe workbench, poe serve, or poe stage)" >&2
+    exit 1
+fi
+set -e
+goldilocks assets install workbench
+goldilocks serve http --host 127.0.0.1 --port 8000 &
+backend_pid=$!
+trap 'kill "$backend_pid"' EXIT
+cd web && npm run dev
+"""
+
+[tool.poe.tasks.web-check]
+help = "Lint, unit-test, and build the Workbench frontend"
+shell = "cd web && npm run check"
+
 [dependency-groups]
 dev = [
     "mutmut>=3.6.0",
+    "poethepoet>=0.35",
     "pre-commit>=4.5.1",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",

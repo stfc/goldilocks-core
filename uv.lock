@@ -3,10 +3,10 @@ revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
-    "python_full_version == '3.13.*' and sys_platform == 'win32'",
-    "python_full_version < '3.13' and sys_platform == 'win32'",
     "python_full_version >= '3.14' and sys_platform != 'win32'",
+    "python_full_version == '3.13.*' and sys_platform == 'win32'",
     "python_full_version == '3.13.*' and sys_platform != 'win32'",
+    "python_full_version < '3.13' and sys_platform == 'win32'",
     "python_full_version < '3.13' and sys_platform != 'win32'",
 ]
 
@@ -663,6 +663,19 @@ wheels = [
 ]
 
 [[package]]
+name = "data-collections-api"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "schema" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/bd/faa8057a212e568d28242ee3b5d15bd9f5c16a35e6573269db59f2aa535b/data_collections_api-0.1.0.tar.gz", hash = "sha256:63076ddd50e9ea1b3578a280091f511f56d06f7ddaaf2920fde03f8defacc2ab", size = 14241, upload-time = "2026-02-11T17:05:50.321Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d3/a5/7b36e810d67bbd2e95e4ed430a28ade77db30d55ec91be7e531dd2e2a5e2/data_collections_api-0.1.0-py3-none-any.whl", hash = "sha256:09d5f3ae5b47256abd7c1c80d0654a5d5b65889c8dfe71697ddbf4347be4fd0b", size = 15878, upload-time = "2026-02-11T17:05:49.201Z" },
+]
+
+[[package]]
 name = "distlib"
 version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -890,6 +903,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "dscribe" },
+    { name = "goldilocks-ml" },
     { name = "joblib" },
     { name = "matminer" },
     { name = "numpy" },
@@ -924,6 +938,7 @@ dev = [
 requires-dist = [
     { name = "dscribe", specifier = ">=2.1" },
     { name = "fastapi", marker = "extra == 'http'" },
+    { name = "goldilocks-ml", editable = "../3-goldilocks-ml" },
     { name = "joblib", specifier = "==1.5.3" },
     { name = "matminer", specifier = ">=0.10.1" },
     { name = "mcp", marker = "extra == 'mcp'" },
@@ -946,6 +961,40 @@ dev = [
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "ruff", specifier = ">=0.15.11" },
+]
+
+[[package]]
+name = "goldilocks-ml"
+version = "0.1.0"
+source = { editable = "../3-goldilocks-ml" }
+dependencies = [
+    { name = "data-collections-api" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "data-collections-api", specifier = "==0.1.0" },
+    { name = "dscribe", marker = "extra == 'models'", specifier = "==2.1.2" },
+    { name = "matminer", marker = "extra == 'models'", specifier = "==0.10.1" },
+    { name = "numpy", marker = "extra == 'models'", specifier = "==2.5.2" },
+    { name = "pymatgen", marker = "extra == 'models'", specifier = "==2026.5.4" },
+    { name = "scikit-learn", marker = "extra == 'models'", specifier = "==1.7.2" },
+    { name = "sklearn-quantile", marker = "extra == 'models'", specifier = "==0.1.1" },
+    { name = "torch", marker = "extra == 'models'", specifier = "==2.13.0" },
+    { name = "torch-geometric", marker = "extra == 'models'", specifier = "==2.8.0.post1" },
+]
+provides-extras = ["models"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "ruff", specifier = ">=0.13" },
+]
+docs = [
+    { name = "ipywidgets", specifier = ">=8.1" },
+    { name = "mkdocs", specifier = ">=1.6.1" },
+    { name = "mkdocs-jupyter", specifier = ">=0.26.3" },
+    { name = "mkdocs-material", specifier = ">=9.7.7" },
 ]
 
 [[package]]
@@ -2884,6 +2933,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/88/27/0195d15fe7a897cbcba0904792c4b7c9fdd958456c3a17d2ea6093716a9a/ruff-0.15.11-py3-none-win32.whl", hash = "sha256:476a2aa56b7da0b73a3ee80b6b2f0e19cce544245479adde7baa65466664d5f3", size = 10655535, upload-time = "2026-04-16T18:46:12.47Z" },
     { url = "https://files.pythonhosted.org/packages/3a/5e/c927b325bd4c1d3620211a4b96f47864633199feed60fa936025ab27e090/ruff-0.15.11-py3-none-win_amd64.whl", hash = "sha256:8b6756d88d7e234fb0c98c91511aae3cd519d5e3ed271cae31b20f39cb2a12a3", size = 11779692, upload-time = "2026-04-16T18:46:17.268Z" },
     { url = "https://files.pythonhosted.org/packages/63/b6/aeadee5443e49baa2facd51131159fd6301cc4ccfc1541e4df7b021c37dd/ruff-0.15.11-py3-none-win_arm64.whl", hash = "sha256:063fed18cc1bbe0ee7393957284a6fe8b588c6a406a285af3ee3f46da2391ee4", size = 11032614, upload-time = "2026-04-16T18:46:34.487Z" },
+]
+
+[[package]]
+name = "schema"
+version = "0.7.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fb/2e/8da627b65577a8f130fe9dfa88ce94fcb24b1f8b59e0fc763ee61abef8b8/schema-0.7.8.tar.gz", hash = "sha256:e86cc08edd6fe6e2522648f4e47e3a31920a76e82cce8937535422e310862ab5", size = 45540, upload-time = "2025-10-11T13:15:40.281Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c9/75/aad85817266ac5285c93391711d231ca63e9ae7d42cd3ca37549e24ebe52/schema-0.7.8-py2.py3-none-any.whl", hash = "sha256:00bd977fadc7d9521bf289850cd8a8aa5f4948f575476b8daaa5c1b57af2dce1", size = 19108, upload-time = "2025-10-11T17:13:07.323Z" },
 ]
 
 [[package]]

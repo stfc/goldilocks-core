@@ -12,6 +12,7 @@ license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "dscribe>=2.1",
+    "goldilocks-ml",
     "joblib==1.5.3",
     "matminer>=0.10.1",
     "numpy>=2.4.4",
@@ -46,6 +47,9 @@ dev = [
 
 [tool.uv]
 package = true
+
+[tool.uv.sources]
+goldilocks-ml = { path = "../3-goldilocks-ml", editable = true }
 
 [tool.pytest.ini_options]
 addopts = ["--strict-markers", "-ra"]

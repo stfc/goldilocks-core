@@ -198,3 +198,45 @@ def test_raising_the_axis_cap_only_extends_the_ladder() -> None:
 
     assert len(long) > len(short)
     assert long[: len(short)] == short
+
+
+def test_ladder_never_repeats_a_mesh_for_degenerate_axes() -> None:
+    # Two equal reciprocal axes share their change points, so two consecutive
+    # candidate intervals yield the same mesh. Keeping both would give one mesh
+    # two k_index values. These lengths are those of MC3D 170541 (SiO2).
+    structure = Structure(
+        lattice=Lattice.from_parameters(
+            a=8.9628, b=8.0389, c=8.9628, alpha=90.0, beta=90.0, gamma=90.0
+        ),
+        species=["Si"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+    reciprocal = structure.lattice.reciprocal_lattice
+    assert math.isclose(reciprocal.a, reciprocal.c)
+
+    candidates = generate_candidate_k_distances(structure)
+    meshes = [entry.mesh for entry in build_kmesh_entries(structure, candidates)]
+
+    assert len(meshes) == len(set(meshes))
+    assert meshes[:4] == [(1, 1, 1), (1, 2, 1), (2, 2, 2), (2, 3, 2)]
+
+
+def test_a_repeated_mesh_does_not_hide_a_gap() -> None:
+    # The step to the next rung is measured against the mesh actually probed,
+    # not the last one kept, so skipping a repeat cannot mask a missing change
+    # point. Every surviving transition is a single step on some axis.
+    structure = Structure(
+        lattice=Lattice.from_parameters(
+            a=8.9628, b=8.0389, c=8.9628, alpha=90.0, beta=90.0, gamma=90.0
+        ),
+        species=["Si"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+
+    candidates = generate_candidate_k_distances(structure)
+    meshes = [entry.mesh for entry in build_kmesh_entries(structure, candidates)]
+
+    for before, after in zip(meshes[:-1], meshes[1:], strict=True):
+        steps = [now - previous for previous, now in zip(before, after, strict=True)]
+        assert max(steps) == 1, f"{before} -> {after} skips a mesh"
+        assert min(steps) >= 0, f"{before} -> {after} is not monotonic"

@@ -72,8 +72,9 @@ def build_kmesh_entries(
     first probe at ``max(candidate_distances) + 1.0`` always yields because that
     distance exceeds every ``|b_i|``.
 
-    The ladder is gap-free: consecutive rungs differ by one k-point on at least
-    one axis and never skip a reachable mesh."""
+    The ladder is gap-free and non-repeating: consecutive rungs differ by one
+    k-point on at least one axis, never skip a reachable mesh, and never name the
+    same mesh twice."""
     meshes = _complete_meshes(structure, candidate_distances)
     return [KMeshEntry(k_index=index, mesh=mesh) for index, mesh in enumerate(meshes)]
 
@@ -82,7 +83,8 @@ def _complete_meshes(
     structure: Structure,
     candidate_distances: list[float],
 ) -> list[tuple[int, int, int]]:
-    """Probe each interval between candidates, stopping at the first gap.
+    """Probe each interval between candidates, stopping at the first gap and
+    skipping a mesh already on the ladder.
 
     Once the longest axis has used up its enumerated quotients, its count keeps
     rising but no candidate marks the change. Two adjacent candidates then span
@@ -91,13 +93,27 @@ def _complete_meshes(
     is exactly that condition: a change point that should have been enumerated
     was not. Truncate there — a short complete ladder is usable, a long one with
     holes is not, and every k_index below the truncation is unaffected by where
-    the enumeration happened to stop."""
+    the enumeration happened to stop.
+
+    Axes with equal ``|b_i|`` share their change points, so two consecutive
+    intervals can yield the same mesh. Keeping both would give one mesh two
+    k_index values, which contradicts a rung being the next denser mesh. Skip
+    the repeat: the step to the following rung is still measured against the
+    mesh actually probed, so a repeat never hides a gap."""
     meshes = _candidate_meshes(structure, candidate_distances)
 
-    complete = meshes[:1]
-    for previous, current in zip(meshes[:-1], meshes[1:], strict=True):
-        if any(now - before > 1 for before, now in zip(previous, current, strict=True)):
+    complete: list[tuple[int, int, int]] = []
+    seen: set[tuple[int, int, int]] = set()
+    previous: tuple[int, int, int] | None = None
+    for current in meshes:
+        if previous is not None and any(
+            now - before > 1 for before, now in zip(previous, current, strict=True)
+        ):
             break
+        previous = current
+        if current in seen:
+            continue
+        seen.add(current)
         complete.append(current)
     return complete
 

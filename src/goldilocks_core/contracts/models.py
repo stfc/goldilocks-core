@@ -27,3 +27,8 @@ class ModelSpec:
     source: ModelSource
     location: str
     revision: str | None = None
+    # Which rung a model's k_index calls the Gamma-only mesh. This ladder
+    # numbers it 1, and records published before that convention number it 0;
+    # the base belongs to the model, not to the ladder, so a record trained
+    # either way maps onto the same table.
+    k_index_base: int = 1

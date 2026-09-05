@@ -21,12 +21,18 @@ from goldilocks_core.ml.kindex import predict_kindex
 def _select_kmesh_entry(
     entries: list[KMeshEntry],
     predicted_k_index: float,
+    k_index_base: int = 1,
 ) -> KMeshEntry:
-    target_index = max(0, math.ceil(predicted_k_index))
+    # A model numbers its rungs from its own base; this ladder numbers them
+    # from 1. Shifting here is what lets a record published against either
+    # convention name the same mesh.
+    on_ladder = predicted_k_index + (1 - k_index_base)
+    target_index = max(1, math.ceil(on_ladder))
     max_k_index = entries[-1].k_index
     target_index = min(target_index, max_k_index)
 
-    return entries[target_index]
+    # k_index is 1-based; the list is not.
+    return entries[target_index - 1]
 
 
 def ml_kmesh_advisor(spec: ModelSpec) -> KMeshAdvisor:
@@ -44,7 +50,7 @@ def advise_kpoints(
 
     candidate_distances = generate_candidate_k_distances(structure)
     entries = build_kmesh_entries(structure, candidate_distances)
-    selected_entry = _select_kmesh_entry(entries, predicted_k_index)
+    selected_entry = _select_kmesh_entry(entries, predicted_k_index, spec.k_index_base)
 
     return KPointSelection(
         mesh_type="monkhorst-pack",

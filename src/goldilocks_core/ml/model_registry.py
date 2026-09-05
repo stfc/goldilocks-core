@@ -142,6 +142,7 @@ def _model_spec(data: dict[str, Any], location: str) -> ModelSpec:
         source=source,
         location=data.get("location", location),
         revision=data.get("revision"),
+        k_index_base=int(data.get("k_index_base", 1)),
     )
 
 

@@ -11,8 +11,10 @@ from goldilocks_core.contracts.types import JsonDict, KPointGrid, KPointShift
 class KMeshEntry:
     """One rung of a structure's ordered k-mesh ladder.
 
-    ``k_index`` is 0-based: rung 0 is the Γ-only ``(1, 1, 1)`` mesh, and each
-    step up is the next denser mesh the reciprocal lattice admits.
+    ``k_index`` is 1-based: rung 1 is the Γ-only ``(1, 1, 1)`` mesh, and each
+    step up is the next denser mesh the reciprocal lattice admits. A model
+    trained against a 0-based record predicts a rung one lower than this
+    ladder names, so the base belongs to the record and must be read from it.
     """
 
     k_index: int

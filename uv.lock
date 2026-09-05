@@ -938,7 +938,7 @@ dev = [
 requires-dist = [
     { name = "dscribe", specifier = ">=2.1" },
     { name = "fastapi", marker = "extra == 'http'" },
-    { name = "goldilocks-ml", editable = "../3-goldilocks-ml" },
+    { name = "goldilocks-ml", specifier = ">=0.1.0" },
     { name = "joblib", specifier = "==1.5.3" },
     { name = "matminer", specifier = ">=0.10.1" },
     { name = "mcp", marker = "extra == 'mcp'" },
@@ -966,35 +966,13 @@ dev = [
 [[package]]
 name = "goldilocks-ml"
 version = "0.1.0"
-source = { editable = "../3-goldilocks-ml" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "data-collections-api" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "data-collections-api", specifier = "==0.1.0" },
-    { name = "dscribe", marker = "extra == 'models'", specifier = "==2.1.2" },
-    { name = "matminer", marker = "extra == 'models'", specifier = "==0.10.1" },
-    { name = "numpy", marker = "extra == 'models'", specifier = "==2.5.2" },
-    { name = "pymatgen", marker = "extra == 'models'", specifier = "==2026.5.4" },
-    { name = "scikit-learn", marker = "extra == 'models'", specifier = "==1.7.2" },
-    { name = "sklearn-quantile", marker = "extra == 'models'", specifier = "==0.1.1" },
-    { name = "torch", marker = "extra == 'models'", specifier = "==2.13.0" },
-    { name = "torch-geometric", marker = "extra == 'models'", specifier = "==2.8.0.post1" },
-]
-provides-extras = ["models"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8.3" },
-    { name = "ruff", specifier = ">=0.13" },
-]
-docs = [
-    { name = "ipywidgets", specifier = ">=8.1" },
-    { name = "mkdocs", specifier = ">=1.6.1" },
-    { name = "mkdocs-jupyter", specifier = ">=0.26.3" },
-    { name = "mkdocs-material", specifier = ">=9.7.7" },
+sdist = { url = "https://files.pythonhosted.org/packages/82/f7/8e41cfd2c33e7ba4251a60c5a286b3b05cdd5c21fda95a07dd392965c433/goldilocks_ml-0.1.0.tar.gz", hash = "sha256:e7a06ef415fcdc295bd4a39940f5d52be93df14ad0d77752b78b098e6c2cfc05", size = 386163, upload-time = "2026-09-05T06:48:06.33Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/28/7f/5f3fecbb8fe681df7b0f0c3c119b465558edb0fb54ff6c03fb7097cd49d4/goldilocks_ml-0.1.0-py3-none-any.whl", hash = "sha256:377a93bf99558336958a36c4195be87c3252b6d5c789f6f1bafb7b2f3871b636", size = 96027, upload-time = "2026-09-05T06:48:05.136Z" },
 ]
 
 [[package]]

@@ -49,16 +49,37 @@ class QrfKpointsConfig:
     metallicity_atom_init_file: str
 
 
-def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
+@dataclass(frozen=True, slots=True)
+class ElectronicCharacterConfig:
+    """Where to find the goldilocks-ml model that answers is-this-a-metal
+    directly, distinct from the checkpoint QRF consumes as a feature block."""
+
+    target_contract: str
+    asset: AssetSpec
+
+
+def _load_registry_data(path: PathLike | None) -> dict[str, Any]:
     registry_path = path or os.environ.get(MODEL_REGISTRY_ENV)
     if registry_path is None:
         registry = resources.files("goldilocks_core.ml").joinpath(_REGISTRY_RESOURCE)
         with registry.open("rb") as registry_file:
-            data = tomllib.load(registry_file)
-    else:
-        with Path(registry_path).open("rb") as registry_file:
-            data = tomllib.load(registry_file)
+            return tomllib.load(registry_file)
+    with Path(registry_path).open("rb") as registry_file:
+        return tomllib.load(registry_file)
 
+
+def load_default_electronic_character_config(
+    path: PathLike | None = None,
+) -> ElectronicCharacterConfig:
+    section = _load_registry_data(path)["defaults"]["electronic_character"]
+    return ElectronicCharacterConfig(
+        target_contract=section["target_contract"],
+        asset=_asset_spec(section["asset"]),
+    )
+
+
+def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
+    data = _load_registry_data(path)
     kpoints = data["defaults"]["kpoints"]
     features = kpoints["features"]
     metallicity = kpoints["metallicity"]
@@ -105,9 +126,14 @@ def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
 
 def model_asset_specs(path: PathLike | None = None) -> tuple[AssetSpec, ...]:
     config = load_default_qrf_config(path)
+    electronic_character = load_default_electronic_character_config(path)
     return tuple(
         spec
-        for spec in (config.model_asset, config.metallicity_asset)
+        for spec in (
+            config.model_asset,
+            config.metallicity_asset,
+            electronic_character.asset,
+        )
         if spec is not None
     )
 

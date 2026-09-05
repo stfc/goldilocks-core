@@ -17,7 +17,13 @@ from goldilocks_core import (
     QueryRequest,
     Runtime,
 )
-from goldilocks_core.assets import AssetFile, AssetSpec, AssetStore
+from goldilocks_core.assets import (
+    AssetFile,
+    AssetNotInstalled,
+    AssetReference,
+    AssetSpec,
+    AssetStore,
+)
 from goldilocks_core.contracts import (
     CalculationIntent,
     KPointSelection,
@@ -184,37 +190,44 @@ def test_recommend_returns_complete_result_without_generated_files() -> None:
     assert result.generated_files == ()
 
 
-def test_analyze_uses_heuristic_without_configured_metallicity_model(
+def test_analyze_fails_loudly_when_no_metallicity_model_is_installed(
     monkeypatch,
 ) -> None:
+    # #174: Runtime() resolves a real model by default, same as the QRF
+    # k-distance backend resolves its own assets -- no silent heuristic
+    # fallback when nothing is configured or installed.
+    def raise_not_installed(self: AssetStore, asset_id: str, version: str):
+        raise AssetNotInstalled(AssetReference(asset_id, version), self.root)
 
-    with Runtime() as runtime:
-        dispatcher = Dispatcher(runtime)
-        records = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
+    monkeypatch.setattr(AssetStore, "resolve", raise_not_installed)
 
-    analysis = records[StructureAnalysisRecord]
-    assert analysis.electronic_character == "unknown"
-    assert analysis.electronic_character_source == "heuristic"
-    assert analysis.electronic_character_confidence is None
+    with (
+        Runtime() as runtime,
+        pytest.raises(AssetNotInstalled, match="models/metallicity-is-metal"),
+    ):
+        Dispatcher(runtime).compute(make_query_request((StructureAnalysisRecord,)))
 
 
 def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
-    from goldilocks_core.ml.qrf import metallicity
+    from goldilocks_ml import inference
 
-    model = object()
     calls = []
-    monkeypatch.setattr(metallicity, "load_metallicity_model", lambda path: model)
 
-    def classify(structure, actual_model, atom_init, **settings):
-        calls.append((structure, actual_model, atom_init, settings))
-        return "metal", 0.92
+    class StubModel:
+        def predict(self, structure):
+            calls.append(structure)
+            return inference.ModelPrediction(
+                parameter="metallicity",
+                quantity="is_metal",
+                value=True,
+                target_contract="goldilocks.is_metal.dft_band_gap_zero.v1",
+                model_id="metallicity.is_metal.cgcnn@crystal_graph.v1",
+                details={"score": 0.92},
+            )
 
-    monkeypatch.setattr(metallicity, "classify_metallicity", classify)
+    monkeypatch.setattr(inference, "load_model", lambda model_dir: StubModel())
 
-    with Runtime(
-        metallicity_checkpoint="metal.ckpt",
-        metallicity_atom_init="atom-init.json",
-    ) as runtime:
+    with Runtime(metallicity_model_dir="metal-model/") as runtime:
         dispatcher = Dispatcher(runtime)
         records = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
 
@@ -223,7 +236,6 @@ def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
     assert analysis.electronic_character_source == "model"
     assert analysis.electronic_character_confidence == 0.92
     assert len(calls) == 1
-    assert calls[0][1:3] == (model, "atom-init.json")
 
 
 def test_generate_returns_generated_files() -> None:
@@ -370,30 +382,34 @@ def test_reset_close_and_context_manager_delegate_to_backend(monkeypatch) -> Non
 
 
 def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
-    from goldilocks_core.ml.qrf import metallicity
+    from goldilocks_ml import inference
 
     backend = TrackingBackend()
     model_loads = 0
     model_refs = []
-    classifications = 0
+    predictions = 0
 
     class StubMetallicityModel:
-        pass
+        def predict(self, structure):
+            nonlocal predictions
+            predictions += 1
+            return inference.ModelPrediction(
+                parameter="metallicity",
+                quantity="is_metal",
+                value=True,
+                target_contract="goldilocks.is_metal.dft_band_gap_zero.v1",
+                model_id="stub",
+                details={"score": 0.9},
+            )
 
-    def load(path):
+    def load(model_dir):
         nonlocal model_loads
         model_loads += 1
         model = StubMetallicityModel()
         model_refs.append(weakref.ref(model))
         return model
 
-    def classify(structure, model, atom_init, **settings):
-        nonlocal classifications
-        classifications += 1
-        return "metal", 0.9
-
-    monkeypatch.setattr(metallicity, "load_metallicity_model", load)
-    monkeypatch.setattr(metallicity, "classify_metallicity", classify)
+    monkeypatch.setattr(inference, "load_model", load)
     request = PresetRequest(
         structure=make_structure(),
         hints=CalculationHints(pseudo_type="NC"),
@@ -401,8 +417,7 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     )
     runtime = Runtime(
         kmesh_service=backend,
-        metallicity_checkpoint="metal.ckpt",
-        metallicity_atom_init="atom-init.json",
+        metallicity_model_dir="metal-model/",
     )
     dispatcher = Dispatcher(runtime)
 
@@ -414,7 +429,7 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     assert second.analysis.electronic_character == "metal"
     assert backend.calls == 2
     assert model_loads == 1
-    assert classifications == 2
+    assert predictions == 2
     assert model_refs[0]() is not None
 
     runtime.reset()
@@ -425,7 +440,7 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     dispatcher.recommend(request)
     assert backend.calls == 3
     assert model_loads == 2
-    assert classifications == 3
+    assert predictions == 3
     assert model_refs[1]() is not None
 
     runtime.close()

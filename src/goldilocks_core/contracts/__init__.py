@@ -24,13 +24,23 @@ from goldilocks_core.contracts.hints import (
     VdwHints,
 )
 from goldilocks_core.contracts.kpoints import KMeshEntry, KPointSelection
-from goldilocks_core.contracts.models import ModelSpec, StructureFeatureVector
+from goldilocks_core.contracts.models import (
+    ModelPrediction,
+    ModelSpec,
+    StructureFeatureVector,
+)
 from goldilocks_core.contracts.outputs import (
     OUTPUT_RECORD_TYPES,
     OUTPUT_TYPES_BY_ID,
     resolve_output_types,
 )
-from goldilocks_core.contracts.protocols import KMeshAdvisor, KMeshService
+from goldilocks_core.contracts.protocols import (
+    PREDICTION_RESOLVERS,
+    KMeshAdvisor,
+    KMeshService,
+    PredictionResolver,
+    StructureModel,
+)
 from goldilocks_core.contracts.provenance import Provenance
 from goldilocks_core.contracts.registry import RECORD_TYPE_IDS, record_type_id
 from goldilocks_core.contracts.requests import PresetRequest, QueryRequest
@@ -96,6 +106,7 @@ __all__ = [
     "KPointSelection",
     "KPointShift",
     "MagnetismAdvice",
+    "ModelPrediction",
     "ModelSource",
     "ModelSpec",
     "ModelType",
@@ -103,6 +114,8 @@ __all__ = [
     "OUTPUT_TYPES_BY_ID",
     "ParameterAdvice",
     "PathLike",
+    "PREDICTION_RESOLVERS",
+    "PredictionResolver",
     "PresetRequest",
     "Provenance",
     "ProvenanceSource",
@@ -127,6 +140,7 @@ __all__ = [
     "StructureAnalysisRecord",
     "StructureFeatureVector",
     "StructureInput",
+    "StructureModel",
     "SymmetryUnavailable",
     "TaskId",
     "VdwAdvice",

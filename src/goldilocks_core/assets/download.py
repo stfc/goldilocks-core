@@ -16,7 +16,11 @@ _TIMEOUT_SECONDS = 300
 _RETRIES = Retry(
     total=3,
     backoff_factor=0.5,
-    status_forcelist=(429, 502, 503, 504),
+    # A presigned-URL backend (observed: PSDI's S3-compatible storage) can
+    # answer a transient 500 for a request that would succeed moments later;
+    # retry it same as the other transient statuses rather than surfacing a
+    # backend hiccup as a permanent download failure.
+    status_forcelist=(429, 500, 502, 503, 504),
     allowed_methods=frozenset({"GET"}),
     raise_on_status=False,
 )

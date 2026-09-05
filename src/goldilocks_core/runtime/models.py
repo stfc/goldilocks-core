@@ -1,42 +1,68 @@
 from __future__ import annotations
 
-import os
+from typing import TYPE_CHECKING
 
 from pymatgen.core import Structure
 
 from goldilocks_core.advice.kdistance import QrfBackend
-from goldilocks_core.analysis import heuristic_metallicity
 from goldilocks_core.assets import AssetStore
 from goldilocks_core.contracts import (
+    PREDICTION_RESOLVERS,
     ElectronicCharacter,
     KMeshService,
     ModelSpec,
     PathLike,
+    StructureModel,
 )
+
+if TYPE_CHECKING:
+    from goldilocks_ml.inference import ModelPrediction
+
+
+def _resolve_metallicity_prediction(
+    structure: Structure, prediction: ModelPrediction
+) -> tuple[ElectronicCharacter, float | None]:
+    """Turn goldilocks-ml's is_metal prediction into an electronic character.
+
+    The prediction already carries the threshold decision -- ``value`` is the
+    label, not a raw score -- so there is nothing left for Core to interpret
+    beyond the boolean itself. ``details["score"]`` travels through as
+    provenance, per the seam's rule that a resolver records details but never
+    branches on them.
+    """
+    del structure
+    character: ElectronicCharacter = "metal" if prediction.value else "insulator"
+    confidence = prediction.details.get("score") if prediction.details else None
+    return character, confidence
+
+
+PREDICTION_RESOLVERS["metallicity"] = _resolve_metallicity_prediction
 
 
 class MetallicityModel:
-    __slots__ = (
-        "_checkpoint",
-        "_atom_init",
-        "_registry_path",
-        "_model",
-        "_graph_settings",
-        "_closed",
-    )
+    """Answers is-this-a-metal directly, via goldilocks-ml.
+
+    ``model_dir`` overrides where the model record lives; left unset, it is
+    resolved from the runtime asset store on first use, same as the QRF
+    k-distance backend resolves its own assets. An asset that is not
+    installed raises ``AssetNotInstalled`` -- same as QRF -- rather than
+    silently guessing from a heuristic: a model that is expected to run and
+    does not is a configuration bug, worth failing loudly over.
+    """
+
+    __slots__ = ("_model_dir", "_registry_path", "_asset_store", "_model", "_closed")
 
     def __init__(
         self,
         *,
-        checkpoint: PathLike | None,
-        atom_init: PathLike | None,
+        model_dir: PathLike | None,
         registry_path: PathLike | None,
+        asset_store: AssetStore,
     ) -> None:
-        self._checkpoint = checkpoint
-        self._atom_init = atom_init
+        self._model_dir = model_dir
         self._registry_path = registry_path
-        self._model: object | None = None
-        self._graph_settings: tuple[float, int] | None = None
+        self._asset_store = asset_store
+        self._model: StructureModel | None = None
         self._closed = False
 
     def __call__(
@@ -44,40 +70,34 @@ class MetallicityModel:
     ) -> tuple[ElectronicCharacter, str, float | None]:
         if self._closed:
             raise RuntimeError("MetallicityModel is closed.")
-        if self._checkpoint is None or self._atom_init is None:
-            return heuristic_metallicity(structure), "heuristic", None
 
-        from goldilocks_core.ml.qrf.metallicity import (
-            classify_metallicity,
-            load_metallicity_model,
-        )
+        from goldilocks_ml.inference import load_model
 
         if self._model is None:
-            self._model = load_metallicity_model(os.fspath(self._checkpoint))
-        if self._graph_settings is None:
-            from goldilocks_core.ml.model_registry import load_default_qrf_config
+            self._model = load_model(self._resolve_model_dir())
 
-            settings = load_default_qrf_config(self._registry_path).feature_settings
-            self._graph_settings = (
-                settings.metallicity_graph_radius,
-                settings.metallicity_max_neighbors,
-            )
-        graph_radius, max_neighbors = self._graph_settings
-        character, confidence = classify_metallicity(
-            structure,
-            self._model,
-            os.fspath(self._atom_init),
-            graph_radius=graph_radius,
-            max_neighbors=max_neighbors,
-        )
+        prediction = self._model.predict(structure)
+        resolver = PREDICTION_RESOLVERS[prediction.parameter]
+        character, confidence = resolver(structure, prediction)
         return character, "model", confidence
+
+    def _resolve_model_dir(self) -> PathLike:
+        if self._model_dir is not None:
+            return self._model_dir
+
+        from goldilocks_core.ml.model_registry import (
+            load_default_electronic_character_config,
+        )
+
+        config = load_default_electronic_character_config(self._registry_path)
+        installed = self._asset_store.resolve(config.asset.id, config.asset.version)
+        return installed.root
 
     def reset(self) -> None:
         self._model = None
 
     def close(self) -> None:
         self._model = None
-        self._graph_settings = None
         self._closed = True
 
 
@@ -86,8 +106,15 @@ class Runtime:
         self,
         *,
         registry_path: PathLike | None = None,
+        # Feeds the QRF k-distance backend's internal metallicity feature
+        # block (ml/qrf/metallicity.py); unrelated to metallicity_model_dir.
         metallicity_checkpoint: PathLike | None = None,
         metallicity_atom_init: PathLike | None = None,
+        # A directory holding a goldilocks-ml model record (model.json plus
+        # its estimator) that answers the electronic-character question
+        # directly. None resolves the default asset from the asset store,
+        # raising AssetNotInstalled if it is not installed.
+        metallicity_model_dir: PathLike | None = None,
         kmesh_service: KMeshService | None = None,
         asset_store: AssetStore | None = None,
         pseudo_registry_path: PathLike | None = None,
@@ -95,6 +122,7 @@ class Runtime:
         self._registry_path = registry_path
         self._metallicity_checkpoint = metallicity_checkpoint
         self._metallicity_atom_init = metallicity_atom_init
+        self._metallicity_model_dir = metallicity_model_dir
         self._asset_store = asset_store or AssetStore()
         self._pseudo_registry_path = pseudo_registry_path
         self._backend = (
@@ -113,9 +141,9 @@ class Runtime:
 
     def _build_metallicity(self) -> MetallicityModel:
         return MetallicityModel(
-            checkpoint=self._metallicity_checkpoint,
-            atom_init=self._metallicity_atom_init,
+            model_dir=self._metallicity_model_dir,
             registry_path=self._registry_path,
+            asset_store=self._asset_store,
         )
 
     @property

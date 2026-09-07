@@ -1,14 +1,4 @@
-"""Documentation hygiene gates.
-
-Every fenced ``python`` block in the docs must parse and import only names
-the package actually exports; every ``goldilocks`` command and flag shown
-must exist in the real CLI parser; every relative documentation link must
-resolve. These gates catch docs rot before it ships: dead types
-(``StructureInspection``), fabricated commands (``goldilocks recommend``),
-and moved pages. README, quickstart, and tutorial Python blocks are also
-*executed* against installed runtime assets by
-``tests/integration/test_docs_executable.py``.
-"""
+"""Check documentation links, Python imports, and CLI command vocabulary."""
 
 from __future__ import annotations
 
@@ -23,7 +13,12 @@ from goldilocks_core.cli.core import build_parser
 
 ROOT = Path(__file__).resolve().parents[2]
 DOC_FILES = sorted(
-    [ROOT / "README.md", *(ROOT / "docs").glob("*.md"), ROOT / "web" / "README.md"]
+    [
+        ROOT / "README.md",
+        *(ROOT / "docs").glob("*.md"),
+        ROOT / "web" / "README.md",
+        ROOT / "src" / "goldilocks_core" / "examples" / "structures" / "README.md",
+    ]
 )
 _FENCE = re.compile(r"^```(\w+)\n(.*?)^```$", re.DOTALL | re.MULTILINE)
 _GOLDILOCKS_CALL = re.compile(r"(?:uv run )?goldilocks (\w+)")
@@ -54,11 +49,6 @@ def _cli_vocabulary() -> tuple[frozenset[str], frozenset[str]]:
                     for leaf_action in leaf._actions:
                         flags.update(leaf_action.option_strings)
     return frozenset(subparsers.choices), frozenset(flags)
-
-
-def test_documentation_files_exist() -> None:
-    assert (ROOT / "README.md").is_file()
-    assert len(DOC_FILES) > 5
 
 
 def test_doc_links_resolve() -> None:
@@ -106,15 +96,10 @@ def _check_python(body: str, label: str) -> None:
 def _check_bash(body: str, label: str) -> None:
     commands, flags = _cli_vocabulary()
     for line in body.splitlines():
-        command_matches = _GOLDILOCKS_CALL.findall(line)
-        if not command_matches:
-            continue
-        for command in command_matches:
+        for match in _GOLDILOCKS_CALL.finditer(line):
+            command = match.group(1)
             assert command in commands, (
                 f"{label} shows unknown command 'goldilocks {command}'"
             )
-        for flag in _FLAG.findall(line):
-            assert flag in flags, f"{label} shows unknown flag {flag!r}"
-    assert not re.search(r"goldilocks (recommend|generate)\b", body), (
-        f"{label} shows recommend/generate as commands; they are preset IDs"
-    )
+            for flag in _FLAG.findall(line[match.end() :]):
+                assert flag in flags, f"{label} shows unknown flag {flag!r}"

@@ -1,138 +1,114 @@
-# How recommendations are made
+# Check your recommendations
 
-This page explains what happens between "here is a structure" and "here is a
-runnable input": which stage decides each parameter, what model or rule it
-uses, and how to tell a measured choice from a guess. Every recommendation
-also carries its own provenance at runtime; this page is the map of those
-sources.
+Goldilocks suggests starting inputs for a Quantum ESPRESSO self-consistent-field
+(SCF) calculation. It does not establish that your energy, forces, or other
+properties are converged. Review the choices below before running a calculation,
+then test the settings against the accuracy your work needs.
 
-The pipeline is a dependency graph of stages:
+For a first calculation, use the [quickstart](quickstart.md). For exact units,
+defaults, and override precedence, see [Scientific conventions](conventions.md).
 
-```text
-Load -> Analyze -> Advise
-Load -> Kmesh
-Load + Advice -> Select
-Load + Advice + Select + Kmesh -> Generate
-Analysis + Advice + Kmesh + Select + Generate -> DFT Input Data
-```
+## Check electronic occupations
 
-Each stage produces a record. `recommend` collects analysis, advice, k-points,
-and selection; `generate` additionally renders input files and binds the
-complete bundle.
+Smearing smooths electron occupations near the Fermi energy to help metals
+converge. Goldilocks chooses smearing from `electronic_character`:
 
-## Structure analysis
+| Classification            | Default occupations                 |
+| ------------------------- | ----------------------------------- |
+| `metal` or `likely_metal` | Cold smearing                       |
+| `insulator` or `unknown`  | Fixed occupations, without smearing |
 
-The analysis stage reports what the structure *is*: formula, lattice, sites,
-space group, dimensionality, and electronic character. Facts first — no
-parameter decisions happen here.
+With the metallicity model installed, ordered structures receive a `metal` or
+`insulator` prediction. Without that asset, or for disordered structures, a
+composition rule returns `likely_metal` if every element is metallic according
+to pymatgen, and `unknown` otherwise. Neither rule determines a band structure.
 
-Dimensionality comes from pymatgen's CrystalNN/Larsen analysis. Electronic
-character — `metal` or `insulator` — comes from the metallicity model, or
-from a conservative composition heuristic when the model is absent or the
-structure is disordered. See the [scientific conventions](conventions.md) for
-the exact fallback behavior.
+Check `electronic_character_source`, `electronic_character_confidence`, and
+`analysis_warnings` in the analysis result. A model prediction or an all-metal
+composition can still give the wrong occupation choice for your system. Override
+it with `smearing_type`; when enabling smearing, also supply
+`smearing_width_ry`. Test the width together with the k-point mesh.
 
-## K-points: the QRF model
+## Check k-point sampling
 
-Without an explicit `k_grid` or `k_spacing` hint, the k-mesh stage consults
-the installed quantile-random-forest model (`qrf-kpoints@QRF95`). The model
-predicts a k-point distance — an effective spacing — from structural and
-composition features (site-connected SOAP descriptors, lattice, and the
-metallicity classification), and the mesh follows from the VASP `KSPACING`
-convention described in the [conventions page](conventions.md).
+K-points sample the Brillouin zone for reciprocal-space integration. Too sparse
+a mesh can leave energies, forces, or electronic properties unconverged.
 
-Two rules bound the model:
+Without a grid or spacing hint, the default quantile random forest model
+(`qrf-kpoints@QRF95`) predicts a spacing and interval from structure features.
+The median spacing determines the mesh. The reported `confidence` is the
+configured prediction-interval level, not a probability that your calculation
+will be accurate.
 
-- an explicit `k_grid` wins over `k_spacing`, and either hint bypasses the
-  model completely — no model load, fully deterministic;
-- the recommendation carries provenance naming the model and its prediction,
-  so it is always distinguishable from a fixed default or your own hint.
+Compare results on denser meshes. For slabs, wires, or molecules in periodic
+cells, check sampling along vacuum directions explicitly; dimensionality advice
+does not by itself set those mesh components to one. Use `k_grid` or `k_spacing`
+to replace the model recommendation. These hints bypass the k-point model, not
+necessarily the separate metallicity classifier used for analysis.
 
-## Smearing from electronic character
+## Check pseudopotentials and cutoffs
 
-The smearing advice reads the electronic character from analysis:
+A pseudopotential replaces the core-electron potential with an effective
+potential for the valence electrons. Check that its functional, valence
+configuration, and relativistic treatment suit your system.
 
-- **metal** → `cold` smearing with a width of 0.01 Ry;
-- **unknown character** → fixed occupations, and a warning asking you to
-  verify.
+Goldilocks selects files and cutoff metadata, not system-specific convergence
+limits. Quantum ESPRESSO receives the largest wavefunction cutoff and largest
+charge-density cutoff among the selected elements. An `efficiency` or
+`precision` table is a library choice, not proof that your target property is
+converged. Test both cutoffs. See [Pseudopotential tables](pseudopotentials.md)
+for selection rules, installation, and custom files.
 
-The default model classifies silicon as metallic (confidence ≈ 0.5), so the
-quickstart example gets cold smearing. Provenance makes that visible; the
-confidence, the fallback warnings, and `--smearing-type` or
-`CalculationHints(smearing_type=...)` exist so you can check and override any
-classification you disagree with.
+## Check magnetism and spin-orbit coupling
 
-## Convergence defaults
+Spin polarization allows different spin populations. Goldilocks enables it by
+default when transition metals, lanthanides, or actinides are present. This is
+an element-based heuristic, not a prediction of magnetic order. The generated
+input does not assign starting magnetic moments or magnetic sublattices; review
+and complete the magnetic setup for your calculation. Override the heuristic
+with `spin_polarized`.
 
-Convergence settings are package defaults, not model predictions:
-`conv_thr = 1e-6` Ry, `mixing_beta = 0.4`, `electron_maxstep = 80`. They are
-recorded in the advice document with `source: default`, and every one can be
-overridden by hint.
+Spin-orbit coupling (SOC) couples electron spin to orbital motion. Goldilocks
+flags period-5-and-heavier elements for consideration but does not enable SOC
+unless you request it. Whether SOC matters depends on the property, not only the
+elements. Enabling it changes the required pseudopotentials and the QE spin
+settings. See [relativistic modes](conventions.md#relativistic-modes) and the
+[table restrictions](pseudopotentials.md#choose-a-table).
 
-## Dispersion
+## Check dispersion and dimensionality
 
-Dimensionality drives the vdW policy: a 3D bulk structure gets no dispersion
-correction by default; a low-dimensional structure enables D3BJ, because
-layered and molecular systems need it and it is cheap. Both decisions are
-visible in the advice document, and `use_vdw` / `vdw_method` override them.
+Dispersion accounts for long-range interactions that common semilocal
+functionals can miss. The default D3BJ correction is the D3 method with
+Becke–Johnson damping. Goldilocks enables it for structures classified as 0D,
+1D, or 2D, and disables it for 3D or unknown dimensionality.
 
-## Spin-orbit coupling
+The classification uses a bond-connectivity analysis from pymatgen's
+CrystalNN/Larsen methods. It is a heuristic, not a test of whether a dispersion
+correction is physically appropriate. Check the structure and choose `use_vdw`
+and `vdw_method` accordingly, including for molecular crystals classified as 3D.
+Disordered structures get unknown dimensionality and a warning. A
+CrystalNN/Larsen failure on an ordered structure raises an error rather than
+silently choosing a dimensionality.
 
-SOC is never enabled automatically. Structures containing period-5-and-heavier
-elements get `spin_orbit.consider = True`; enabling it is always your
-decision, because SOC multiplies cost and changes the required
-pseudopotentials. When you do enable it, the pseudopotential requirements
-demand fully relativistic files — see the
-[conventions page](conventions.md#spin-orbit-coupling).
+## Check SCF convergence
 
-## Pseudopotentials
+The SCF threshold, density-mixing strength, and iteration limit are package
+defaults, not model predictions. Inspect the actual QE convergence history and
+adjust these settings if needed. Reaching the SCF threshold does not demonstrate
+convergence with respect to k-points or cutoffs.
 
-Selection is deterministic: given the requested functional, accuracy tier,
-relativistic treatment, and the structure's elements, the core resolves a
-compatible registered table and picks each element's file and cutoffs from
-it. PseudoDojo is preferred for ordinary elements; lanthanides and actinides
-require SSSP tables, because PseudoDojo's lanthanide table freezes 4f
-electrons in a trivalent ion and no PseudoDojo table covers actinides. The
-cutoffs come from the table — the core does not tune them. The full policy,
-table list, and licensing model are in
-[Pseudopotential tables](pseudopotentials.md).
+## Read the reasons and warnings
 
-## Reading provenance
+Parameter advice, k-point selection, and individual pseudopotential selections
+include `provenance`: a source, reason, and optional asset identity, confidence,
+details, or warnings. Sources include `default`, `analysis`, `model`, `lookup`,
+`user_hint`, and `fallback`. Structure analysis uses its own source and warning
+fields instead of a single provenance block.
 
-Every recommendation sub-document carries a `provenance` block:
-
-```text
-"provenance": {
-    "source": "analysis",
-    "reason": "Model-classified metallic systems benefit from modest smearing.",
-    "confidence": null,
-    "data_source": null,
-    "warnings": []
-}
-```
-
-| `source` | Meaning |
-| --- | --- |
-| `default` | package default, no model or structure input involved |
-| `analysis` | derived from structure analysis (including model classification) |
-| `model` | predicted directly by a model asset |
-| `lookup` | read from a registered table or manifest |
-| `user_hint` | you set it; the stage only echoed the decision |
-
-`confidence` is populated when a model produced the value. `data_source`
-names the exact asset (for example, which pseudopotential table supplied a
-cutoff). If you disagree with any recommendation, the override and its
-provenance both land in the published `goldilocks.json`, so the decision
-trail survives into your archive.
-
-## Known limitations
-
-- The metallicity model is a trained classifier. Verify surprising calls —
-  the confidence and the `likely_metal` fallback warnings exist for exactly
-  this reason. Composition-only heuristics are also a documented stand-in for
-  future models; see issue #175 for the inventory.
-- Dimensionality classification uses CrystalNN, which fails on some ordered
-  structures; the failure is reported as a warning with the analysis.
-- Cutoffs are table values, not per-system optimized values. Use a
-  `precision` table when you need tighter converged cutoffs.
-- Only Quantum ESPRESSO SCF generation exists today.
+Provenance describes a decision or group of settings, not necessarily each field
+separately. For example, overriding one convergence setting marks the whole
+convergence group `user_hint`; the remaining values are still defaults. Model
+confidence is not copied into every downstream advice block, and asset
+identities are not always populated. Read analysis and selection warnings as
+well as advice; do not treat the presence of provenance as scientific
+validation.

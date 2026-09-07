@@ -1,261 +1,193 @@
 # Pseudopotential tables
 
-Goldilocks needs pseudopotential metadata to select UPF files and energy
-cutoffs. You can install a table that Goldilocks manages, or use a directory of
-UPF files that you manage.
+A table is a named collection of pseudopotential files in UPF format and
+recommended energy cutoffs. Goldilocks supports tables from PseudoDojo and SSSP.
+Start with the default table in the [quickstart](quickstart.md); use this page
+to choose another table or supply your own files.
 
-## Use automatic table selection
+## Choose a table
 
-Without an explicit source, Core chooses a registered table matching the
-requested functional, accuracy, relativistic treatment, and structure
-elements. It prefers PseudoDojo for ordinary elements and requires SSSP for
-lanthanides or actinides. The default runtime profile installs the preferred
-scalar-relativistic PBEsol efficiency table for a normal calculation without
-spin-orbit coupling (SOC).
-
-Install the profile once:
+List the registered choices and their supported elements, functional, accuracy,
+and relativistic treatment:
 
 ```bash
-uv run goldilocks assets install default
+uv run goldilocks capabilities --json
 ```
 
-Check it:
+The `pseudopotential_sets` array lists the available tables. Use `assets status`
+to check which are installed.
 
-```bash
-uv run goldilocks assets verify default
-```
+Without an explicit source, Goldilocks chooses a compatible registered table,
+preferring PseudoDojo unless the structure contains lanthanides or actinides. It
+does not choose a different table merely because that table is installed. The
+`default` asset profile includes the scalar-relativistic PBEsol efficiency
+table, plus the default k-point and metallicity models.
 
-You can now run a PBEsol calculation:
+To choose a table explicitly, use `--pseudo-table` or
+`CalculationDraft.pseudo_table`. Its functional, accuracy tier, relativistic
+treatment, and element coverage must match the request. In particular:
 
-```bash
-uv run goldilocks compute structure.cif --preset recommend --no-out
-```
+- `precision` tables require `--pseudo-accuracy precision`; this is a library
+  tier, not a guarantee of convergence for your calculation.
+- Table suffixes `sr` and `fr` mean scalar relativistic and fully relativistic.
+  Explicit spin-orbit coupling (SOC) needs fully relativistic files; the default
+  profile contains only an `sr` table.
+- Lanthanides and actinides must use SSSP under Goldilocks' selection policy,
+  with coverage checked for the actual elements. PseudoDojo's lanthanide table
+  freezes 4f electrons in the core assuming trivalent ions, which is not
+  suitable for all oxidation states; its tables do not cover actinides. No
+  registered SSSP table is fully relativistic, so automatic or explicit
+  registered-table selection cannot supply SOC for these elements.
+- SSSP 1.3.0 PBEsol tables reuse PBE input parameters and cutoffs and were not
+  tested with the SSSP convergence protocol. Do not treat these as
+  PBEsol-validated cutoffs.
+- Some files in SSSP scalar-relativistic tables declare non-relativistic
+  treatment. Goldilocks permits this exception for scalar requests, preserves
+  the per-file treatment, and emits a compatibility warning.
 
-## Choose a different table
+The [scientific guide](science.md#check-pseudopotentials-and-cutoffs) explains
+what to check before using selected cutoffs.
 
-Select an exact table ID with `--pseudo-table` or `CalculationDraft.pseudo_table`.
-The table must agree with the calculation functional, accuracy tier,
-relativistic treatment, and every element in the structure. Core reports all
-disagreements before selection.
+## Install and select it
 
-- Use an `efficiency` table for normal calculations.
-- Use a `precision` table with `--pseudo-accuracy precision`.
-- Use an `sr` table for a calculation without SOC.
-- Use an `fr` table for a calculation with SOC.
-- Use an SSSP table for lanthanides or actinides. Selection refuses PseudoDojo
-  pseudopotentials for these elements: its lanthanide table freezes 4f
-  electrons assuming a trivalent ion (wrong for Eu, Yb, and Ce) and no
-  PseudoDojo table covers actinides at all. SSSP has no fully-relativistic
-  table, so these elements also cannot use SOC pseudopotentials.
-
-### PseudoDojo scalar-relativistic tables
-
-- `pseudodojo-pbesol-efficiency-sr`
-- `pseudodojo-pbesol-precision-sr`
-- `pseudodojo-pbe-efficiency-sr`
-- `pseudodojo-pbe-precision-sr`
-- `pseudodojo-lda-efficiency-sr`
-- `pseudodojo-lda-precision-sr`
-
-### PseudoDojo fully relativistic tables for SOC
-
-- `pseudodojo-pbesol-efficiency-fr`
-- `pseudodojo-pbesol-precision-fr`
-- `pseudodojo-pbe-efficiency-fr`
-- `pseudodojo-pbe-precision-fr`
-
-Install the table, then select the same ID:
+The commands below assume Goldilocks is installed. Replace `structure.cif` with
+your ordered structure file. This example installs and selects fully
+relativistic PBEsol files for an SOC recommendation:
 
 ```bash
 uv run goldilocks assets install pseudodojo-pbesol-efficiency-fr
-uv run goldilocks compute structure.cif --preset recommend --spin-orbit-coupling true --pseudo-table pseudodojo-pbesol-efficiency-fr --no-out
+uv run goldilocks compute structure.cif --preset recommend --spin-orbit-coupling true --pseudo-table pseudodojo-pbesol-efficiency-fr
 ```
 
-Python requests carry the ID; Core verifies and loads its installed manifest
-only when Select is required:
+Use the [asset commands](cli.md#install-and-check-assets) if a required model or
+table is missing.
 
-```python
-from goldilocks_core import (
-    CalculationDraft,
-    CalculationHints,
-    ComputeRequest,
-    DirectoryOutput,
-    PathStructureSource,
-    PresetSelection,
-    Service,
-)
-from goldilocks_core.examples.structures import structures_path
-
-request = ComputeRequest(
-    CalculationDraft(
-        PathStructureSource(structures_path() / "Si.cif"),
-        hints=CalculationHints(spin_orbit_coupling=True),
-        pseudo_table="pseudodojo-pbesol-efficiency-fr",
-    ),
-    PresetSelection("generate"),
-)
-
-with Service() as core:
-    result = core.compute(request, output=DirectoryOutput("run"))
-```
-
-The default profile contains only an `sr` table. It cannot supply the fully
-relativistic UPFs that an SOC calculation needs.
-
-### SSSP tables
-
-SSSP tables cover the lanthanides and actinides as well as the lighter
-elements. Select the one table matching the calculation:
-
-- `sssp-pbesol-efficiency-sr`
-- `sssp-pbesol-precision-sr`
-- `sssp-pbe-efficiency-sr`
-- `sssp-pbe-precision-sr`
-
-Install the table, then put its exact ID on the CLI or Python request. The
-default profile does not include an SSSP table.
-
-SSSP 1.3.0 PBEsol tables reuse pseudopotentials and input parameters from the
-PBE library; SSSP did not validate those PBEsol tables with its convergence
-protocol. Goldilocks preserves this provenance rather than presenting the
-cutoffs as PBEsol-validated.
-
-Some UPFs in SSSP's scalar-relativistic tables declare themselves
-non-relativistic. Goldilocks preserves that per-file treatment on the selected
-record and archive instead of relabelling it scalar. Core permits the file only
-for a scalar request and emits a compatibility warning for operator review.
-
-The registry also contains `pseudodojo-pbe-lanthanides-sr`. It assumes
-trivalent f-in-core ions and is not suitable for every lanthanide, so
-selection never uses it for lanthanide or actinide elements; only an SSSP
-table can serve them.
-
-Automatic selection reads the scientific registry, not the set of directories
-currently installed in the asset store. If the preferred compatible table is
-missing, Core reports its exact asset ID and version so `--fetch-missing` can
-install that dependency.
-
-## Check an installed table
-
-Show its state:
+Check installation state and verify file integrity:
 
 ```bash
 uv run goldilocks assets status pseudodojo-pbesol-efficiency-fr
-```
-
-Check every installed file:
-
-```bash
 uv run goldilocks assets verify pseudodojo-pbesol-efficiency-fr
 ```
 
-The state is `installed`, `missing`, or `corrupt`. Run `assets install` again
-to replace a corrupt table transactionally.
+Status is `installed`, `missing`, or `corrupt`. Repeat `assets install` to
+repair a corrupt installation. Verification checks stored files, not scientific
+accuracy.
 
-Asset stores installed by older releases used `schema_version: 1` manifests
-and bare or namespaced table directories; they are incompatible with the
-strict manifest reader. Reinstall affected assets:
+### Read installed metadata in Python
 
-```bash
-uv run goldilocks assets install workbench
+For ordinary calculations, pass the table ID on `CalculationDraft`; see the
+[Python tutorial](tutorial.md). To inspect its installed metadata directly:
+
+```python
+from goldilocks_core.assets.store import AssetStore
+from goldilocks_core.pseudo.installed import load_installed_table
+from goldilocks_core.pseudo.registry import load_tables
+
+table = load_tables()["pseudodojo-pbesol-efficiency-fr"]
+installed = AssetStore().resolve_spec(table.asset)
+metadata = load_installed_table(installed, table=table)
+for pseudo in metadata:
+    print(pseudo.element, pseudo.filename, pseudo.cutoffs)
 ```
+
+Managed PseudoDojo tables convert the provider's high cutoff hint from Hartree
+to Ry and derive the charge-density cutoff using the registered multiplier
+(currently 4). SSSP tables supply separate wavefunction and charge-density
+cutoffs. Neither path optimizes cutoffs for your structure.
 
 ## Use your own UPF files
 
-Use `--pseudo-root` to read a directory that you manage:
+Replace `pseudos` with your UPF root and `structure.cif` with your structure.
+This first command inspects a recommendation without publishing files:
 
 ```bash
-uv run goldilocks compute structure.cif --preset generate --pseudo-root pseudos --k-grid 4 4 4 --out run
+uv run goldilocks compute structure.cif --preset recommend --pseudo-root pseudos
 ```
 
-Goldilocks reads `.upf` and `.UPF` files recursively. It does not copy or
-change them. The UPF header or a recognized provider sidecar must identify the
-scientific metadata and provide two finite positive cutoffs for every selected
-element. Arbitrary JSON files and filename words are not treated as scientific
-facts.
+Goldilocks scans UPF files recursively, ignoring extension case, and leaves the
+source directory unchanged. Check the parsed functional and relativistic
+treatment against your request. UPF headers alone do **not** populate the
+selection's cutoff fields. Recognized cutoff sidecars are:
 
-The recognized sidecar filenames are a fixed convention:
+- **PseudoDojo:** a `.djrepo` beside each UPF, with the same stem. Its checksum
+  and functional must match. The high cutoff hint supplies `ecutwfc_ry`, but
+  leaves `ecutrho_ry` unset for a custom root. Use a managed table or supply
+  complete Python metadata before generation.
+- **SSSP:** a JSON file beside the UPF with an element entry naming that file
+  and providing both cutoffs. For UPFs in a subdirectory of the supplied root,
+  Goldilocks also checks `<subdirectory>.json` in its parent. For example,
+  `pseudos/table/Si.upf` can use `pseudos/table.json` when the supplied root is
+  `pseudos`. It does not search outside the supplied root. More than one
+  matching cutoff record is an error.
 
-- PseudoDojo: one `.djrepo` beside each UPF (same stem).
-- SSSP: any `*.json` beside the UPF, or exactly one table-level JSON named
-  `<directory>.json` one level above it (for example `pseudos/` with
-  `pseudos.json` beside it). A table-level JSON must cover every UPF in that
-  directory.
+Unrelated JSON is ignored. A recommendation can contain missing cutoffs or
+unresolved elements with warnings; generation needs a compatible file and two
+finite positive cutoffs for every element.
 
-Other parent-directory layouts are not searched: keep sidecars beside their
-UPF files, or follow the one table-level filename above.
+### Supply licence and citation material
 
-Generating publishable DFT Input Data from a local root also requires the
-operator to declare the real redistribution terms and source citation. Put a
-`goldilocks-pseudopotentials.json` sidecar at the root:
+Before generating a complete output, add `goldilocks-pseudopotentials.json` at
+the UPF root. Replace the descriptive strings below with the source's real terms
+and citation, and place its licence text in `LICENSE.txt`:
 
 ```json
 {
-    "schema_version": 1,
-    "licence": "the actual licence name or SPDX expression",
-    "licence_file": "LICENSE.txt",
-    "citation": "the citation requested by this pseudopotential source"
+  "schema_version": 1,
+  "licence": "Actual licence name or SPDX expression",
+  "licence_file": "LICENSE.txt",
+  "citation": "Citation required by the pseudopotential source"
 }
 ```
 
-`licence_file` is a relative path contained under the root. Goldilocks reads
-and publishes that file verbatim with the selected UPFs. It does not infer a
-licence from a provider name, UPF filename, or cutoff sidecar. Recommendation
-can inspect a root without this publication sidecar, but generation fails
-clearly until complete legal and citation material is supplied.
+`licence_file` must be a relative POSIX path contained under the root, without
+`.` or `..` components. Its UTF-8 text must be nonempty. Goldilocks does not
+infer redistribution rights from filenames or provider names. Recommendation can
+proceed without this sidecar; a complete generated output cannot.
 
-`pseudo_metadata`, `pseudo_root`, and `pseudo_table` are mutually exclusive.
-Explicit metadata is useful for in-memory callers; an explicit root remains
-operator-managed; an exact table ID resolves through the verified asset store.
-HTTP and MCP expose only `pseudo_table`: callers may choose a registered
-scientific set by stable ID without transmitting metadata, roots, or files.
-Build explicit metadata with `parse_upf_metadata`, which binds the file's SHA-256
-and size from one binary read. Generation rereads the file once and requires that
-binding to match. `source_identifier` must be a provider-relative identity or URL,
-not an absolute or home-relative host path.
+Once the scientific metadata and licence material are complete:
 
-## Find installed files
-
-Goldilocks uses this directory on a normal Linux system:
-
-```text
-~/.local/share/goldilocks/assets
+```bash
+uv run goldilocks compute structure.cif --preset generate --pseudo-root pseudos --out run
 ```
 
-Set `GOLDILOCKS_ASSET_ROOT` to use a different directory. If
-`XDG_DATA_HOME` is set, the default is `$XDG_DATA_HOME/goldilocks/assets`.
+Published outputs contain copies of the selected UPFs and licence text. Run QE
+from the output root (`run` here), so `pseudo_dir = './pseudo'` resolves to the
+published files, not the original UPF directory.
 
-Each version has its own directory:
+For Python-managed metadata, start with
+`goldilocks_core.pseudo.parse_upf.parse_upf_metadata`, then supply the cutoffs
+and legal metadata on `PseudoMetadata` (`cutoffs` and `pseudo_info`). Parsing
+binds the file's SHA-256 and size; generation rejects changed file content. Keep
+`source_identifier` a provider-relative identity or URL, not an absolute or
+home-relative host path. `pseudo_metadata`, `pseudo_root`, and `pseudo_table`
+are mutually exclusive. HTTP and MCP requests support only `pseudo_table`.
+
+## Find stored assets
+
+The default store is `$XDG_DATA_HOME/goldilocks/assets`, or
+`~/.local/share/goldilocks/assets` when `XDG_DATA_HOME` is unset.
+`GOLDILOCKS_ASSET_ROOT` overrides it. Table installations live at:
 
 ```text
-<asset-store>/<asset-id>/<version>/
+<asset-store>/pseudopotentials/<table-id>/<version>/
 ```
 
-Treat this directory as read-only. Use the `assets` commands to install, check,
-or repair its contents.
+Treat managed files as read-only; use `assets install`, `status`, and `verify`.
 
 ## Licences and citations
 
-Pseudopotential files keep their upstream licences. The Goldilocks BSD licence
-does not apply to those files. Goldilocks does not include UPF files in its
-wheel or source archive.
+UPFs retain their upstream licences; the Goldilocks BSD licence does not apply
+to them. UPFs are downloaded separately, not bundled in the package.
 
-PseudoDojo table definitions record CC BY 4.0. Cite van Setten et al.,
-*Computer Physics Communications* 226, 39–54 (2018).
+- [PseudoDojo](https://www.pseudo-dojo.org/): registered tables use CC BY 4.0.
+  Cite van Setten et al., _Computer Physics Communications_ 226, 39–54 (2018).
+- [SSSP 1.3.0](https://archive.materialscloud.org/records/rcyfm-68h65): cite
+  Prandini et al., _npj Computational Materials_ 4, 72 (2018), and the data
+  record. The record's CC BY 4.0 licence does not replace the individual UPF
+  licences. Read its mixed-family
+  [`LICENSE.txt`](https://archive.materialscloud.org/records/rcyfm-68h65/files/LICENSE.txt?download=1)
+  before redistribution.
 
-SSSP 1.3.0 contains files from different pseudopotential families. The Materials
-Cloud record is CC BY 4.0. Individual files can use GPL-2.0-or-later, GPL-3.0,
-CC BY 3.0, CC BY 4.0, or CC BY-SA 4.0. Read the SSSP
-[`LICENSE.txt`](https://archive.materialscloud.org/records/rcyfm-68h65/files/LICENSE.txt?download=1)
-before you redistribute an SSSP table.
-
-Asset installation stores licence material as `LICENSE.txt` beside each
-normalized table. PseudoDojo installations receive the table's CC BY 4.0
-notice; SSSP installations preserve the upstream record's complete mixed-family
-licence file. Workbench calculation archives include that installed licence
-material with the selected UPFs.
-
-Upstream sources:
-
-- [PseudoDojo](https://www.pseudo-dojo.org/)
-- [SSSP 1.3.0](https://archive.materialscloud.org/records/rcyfm-68h65)
+Installations store licence material in `LICENSE.txt`: the CC BY 4.0 notice for
+PseudoDojo, or the upstream mixed-family licence file for SSSP. Published
+calculation outputs include that material with the selected UPFs.

@@ -1,97 +1,85 @@
 # Scientific conventions
 
-This page records the physical and numerical conventions behind the
-recommendations: units, defaults, and the policies that affect correctness.
-For how each recommendation is produced and provenanced, see
-[How recommendations are made](science.md).
+Use this reference for units, defaults, and override rules. For what to check
+before trusting a recommendation, see [Check your recommendations](science.md).
 
 ## Units
 
-| Quantity | Unit | Where it appears |
-| --- | --- | --- |
-| k-point spacing | Å⁻¹ | `CalculationHints.k_spacing` |
-| Smearing width | Rydberg | advice `smearing.width_ry`, `CalculationHints.smearing_width_ry` |
-| Wavefunction cutoff | Rydberg | selection `pseudopotentials[].ecutwfc_ry` |
-| Charge-density cutoff | Rydberg | selection `pseudopotentials[].ecutrho_ry` |
-| Convergence threshold | Rydberg | advice `convergence.conv_thr`, `CalculationHints.conv_thr` |
-| Mixing beta | dimensionless | advice `convergence.mixing_beta`, `CalculationHints.mixing_beta` |
+| Quantity                  | Unit          | Field                                           |
+| ------------------------- | ------------- | ----------------------------------------------- |
+| k-point spacing           | Å⁻¹           | `CalculationHints.k_spacing`                    |
+| Smearing width            | Rydberg (Ry)  | `smearing_width_ry`; advice `smearing.width_ry` |
+| Wavefunction cutoff       | Ry            | selection `pseudopotentials[].ecutwfc_ry`       |
+| Charge-density cutoff     | Ry            | selection `pseudopotentials[].ecutrho_ry`       |
+| SCF convergence threshold | Ry            | `conv_thr`; advice `convergence.conv_thr`       |
+| Density-mixing strength   | Dimensionless | `mixing_beta`                                   |
+| SCF iteration limit       | Integer       | `electron_maxstep`                              |
 
-All cutoffs, smearing widths, and SCF energy thresholds follow the Quantum
-ESPRESSO convention (Rydberg atomic units), not Hartree. Quantum ESPRESSO SCF
-is the only implemented target code.
+Energies use Quantum ESPRESSO's Rydberg convention, not Hartree: 1 Ha = 2 Ry.
+The SCF threshold controls the estimated self-consistency error; it is not a
+k-point or cutoff convergence tolerance.
 
-## K-point spacing convention
+## K-point spacing and shifts
 
-k-point spacing uses the **VASP KSPACING convention**:
+Spacing uses solid-state reciprocal lattice vectors, including the 2π factor, as
+in VASP `KSPACING`. For each reciprocal vector `b_i`, the grid size is:
 
-- Spacing is in Å⁻¹.
-- Mesh sizes come from solid-state reciprocal lattice lengths including the
-  2π factor (`reciprocal_lattice.a`, `.b`, `.c` from pymatgen).
-- The mesh in each direction is `max(1, ceil(recip_length / k_spacing))`.
+```text
+N_i = max(1, ceil(round(|b_i| / k_spacing, 5)))
+```
 
-This matches VASP's `KSPACING` tag. It differs from conventions that use
-2π/a-style spacing without the 2π factor.
+Rounding to five decimal places avoids numerical noise at integer boundaries. A
+smaller spacing gives a denser mesh. The built-in spacing and grid paths and
+default model use shift `[0, 0, 0]`. In Quantum ESPRESSO's `K_POINTS automatic`
+convention this includes Γ (the reciprocal-space origin), even for even-sized
+meshes; a shift flag of `1` means a half-grid shift on that axis.
 
-## Default values
+## Defaults
 
-| Parameter | Default | Unit | Defined in |
-| --- | --- | --- | --- |
-| convergence threshold | 1e-6 | Ry | `advice/convergence.py` |
-| mixing beta | 0.4 | — | `advice/convergence.py` |
-| electron max steps | 80 | — | `advice/convergence.py` |
-| metallic smearing width | 0.01 | Ry | `advice/smearing.py` |
-| smearing type (metallic) | `cold` | — | `advice/smearing.py` |
-| smearing type (unknown character) | `fixed` | — | `advice/smearing.py` |
-| pseudopotential accuracy | `efficiency` | — | `CalculationIntent.pseudo_accuracy` |
-| functional | PBEsol | — | `CalculationIntent.functional` |
+| Setting                                  | Default                            |
+| ---------------------------------------- | ---------------------------------- |
+| Target                                   | Quantum ESPRESSO, SCF single point |
+| Exchange-correlation functional          | `PBEsol`                           |
+| Pseudopotential accuracy tier            | `efficiency`                       |
+| SCF threshold / mixing / iteration limit | `1e-6` Ry / `0.4` / `80`           |
+| Metallic or likely-metallic occupations  | `cold`, width `0.01` Ry            |
+| Insulating or unknown occupations        | `fixed`, no width                  |
 
-## Electronic character classification
+Spin, dispersion, and electronic-character heuristics are described in
+[Check your recommendations](science.md). Pseudopotential compatibility
+exceptions belong to the [table guide](pseudopotentials.md#choose-a-table).
 
-The analysis stage classifies each structure as `metal` or `insulator` to
-drive the smearing recommendation. With the default metallicity model asset
-installed, an ordered structure is classified by the model, and the advice
-provenance records `source: analysis` with the model's confidence. Without
-that asset, or for a disordered structure the model cannot represent, the
-core falls back to a conservative composition heuristic:
+## Override precedence
 
-- **`likely_metal`**: all composition elements are metallic according to
-  pymatgen. A warning records that this is not confirmed by
-  electronic-structure data.
-- **`unknown`**: composition alone cannot determine electronic character.
-  The smearing advice falls back to fixed occupations and callers should
-  verify manually.
+Fields below are on `CalculationHints` unless stated otherwise. `None` leaves
+the choice to Goldilocks.
 
-The heuristic never returns `metal` or `insulator`; only the model does. See
-[How recommendations are made](science.md) for when to distrust the model.
+- `k_grid` wins over `k_spacing`; either bypasses the k-point model.
+- A non-fixed `smearing_type` requires a positive `smearing_width_ry`. Fixed
+  occupations require no width. A smearing override replaces the pair.
+- `conv_thr`, `mixing_beta`, and `electron_maxstep` override independently;
+  unspecified values retain their defaults.
+- `pseudo_accuracy` overrides `CalculationIntent.pseudo_accuracy`. The
+  functional comes from `CalculationIntent.functional`.
+- `spin_polarized` and `spin_orbit_coupling` override their respective advice.
+- `use_vdw` explicitly enables or disables dispersion. `vdw_method` alone
+  changes the method only if dispersion is otherwise enabled; it does not enable
+  dispersion for a 3D or unknown structure. Enabled dispersion defaults to
+  `d3bj` if no method is given.
+- On `CalculationDraft`, `pseudo_table`, `pseudo_root`, and `pseudo_metadata`
+  are mutually exclusive. An explicit table must match the request; selecting a
+  table does not change the requested functional or accuracy tier.
 
-## Heavy elements and spin-orbit coupling
+## Relativistic modes
 
-`contains_heavy_elements` and `heavy_elements` classify period-5-and-heavier
-elements as heavy. Such elements can need SOC consideration.
+| `relativistic_mode` | Meaning                                           |
+| ------------------- | ------------------------------------------------- |
+| `scalar`            | Scalar relativistic effects, without explicit SOC |
+| `full`              | Fully relativistic data, needed for explicit SOC  |
+| `non-relativistic`  | No relativistic treatment                         |
 
-SOC is **never enabled automatically**, even when heavy elements are present:
-
-- the advice document sets `spin_orbit.consider = True` when heavy elements
-  are detected;
-- `spin_orbit.enabled` stays `False` unless you set
-  `CalculationHints(spin_orbit_coupling=True)`.
-
-SOC changes calculation cost, convergence, and pseudopotential requirements,
-so the operator must enable it explicitly. Enabling SOC without an explicit
-`CalculationHints.relativistic_mode` makes the pseudopotential requirements
-demand fully relativistic (`full`) pseudopotentials with the same
-`user_hint` provenance as the SOC decision.
-
-A low-dimensional structure enables the lower-cost D3BJ dispersion correction
-by default; the operator can override that choice.
-
-## Pseudopotential relativistic modes
-
-| Mode | Meaning |
-| --- | --- |
-| `scalar` | Scalar relativistic (default for non-SOC calculations) |
-| `full` | Fully relativistic (required when SOC is enabled) |
-| `non-relativistic` | No relativistic treatment (rarely used) |
-
-See [Pseudopotential tables](pseudopotentials.md) for which registered tables
-provide fully relativistic files.
+Without an explicit mode, Goldilocks requests `full` when SOC is enabled and
+`scalar` otherwise. An explicit mode takes precedence: keep it consistent with
+the SOC setting. Fully relativistic files alone do not enable SOC. With SOC
+enabled, QE generation writes `noncolin = .true.` and `lspinorb = .true.`;
+otherwise spin-polarized advice produces `nspin = 2`.

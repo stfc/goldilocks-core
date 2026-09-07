@@ -1,187 +1,129 @@
-# Tutorial
+# Python API
 
-This tutorial walks the Python API from a CIF file to published Quantum
-ESPRESSO SCF inputs: inspect a structure, compute recommendations, select
-individual records, and publish a ready-to-run bundle. The
-[quickstart](quickstart.md) does the same through the CLI.
+Use Goldilocks to generate inputs from a script. First complete the
+[installation and asset setup](quickstart.md#1-install). Run the examples in
+order in the same Python session, or save them in a script and run
+`uv run your_script.py`.
 
-## Inspect a structure
+## Generate inputs
 
-```python
-from goldilocks_core import PathStructureSource, Service
-from goldilocks_core.examples.structures import structures_path
-
-source = PathStructureSource(structures_path() / "Si.cif")
-with Service() as core:
-    inspection = core.inspect_structure(source)
-
-print(inspection["structure"]["reduced_formula"])
-print(inspection["structure"]["site_count"])
-print(inspection["canonical_cif"])
-```
-
-`inspect_structure` returns a document with four keys: `source` (identity and
-content hash of what you gave it), `structure` (formula, lattice, sites,
-species, occupancies, periodicity), `canonical_cif`, and `schema_version`:
-
-```text
-Si
-8
-# generated using pymatgen
-data_Si
-...
-```
-
-Nothing scientific has happened yet — inspection normalizes the structure and
-reports facts.
-
-## Compute a recommendation
-
-An empty draft lets every stage decide for itself. This loads the models and
-recommends k-points, smearing, convergence settings, and pseudopotentials:
+This example writes to `si-python/`. Choose another name if it already exists.
 
 ```python
 from goldilocks_core import (
     CalculationDraft,
     ComputeRequest,
+    DirectoryOutput,
+    PathStructureSource,
     PresetSelection,
-    Service,
+    compute,
 )
-from goldilocks_core.serialization import to_portable
+from goldilocks_core.examples.structures import structure
 
+source = PathStructureSource(structure("Si.cif"))
 request = ComputeRequest(
-    CalculationDraft(source, pseudo_table="pseudodojo-pbesol-efficiency-sr"),
-    PresetSelection("recommend"),
+    draft=CalculationDraft(structure=source),
+    selection=PresetSelection("generate"),
 )
+result = compute(request, output=DirectoryOutput("si-python"))
 
-with Service() as core:
-    result = core.compute(request)
-
-records = to_portable(result)["records"]
-print(records["k_points"]["grid"])
-print(records["advice"]["smearing"])
-print(records["selection"]["pseudopotentials"][0]["ecutwfc_ry"])
-
-# The shown values are part of the contract this tutorial documents; CI
-# re-proves them on every run, so a model change flags the docs for review.
-assert records["k_points"]["grid"] == [6, 6, 6]
-assert records["advice"]["smearing"]["smearing_type"] == "cold"
-assert records["selection"]["pseudopotentials"][0]["ecutwfc_ry"] == 48.0
+print(result.publication["path"])
+for warning in result.warnings:
+    print(warning)
 ```
 
-For the bundled silicon example this prints:
+Replace `structure("Si.cif")` with a path to your own CIF or POSCAR.
+`CalculationDraft` holds the structure and settings;
+`PresetSelection("generate")` asks for input files. `DirectoryOutput` writes
+them to a new directory. See the [quickstart](quickstart.md#2-generate-an-input)
+for its contents.
 
-```text
-[6, 6, 6]
-{'smearing_type': 'cold', 'width_ry': 0.01, 'provenance': {'source': 'analysis', 'reason': 'Model-classified metallic systems benefit from modest smearing.', ...}}
-48.0
+## Read a recommendation
+
+`result.records` holds the computed results, keyed by record type:
+
+```python
+from goldilocks_core import KPointSelection
+
+k_points = result.records[KPointSelection]
+print(k_points["grid"])
+print(k_points["provenance"].reason)
 ```
 
-`recommend` is a preset ID. It requests the `analysis`, `advice`, `k_points`,
-and `selection` records without generating runnable input data.
+This prints the selected grid and the reason for it. Model-dependent values can
+change with the installed model; review warnings and check convergence rather
+than treating the recommendation as a verified result.
 
-Every sub-dict carries a `provenance` block. The smearing provenance above
-says the choice came from `analysis` — the metallicity model — not from a
-fixed default and not from you. The same structure of provenance appears on
-every recommendation, so you can always ask where a number came from. The
-`assert` lines in the snippet pin the shown values: when a model update
-changes a recommendation, CI fails here and the tutorial gets re-blessed.
-[How recommendations are made](science.md) covers each source.
+## Choose settings yourself
 
-## Override with hints
-
-Hints override the models. An explicit grid also skips loading the k-point
-model entirely:
+Pass `CalculationHints` for the settings you want to control:
 
 ```python
 from goldilocks_core import CalculationHints
 
 request = ComputeRequest(
-    CalculationDraft(
-        source,
+    draft=CalculationDraft(
+        structure=source,
         hints=CalculationHints(k_grid=(4, 4, 4)),
-        pseudo_table="pseudodojo-pbesol-efficiency-sr",
     ),
-    PresetSelection("recommend"),
+    selection=PresetSelection("recommend"),
 )
+result = compute(request)
+print(result.records[KPointSelection]["grid"])
 ```
 
-`CalculationHints` covers k-point spacing and grid, smearing type and width,
-spin polarization, spin-orbit coupling, dispersion, and the convergence
-settings. Every hint is optional; anything you omit stays with the advice
-stages. The [CLI reference](cli.md#scientific-controls) maps every flag to its
-hint field.
+The grid is now `[4, 4, 4]`. An explicit grid bypasses the k-point model; other
+settings are still recommended. The
+[scientific controls](cli.md#scientific-controls) list the available hints.
 
-## Select explicit records
+`recommend` returns recommendations without generating input files. `generate`
+adds the input files. Neither writes to disk through the Python API unless you
+supply an output target.
 
-Presets are shorthand for a set of records. To run only a subgraph — here,
-structure analysis and k-points — name the records:
+## Choose an output
+
+| `output` argument                | Result                             |
+| -------------------------------- | ---------------------------------- |
+| Omitted or `None`                | Keep the result in memory          |
+| `DirectoryOutput("si-python")`   | Write a new directory              |
+| `ArchiveOutput("si-python.zip")` | Write a ZIP with the same contents |
+
+Import `ArchiveOutput` from `goldilocks_core` to use it. Use the `generate`
+preset when writing outputs; choose a destination that does not already exist.
+
+## Inspect structures and reuse loaded models
+
+Use a `Service` for repeated calls:
 
 ```python
-from goldilocks_core import RecordSelection, StructureAnalysisRecord, KPointSelection
+from goldilocks_core import Service
+
+with Service() as core:
+    inspection = core.inspect_structure(source)
+    print(inspection["structure"]["reduced_formula"])
+    result = core.compute(request)
+```
+
+Keep related computations inside the `with` block to reuse loaded models.
+`core.capabilities()` lists the available tasks, presets, and controls.
+
+## Request only the results you need
+
+For example, request only the k-point grid:
+
+```python
+from goldilocks_core import RecordSelection
 
 query = ComputeRequest(
-    request.draft,
-    RecordSelection((StructureAnalysisRecord, KPointSelection)),
+    draft=request.draft,
+    selection=RecordSelection((KPointSelection,)),
 )
-with Service() as core:
-    result = core.compute(query)
+result = compute(query)
+print(result.records[KPointSelection]["grid"])
 ```
 
-Only the stages the selected records depend on execute. `result.records` is
-keyed by the record classes themselves; `to_portable` projects those keys to
-the stable IDs used on the wire (`analysis`, `advice`, `k_points`,
-`selection`, `generated_files`, `dft_input_data`).
+Only the required stages run. This example retains the explicit grid from the
+earlier request.
 
-## Generate and publish inputs
-
-`generate` additionally produces the generated files and the complete
-ready-to-run bundle. Choose an output target:
-
-```python
-from goldilocks_core import DirectoryOutput
-
-request = ComputeRequest(request.draft, PresetSelection("generate"))
-with Service() as core:
-    result = core.compute(request, output=DirectoryOutput("run"))
-
-print(result.publication["path"])
-```
-
-- `DirectoryOutput("run")` writes a new directory; the destination must not
-  exist.
-- `ArchiveOutput("run.zip")` writes the same layout as one ZIP.
-- `DirectoryOutput()` with no path allocates `goldilocks_out`, then
-  `goldilocks_out_1`, and so on.
-- `None` (the default) keeps everything in memory.
-
-A publication contains the generated inputs, canonical and original
-structures, the exact pseudopotential files, licence material, citations,
-provenance, and checksums — the layout shown in the
-[quickstart](quickstart.md). Extract an archive and run Quantum ESPRESSO from
-its root so `pseudo_dir = './pseudo'` resolves.
-
-## Reuse the Service
-
-One `Service` owns its model state and reuses it across computations:
-
-```python
-with Service() as core:
-    capabilities = core.capabilities()
-    first = core.compute(query)
-    second = core.compute(query)
-```
-
-## CLI, HTTP, and MCP
-
-The CLI exposes the same three operations:
-
-```bash
-uv run goldilocks inspect structure.cif --json
-uv run goldilocks compute structure.cif --preset generate --out run
-```
-
-HTTP and MCP expose the same operations over a running process. Both accept
-inline structure content and a registered pseudopotential table ID — not
-paths or publication destinations, which stay local to Python and the CLI.
-The exact contract is in the [CLI reference](cli.md#optional-transports).
+See [Recommendations](science.md) to interpret other settings, or
+[Architecture](architecture.md) to extend the computation workflow.

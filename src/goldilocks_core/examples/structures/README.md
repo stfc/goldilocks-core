@@ -1,63 +1,25 @@
 # Example structures
 
-Goldilocks includes three small crystal structures. Use them to try the package
-without finding a structure file first.
+Three CIF files are included for trying Goldilocks:
 
-## Run an example
+| File         | Structure                   |
+| ------------ | --------------------------- |
+| `Si.cif`     | Diamond silicon             |
+| `Fe_bcc.cif` | Body-centred cubic iron     |
+| `Pt_fcc.cif` | Face-centred cubic platinum |
 
-Install the default runtime assets:
-
-```bash
-uv run goldilocks assets install default
-```
-
-Run the silicon example:
+After installing the default assets, run this from the repository root:
 
 ```bash
-uv run goldilocks compute "$(uv run goldilocks examples path)/Si.cif" --preset recommend --no-out
+uv run goldilocks compute src/goldilocks_core/examples/structures/Si.cif --preset generate --out si-run
 ```
 
-From Python:
-
-```python
-from goldilocks_core import (
-    CalculationDraft,
-    ComputeRequest,
-    KPointSelection,
-    PresetSelection,
-    Service,
-    StructureAnalysisRecord,
-)
-from goldilocks_core.examples.structures import structure
-
-request = ComputeRequest(
-    draft=CalculationDraft(structure=structure("Si.cif")),
-    selection=PresetSelection("recommend"),
-)
-with Service() as core:
-    result = core.compute(request)
-
-print(result.records[StructureAnalysisRecord].reduced_formula)
-print(result.records[KPointSelection].grid)
-```
-
-## Available structures
-
-- `Si.cif`: diamond silicon. A simple non-magnetic semiconductor example.
-- `Fe_bcc.cif`: body-centred cubic iron. Goldilocks recommends spin
-  polarisation and metallic smearing.
-- `Pt_fcc.cif`: face-centred cubic platinum. Goldilocks reports that SOC should
-  be considered because platinum is a heavy element.
-
-These files are input examples. They are not converged calculations or benchmark
-results.
-
-## Use an example path in Python
-
-The `structure()` function returns the full path to an installed example:
+In Python, `structure()` returns the path to a bundled file:
 
 ```python
 from goldilocks_core.examples.structures import structure
 
 silicon_path = structure("Si.cif")
 ```
+
+These are example structures, not converged calculation results.

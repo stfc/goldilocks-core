@@ -1,137 +1,81 @@
-# Quickstart
+# First calculation
 
-This page generates a runnable Quantum ESPRESSO SCF calculation from a CIF
-file. It shows the real output at every step. It uses the CLI; the
-[tutorial](tutorial.md) does the same through the Python API.
+Generate a Quantum ESPRESSO SCF input for silicon, check the result, and run it.
+For Python, see the [Python guide](tutorial.md).
 
-## Install the package and assets
+Already generated `si-run` from the README? Continue with
+[checking the settings](#3-check-the-settings).
+
+## 1. Install
+
+Follow the [repository setup](../README.md#try-it), then run these commands from
+the repository directory:
 
 ```bash
-uv sync
 uv run goldilocks assets install default
 uv run goldilocks assets verify default
 ```
 
-`default` installs two models (a k-point model and a metallicity classifier)
-and one PseudoDojo pseudopotential table:
+This downloads and checks the k-point model, the metallicity classifier, and the
+PseudoDojo PBEsol efficiency pseudopotential table. The first installation needs
+an internet connection.
 
-```text
-models/qrf-kpoints@QRF95: installed
-models/metallicity-cgcnn@1: installed
-pseudopotentials/pseudodojo-pbesol-efficiency-sr@0.4: installed
-```
-
-## Generate inputs for silicon
-
-Use a bundled example structure. `uv run goldilocks examples path` prints the
-directory that holds them; copy one beside you, or point `compute` at any CIF
-or POSCAR:
+## 2. Generate an input
 
 ```bash
-uv run goldilocks compute Si.cif --preset generate --out run
+uv run goldilocks compute src/goldilocks_core/examples/structures/Si.cif --preset generate --out si-run
 ```
 
-The command prints what it produced:
+Replace the bundled silicon path with your own CIF or POSCAR when you are ready.
+Choose a new output directory each time; Goldilocks will not overwrite an
+existing one.
 
-```text
-generated files:
-  inputs/qe.in
-published directory: /tmp/work/run
-```
+The main files in `si-run/` are:
 
-and writes a directory you can run immediately:
+| Path                        | Contents                                     |
+| --------------------------- | -------------------------------------------- |
+| `inputs/qe.in`              | Quantum ESPRESSO input                       |
+| `pseudo/`                   | The selected UPF pseudopotential files       |
+| `source/`, `structure/`     | Original and normalized structures           |
+| `goldilocks.json`           | Settings, recommendations, and their sources |
+| `CITATIONS.md`, `licences/` | Citation and licence information             |
+| `checksums.sha256`          | File checksums                               |
 
-```text
-run/
-checksums.sha256
-CITATIONS.md
-goldilocks.json
-inputs/qe.in
-licences/models_metallicity-cgcnn-1.md
-licences/models_qrf-kpoints-QRF95.md
-licences/pseudodojo-pbesol-efficiency-sr.txt
-pseudo/Si.upf
-README.md
-source/Si.cif
-structure/canonical.cif
-```
+## 3. Check the settings
 
-Everything `pw.x` needs is in there. The generated `run/inputs/qe.in` sets
-`pseudo_dir = './pseudo'`, so run it from the publication root:
+Read any warnings printed by the command and open `si-run/inputs/qe.in`. Check
+the k-point grid, energy cutoffs, occupations, and spin settings against what
+you know about your material.
+
+Model predictions and table cutoffs are starting points, not convergence tests.
+See [Recommendations](science.md) for how each choice is made and
+[Scientific conventions](conventions.md) for units.
+
+To choose a grid yourself, generate a second input with `--k-grid`:
 
 ```bash
-pw.x < run/inputs/qe.in
+uv run goldilocks compute src/goldilocks_core/examples/structures/Si.cif --preset generate --k-grid 4 4 4 --out si-grid-4
 ```
 
-## Read the generated input
+The `4 × 4 × 4` grid demonstrates an override; it is not a converged value for
+silicon. Other controls are in the [CLI reference](cli.md#scientific-controls).
 
-The interesting part of `run/inputs/qe.in`:
+## 4. Run Quantum ESPRESSO
 
-```text
-&SYSTEM
-  ibrav = 0
-  nat = 8
-  ntyp = 1
-  ecutwfc = 48
-  ecutrho = 192
-  occupations = 'smearing'
-  smearing = 'cold'
-  degauss = 0.01
-/
-
-&ELECTRONS
-  conv_thr = 1.0000000000e-06
-  mixing_beta = 0.4
-  electron_maxstep = 80
-/
-```
-
-The recommendations chose these values. Each one comes from a stage that
-records its provenance:
-
-- `ecutwfc = 48` and `ecutrho = 192` come from the PseudoDojo
-  `pbesol-efficiency-sr` table, selected per element;
-- `smearing = 'cold'` with `degauss = 0.01` Ry because the installed
-  metallicity model classified Si as metallic;
-- `conv_thr`, `mixing_beta`, and `electron_maxstep` are package defaults for
-  SCF convergence.
-
-Every value also appears in `run/goldilocks.json` with provenance: which stage
-decided it, from what source, and why. Override any of it with hints — see the
-[CLI reference](cli.md) for the flags and
-[How recommendations are made](science.md) for the reasoning behind each
-default.
-
-## Recommend without generating files
-
-`--preset recommend` runs analysis, advice, k-points, and pseudopotential
-selection, and keeps the result in memory:
+With Quantum ESPRESSO installed, run `pw.x` **from inside the output directory**
+so it can find `./pseudo`:
 
 ```bash
-uv run goldilocks compute Si.cif --preset recommend --no-out --json
+cd si-run
+pw.x -in inputs/qe.in > qe.out
 ```
 
-With `--json`, the result is one document whose `records` map is keyed by
-stable record IDs. The k-point recommendation for Si is a 6×6×6 grid:
+Review `qe.out` to check that the SCF calculation converged.
 
-```text
-"k_points": { "grid": [6, 6, 6], ... }
-```
+## Next
 
-and the pseudopotential selection names its source:
-
-```text
-"ecutwfc_ry": 48.0, "ecutrho_ry": 192.0,
-"provenance": { "source": "lookup",
-                "data_source": "pseudopotentials/pseudodojo-pbesol-efficiency-sr", ... }
-```
-
-## Next steps
-
-- [Tutorial](tutorial.md) — the same workflow through the Python API, plus
-  record selection and output targets
-- [How recommendations are made](science.md) — what the models do and when to
-  distrust them
-- [Pseudopotential tables](pseudopotentials.md) — other functionals, SOC,
-  lanthanides, and your own UPF files
-- [CLI reference](cli.md) — every flag
+- [Python API](tutorial.md) — inspect structures and generate inputs in a
+  script.
+- [Pseudopotentials](pseudopotentials.md) — change functional, table, or UPF
+  files.
+- [Workbench](../web/README.md) — prepare and review inputs in a browser.

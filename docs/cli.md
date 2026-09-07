@@ -1,158 +1,142 @@
 # CLI reference
 
-The `goldilocks` command exposes the same capabilities, structure inspection,
-and compute operations as the Python `Service`.
+For installation and a first calculation, follow the
+[quickstart](quickstart.md).
 
-## Scientific commands
+## Common commands
 
-### capabilities
-
-```bash
-uv run goldilocks capabilities [--json]
-```
-
-Lists tasks, presets, selectable records, target codes, models,
-pseudopotential sets, and defaults. `--json` prints the canonical
-capabilities document.
-
-### inspect
+Replace `structure.cif` with your CIF or POSCAR:
 
 ```bash
-uv run goldilocks inspect structure.cif [--json]
+uv run goldilocks inspect structure.cif --json
+uv run goldilocks compute structure.cif --preset recommend --json
+uv run goldilocks compute structure.cif --preset generate --out silicon-run
 ```
 
-Normalizes a local CIF or POSCAR and reports its facts. `--json` prints the
-canonical inspection document (`source`, `structure`, `canonical_cif`):
+These inspect the structure, recommend settings, and write inputs, respectively.
+Use `uv run goldilocks --help` or a subcommand's `--help` for syntax.
 
-```text
-"structure": {
-    "formula": "Si8",
-    "reduced_formula": "Si",
-    "site_count": 8,
-    "periodicity": [true, true, true],
-    ...
-}
-```
+## Choose results
 
-### compute
+Every `compute` requires one of:
 
-```bash
-uv run goldilocks compute structure.cif (--preset ID | --outputs IDS) [options]
-```
+| Option               | Results                                                             |
+| -------------------- | ------------------------------------------------------------------- |
+| `--preset recommend` | Analysis, parameter advice, k-points, and pseudopotential selection |
+| `--preset generate`  | Recommendations and complete calculation inputs                     |
+| `--outputs IDS`      | Selected records, such as `analysis,k_points`                       |
 
-`--preset recommend` requests the analysis, advice, k-points, and selection
-records. `--preset generate` additionally requests the generated files and
-the complete ready-to-run bundle. `--outputs` accepts comma-separated stable
-record IDs instead of a preset:
-`analysis`, `advice`, `k_points`, `selection`, `generated_files`,
-`dft_input_data`.
+`uv run goldilocks capabilities --json` lists available tasks, presets, record
+IDs, models, tables, and defaults. `uv run goldilocks examples path` locates the
+bundled structures.
 
-Selection options are mutually exclusive. Recommendation and generation are
-preset IDs only; there are no `recommend` or `generate` commands.
+## Save output or print JSON
 
-## Compute output
+| Option               | Output                                                   |
+| -------------------- | -------------------------------------------------------- |
+| `--out DIRECTORY`    | A new calculation directory                              |
+| `--archive FILE.zip` | The same contents in a ZIP                               |
+| `--no-out`           | Recommendations or inputs in memory, without publication |
 
-Choose at most one output option:
+Choose at most one of these flags. Explicit destinations must not exist. Writing
+a directory or archive requires complete input data: use `--preset generate` or
+`--outputs dft_input_data`.
 
-- `--out DIRECTORY` publishes a new ready-to-run directory;
-- `--archive FILE.zip` publishes a new ready-to-run archive;
-- `--no-out` keeps the result in memory;
-- omission automatically publishes a directory only when the result contains
-  the complete bundle.
+Without an output flag, complete input data is written to `goldilocks_out`, then
+`goldilocks_out_1`, and so on. Recommendations alone do not create a directory.
 
-The core never overwrites an existing destination. With `--json`, the result
-prints as the canonical computation document, including publication metadata.
-Human output reports the structure, formula, target code, task, warnings, and
-publication path:
-
-```text
-generated files:
-  inputs/qe.in
-published directory: /home/you/run
-```
+`--json` prints structured results and warnings. Use `--no-out --json` when you
+want JSON without writing a calculation directory.
 
 ## Scientific controls
 
-| Flag | Default | Core contract |
-| --- | --- | --- |
-| `structure` | required | `PathStructureSource` |
-| `--code` | `quantum_espresso` | `CalculationIntent.code` |
-| `--task` | `scf_single_point` | `CalculationIntent.task` |
-| `--functional` | `PBEsol` | `CalculationIntent.functional` |
-| `--pseudo-accuracy` | `efficiency` | `CalculationIntent.pseudo_accuracy` |
-| `--pseudo-type` | None | `CalculationHints.pseudo_type` |
-| `--relativistic-mode` | None | `CalculationHints.relativistic_mode` |
-| `--pseudo-root` | None | local pseudopotential source |
-| `--pseudo-table` | None | stable registered table ID |
-| `--k-spacing` | None | `CalculationHints.k_spacing` |
-| `--k-grid NK1 NK2 NK3` | None | `CalculationHints.k_grid` |
-| `--smearing-type` | None | `CalculationHints.smearing_type` |
-| `--smearing-width-ry` | None | `CalculationHints.smearing_width_ry` |
-| `--spin-polarized true|false` | None | `CalculationHints.spin_polarized` |
-| `--spin-orbit-coupling true|false` | None | `CalculationHints.spin_orbit_coupling` |
-| `--use-vdw true|false` | None | `CalculationHints.use_vdw` |
-| `--vdw-method` | None | `CalculationHints.vdw_method` |
-| `--conv-thr` | None | `CalculationHints.conv_thr` |
-| `--mixing-beta` | None | `CalculationHints.mixing_beta` |
-| `--electron-maxstep` | None | `CalculationHints.electron_maxstep` |
+Defaults are Quantum ESPRESSO single-point SCF, PBEsol, and efficiency-tier
+pseudopotentials. See [scientific conventions](conventions.md) for numerical
+defaults and override rules.
 
-`--model`, `--model-name`, and `--model-version` select and identify a local
-k-index model. `--model-name` and `--model-version` require `--model`.
-Explicit `--k-grid` or `--k-spacing` bypasses model inference.
+| Flag                                                     | Values or meaning                                           |
+| -------------------------------------------------------- | ----------------------------------------------------------- |
+| `--code`, `--task`                                       | Built-in values: `quantum_espresso`, `scf_single_point`     |
+| `--functional`                                           | Exchange-correlation functional                             |
+| `--pseudo-accuracy`                                      | `efficiency` or `precision`                                 |
+| `--pseudo-table ID`                                      | Choose a registered table                                   |
+| `--pseudo-root DIRECTORY`                                | Use local UPF files                                         |
+| `--pseudo-type`                                          | `NC`, `USPP`, or `PAW`                                      |
+| `--relativistic-mode`                                    | `scalar`, `full`, or `non-relativistic`                     |
+| `--k-grid NK1 NK2 NK3`                                   | Three positive integers                                     |
+| `--k-spacing`                                            | Positive spacing in Å⁻¹, using the VASP KSPACING convention |
+| `--smearing-type`                                        | `fixed`, `gaussian`, `mp`, or `cold`                        |
+| `--smearing-width-ry`                                    | Smearing width in Ry                                        |
+| `--spin-polarized`, `--spin-orbit-coupling`, `--use-vdw` | `true` or `false`                                           |
+| `--vdw-method`                                           | `d3`, `d3bj`, `ts`, or `mbd`                                |
+| `--conv-thr`                                             | Positive SCF threshold in Ry                                |
+| `--mixing-beta`                                          | Positive density-mixing factor                              |
+| `--electron-maxstep`                                     | Positive maximum number of SCF iterations                   |
 
-`--fetch-missing` installs only an exact missing asset reported by the core,
-then retries. It does not replace corrupt assets.
+Grid, smearing, spin, dispersion, and convergence overrides are optional. For
+table compatibility and local-file requirements, see
+[Pseudopotentials](pseudopotentials.md).
 
-## Asset administration
+`--model PATH` loads a local k-index model; `--model-name` and `--model-version`
+optionally label its provenance.
 
-```bash
-uv run goldilocks assets install [PROFILE|ASSET_ID|TABLE_ID]
-uv run goldilocks assets status [PROFILE|ASSET_ID|TABLE_ID]
-uv run goldilocks assets verify [PROFILE|ASSET_ID|TABLE_ID]
-```
-
-The default asset root is `$XDG_DATA_HOME/goldilocks/assets`, falling back to
-`~/.local/share/goldilocks/assets`. Override it with `GOLDILOCKS_ASSET_ROOT`.
-See [Pseudopotential tables](pseudopotentials.md) for registered table
-selection and local-source licensing requirements.
-
-## Examples
+## Install and check assets
 
 ```bash
-uv run goldilocks examples path
-uv run goldilocks inspect Si.cif --json
+uv run goldilocks assets install default
+uv run goldilocks assets status default
+uv run goldilocks assets verify default
 ```
 
-## Optional transports
+Use a profile, asset ID, or table ID. `default` installs the two prediction
+models and a PBEsol efficiency PseudoDojo table; `workbench` installs all
+registered models and tables. `install` also repairs corrupt installations.
 
-HTTP and MCP are optional extras exposing the same three operations:
+`compute --fetch-missing` installs missing required dependencies and retries.
+See [asset storage](pseudopotentials.md#find-stored-assets) for locations.
+
+## Serve HTTP
 
 ```bash
-uv sync --extra http
-uv sync --extra mcp
-uv run goldilocks serve http --host 127.0.0.1 --port 8000
-uv run goldilocks serve mcp
+uv run goldilocks assets install workbench
+uv run --extra http goldilocks serve http
 ```
 
-HTTP exposes `GET /capabilities`, `POST /inspect`, `POST /compute`,
-`GET /health`, and `GET /ready`. Compute returns one multipart response
-containing the canonical result JSON and — when the preset or record
-selection produced the complete bundle — the exact ZIP from that execution.
-Local stdio MCP exposes `capabilities`, `inspect_structure`, and `compute`.
+The server defaults to **http://127.0.0.1:8000**. `--host` and `--port` change
+the address. `--static-root DIRECTORY` also serves a built Workbench.
 
-Because transports may face untrusted callers, they accept a deliberately
-narrow surface. The trust boundary:
+| Endpoint            | Purpose                                                      |
+| ------------------- | ------------------------------------------------------------ |
+| `GET /capabilities` | Available tasks, records, models, and tables                 |
+| `POST /inspect`     | Structure inspection                                         |
+| `POST /compute`     | Multipart result JSON and, for complete inputs, a ZIP        |
+| `GET /health`       | Process health                                               |
+| `GET /ready`        | Workbench asset readiness; 503 for missing or corrupt assets |
+| `GET /openapi.json` | Request and response schemas                                 |
 
-| Input | Python | CLI | HTTP | MCP |
-| --- | --- | --- | --- | --- |
-| structure by filesystem path | yes | yes | no | no |
-| inline structure content | yes | no | yes | yes |
-| pseudopotential table ID | yes | yes | yes | yes |
-| local pseudopotential root | yes | yes | no | no |
-| explicit pseudopotential metadata | yes | no | no | no |
-| model location or specification | yes | yes | no | no |
-| output directory or archive path | yes | yes | no | no |
+Interactive API documentation is at `/docs`.
 
-HTTP compute always returns the archive as response bytes rather than writing
-server-side files; MCP may publish to a server-chosen directory, and explicit
-memory output suppresses that publication.
+### HTTP security
+
+Keep the default localhost binding for local use. The server has no built-in
+authentication; restrict network access with a firewall or authenticated reverse
+proxy before exposing it. Configure TLS and request limits there.
+
+HTTP and MCP accept inline structures and registered table IDs, not local
+structure paths, model locations, pseudopotential roots, or publication paths.
+Server operators control installed assets. HTTP returns ZIP bytes without
+writing calculation directories.
+
+## Serve local MCP
+
+Configure your MCP client to launch this command from the repository root:
+
+```bash
+uv run --extra mcp goldilocks serve mcp
+```
+
+The stdio tools are `capabilities`, `inspect_structure`, and `compute`. By
+default, complete inputs are written to an automatically named `goldilocks_out`
+directory in the server's working directory. Send `"output": {"kind": "memory"}`
+to keep results in memory. Choose the working directory and OS account
+carefully: clients can trigger these writes.

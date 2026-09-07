@@ -1,88 +1,52 @@
-# Workbench (web/)
+# Workbench
 
-The Goldilocks Workbench is a React single-page client of the Core HTTP
-transport. It owns no state the server keeps: capabilities load once, the
-calculation draft lives in the browser, and each compute response's result
-and archive bytes are held only for the current view.
+Upload a CIF or POSCAR, choose settings, and generate Quantum ESPRESSO inputs in
+your browser. Review the recommendations, then download the input bundle. The
+[quickstart](../docs/quickstart.md#4-run-quantum-espresso) explains how to run
+the extracted calculation.
 
-Scientific record cards show labelled values, units, decision reasons, and
-provenance.
-The pseudopotential dropdown follows the selected functional and accuracy;
-changing either resets an explicit table to Automatic. Core validates the
-selected table when computing.
+## Run locally
 
-Mantine owns component appearance and layout primitives. The gold theme and
-responsive two-panel workflow remain; custom CSS is limited to panel/input
-resizing and accessibility rules. Scientific records and workspace operations
-remain independent of component styling.
-
-## Run it
-
-One task does the backend steps and starts both processes — assets install,
-Core HTTP backend on :8000, Vite dev server on :5173 (assumes `npm ci` has
-run once in `web/`):
+From the repository root, with
+[uv](https://docs.astral.sh/uv/getting-started/installation/) and Node.js 24 or
+newer installed:
 
 ```bash
-uv sync --all-extras
-uv run poe workbench
+uv sync --extra http
+npm --prefix web ci
+uv run --extra http poe workbench
 ```
 
-Or run the two processes by hand:
+Open **http://127.0.0.1:5173**. The task downloads runtime assets and starts the
+backend on port 8000 and the frontend on port 5173.
+
+To serve a built frontend instead, stop those servers and run:
 
 ```bash
-uv sync --all-extras
-uv run goldilocks assets install workbench
-uv run goldilocks serve http --host 127.0.0.1 --port 8000
+uv run --extra http poe stage
 ```
+
+Then open **http://127.0.0.1:8000**.
+
+## Run in Docker
+
+Alternatively, build and run from the repository root:
 
 ```bash
-cd web
-npm ci
-npm run dev
+docker build --tag goldilocks-workbench .
+docker run --rm --publish 127.0.0.1:8000:8000 goldilocks-workbench
 ```
 
-The dev server runs on `http://127.0.0.1:5173` and proxies `/capabilities`,
-`/inspect`, `/compute`, `/health`, `/ready`, and `/openapi.json` to the
-backend on port 8000 (see `vite.config.ts`).
+Open **http://127.0.0.1:8000**. The image includes the frontend and runtime
+assets. See [HTTP security](../docs/cli.md#http-security) before exposing it
+beyond localhost.
 
-To exercise the compiled bundle against the backend without the Vite dev
-server (builds the bundle, then serves it via `serve http --static-root`):
+## Development
 
 ```bash
-uv run poe stage
+npm --prefix web run check
 ```
 
-## Checks
-
-```bash
-npm run format      # apply Prettier formatting
-npm run format:check # verify formatting without edits
-npm run lint        # strict type-aware ESLint, zero warnings allowed
-npm run test        # Vitest unit and integration tests
-npm run build       # tsc -b && vite build
-npm run check       # formatting + lint + tests + build
-npm run test:e2e    # Playwright against a real server
-```
-
-Tests live under `tests/`: `unit/` for isolated scientific presentation,
-`integration/` for UI, workspace, and HTTP contracts, `e2e/` for real-server
-browser workflows, and `support/` for shared fixtures and setup.
-
-Mantine owns interactive components and the shared theme. ESLint enforces
-cyclomatic and cognitive complexity limits of 15, nesting depth of 3,
-no nested ternaries, React Hooks correctness, and static accessibility.
-Focusable ARIA window splitters have a documented exception to the accessibility
-plugin's non-interactive-element rule; browser tests exercise their keyboard behavior.
-ESLint is pinned to version 9 because the accessibility plugin's peer range
-does not yet include version 10; npm currently marks that ESLint release unsupported.
-
-The API contract is generated, never hand-edited. Regenerate both artifacts
-from the running package and commit them together with backend changes:
-
-```bash
-npm run generate:api
-```
-
-`npm run check:api` regenerates and fails on any drift between the exported
-OpenAPI document, the generated TypeScript types, and the committed files.
-CI enforces the same drift check.
+This runs formatting, lint, tests, and the build. See the contributor guide for
+[browser tests](../docs/architecture.md#run-browser-tests) and
+[API schema updates](../docs/architecture.md#change-the-http-or-browser-contract).

@@ -1,17 +1,4 @@
-"""Executable documentation.
-
-The README, quickstart, and tutorial Python snippets run for real, in
-document order, against installed runtime assets. This is the strong
-freshness gate: renamed API surfaces or stale attribute access in the
-copy-paste path fail the suite instead of the reader.
-
-The test deliberately opts back into the real asset store (conftest isolates
-the asset root for every test) and skips when the default profile is not
-installed — CI provisions no assets, so the gates run where assets exist.
-``pseudopotentials.md`` is excluded: its example selects a fully relativistic
-table the default profile does not install; its blocks are still
-parse/import-checked by ``tests/unit/test_docs_examples.py``.
-"""
+"""Run Python documentation examples against installed runtime assets."""
 
 from __future__ import annotations
 
@@ -31,9 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 # store and skip when it lacks the default profile.
 REAL_ASSET_ROOT = asset_root()
 EXEC_DOCUMENTS = (
-    ROOT / "README.md",
-    ROOT / "docs" / "quickstart.md",
     ROOT / "docs" / "tutorial.md",
+    ROOT / "src" / "goldilocks_core" / "examples" / "structures" / "README.md",
 )
 _FENCE = re.compile(r"^```python\n(.*?)^```$", re.DOTALL | re.MULTILINE)
 

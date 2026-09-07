@@ -1,4 +1,13 @@
-import { Accordion, Box, Center, Group, Text } from "@mantine/core";
+import {
+  Accordion,
+  Badge,
+  Code,
+  Group,
+  Paper,
+  Stack,
+  Text,
+  Title,
+} from "@mantine/core";
 
 import type { ComputationResult } from "../api/coreClient";
 import { artifactDigest } from "./artifacts";
@@ -13,94 +22,58 @@ export function PseudopotentialReview({
   if (inputData === undefined || selection === undefined) return null;
   const table = inputData.pseudopotential_set;
   return (
-    <section className="review-section pseudo-review">
-      <Group component="header" gap={12} wrap="nowrap" mb={16}>
-        <span className="review-section__index">C</span>
-        <div>
-          <h3>Pseudopotentials</h3>
-          <p>
-            {table.provider} · {table.version ?? "unversioned"}
-          </p>
-        </div>
-      </Group>
-      <Group
-        className="pseudo-table-id"
-        justify="space-between"
-        wrap="nowrap"
-        gap={12}
-        p={12}
-      >
-        <span>
-          {table.functional} · {table.accuracy}
-        </span>
-        <code>{table.id}</code>
-      </Group>
-      <ul className="pseudo-files">
+    <Stack component="section" gap="sm" miw={0}>
+      <header>
+        <Title order={3}>Pseudopotentials</Title>
+        <Text size="sm" c="dimmed">
+          {table.provider} · {table.version ?? "unversioned"}
+        </Text>
+      </header>
+      <Paper withBorder p="sm">
+        <Group justify="space-between">
+          <Text size="sm">
+            {table.functional} · {table.accuracy}
+          </Text>
+          <Code aria-label="Pseudopotential set">{table.id}</Code>
+        </Group>
+      </Paper>
+      <Stack component="ul" gap="sm" m={0} p={0} style={{ listStyle: "none" }}>
         {selection.pseudopotentials.map((item) => {
           const digest = artifactDigest(inputData.artifacts, item.filename);
           return (
-            <li key={item.element}>
-              <Center component="span" className="element-badge" w={32} h={32}>
-                {item.element}
-              </Center>
-              <Box miw={0}>
-                <Text
-                  component="strong"
-                  inherit
-                  truncate
-                  fw={500}
-                  display="block"
-                >
-                  {item.filename ?? "Filename unavailable"}
-                </Text>
-                <Text
-                  component="span"
-                  inherit
-                  truncate
-                  c="var(--color-text-muted)"
-                  mt={4}
-                  display="block"
-                >
+            <Group component="li" key={item.element} wrap="nowrap" gap="sm">
+              <Badge>{item.element}</Badge>
+              <Stack
+                gap={0}
+                miw={0}
+                flex={1}
+                style={{ overflowWrap: "anywhere" }}
+              >
+                <Text size="sm">{item.filename ?? "Filename unavailable"}</Text>
+                <Text size="xs" c="dimmed">
                   {item.relativistic ?? "unknown"} · {item.ecutwfc_ry ?? "—"} /{" "}
                   {item.ecutrho_ry ?? "—"} Ry
                 </Text>
-              </Box>
+              </Stack>
               {digest === null ? null : (
-                <code title={digest}>{digest.slice(0, 8)}</code>
+                <Code title={digest}>{digest.slice(0, 8)}</Code>
               )}
-            </li>
+            </Group>
           );
         })}
-      </ul>
-      <Group
-        component="p"
-        justify="space-between"
-        align="stretch"
-        wrap="nowrap"
-        gap={12}
-        mt={12}
-        mb={0}
-        c="var(--color-text-secondary)"
-        fz="var(--text-xs)"
-      >
-        <span>Licence</span>
-        <Text component="strong" inherit c="var(--color-text)" fw={550}>
-          {table.licence}
+      </Stack>
+      <Group justify="space-between">
+        <Text size="sm" c="dimmed">
+          Licence
         </Text>
+        <Text size="sm">{table.licence}</Text>
       </Group>
-      <Accordion
-        order={4}
-        chevron={<span aria-hidden="true" />}
-        disableChevronRotation
-        className="review-disclosure citation"
-      >
+      <Accordion order={4}>
         <Accordion.Item value="citation">
           <Accordion.Control>Citation and provenance</Accordion.Control>
-          <Accordion.Panel>
-            <p>{table.citation}</p>
-          </Accordion.Panel>
+          <Accordion.Panel>{table.citation}</Accordion.Panel>
         </Accordion.Item>
       </Accordion>
-    </section>
+    </Stack>
   );
 }

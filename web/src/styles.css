@@ -1,2 +1,52 @@
-@import "./styles/tokens.css";
-@import "./styles/base.css";
+:root[data-mantine-color-scheme="dark"] {
+  --mantine-color-dimmed: var(--mantine-color-gray-5);
+}
+
+:root[data-mantine-color-scheme="light"] {
+  --mantine-color-dimmed: var(--mantine-color-gray-7);
+}
+
+body {
+  min-width: 20rem;
+  min-height: 100dvh;
+}
+
+:where(button, input, select, a, [tabindex]):focus-visible {
+  outline: 3px solid var(--mantine-primary-color-filled);
+  outline-offset: 3px;
+}
+
+:where(button, input, select, a, [tabindex]) {
+  scroll-margin: 1.5rem;
+}
+
+dd {
+  margin: 0;
+}
+
+dt {
+  color: var(--mantine-color-dimmed);
+}
+
+p,
+dd,
+li,
+pre {
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
+}

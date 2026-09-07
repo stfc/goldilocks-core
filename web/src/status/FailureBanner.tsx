@@ -1,5 +1,5 @@
-import { ActionIcon, Alert, Button } from "@mantine/core";
-import { RotateCw, X } from "lucide-react";
+import { Alert, Button, Group, Text } from "@mantine/core";
+import { RotateCw } from "lucide-react";
 
 import type { CoreFailure } from "../api/coreClient";
 
@@ -18,39 +18,27 @@ export function FailureBanner({
 }) {
   return (
     <Alert
-      className="failure-banner"
-      classNames={{
-        body: "failure-banner__body",
-        message: "failure-banner__message",
-      }}
+      color="red"
+      title={FAILURE_TITLES[failure.kind] ?? "Calculation failed"}
+      withCloseButton={dismissAvailable}
+      closeButtonLabel="Dismiss error"
+      styles={{ closeButton: { width: 44, height: 44 } }}
+      onClose={onDismiss}
       role="alert"
     >
-      <div className="failure-banner__copy">
-        <strong>{FAILURE_TITLES[failure.kind] ?? "Calculation failed"}</strong>
-        <span className="failure-banner__description">{failure.message}</span>
-      </div>
-      <div className="failure-banner__actions">
+      <Group justify="space-between">
+        <Text flex={1}>{failure.message}</Text>
         {retryAvailable ? (
           <Button
-            className="failure-banner__action"
-            type="button"
+            color="red"
+            variant="light"
             onClick={onRetry}
             leftSection={<RotateCw aria-hidden="true" size={15} />}
           >
             Retry
           </Button>
         ) : null}
-        {dismissAvailable ? (
-          <ActionIcon
-            className="failure-banner__action"
-            type="button"
-            aria-label="Dismiss error"
-            onClick={onDismiss}
-          >
-            <X aria-hidden="true" size={17} />
-          </ActionIcon>
-        ) : null}
-      </div>
+      </Group>
     </Alert>
   );
 }

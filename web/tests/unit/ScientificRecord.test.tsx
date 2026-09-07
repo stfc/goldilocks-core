@@ -1,3 +1,4 @@
+import { MantineProvider } from "@mantine/core";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
@@ -28,6 +29,7 @@ describe("scientific record presentation", () => {
           },
         }}
       />,
+      { wrapper: MantineProvider },
     );
     expect(screen.getByText("4 × 6 × 8")).toBeInTheDocument();
     expect(screen.getByText("1 0 1")).toBeInTheDocument();

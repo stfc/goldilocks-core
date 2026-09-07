@@ -1,8 +1,8 @@
+import { Box, Group, Paper, SimpleGrid, Text, Title } from "@mantine/core";
 import { useEffect, useRef, useState } from "react";
 
 import type { StructureInspection } from "../api/coreClient";
 import { StructureFallback } from "./StructureFallback";
-import "./StructureViewport.css";
 import {
   attachStructureViewer,
   type StructureViewer,
@@ -64,8 +64,14 @@ export function StructureViewport({
 
   const lattice = inspection.structure.lattice;
   return (
-    <section className="viewport" aria-label="Crystal structure viewer">
-      <div className="viewport__canvas" ref={host} />
+    <Box
+      component="section"
+      aria-label="Crystal structure viewer"
+      pos="relative"
+      w="100%"
+      h="100%"
+    >
+      <Box pos="absolute" inset={0} ref={host} />
       <StructureFallback
         structure={inspection.structure}
         containerRef={fallback}
@@ -74,22 +80,24 @@ export function StructureViewport({
           setViewerRevision((revision) => revision + 1);
         }}
       />
-      <h2 className="viewport__title">
-        <strong>{inspection.structure.reduced_formula}</strong>
-        <span>{inspection.structure.site_count} atomic sites</span>
-      </h2>
-      <dl className="viewport__metrics">
-        {lattice.lengths_angstrom.map((length, index) => (
-          <div key={index}>
-            <dt>{LATTICE_AXES[index]}</dt>
-            <dd>{length.toFixed(3)} Å</dd>
+      <Group pos="absolute" top={16} left={16} align="baseline">
+        <Title order={2}>{inspection.structure.reduced_formula}</Title>
+        <Text size="sm">{inspection.structure.site_count} atomic sites</Text>
+      </Group>
+      <Paper pos="absolute" right={16} bottom={16} p="sm" withBorder>
+        <SimpleGrid component="dl" cols={2} spacing="md" m={0}>
+          {lattice.lengths_angstrom.map((length, index) => (
+            <div key={index}>
+              <dt>{LATTICE_AXES[index]}</dt>
+              <dd>{length.toFixed(3)} Å</dd>
+            </div>
+          ))}
+          <div>
+            <dt>V</dt>
+            <dd>{lattice.volume_angstrom3.toFixed(2)} Å³</dd>
           </div>
-        ))}
-        <div>
-          <dt>V</dt>
-          <dd>{lattice.volume_angstrom3.toFixed(2)} Å³</dd>
-        </div>
-      </dl>
-    </section>
+        </SimpleGrid>
+      </Paper>
+    </Box>
   );
 }

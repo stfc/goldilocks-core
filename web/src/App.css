@@ -1,21 +1,9 @@
-.app-shell {
-  display: flex;
-  width: 100%;
-  min-width: 57rem;
-  min-height: 100vh;
-  min-height: 100dvh;
-  flex-direction: column;
-  background: var(--color-canvas);
-}
-
 .workbench-grid {
   display: grid;
   min-height: 100dvh;
-  flex: 1 0 auto;
   grid-template-columns:
     minmax(22rem, var(--controls-width, 34%))
-    0.75rem
-    minmax(32rem, 1fr);
+    0.75rem minmax(32rem, 1fr);
   align-items: start;
 }
 
@@ -23,125 +11,30 @@
   grid-template-columns: 1fr;
 }
 
-.workbench-grid--loading .structure-stage {
-  width: 100%;
-  grid-column: 1 / -1;
-}
-
 .structure-stage {
   position: sticky;
   top: 0;
-  display: block;
   min-width: 0;
   height: 100dvh;
   min-height: 34rem;
   overflow: hidden;
-  background-color: var(--color-surface);
-  background-image:
-    linear-gradient(var(--color-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--color-grid) 1px, transparent 1px);
-  background-size: 2.625rem 2.625rem;
-}
-
-.empty-stage {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  width: 100%;
-  height: 100%;
-  max-width: 40rem;
-  margin: auto;
-  padding: var(--space-10);
-  align-items: center;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
-
-.empty-stage__orbital {
-  position: relative;
-  width: 8rem;
-  height: 8rem;
-  margin-bottom: var(--space-6);
-}
-
-.empty-stage__orbital span {
-  position: absolute;
-  inset: 50% auto auto 50%;
-  width: 7.5rem;
-  height: 2.625rem;
-  border: 1px solid var(--color-line-strong);
-  border-radius: 50%;
-}
-
-.empty-stage__orbital span:nth-child(1) {
-  transform: translate(-50%, -50%);
-}
-
-.empty-stage__orbital span:nth-child(2) {
-  transform: translate(-50%, -50%) rotate(60deg);
-}
-
-.empty-stage__orbital span:nth-child(3) {
-  transform: translate(-50%, -50%) rotate(120deg);
-}
-
-.empty-stage__orbital i {
-  position: absolute;
-  inset: 50% auto auto 50%;
-  width: 0.875rem;
-  height: 0.875rem;
-  border: 2px solid var(--color-accent-text);
-  background: var(--color-surface);
-  transform: translate(-50%, -50%) rotate(45deg);
-}
-
-.empty-stage h2 {
-  margin: 0;
-  color: var(--color-text);
-  font-size: clamp(1.75rem, 2.5vw, 2.5rem);
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: var(--leading-tight);
-}
-
-.stage-navigation,
-.panel-navigation {
-  min-width: var(--target-size);
-  padding: 0 var(--space-3);
-  color: var(--color-text-secondary);
-  border: var(--border-strong);
-  background: var(--color-overlay);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-}
-
-.stage-navigation:not(:disabled):hover,
-.panel-navigation:not(:disabled):hover {
-  color: var(--color-accent-text-hover);
-  border-color: var(--color-accent-border);
-  background: var(--color-accent-surface);
+  background: var(--mantine-color-body);
 }
 
 .stage-navigation {
   position: absolute;
   z-index: 7;
-  top: var(--space-5);
-  right: var(--space-5);
+  top: 1rem;
+  right: 1rem;
 }
 
 .pane-resizer {
   position: sticky;
-  z-index: 8;
   top: 0;
-  width: 100%;
   height: 100dvh;
   min-height: 34rem;
-  align-self: start;
-  border: 0;
-  border-right: var(--border-subtle);
-  border-left: var(--border-subtle);
-  background: var(--color-canvas);
+  border-inline: 1px solid var(--mantine-color-default-border);
+  background: var(--mantine-color-body);
   cursor: col-resize;
   touch-action: none;
 }
@@ -150,25 +43,19 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 0.1875rem;
+  width: 3px;
   height: 3.5rem;
-  border-radius: 999px;
-  background: var(--color-line-strong);
+  background: var(--mantine-color-dimmed);
   content: "";
   transform: translate(-50%, -50%);
-  transition: background-color var(--motion-fast) ease;
 }
 
 .pane-resizer:hover::after,
 .pane-resizer:focus-visible::after {
-  background: var(--color-accent-text);
+  background: var(--mantine-primary-color-filled);
 }
 
 @media (max-width: 57rem) {
-  .app-shell {
-    min-width: 20rem;
-  }
-
   .workbench-grid {
     display: flex;
     min-height: 0;
@@ -179,47 +66,22 @@
     display: none;
   }
 
-  .control-rail,
+  #calculation-panel,
   .structure-stage,
-  .review-panel {
+  #recommendation-panel {
     width: 100%;
   }
 
   .structure-stage {
     position: relative;
-    top: auto;
-    min-height: 38rem;
     height: 38rem;
-    border-top: var(--border-strong);
-  }
-
-  .review-panel {
-    min-height: 0;
+    min-height: 38rem;
   }
 }
 
 @media (max-width: 47.5rem) {
   .structure-stage {
-    min-height: 31rem;
     height: 31rem;
-  }
-
-  .stage-navigation {
-    top: var(--space-3);
-    right: var(--space-3);
-  }
-
-  .empty-stage {
-    padding: var(--space-8) var(--space-5);
-  }
-
-  .empty-stage__orbital {
-    width: 7rem;
-    height: 7rem;
-  }
-
-  .empty-stage__orbital span {
-    width: 6.5rem;
-    height: 2.25rem;
+    min-height: 31rem;
   }
 }

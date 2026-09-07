@@ -1,3 +1,4 @@
+import { Table, Text } from "@mantine/core";
 import type { ReactNode } from "react";
 
 import type { ComputationResult } from "../api/coreClient";
@@ -53,20 +54,26 @@ export function ScientificRecord({
   const facts = recordPresenters[name](result.records);
   if (facts.length === 0) return null;
   return (
-    <dl className="record-facts">
-      {facts.map(([label, content, provenance], index) => (
-        <div key={`${label}-${String(index)}`}>
-          <dt>{label}</dt>
-          <dd>
-            {provenance === undefined ? (
-              (content ?? "None reported")
-            ) : (
-              <Decision provenance={provenance}>{content}</Decision>
-            )}
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <Table
+      layout="fixed"
+      verticalSpacing="sm"
+      style={{ overflowWrap: "anywhere" }}
+    >
+      <Table.Tbody>
+        {facts.map(([label, content, provenance], index) => (
+          <Table.Tr key={`${label}-${String(index)}`}>
+            <Table.Th scope="row">{label}</Table.Th>
+            <Table.Td>
+              {provenance === undefined ? (
+                (content ?? "None reported")
+              ) : (
+                <Decision provenance={provenance}>{content}</Decision>
+              )}
+            </Table.Td>
+          </Table.Tr>
+        ))}
+      </Table.Tbody>
+    </Table>
   );
 }
 
@@ -250,15 +257,15 @@ function Decision({
 }) {
   return (
     <>
-      {children === undefined ? null : <p>{children}</p>}
-      <p>{provenance.reason}</p>
-      <p>
+      {children === undefined ? null : <Text size="sm">{children}</Text>}
+      <Text size="sm">{provenance.reason}</Text>
+      <Text size="sm" c="dimmed">
         {SOURCE_NAMES[provenance.source]}
         {provenance.data_source === null ? "" : ` · ${provenance.data_source}`}
         {provenance.confidence === null
           ? ""
           : ` · ${(provenance.confidence * 100).toFixed(1)}% confidence`}
-      </p>
+      </Text>
       <WarningText warnings={provenance.warnings} />
     </>
   );

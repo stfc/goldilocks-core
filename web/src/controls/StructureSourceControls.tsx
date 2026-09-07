@@ -1,6 +1,14 @@
 import { type DragEvent, useRef, useState } from "react";
-import { Button, FileButton } from "@mantine/core";
-import { LoaderCircle, Upload } from "lucide-react";
+import {
+  Button,
+  FileButton,
+  Loader,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Text,
+} from "@mantine/core";
+import { Upload } from "lucide-react";
 
 import type { StructureInspection, StructureSource } from "../api/coreClient";
 
@@ -67,8 +75,14 @@ export function StructureSourceControls({
 
   return (
     <>
-      <div
-        className={`file-drop${dragging ? " file-drop--active" : ""}`}
+      <Paper
+        withBorder
+        p="md"
+        bg={
+          dragging
+            ? "var(--mantine-primary-color-light)"
+            : "var(--mantine-color-body)"
+        }
         onDragEnter={(event) => {
           event.preventDefault();
           setDragging(true);
@@ -82,47 +96,46 @@ export function StructureSourceControls({
         onDrop={fileDropped}
         aria-busy={inspecting}
       >
-        <span className="file-drop__mark" aria-hidden="true">
+        <Stack align="center" gap="xs">
           {inspecting ? (
-            <LoaderCircle className="spinning-icon" size={18} />
+            <Loader size="sm" aria-hidden="true" />
           ) : (
-            <Upload size={18} />
+            <Upload aria-hidden="true" size={18} />
           )}
-        </span>
-        <strong className="file-drop__name">
-          {source?.name ?? "Drop a structure"}
-        </strong>
-        <span id="structure-source-help" className="file-drop__help">
-          {sourceHelp}
-        </span>
-        <FileButton
-          resetRef={resetFileInput}
-          onChange={fileSelected}
-          disabled={inspecting}
-        >
-          {(fileButtonProps) => (
-            <Button
-              {...fileButtonProps}
-              className="text-button"
-              variant="subtle"
-              type="button"
-              aria-describedby="structure-source-help"
-              aria-label={
-                source === null
-                  ? "Choose a CIF or POSCAR structure"
-                  : "Replace structure file"
-              }
-              disabled={inspecting}
-            >
-              {source === null ? "Browse files" : "Replace file"}
-            </Button>
-          )}
-        </FileButton>
-      </div>
+          <Text fw={600} truncate w="100%" ta="center">
+            {source?.name ?? "Drop a structure"}
+          </Text>
+          <Text id="structure-source-help" c="dimmed" size="sm" ta="center">
+            {sourceHelp}
+          </Text>
+          <FileButton
+            resetRef={resetFileInput}
+            onChange={fileSelected}
+            disabled={inspecting}
+          >
+            {(fileButtonProps) => (
+              <Button
+                {...fileButtonProps}
+                variant="subtle"
+                type="button"
+                aria-describedby="structure-source-help"
+                aria-label={
+                  source === null
+                    ? "Choose a CIF or POSCAR structure"
+                    : "Replace structure file"
+                }
+                disabled={inspecting}
+              >
+                {source === null ? "Browse files" : "Replace file"}
+              </Button>
+            )}
+          </FileButton>
+        </Stack>
+      </Paper>
       {readError === null ? null : (
-        <p className="field-error" role="alert">
+        <Text c="red" size="sm" role="alert">
           {readError}
-        </p>
+        </Text>
       )}
       {inspection === null ? null : (
         <StructureSummary inspection={inspection} />
@@ -145,24 +158,46 @@ function StructureSummary({
     ),
   ];
   return (
-    <dl className="structure-summary" aria-label="Inspected structure summary">
+    <SimpleGrid
+      component="dl"
+      cols={2}
+      mt="md"
+      mb={0}
+      aria-label="Inspected structure summary"
+    >
       <div>
-        <dt>Formula</dt>
-        <dd>{structure.formula}</dd>
+        <Text component="dt" c="dimmed" size="sm">
+          Formula
+        </Text>
+        <Text component="dd" m={0}>
+          {structure.formula}
+        </Text>
       </div>
       <div>
-        <dt>Elements</dt>
-        <dd>{elements.join(" · ")}</dd>
+        <Text component="dt" c="dimmed" size="sm">
+          Elements
+        </Text>
+        <Text component="dd" m={0}>
+          {elements.join(" · ")}
+        </Text>
       </div>
       <div>
-        <dt>Cell volume</dt>
-        <dd>{structure.lattice.volume_angstrom3.toFixed(1)} Å³</dd>
+        <Text component="dt" c="dimmed" size="sm">
+          Cell volume
+        </Text>
+        <Text component="dd" m={0}>
+          {structure.lattice.volume_angstrom3.toFixed(1)} Å³
+        </Text>
       </div>
       <div>
-        <dt>Periodicity</dt>
-        <dd>{structure.periodicity.every(Boolean) ? "3D" : "Partial"}</dd>
+        <Text component="dt" c="dimmed" size="sm">
+          Periodicity
+        </Text>
+        <Text component="dd" m={0}>
+          {structure.periodicity.every(Boolean) ? "3D" : "Partial"}
+        </Text>
       </div>
-    </dl>
+    </SimpleGrid>
   );
 }
 

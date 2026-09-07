@@ -102,6 +102,6 @@ describe("StructureViewport", () => {
 
     expect(createViewer).toHaveBeenCalledTimes(2);
     expect(show).toHaveBeenCalledWith("data_Si");
-    expect(screen.queryByText("3D preview unavailable")).not.toBeVisible();
+    expect(fallback).not.toBeVisible();
   });
 });

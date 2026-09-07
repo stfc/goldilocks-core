@@ -1,8 +1,11 @@
 import { useLayoutEffect, useEffect, useState } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Atom } from "lucide-react";
 import {
   Button,
   MantineProvider,
+  Loader,
+  Stack,
+  Title,
   useComputedColorScheme,
   useMantineColorScheme,
 } from "@mantine/core";
@@ -51,7 +54,7 @@ function Workbench() {
   }, [workspaceView]);
 
   return (
-    <div className="app-shell">
+    <>
       <OperationStatus
         operation={snapshot.operation}
         hasFailure={snapshot.failure !== null}
@@ -132,7 +135,7 @@ function Workbench() {
           </section>
         )}
       </WorkspaceLayout>
-    </div>
+    </>
   );
 }
 
@@ -144,17 +147,22 @@ function EmptyStage({
   readonly label?: string | undefined;
 }) {
   return (
-    <div
-      className={`empty-stage${loading ? " empty-stage--loading" : ""}`}
+    <Stack
+      align="center"
+      justify="center"
+      h="100%"
+      p="xl"
+      gap="xl"
       role={loading ? "status" : undefined}
     >
-      <div className="empty-stage__orbital" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-        <i />
-      </div>
-      <h2>{label}</h2>
-    </div>
+      {loading ? (
+        <Loader size="xl" aria-hidden="true" />
+      ) : (
+        <Atom size={128} strokeWidth={1} aria-hidden="true" />
+      )}
+      <Title order={2} ta="center">
+        {label}
+      </Title>
+    </Stack>
   );
 }

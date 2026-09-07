@@ -11,6 +11,11 @@ The pseudopotential dropdown follows the selected functional and accuracy;
 changing either resets an explicit table to Automatic. Core validates the
 selected table when computing.
 
+Mantine owns component appearance and layout primitives. The gold theme and
+responsive two-panel workflow remain; custom CSS is limited to panel/input
+resizing and accessibility rules. Scientific records and workspace operations
+remain independent of component styling.
+
 ## Run it
 
 One task does the backend steps and starts both processes — assets install,

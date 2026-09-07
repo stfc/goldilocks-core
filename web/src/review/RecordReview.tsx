@@ -1,4 +1,4 @@
-import { Accordion, Group } from "@mantine/core";
+import { Accordion, Code, Group, Stack, Text, Title } from "@mantine/core";
 
 import type { ComputationResult } from "../api/coreClient";
 import { ScientificRecord } from "./ScientificRecord";
@@ -10,52 +10,42 @@ export function RecordReview({
 }) {
   const records = Object.entries(result.records);
   return (
-    <section className="review-section record-review">
-      <Group component="header" gap={12} wrap="nowrap" mb={16}>
-        <span className="review-section__index">D</span>
-        <div>
-          <h3>Scientific records</h3>
-          <p>{records.length} records</p>
-        </div>
+    <Stack component="section" gap="xs" miw={0}>
+      <Group component="header" justify="space-between">
+        <Title order={3}>Scientific records</Title>
+        <Text size="sm" c="dimmed">
+          {records.length} records
+        </Text>
       </Group>
-      <Accordion
-        multiple
-        order={4}
-        chevron={<span aria-hidden="true" />}
-        disableChevronRotation
-        className="review-disclosure record-list"
-        style={{ display: "grid", gap: 8 }}
-      >
+      <Accordion multiple order={4}>
         {records.map(([name, value]) => (
           <Accordion.Item key={name} value={name} className="record-card">
             <Accordion.Control>
-              <span>{readableName(name)}</span>
-              <code className="record-card__key">{name}</code>
+              <Group justify="space-between">
+                <span>{readableName(name)}</span>
+                <Code>{name}</Code>
+              </Group>
             </Accordion.Control>
             <Accordion.Panel>
               <ScientificRecord
                 name={name as keyof ComputationResult["records"]}
                 result={result}
               />
-              <Accordion
-                order={5}
-                chevron={<span aria-hidden="true" />}
-                disableChevronRotation
-                className="review-disclosure record-raw"
-              >
+              <Accordion order={5} mt="sm">
                 <Accordion.Item value="json">
                   <Accordion.Control>
                     Raw {readableName(name)} record (JSON)
                   </Accordion.Control>
                   <Accordion.Panel>
-                    <pre
+                    <Code
+                      block
                       role="region"
-                      className="record-json"
+                      mah={400}
                       tabIndex={0}
                       aria-label={`Raw ${readableName(name)} record`}
                     >
                       {JSON.stringify(value, null, 2)}
-                    </pre>
+                    </Code>
                   </Accordion.Panel>
                 </Accordion.Item>
               </Accordion>
@@ -63,7 +53,7 @@ export function RecordReview({
           </Accordion.Item>
         ))}
       </Accordion>
-    </section>
+    </Stack>
   );
 }
 

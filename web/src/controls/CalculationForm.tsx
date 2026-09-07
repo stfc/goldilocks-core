@@ -2,16 +2,18 @@ import {
   Accordion,
   Button,
   Checkbox,
+  Fieldset,
   NativeSelect,
   NumberInput,
   SimpleGrid,
   Stack,
+  Text,
+  VisuallyHidden,
 } from "@mantine/core";
 import { ArrowRight } from "lucide-react";
 
 import type { CalculationDraft } from "../api/coreClient";
 import { useWorkspace, useWorkspaceSnapshot } from "../workspace/useWorkspace";
-import "./CalculationForm.css";
 
 const K_GRID_AXES = ["x", "y", "z"] as const;
 type SmearingType = NonNullable<
@@ -76,7 +78,6 @@ export function CalculationForm({
   return (
     <Stack
       component="form"
-      gap="var(--space-4)"
       onSubmit={(event) => {
         event.preventDefault();
         onShowRecommendation();
@@ -84,9 +85,9 @@ export function CalculationForm({
       }}
     >
       {inspecting ? (
-        <p className="stale-note" role="status">
+        <Text c="red" size="sm" role="status">
           Calculation settings are disabled while the new structure loads.
-        </p>
+        </Text>
       ) : null}
       <NativeSelect
         label="Task"
@@ -97,7 +98,7 @@ export function CalculationForm({
           label: task.name,
         }))}
       />
-      <SimpleGrid className="field-row" spacing="var(--space-3)">
+      <SimpleGrid cols={{ base: 1, xs: 2 }}>
         <NativeSelect
           label="Functional"
           value={intent.functional}
@@ -150,25 +151,21 @@ export function CalculationForm({
           })),
         ]}
       />
-      <p
-        id="pseudo-table-help"
-        className={
-          matchingTables.length === 0 ? "stale-note" : "visually-hidden"
-        }
-        role="status"
-      >
-        {matchingTables.length === 0
-          ? "No registered table matches these settings. Choose another functional or accuracy."
-          : `Showing ${intent.functional} / ${accuracy} tables. Automatic lets Core choose; changing either setting resets the table.`}
-      </p>
+      {matchingTables.length === 0 ? (
+        <Text id="pseudo-table-help" c="red" size="sm" role="status">
+          No registered table matches these settings. Choose another functional
+          or accuracy.
+        </Text>
+      ) : (
+        <VisuallyHidden id="pseudo-table-help" role="status">
+          Showing {intent.functional} / {accuracy} tables. Automatic lets Core
+          choose; changing either setting resets the table.
+        </VisuallyHidden>
+      )}
 
       <ScientificOverrides hints={hints} inspecting={inspecting} />
 
       <Button
-        classNames={{
-          root: "primary-action",
-          inner: "primary-action__inner",
-        }}
         type="submit"
         fullWidth
         rightSection={<ArrowRight aria-hidden="true" size={14} />}
@@ -209,29 +206,17 @@ function ScientificOverrides({
   }
 
   return (
-    <Accordion
-      order={3}
-      transitionDuration={0}
-      chevron={
-        <span className="advanced-controls__indicator" aria-hidden="true" />
-      }
-      className="advanced-controls"
-    >
+    <Accordion order={3} transitionDuration={0}>
       <Accordion.Item value="scientific-overrides">
         <Accordion.Control>Scientific overrides</Accordion.Control>
         <Accordion.Panel>
-          <p className="advanced-controls__summary">
-            {explicitKGrid ? `${kGrid.join("×")} k grid` : "automatic k grid"} ·{" "}
-            {smearingSummary(smearingType, smearingWidth)} · spin {spinSetting}{" "}
-            · vdW {vdwSetting}
-          </p>
-          <Stack
-            p="var(--space-3)"
-            gap="var(--space-3)"
-            style={{ borderTop: "var(--border-subtle)" }}
-          >
-            <fieldset className="k-grid-field">
-              <legend>K-point grid</legend>
+          <Stack>
+            <Text c="dimmed" size="sm">
+              {explicitKGrid ? `${kGrid.join("×")} k grid` : "automatic k grid"}{" "}
+              · {smearingSummary(smearingType, smearingWidth)} · spin{" "}
+              {spinSetting} · vdW {vdwSetting}
+            </Text>
+            <Fieldset legend="K-point grid">
               <Checkbox
                 label="Set an explicit grid"
                 checked={explicitKGrid}
@@ -242,12 +227,11 @@ function ScientificOverrides({
                   });
                 }}
               />
-              <SimpleGrid cols={3} spacing="var(--space-2)">
+              <SimpleGrid cols={3} mt="sm" spacing="xs">
                 {([0, 1, 2] as const).map((index) => (
                   <NumberInput
                     key={index}
                     aria-label={`K-point grid ${K_GRID_AXES[index]}`}
-                    classNames={{ input: "k-grid-inputs__input" }}
                     aria-valuemin={1}
                     aria-valuemax={99}
                     aria-valuenow={kGrid?.[index]}
@@ -262,8 +246,8 @@ function ScientificOverrides({
                   />
                 ))}
               </SimpleGrid>
-            </fieldset>
-            <SimpleGrid className="field-row" spacing="var(--space-3)">
+            </Fieldset>
+            <SimpleGrid cols={{ base: 1, xs: 2 }}>
               <NativeSelect
                 label="Smearing treatment"
                 disabled={inspecting}

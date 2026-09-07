@@ -25,9 +25,11 @@ export const attachStructureViewer: StructureViewerFactory = async (
   element.append(surface);
   const rootStyle = getComputedStyle(document.documentElement);
   const backgroundColor = rootStyle
-    .getPropertyValue("--color-viewer-background")
+    .getPropertyValue("--mantine-color-body")
     .trim();
-  const unitCellColor = rootStyle.getPropertyValue("--color-unit-cell").trim();
+  const unitCellColor = rootStyle
+    .getPropertyValue("--mantine-color-gray-6")
+    .trim();
   let viewer: GLViewer;
   try {
     viewer = createViewer(surface, {

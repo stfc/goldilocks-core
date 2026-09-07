@@ -1,4 +1,4 @@
-import { Group } from "@mantine/core";
+import { Code, Group, Paper, Text } from "@mantine/core";
 import { type KeyboardEvent, type PointerEvent, useRef, useState } from "react";
 
 const DEFAULT_INPUT_HEIGHT = 352;
@@ -22,14 +22,14 @@ export function GeneratedInputPreview({
 }) {
   const [inputHeight, setInputHeight] = useState<number | null>(null);
   const [fullHeight, setFullHeight] = useState(DEFAULT_INPUT_HEIGHT);
-  const input = useRef<HTMLPreElement | null>(null);
+  const input = useRef<HTMLElement | null>(null);
   const activePointer = useRef<{
     readonly id: number;
     readonly startHeight: number;
     readonly startY: number;
   } | null>(null);
 
-  function measureInput(element: HTMLPreElement | null): void {
+  function measureInput(element: HTMLElement | null): void {
     if (element === null || input.current === element) return;
     input.current = element;
     element.style.height = "auto";
@@ -73,33 +73,27 @@ export function GeneratedInputPreview({
   const displayedHeight =
     inputHeight ?? Math.min(DEFAULT_INPUT_HEIGHT, fullHeight);
   return (
-    <div className="code-frame">
-      <Group
-        className="code-frame__heading"
-        justify="space-between"
-        align="stretch"
-        wrap="nowrap"
-        gap={12}
-        py={8}
-        px={12}
-      >
-        <span>{path}</span>
+    <Paper withBorder>
+      <Group justify="space-between" gap="xs" p="xs">
+        <Text size="xs" style={{ overflowWrap: "anywhere" }}>
+          {path}
+        </Text>
         {digest === undefined ? null : (
-          <code>{digest?.slice(0, 10) ?? "unlisted"}</code>
+          <Code>{digest?.slice(0, 10) ?? "unlisted"}</Code>
         )}
       </Group>
-      <pre
+      <Code
+        block
         role="region"
         key={`${path}\0${content}`}
         id="generated-input-content"
         ref={measureInput}
-        className={inputHeight === null ? undefined : "generated-input--sized"}
-        style={inputHeight === null ? undefined : { height: inputHeight }}
+        h={inputHeight ?? undefined}
         aria-label={`Generated input ${path}`}
         tabIndex={0}
       >
         {content}
-      </pre>
+      </Code>
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Focusable ARIA window splitters are interactive separators, with range values and keyboard support. */}
       <div
         className="code-resizer"
@@ -135,6 +129,6 @@ export function GeneratedInputPreview({
         onPointerUp={stopPointerResize}
         onPointerCancel={stopPointerResize}
       />
-    </div>
+    </Paper>
   );
 }

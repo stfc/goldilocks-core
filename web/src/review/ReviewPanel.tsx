@@ -1,5 +1,15 @@
-import { Box, Button, Flex, Group, Stack, Text } from "@mantine/core";
-import { ArrowLeft, Download, LoaderCircle } from "lucide-react";
+import {
+  Alert,
+  Button,
+  Group,
+  Loader,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Text,
+  Title,
+} from "@mantine/core";
+import { ArrowLeft, Download } from "lucide-react";
 
 import type { ComputationResult } from "../api/coreClient";
 import { useWorkspace, useWorkspaceSnapshot } from "../workspace/useWorkspace";
@@ -18,25 +28,19 @@ export function ReviewPanel({
   const result = snapshot.reviewed?.result ?? null;
 
   return (
-    <section
+    <Stack
+      component="section"
       id="recommendation-panel"
-      className="review-panel"
       aria-label="Recommendation results"
       aria-busy={snapshot.operation === "compute"}
+      p="md"
+      gap="lg"
+      miw={0}
     >
-      <Group
-        component="header"
-        className="review-heading"
-        justify="space-between"
-        wrap="nowrap"
-        gap={0}
-      >
-        <Group gap={12} wrap="nowrap">
-          <span>03</span>
-          <h2>Recommendation</h2>
-        </Group>
+      <Group component="header" justify="space-between">
+        <Title order={2}>Recommendation</Title>
         <Button
-          className="panel-navigation"
+          variant="subtle"
           leftSection={<ArrowLeft aria-hidden="true" size={15} />}
           aria-label="Back to structure"
           onClick={onShowStructure}
@@ -44,30 +48,15 @@ export function ReviewPanel({
           Structure
         </Button>
       </Group>
-
       {result === null && (
         <Stack
-          className="review-empty"
           align="center"
           justify="center"
-          gap={0}
+          mih={240}
           role={snapshot.operation === "compute" ? "status" : undefined}
         >
-          {snapshot.operation === "compute" ? (
-            <LoaderCircle
-              className="spinning-icon"
-              aria-hidden="true"
-              size={18}
-              style={{ marginBottom: 16, color: "var(--color-accent-bright)" }}
-            />
-          ) : (
-            <div className="review-empty__diagram" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </div>
-          )}
-          <Text component="strong" fz="var(--text-lg)" fw={550} lh="inherit">
+          {snapshot.operation === "compute" && <Loader size="sm" />}
+          <Text fw={600}>
             {snapshot.operation === "compute"
               ? "Computing recommendation"
               : "No recommendation"}
@@ -76,25 +65,19 @@ export function ReviewPanel({
       )}
       {result !== null && (
         <>
-          {snapshot.outOfDate ? (
-            <Box
-              className="stale-banner"
+          {snapshot.outOfDate && (
+            <Alert
               role="status"
               aria-label="Recommendation notice"
               aria-live="polite"
               aria-atomic="true"
-              fz="var(--text-sm)"
             >
               Your settings changed. Update the recommendation before
               downloading.
-            </Box>
-          ) : null}
-          <Flex className="download-bar" justify="space-between" gap={16}>
+            </Alert>
+          )}
+          <Group justify="space-between">
             <Button
-              classNames={{
-                root: "download-action",
-                inner: "download-action__inner",
-              }}
               rightSection={<Download aria-hidden="true" size={14} />}
               disabled={
                 snapshot.reviewed?.archive == null ||
@@ -108,16 +91,16 @@ export function ReviewPanel({
               Download input files (.zip)
             </Button>
             {snapshot.lastDownload === null || snapshot.outOfDate ? null : (
-              <p
-                className="archive-receipt"
+              <Text
+                size="sm"
                 role="status"
                 aria-label="Archive status"
                 aria-live="polite"
               >
                 {snapshot.lastDownload.filename} is ready
-              </p>
+              </Text>
             )}
-          </Flex>
+          </Group>
           <GeneratedInputReview result={result} />
           <RecommendationSummary result={result} />
           <PseudopotentialReview result={result} />
@@ -125,7 +108,7 @@ export function ReviewPanel({
           <Warnings result={result} />
         </>
       )}
-    </section>
+    </Stack>
   );
 }
 
@@ -145,39 +128,48 @@ function RecommendationSummary({
       : "Unpolarized";
   }
   return (
-    <section className="review-section recommendation-summary">
-      <Group component="header" gap={12} wrap="nowrap" mb={16}>
-        <span className="review-section__index">B</span>
+    <Paper component="section" withBorder p="md">
+      <Title order={3}>Recommended setup</Title>
+      <Text size="sm" c="dimmed">
+        {intent.functional} · Quantum ESPRESSO
+      </Text>
+      <SimpleGrid component="dl" cols={{ base: 2, sm: 4 }} mb={0}>
         <div>
-          <h3>Recommended setup</h3>
-          <p>{intent.functional} · Quantum ESPRESSO</p>
+          <Text component="dt" size="sm" c="dimmed">
+            K-grid
+          </Text>
+          <Text component="dd" m={0}>
+            {result.records.k_points?.grid.join(" × ") ?? "Not returned"}
+          </Text>
         </div>
-      </Group>
-      <dl className="recommendation-metrics">
         <div>
-          <dt>K-grid</dt>
-          <dd>{result.records.k_points?.grid.join(" × ") ?? "Not returned"}</dd>
-        </div>
-        <div>
-          <dt>Wavefunction</dt>
-          <dd>
+          <Text component="dt" size="sm" c="dimmed">
+            Wavefunction
+          </Text>
+          <Text component="dd" m={0}>
             {wavefunction === null
               ? "Table default"
               : `${String(wavefunction)} Ry`}
-          </dd>
+          </Text>
         </div>
         <div>
-          <dt>Charge density</dt>
-          <dd>
+          <Text component="dt" size="sm" c="dimmed">
+            Charge density
+          </Text>
+          <Text component="dd" m={0}>
             {density === null ? "Table default" : `${String(density)} Ry`}
-          </dd>
+          </Text>
         </div>
         <div>
-          <dt>Spin</dt>
-          <dd>{spin}</dd>
+          <Text component="dt" size="sm" c="dimmed">
+            Spin
+          </Text>
+          <Text component="dd" m={0}>
+            {spin}
+          </Text>
         </div>
-      </dl>
-    </section>
+      </SimpleGrid>
+    </Paper>
   );
 }
 
@@ -192,20 +184,18 @@ function Warnings({ result }: { readonly result: ComputationResult }) {
   ];
   if (warnings.length === 0) return null;
   return (
-    <Box
-      className="warning-list"
+    <Alert
+      title="Scientific warnings"
       role="status"
-      aria-label="Scientific warnings"
       aria-live="polite"
       aria-atomic="true"
     >
-      <h3>Warnings</h3>
-      <Stack component="ul" gap={8} mt={12} mb={0} pl={20}>
+      <Stack component="ul" gap="xs" m={0} pl="md">
         {warnings.map((warning) => (
           <li key={warning}>{warning}</li>
         ))}
       </Stack>
-    </Box>
+    </Alert>
   );
 }
 

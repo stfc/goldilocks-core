@@ -1,4 +1,4 @@
-import { Group, Tabs } from "@mantine/core";
+import { Group, Stack, Tabs, Text, Title } from "@mantine/core";
 import { useState } from "react";
 
 import type { ComputationResult } from "../api/coreClient";
@@ -16,22 +16,17 @@ export function GeneratedInputReview({
     files.find((candidate) => candidate.path === selectedPath) ?? files[0];
   const inputData = result.records.dft_input_data;
   return (
-    <section className="review-section generated-review">
-      <Group component="header" gap={12} wrap="nowrap" mb={16}>
-        <span className="review-section__index">A</span>
-        <div>
-          <h3>Generated inputs</h3>
-          <p>{files.length} files</p>
-        </div>
+    <Stack component="section" gap="xs" miw={0}>
+      <Group component="header" justify="space-between">
+        <Title order={3}>Generated inputs</Title>
+        <Text size="sm" c="dimmed">
+          {files.length} files
+        </Text>
       </Group>
       {file === undefined ? (
-        <p className="no-files">No generated input files.</p>
+        <Text c="dimmed">No generated input files.</Text>
       ) : (
-        <Tabs
-          value={file.path}
-          onChange={setSelectedPath}
-          classNames={{ list: "file-tabs", tab: "file-tabs__tab" }}
-        >
+        <Tabs value={file.path} onChange={setSelectedPath}>
           <Tabs.List aria-label="Generated input files">
             {files.map((candidate) => (
               <Tabs.Tab key={candidate.path} value={candidate.path}>
@@ -56,6 +51,6 @@ export function GeneratedInputReview({
           ))}
         </Tabs>
       )}
-    </section>
+    </Stack>
   );
 }

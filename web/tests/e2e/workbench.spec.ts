@@ -125,7 +125,6 @@ test("prepares and downloads a real Core calculation", async ({ page }) => {
     page.getByText("Metallicity was inferred from structure-only heuristics."),
   ).toHaveCount(0);
   await expectNoAxeViolations(page);
-  await expect(page.locator(".review-state")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Back to structure" }).click();
   await expect(page.getByLabel("Crystal structure viewer")).toBeVisible();
@@ -474,15 +473,12 @@ test("uses the document scrollbar for long desktop content", async ({
   ).toBeVisible();
 
   const documentScrolls = await page.evaluate<{
-    readonly overflow: string;
     readonly scrollHeight: number;
     readonly viewportHeight: number;
   }>(`({
-    overflow: getComputedStyle(document.body).overflow,
     scrollHeight: document.documentElement.scrollHeight,
     viewportHeight: window.innerHeight,
   })`);
-  expect(documentScrolls.overflow).toBe("auto");
   expect(documentScrolls.scrollHeight).toBeGreaterThan(
     documentScrolls.viewportHeight,
   );
@@ -499,7 +495,6 @@ test("reflows at effective 200 percent zoom without clipping", async ({
     page.getByRole("heading", { name: "No structure selected" }),
   ).toBeVisible();
 
-  await expect(page.locator(".app-header")).toHaveCount(0);
   const mainBox = await page.getByRole("main").boundingBox();
   expect(mainBox).not.toBeNull();
   expect((mainBox?.x ?? 0) + (mainBox?.width ?? 0)).toBeLessThanOrEqual(720);
@@ -519,10 +514,13 @@ test("removes nonessential animation when reduced motion is requested", async ({
   );
   await page.goto("/");
   await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
-  const spinner = page.locator(".spinning-icon");
-  await spinner.waitFor();
-
-  await expect(spinner).toHaveCSS("animation-name", "none");
+  await expect(
+    page.getByRole("status", { name: "Workbench status" }),
+  ).toHaveText("Inspecting structure");
+  const runningAnimations =
+    await page.evaluate<number>(`document.getAnimations()
+    .filter((animation) => animation.playState === "running").length`);
+  expect(runningAnimations).toBe(0);
 });
 
 test("prepares a real Core recommendation from POSCAR", async ({ page }) => {
@@ -542,7 +540,7 @@ test("prepares a real Core recommendation from POSCAR", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Recommended setup" }),
   ).toBeVisible();
-  await expect(page.locator(".pseudo-table-id code")).toHaveText(
+  await expect(page.getByLabel("Pseudopotential set")).toHaveText(
     "sssp-pbesol-efficiency-sr",
   );
   const downloadStarted = page.waitForEvent("download");
@@ -675,3 +673,17 @@ async function expectNoAxeViolations(page: Page): Promise<void> {
 function sha256(payload: Uint8Array): string {
   return createHash("sha256").update(payload).digest("hex");
 }
+
+test("keeps the crystal title clear of lattice details", async ({ page }) => {
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
+  const viewer = page.getByRole("region", { name: "Crystal structure viewer" });
+  await expect(viewer.locator("canvas")).toBeVisible();
+  const title = await viewer
+    .getByRole("heading", { name: "Si", exact: true })
+    .boundingBox();
+  const lattice = await viewer.locator("dl").boundingBox();
+  assert(title, "Crystal title must have a layout box");
+  assert(lattice, "Lattice details must have a layout box");
+  expect(lattice.y).toBeGreaterThan(title.y + title.height);
+});

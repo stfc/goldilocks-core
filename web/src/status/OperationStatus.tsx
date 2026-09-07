@@ -1,6 +1,5 @@
 import { VisuallyHidden } from "@mantine/core";
 import type { WorkspaceOperation } from "../workspace/workspace";
-import "./OperationStatus.css";
 
 export function OperationStatus({
   operation,

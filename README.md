@@ -119,6 +119,20 @@ source/  structure/  inputs/  pseudo/  licences/
 CITATIONS.md  README.md  goldilocks.json
 ```
 
+## Workbench
+
+The [Workbench](web/README.md) provides a browser workflow for uploading a
+structure, reviewing recommendations, and downloading complete input files.
+
+```bash
+uv sync --extra http
+npm --prefix web ci
+uv run --extra http poe workbench
+```
+
+Open http://127.0.0.1:5173. The command installs the Workbench runtime assets
+before starting the backend and frontend.
+
 ## Documentation
 
 - [Tutorial](docs/tutorial.md)

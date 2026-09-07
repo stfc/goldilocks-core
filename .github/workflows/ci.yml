@@ -54,6 +54,34 @@ jobs:
             mutants/mutmut-cicd-stats.json --minimum 0.74 \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
+  workbench:
+    name: Workbench types, tests, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Install frozen Python HTTP dependencies
+        run: uv sync --frozen --no-dev --extra http
+
+      - name: Install frozen Workbench dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Lint, test, and build Workbench
+        working-directory: web
+        run: npm run check
+
   package-build:
     name: Build distribution
     runs-on: ubuntu-latest

@@ -14,6 +14,9 @@ wheels/
 
 # Virtual environments
 .venv
+node_modules/
+playwright-report/
+test-results/
 
 design.md
 

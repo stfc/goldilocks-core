@@ -159,7 +159,14 @@ show_missing = true
 skip_covered = true
 
 [tool.mutmut]
-source_paths = ["src/goldilocks_core"]
+# source_paths creates parent directories for nested files; also_copy does not.
+# Copy Workbench test inputs without web/node_modules or build outputs.
+source_paths = [
+    "src/goldilocks_core",
+    "web/README.md",
+]
+# Documentation tests read these files and validate their relative links.
+also_copy = ["README.md", "LICENSE", "docs"]
 only_mutate = [
     "src/goldilocks_core/advice/parameters.py",
     "src/goldilocks_core/functionals.py",

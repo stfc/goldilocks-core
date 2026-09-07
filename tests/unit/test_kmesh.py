@@ -1,4 +1,5 @@
 import math
+from itertools import pairwise
 from typing import Any
 
 from pymatgen.core import Lattice, Structure
@@ -163,7 +164,7 @@ def test_ladder_is_gap_free_for_an_anisotropic_cell() -> None:
     meshes = [mesh for _, mesh in build_kmesh_entries(structure, candidates)]
 
     assert len(meshes) > 1
-    for before, after in zip(meshes[:-1], meshes[1:], strict=True):
+    for before, after in pairwise(meshes):
         steps = [now - previous for previous, now in zip(before, after, strict=True)]
         # Denser by at least one k-point, and never skipping a reachable mesh.
         assert max(steps) == 1, f"{before} -> {after} skips a mesh"
@@ -234,7 +235,7 @@ def test_a_repeated_mesh_does_not_hide_a_gap() -> None:
     candidates = generate_candidate_k_distances(structure)
     meshes = [mesh for _, mesh in build_kmesh_entries(structure, candidates)]
 
-    for before, after in zip(meshes[:-1], meshes[1:], strict=True):
+    for before, after in pairwise(meshes):
         steps = [now - previous for previous, now in zip(before, after, strict=True)]
         assert max(steps) == 1, f"{before} -> {after} skips a mesh"
         assert min(steps) >= 0, f"{before} -> {after} is not monotonic"

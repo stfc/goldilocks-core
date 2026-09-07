@@ -41,6 +41,7 @@ jobs:
 
       - name: Import and cyclomatic complexity ceilings
         run: uv run python scripts/check_complexity.py
+
       - name: Pytest with branch coverage
         run: >-
           uv run pytest --cov --cov-report=term-missing:skip-covered
@@ -61,18 +62,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install frozen HTTP dependencies
+        run: uv sync --frozen --no-dev --extra http
+
       - name: Install Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: web/package-lock.json
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-
-      - name: Install frozen Python HTTP dependencies
-        run: uv sync --frozen --no-dev --extra http
 
       - name: Install frozen Workbench dependencies
         working-directory: web
@@ -81,6 +84,29 @@ jobs:
       - name: Lint, test, and build Workbench
         working-directory: web
         run: npm run check
+
+      - name: Check production image definition
+        run: docker build --check .
+
+      - name: Build production Workbench image
+        run: docker build --tag goldilocks-workbench:e2e .
+
+      - name: Install Chromium
+        working-directory: web
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Exercise real-server browser workflow
+        working-directory: web
+        run: |
+          docker run --detach --name goldilocks-workbench-e2e \
+            --publish 8000:8000 goldilocks-workbench:e2e
+          trap 'docker rm --force goldilocks-workbench-e2e' EXIT
+          for attempt in {1..120}; do
+            curl --fail --silent http://127.0.0.1:8000/ready && break
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:8000/ready
+          npm run test:e2e
 
   package-build:
     name: Build distribution

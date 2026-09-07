@@ -76,6 +76,47 @@ def make_metadata(
     )
 
 
+@pytest.mark.parametrize(
+    "source_identifier",
+    (
+        "/srv/provider/Si.UPF",
+        r"C:\provider\Si.UPF",
+        r"\\server\share\Si.UPF",
+        "~/provider/Si.UPF",
+        r"~\provider\Si.UPF",
+        "~willow/provider/Si.UPF",
+    ),
+)
+def test_pseudo_source_identity_rejects_host_path_forms(
+    source_identifier: str,
+) -> None:
+    with pytest.raises(ValueError, match="portable source identity"):
+        PseudoMetadata(
+            filepath="operator/Si.UPF",
+            filename="Si.UPF",
+            header_format="attr",
+            source_identifier=source_identifier,
+        )
+
+
+@pytest.mark.parametrize(
+    "source_identifier",
+    ("provider/table/Si.UPF", "https://provider.example/table/Si.UPF"),
+)
+def test_pseudo_source_identity_retains_portable_provider_identifiers(
+    source_identifier: str,
+) -> None:
+    metadata = PseudoMetadata(
+        filepath="operator/Si.UPF",
+        filename="Si.UPF",
+        header_format="attr",
+        source_identifier=source_identifier,
+    )
+
+    assert metadata.source_identifier == source_identifier
+    assert metadata.to_dict()["source_identifier"] == source_identifier
+
+
 def test_selects_complete_candidate_matching_every_requirement() -> None:
     selection = select_pseudopotentials(
         make_structure("Si"),
@@ -88,6 +129,7 @@ def test_selects_complete_candidate_matching_every_requirement() -> None:
     assert pseudo.filename == "Si.UPF"
     assert pseudo.filepath == "/pseudo/Si.UPF"
     assert pseudo.functional == "PBEsol"
+    assert pseudo.relativistic == "scalar"
     assert pseudo.ecutwfc_ry == 30.0
     assert pseudo.ecutrho_ry == 120.0
     assert pseudo.provenance.source == "lookup"
@@ -256,6 +298,23 @@ def test_nr_requires_curated_scalar_table_for_scalar_selection(
 
     assert selection.pseudopotentials[0].filename is None
     assert "scalar PBEsol" in selection.warnings[0]
+
+
+def test_sssp_scalar_table_preserves_nonrelativistic_file_treatment() -> None:
+    selection = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(relativistic="scalar"),
+        [
+            replace(
+                make_metadata(provider="sssp", relativistic="non-relativistic"),
+                pseudo_info={"table_relativistic": "scalar"},
+            )
+        ],
+    )
+
+    pseudo = selection.pseudopotentials[0]
+    assert pseudo.filename == "Si.UPF"
+    assert pseudo.relativistic == "non-relativistic"
 
 
 def test_frozen_4f_core_warning_survives_selection() -> None:

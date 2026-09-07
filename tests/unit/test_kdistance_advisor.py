@@ -1,15 +1,14 @@
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from threading import Barrier, Event
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.advice.kdistance import (
-    QrfBackend,
-    kdistance_to_selection,
-)
+from goldilocks_core.advice.kdistance import QrfBackend
 from goldilocks_core.contracts import StructureFeatureVector
-from goldilocks_core.kmesh.math import k_distance_to_mesh
 from goldilocks_core.ml.model_registry import load_default_qrf_config
 from goldilocks_core.ml.qrf.inference import _predict_kdistance_quantiles
 
@@ -84,45 +83,95 @@ def test_predict_kdistance_quantiles_requires_three_values() -> None:
         _predict_kdistance_quantiles(model, make_features())
 
 
-def test_kdistance_selection_records_model_provenance() -> None:
-    structure = make_structure()
-    selection = kdistance_to_selection(
-        structure,
-        0.25,
-        0.2,
-        0.3,
-        data_source="qrf@revision",
-        confidence=0.9,
-    )
-
-    assert selection.grid == k_distance_to_mesh(structure, 0.25)
-    assert selection.provenance.source == "model"
-    assert selection.provenance.data_source == "qrf@revision"
-    assert selection.provenance.confidence == 0.9
-
-
-def test_qrf_backend_loads_lazily_and_reuses_resources(monkeypatch) -> None:
-    loads = 0
+def test_qrf_backend_lazy_loading_reuse_reset_and_close(monkeypatch) -> None:
+    models = []
+    configs = []
+    config = local_config()
 
     def load_model(spec):
-        nonlocal loads
-        loads += 1
-        return FakeQRF()
+        model = FakeQRF() if not models else FakeQRF(0.35, 0.4, 0.45)
+        models.append(model)
+        return model
+
+    def load_config(path=None):
+        configs.append(config)
+        return config
 
     patch_inference(monkeypatch)
     monkeypatch.setattr("goldilocks_core.ml.models.load_model", load_model)
+    monkeypatch.setattr(
+        "goldilocks_core.advice.kdistance.load_default_qrf_config", load_config
+    )
     backend = QrfBackend(
-        config=local_config(),
         metallicity_checkpoint="checkpoint.ckpt",
         metallicity_atom_init="atom-init.json",
     )
-
+    assert not models and not configs
     first = backend(make_structure())
-    second = backend(make_structure())
-
-    assert first.grid == second.grid
+    assert backend(make_structure()) == first
+    assert len(models) == len(configs) == 1
     assert first.provenance.source == "model"
-    assert loads == 1
+    assert first.provenance.data_source == (
+        f"{config.model.name}@{config.model.revision or config.model.version}"
+    )
+    assert first.provenance.confidence == config.confidence
+    backend.reset()
+    assert backend(make_structure()).grid != first.grid
+    assert len(models) == 2
+    assert len(configs) == 1
+    backend.close()
+    backend.reset()
+    with pytest.raises(RuntimeError):
+        backend(make_structure())
+
+
+def test_qrf_backend_loads_once_for_concurrent_first_calls(monkeypatch) -> None:
+    backend = QrfBackend(config=local_config())
+    resources = object()
+    load_started = Event()
+    release_load = Event()
+    inference = Barrier(2)
+    loads = []
+
+    def load_resources(*args, **kwargs):
+        loads.append(resources)
+        load_started.set()
+        assert release_load.wait(timeout=2)
+        return resources
+
+    def predict(structure, config, actual_resources):
+        del structure, config
+        assert actual_resources is resources
+        inference.wait(timeout=2)
+        return SimpleNamespace(
+            median=0.25,
+            lower=0.2,
+            upper=0.3,
+            data_source="test",
+            confidence=0.9,
+        )
+
+    monkeypatch.setattr(
+        "goldilocks_core.advice.kdistance.load_qrf_resources", load_resources
+    )
+    monkeypatch.setattr(
+        "goldilocks_core.advice.kdistance.predict_kdistance_with_resources",
+        predict,
+    )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(backend, make_structure())
+        try:
+            assert load_started.wait(timeout=2)
+            second = pool.submit(backend, make_structure())
+            with pytest.raises(TimeoutError):
+                second.result(timeout=0.1)
+        finally:
+            release_load.set()
+        first_selection = first.result(timeout=2)
+        second_selection = second.result(timeout=2)
+    assert first_selection == second_selection
+    assert len(loads) == 1
 
 
 def test_qrf_backend_model_loading_errors_propagate(monkeypatch) -> None:
@@ -138,29 +187,3 @@ def test_qrf_backend_model_loading_errors_propagate(monkeypatch) -> None:
 
     with pytest.raises(FileNotFoundError, match="missing model"):
         backend(make_structure())
-
-
-def test_qrf_backend_loads_registry_config_on_first_model_call(monkeypatch) -> None:
-    loads = 0
-
-    def load_config(path=None):
-        nonlocal loads
-        loads += 1
-        return local_config()
-
-    monkeypatch.setattr(
-        "goldilocks_core.advice.kdistance.load_default_qrf_config",
-        load_config,
-    )
-    patch_inference(monkeypatch)
-    backend = QrfBackend(
-        metallicity_checkpoint="checkpoint.ckpt",
-        metallicity_atom_init="atom-init.json",
-    )
-
-    first = backend(make_structure())
-    second = backend(make_structure())
-
-    assert first.provenance.source == "model"
-    assert first.grid == second.grid
-    assert loads == 1

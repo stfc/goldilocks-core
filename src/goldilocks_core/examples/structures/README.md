@@ -14,21 +14,31 @@ uv run goldilocks assets install default
 Run the silicon example:
 
 ```bash
-uv run goldilocks recommend "$(uv run goldilocks examples path)/Si.cif"
+uv run goldilocks compute "$(uv run goldilocks examples path)/Si.cif" --preset recommend --no-out
 ```
 
 From Python:
 
 ```python
-from goldilocks_core import Service, PresetRequest
+from goldilocks_core import (
+    CalculationDraft,
+    ComputeRequest,
+    PathStructureSource,
+    PresetSelection,
+    Service,
+)
+from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
 from goldilocks_core.examples import structure
 
-request = PresetRequest(structure=structure("Si.cif"))
+request = ComputeRequest(
+    draft=CalculationDraft(structure=PathStructureSource(structure("Si.cif"))),
+    selection=PresetSelection("recommend"),
+)
 with Service() as core:
-    result = core.recommend(request)
+    result = core.compute(request)
 
-print(result.analysis.reduced_formula)
-print(result.k_points.grid)
+print(result.records[StructureAnalysisRecord].reduced_formula)
+print(result.records[KPointSelection].grid)
 ```
 
 ## Available structures

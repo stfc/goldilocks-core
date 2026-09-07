@@ -2,36 +2,50 @@ from __future__ import annotations
 
 import gc
 import hashlib
-import json
 import weakref
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, replace
+from threading import Barrier, Event
 from types import SimpleNamespace
 
 import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
+    CalculationDraft,
     CalculationHints,
+    ComputeRequest,
     Dispatcher,
-    PresetRequest,
-    QueryRequest,
+    InMemoryStructureSource,
+    PathStructureSource,
+    PresetSelection,
+    RecordSelection,
     Runtime,
 )
 from goldilocks_core.assets import AssetFile, AssetSpec, AssetStore
 from goldilocks_core.contracts import (
     CalculationIntent,
     KPointSelection,
+    ModelSpec,
     ParameterAdvice,
     Provenance,
     PseudoCutoffs,
     PseudoMetadata,
-    Result,
+    PseudopotentialRequirements,
     SelectionRecord,
     StructureAnalysisRecord,
+    resolve_output_types,
+)
+from goldilocks_core.contracts.registry import (
+    RECORD_TYPE_IDS,
+    register_record_types,
 )
 from goldilocks_core.pseudo.installed import write_table_manifest
 from goldilocks_core.pseudo.registry import PseudoTable
-from goldilocks_core.pseudo.source import PseudoTableMismatch
+from goldilocks_core.pseudo.source import (
+    PseudoTableMismatch,
+    select_compatible_table,
+)
 from goldilocks_core.runtime import (
     GraphHandler,
     Preset,
@@ -40,8 +54,28 @@ from goldilocks_core.runtime import (
 )
 
 
+@pytest.fixture
+def isolated_record_registry():
+    registered = dict(RECORD_TYPE_IDS)
+    yield
+    RECORD_TYPE_IDS.clear()
+    RECORD_TYPE_IDS.update(registered)
+
+
 def make_structure() -> Structure:
     return Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
+
+
+def make_metallicity_model() -> ModelSpec:
+    return ModelSpec(
+        name="operator-metallicity",
+        version="1",
+        model_type="cgcnn",
+        target="metallicity",
+        feature_set="test-features",
+        source="local",
+        location="metal.ckpt",
+    )
 
 
 def make_metadata() -> PseudoMetadata:
@@ -60,6 +94,11 @@ def make_metadata() -> PseudoMetadata:
             ecutrho_ry=140,
         ),
         source_identifier="synthetic/Si.UPF",
+        pseudo_info={
+            "licence": "CC-BY-4.0",
+            "licence_text": "Synthetic fixture licence\n",
+            "citation": "Synthetic fixture pseudopotential.",
+        },
     )
 
 
@@ -121,29 +160,50 @@ def installed_pseudo_table(tmp_path) -> tuple[AssetStore, PseudoTable]:
     return store, table
 
 
-def make_request(*, mode: str = "recommend") -> PresetRequest:
-    return PresetRequest(
-        structure=make_structure(),
+def table_fixture(
+    table_id: str,
+    *,
+    provider: str,
+    functional: str,
+    accuracy: str,
+    elements: tuple[str, ...],
+) -> PseudoTable:
+    spec = AssetSpec(
+        f"pseudopotentials/{table_id}",
+        "1",
+        (
+            AssetFile(
+                "pseudopotentials",
+                "source/table.tar.gz",
+                f"https://example.invalid/{table_id}.tar.gz",
+            ),
+        ),
+    )
+    return PseudoTable(
+        id=table_id,
+        provider=provider,
+        upstream_table=f"{table_id}-upstream",
+        version=spec.version,
+        functional=functional,
+        relativistic="scalar",
+        accuracy=accuracy,
+        licence="fixture licence",
+        citation="fixture citation",
+        elements=elements,
+        asset=spec,
+    )
+
+
+def make_query_request(outputs, **kw) -> ComputeRequest:
+    draft = CalculationDraft(
+        structure=InMemoryStructureSource(make_structure()),
         hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
         pseudo_metadata=(make_metadata(),),
-        mode=mode,
     )
-
-
-def make_query_request(outputs, **kw) -> QueryRequest:
-    request = QueryRequest(
-        structure=kw.pop("structure", make_structure()),
-        outputs=outputs,
-        intent=kw.pop("intent", CalculationIntent()),
-        hints=kw.pop("hints", CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC")),
-        pseudo_metadata=kw.pop("pseudo_metadata", (make_metadata(),)),
-        pseudo_root=kw.pop("pseudo_root", None),
-        pseudo_table=kw.pop("pseudo_table", None),
-        kmesh_model=kw.pop("kmesh_model", None),
+    return ComputeRequest(
+        draft=replace(draft, **kw),
+        selection=RecordSelection(outputs),
     )
-    if kw:
-        raise TypeError(f"unsupported test request fields: {sorted(kw)}")
-    return request
 
 
 class TrackingBackend:
@@ -171,84 +231,125 @@ class TrackingBackend:
         self.closes += 1
 
 
-def test_recommend_returns_complete_result_without_generated_files() -> None:
-    with Runtime() as runtime:
-        dispatcher = Dispatcher(runtime)
-        result = dispatcher.recommend(make_request())
-
-    assert isinstance(result, Result)
-    assert isinstance(result.analysis, StructureAnalysisRecord)
-    assert isinstance(result.advice, ParameterAdvice)
-    assert isinstance(result.k_points, KPointSelection)
-    assert isinstance(result.selection, SelectionRecord)
-    assert result.generated_files == ()
-
-
-def test_analyze_uses_heuristic_without_configured_metallicity_model(
-    monkeypatch,
+def test_analyze_uses_heuristic_without_an_installed_metallicity_model(
+    tmp_path,
 ) -> None:
-
-    with Runtime() as runtime:
+    with Runtime(asset_store=AssetStore(tmp_path / "empty-assets")) as runtime:
         dispatcher = Dispatcher(runtime)
-        records = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
+        result = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
 
-    analysis = records[StructureAnalysisRecord]
+    analysis = result.records[StructureAnalysisRecord]
     assert analysis.electronic_character == "unknown"
     assert analysis.electronic_character_source == "heuristic"
     assert analysis.electronic_character_confidence is None
 
 
-def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:
+def test_analyze_uses_the_installed_default_metallicity_model(
+    tmp_path, monkeypatch
+) -> None:
+    from goldilocks_core.ml import model_registry
+    from goldilocks_core.ml.qrf import metallicity
+
+    checkpoint = tmp_path / "checkpoint-source"
+    checkpoint.write_bytes(b"checkpoint")
+    atom_init = tmp_path / "atom-init-source"
+    atom_init.write_text("{}", encoding="utf-8")
+    licence = tmp_path / "licence-source"
+    licence.write_text("Model terms\n", encoding="utf-8")
+    spec = AssetSpec(
+        id="models/metallicity-fixture",
+        version="1",
+        files=(
+            AssetFile("checkpoint", "is_metal.ckpt", checkpoint.as_uri()),
+            AssetFile("atom_init", "atom_init.json", atom_init.as_uri()),
+            AssetFile("licence", "MODEL_CARD.md", licence.as_uri()),
+        ),
+    )
+    store = AssetStore(tmp_path / "assets")
+    store.install(spec)
+    config = replace(
+        model_registry.load_default_qrf_config(),
+        metallicity_asset=spec,
+        metallicity_checkpoint_file="is_metal.ckpt",
+        metallicity_atom_init_file="atom_init.json",
+    )
+    monkeypatch.setattr(model_registry, "load_default_qrf_config", lambda path: config)
+    monkeypatch.setattr(metallicity, "load_metallicity_model", lambda path: object())
+    monkeypatch.setattr(
+        metallicity, "classify_metallicity", lambda *args, **kwargs: ("insulator", 0.94)
+    )
+    with Runtime(asset_store=store) as runtime:
+        result = Dispatcher(runtime).compute(
+            make_query_request((StructureAnalysisRecord,))
+        )
+    analysis = result.records[StructureAnalysisRecord]
+    assert analysis.electronic_character == "insulator"
+    assert analysis.electronic_character_source == "model"
+    assert analysis.electronic_character_confidence == 0.94
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    (
+        {
+            "metallicity_checkpoint": "metal.ckpt",
+            "metallicity_atom_init": "atom-init.json",
+        },
+        {"metallicity_model": make_metallicity_model()},
+    ),
+)
+def test_runtime_rejects_incomplete_metallicity_configuration(configuration) -> None:
+    with pytest.raises(ValueError):
+        Runtime(**configuration)
+
+
+def test_metallicity_model_loads_once_for_concurrent_first_calls(
+    monkeypatch,
+) -> None:
     from goldilocks_core.ml.qrf import metallicity
 
     model = object()
-    calls = []
-    monkeypatch.setattr(metallicity, "load_metallicity_model", lambda path: model)
+    load_started = Event()
+    release_load = Event()
+    inference = Barrier(2)
+    loads = []
+
+    def load(path):
+        loads.append(model)
+        load_started.set()
+        assert release_load.wait(timeout=2)
+        return model
 
     def classify(structure, actual_model, atom_init, **settings):
-        calls.append((structure, actual_model, atom_init, settings))
+        del structure, atom_init, settings
+        assert actual_model is model
+        inference.wait(timeout=2)
         return "metal", 0.92
 
+    monkeypatch.setattr(metallicity, "load_metallicity_model", load)
     monkeypatch.setattr(metallicity, "classify_metallicity", classify)
 
     with Runtime(
         metallicity_checkpoint="metal.ckpt",
         metallicity_atom_init="atom-init.json",
+        metallicity_model=make_metallicity_model(),
     ) as runtime:
-        dispatcher = Dispatcher(runtime)
-        records = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
+        structure = make_structure()
 
-    analysis = records[StructureAnalysisRecord]
-    assert analysis.electronic_character == "metal"
-    assert analysis.electronic_character_source == "model"
-    assert analysis.electronic_character_confidence == 0.92
-    assert len(calls) == 1
-    assert calls[0][1:3] == (model, "atom-init.json")
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(runtime.metallicity, structure)
+            try:
+                assert load_started.wait(timeout=2)
+                second = pool.submit(runtime.metallicity, structure)
+                with pytest.raises(TimeoutError):
+                    second.result(timeout=0.1)
+            finally:
+                release_load.set()
+            first_result = first.result(timeout=2)
+            second_result = second.result(timeout=2)
 
-
-def test_generate_returns_generated_files() -> None:
-    with Runtime() as runtime:
-        dispatcher = Dispatcher(runtime)
-        result = dispatcher.generate(make_request(mode="generate"))
-
-    assert result.generated_files
-    assert result.generated_files[0].path == "inputs/qe.in"
-
-
-def test_generate_with_output_dir_writes_bundle(tmp_path) -> None:
-    output_dir = tmp_path / "bundle"
-
-    with Runtime() as runtime:
-        dispatcher = Dispatcher(runtime)
-        result = dispatcher.generate(
-            make_request(mode="generate"), output_dir=str(output_dir)
-        )
-
-    assert result.bundle is not None
-    assert result.bundle.path == str(output_dir)
-    assert (output_dir / "inputs" / "qe.in").is_file()
-    manifest = json.loads((output_dir / "manifest.json").read_text())
-    assert manifest == result.bundle.manifest
+    assert first_result == second_result == ("metal", "model", 0.92)
+    assert len(loads) == 1
 
 
 @pytest.mark.parametrize(
@@ -263,20 +364,20 @@ def test_generate_with_output_dir_writes_bundle(tmp_path) -> None:
 def test_compute_returns_each_requested_record_type(record_type: type) -> None:
     with Runtime() as runtime:
         dispatcher = Dispatcher(runtime)
-        records = dispatcher.compute(make_query_request((record_type,)))
+        result = dispatcher.compute(make_query_request((record_type,)))
 
-    assert tuple(records) == (record_type,)
-    assert isinstance(records[record_type], record_type)
+    assert tuple(result.records) == (record_type,)
+    assert isinstance(result.records[record_type], record_type)
 
 
-def test_select_only_compute_does_not_invoke_kmesh(monkeypatch) -> None:
+def test_select_only_compute_does_not_invoke_kmesh() -> None:
     backend = TrackingBackend(raise_on_call=True)
 
     with Runtime(kmesh_service=backend) as runtime:
         dispatcher = Dispatcher(runtime)
-        records = dispatcher.compute(make_query_request((SelectionRecord,)))
+        result = dispatcher.compute(make_query_request((SelectionRecord,)))
 
-    assert isinstance(records[SelectionRecord], SelectionRecord)
+    assert isinstance(result.records[SelectionRecord], SelectionRecord)
     assert backend.calls == 0
 
 
@@ -288,9 +389,9 @@ def test_analysis_query_does_not_resolve_pseudopotential_source(tmp_path) -> Non
     )
 
     with Runtime(asset_store=AssetStore(tmp_path / "empty")) as runtime:
-        records = Dispatcher(runtime).compute(request)
+        result = Dispatcher(runtime).compute(request)
 
-    assert records[StructureAnalysisRecord].reduced_formula == "Si"
+    assert result.records[StructureAnalysisRecord].reduced_formula == "Si"
 
 
 def test_explicit_metadata_selection_does_not_read_registry(
@@ -305,9 +406,9 @@ def test_explicit_metadata_selection_does_not_read_registry(
     )
 
     with Runtime() as runtime:
-        records = Dispatcher(runtime).compute(make_query_request((SelectionRecord,)))
+        result = Dispatcher(runtime).compute(make_query_request((SelectionRecord,)))
 
-    assert records[SelectionRecord].pseudopotentials[0].filename == "Si.UPF"
+    assert result.records[SelectionRecord].pseudopotentials[0].filename == "Si.UPF"
 
 
 def test_runtime_resolves_one_explicit_installed_table(
@@ -318,16 +419,19 @@ def test_runtime_resolves_one_explicit_installed_table(
 
     store, table = installed_pseudo_table(tmp_path)
     monkeypatch.setattr(source, "load_tables", lambda path: {table.id: table})
-    request = PresetRequest(
-        structure=make_structure(),
-        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
-        pseudo_table=table.id,
+    request = ComputeRequest(
+        draft=CalculationDraft(
+            structure=InMemoryStructureSource(make_structure()),
+            hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+            pseudo_table=table.id,
+        ),
+        selection=PresetSelection("recommend"),
     )
 
     with Runtime(asset_store=store) as runtime:
-        result = Dispatcher(runtime).recommend(request)
+        result = Dispatcher(runtime).compute(request)
 
-    selected = result.selection.pseudopotentials[0]
+    selected = result.records[SelectionRecord].pseudopotentials[0]
     assert selected.filename == "Si.upf"
     assert selected.provenance.data_source == table.id
 
@@ -340,33 +444,53 @@ def test_explicit_table_must_satisfy_scientific_requirements(
 
     store, table = installed_pseudo_table(tmp_path)
     monkeypatch.setattr(source, "load_tables", lambda path: {table.id: table})
-    request = PresetRequest(
-        structure=make_structure(),
-        intent=CalculationIntent(functional="PBE"),
-        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
-        pseudo_table=table.id,
+    request = ComputeRequest(
+        draft=CalculationDraft(
+            structure=InMemoryStructureSource(make_structure()),
+            intent=CalculationIntent(functional="PBE"),
+            hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
+            pseudo_table=table.id,
+        ),
+        selection=PresetSelection("recommend"),
     )
 
     with (
         Runtime(asset_store=store) as runtime,
         pytest.raises(PseudoTableMismatch, match="functional is PBEsol"),
     ):
-        Dispatcher(runtime).recommend(request)
+        Dispatcher(runtime).compute(request)
 
 
-def test_reset_close_and_context_manager_delegate_to_backend(monkeypatch) -> None:
-    backend = TrackingBackend()
-
-    with Runtime(kmesh_service=backend) as runtime:
-        runtime.reset()
-        assert runtime.is_closed is False
-
-    assert runtime.is_closed is True
-    assert backend.resets == 1
-    assert backend.closes == 1
-
-    runtime.close()
-    assert backend.closes == 1
+@pytest.mark.parametrize(
+    "element,functional,accuracy,provider",
+    (("Si", "PBE", "precision", "pseudodojo"), ("La", "PBEsol", "efficiency", "sssp")),
+)
+def test_automatic_table_selection_routes_by_element(
+    element, functional, accuracy, provider
+) -> None:
+    tables = {
+        name: table_fixture(
+            f"{name}-{functional}-{accuracy}-sr",
+            provider=name,
+            functional=functional,
+            accuracy=accuracy,
+            elements=(element,),
+        )
+        for name in ("pseudodojo", "sssp")
+    }
+    requirements = PseudopotentialRequirements(
+        functional=functional,
+        accuracy=accuracy,
+        pseudo_type=None,
+        relativistic="scalar",
+        provenance=Provenance(source="test", reason="test"),
+    )
+    assert (
+        select_compatible_table(
+            tables, table_id=None, elements={element}, requirements=requirements
+        )
+        is tables[provider]
+    )
 
 
 def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
@@ -375,7 +499,6 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     backend = TrackingBackend()
     model_loads = 0
     model_refs = []
-    classifications = 0
 
     class StubMetallicityModel:
         pass
@@ -388,33 +511,34 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
         return model
 
     def classify(structure, model, atom_init, **settings):
-        nonlocal classifications
-        classifications += 1
+        del structure, model, atom_init, settings
         return "metal", 0.9
 
     monkeypatch.setattr(metallicity, "load_metallicity_model", load)
     monkeypatch.setattr(metallicity, "classify_metallicity", classify)
-    request = PresetRequest(
-        structure=make_structure(),
+    request = make_query_request(
+        (StructureAnalysisRecord, KPointSelection),
         hints=CalculationHints(pseudo_type="NC"),
-        pseudo_metadata=(make_metadata(),),
     )
     runtime = Runtime(
         kmesh_service=backend,
         metallicity_checkpoint="metal.ckpt",
         metallicity_atom_init="atom-init.json",
+        metallicity_model=make_metallicity_model(),
     )
     dispatcher = Dispatcher(runtime)
 
-    first = dispatcher.recommend(request)
-    second = dispatcher.recommend(request)
+    first = dispatcher.compute(request)
+    second = dispatcher.compute(request)
 
-    assert first.k_points == second.k_points
-    assert first.analysis.electronic_character == "metal"
-    assert second.analysis.electronic_character == "metal"
+    assert first.records[KPointSelection] == second.records[KPointSelection]
+    for result in (first, second):
+        analysis = result.records[StructureAnalysisRecord]
+        assert analysis.electronic_character == "metal"
+        assert analysis.electronic_character_source == "model"
+        assert analysis.electronic_character_confidence == 0.9
     assert backend.calls == 2
     assert model_loads == 1
-    assert classifications == 2
     assert model_refs[0]() is not None
 
     runtime.reset()
@@ -422,85 +546,144 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     assert backend.resets == 1
     assert model_refs[0]() is None
 
-    dispatcher.recommend(request)
+    dispatcher.compute(request)
     assert backend.calls == 3
     assert model_loads == 2
-    assert classifications == 3
     assert model_refs[1]() is not None
 
+    runtime.close()
     runtime.close()
     gc.collect()
     assert backend.closes == 1
     assert model_refs[1]() is None
     assert runtime.is_closed is True
-    with pytest.raises(RuntimeError, match="Runtime is closed"):
-        dispatcher.recommend(request)
+    with pytest.raises(RuntimeError):
+        dispatcher.compute(request)
 
 
-def test_runtime_dispatches_a_registered_task_via_compute(monkeypatch) -> None:
-    monkeypatch.setattr(Runtime, "_build_backend", lambda self: TrackingBackend())
+def test_record_registration_is_atomic_when_an_id_conflicts() -> None:
+    @dataclass
+    class FirstRecord:
+        value: str = "first"
 
     @dataclass
-    class StubRecord:
-        value: str = "stub"
+    class ConflictingRecord:
+        value: str = "conflict"
 
-    def make_stub(*, ctx) -> StubRecord:
-        return StubRecord("ran")
-
-    handler = GraphHandler(
-        spec=TaskGraph(
-            task="stub_task",
-            stages=(Stage(StubRecord, (), make_stub),),
-            presets=(Preset("only", (StubRecord,)),),
-        ),
-        build_context=lambda request, runtime: SimpleNamespace(),
-        assemble_result=lambda request, records: records,
-    )
-
-    with Runtime() as runtime:
-        dispatcher = Dispatcher(runtime)
-        dispatcher.register(handler)
-        records = dispatcher.compute(
-            QueryRequest(
-                structure=make_structure(),
-                outputs=(StubRecord,),
-                intent=CalculationIntent(task="stub_task"),
-            ),
-        )
-
-    assert isinstance(records[StubRecord], StubRecord)
-    assert records[StubRecord].value == "ran"
-
-
-def test_runtime_recommend_dispatches_a_registered_task_preset(monkeypatch) -> None:
-    monkeypatch.setattr(Runtime, "_build_backend", lambda self: TrackingBackend())
-
-    @dataclass
-    class StubRecord:
-        value: str = "stub"
-
-    def make_stub(*, ctx) -> StubRecord:
-        return StubRecord("ran")
-
-    assembled = object()
-    handler = GraphHandler(
-        spec=TaskGraph(
-            task="stub_task",
-            stages=(Stage(StubRecord, (), make_stub),),
-            presets=(Preset("recommend", (StubRecord,)),),
-        ),
-        build_context=lambda request, runtime: SimpleNamespace(),
-        assemble_result=lambda request, records: assembled,
-    )
-
-    with Runtime() as runtime:
-        dispatcher = Dispatcher(runtime)
-        dispatcher.register(handler)
-        result = dispatcher.recommend(
-            PresetRequest(
-                structure=make_structure(),
-                intent=CalculationIntent(task="stub_task"),
+    registered = dict(RECORD_TYPE_IDS)
+    with pytest.raises(ValueError, match="'analysis' is already registered"):
+        register_record_types(
+            (
+                (FirstRecord, "atomic_fixture"),
+                (ConflictingRecord, "analysis"),
             )
         )
 
-    assert result is assembled
+    assert RECORD_TYPE_IDS == registered
+
+
+@pytest.mark.parametrize(
+    "changes",
+    (
+        {"task": " "},
+        {"revision": " "},
+        {"stages": (Stage(StructureAnalysisRecord, (), lambda *, ctx: None, id=" "),)},
+        {
+            "stages": (
+                Stage(StructureAnalysisRecord, (), lambda *, ctx: None, id="duplicate"),
+                Stage(ParameterAdvice, (), lambda *, ctx: None, id="duplicate"),
+            )
+        },
+        {"presets": (Preset(" ", (StructureAnalysisRecord,)),)},
+        {
+            "presets": (
+                Preset("duplicate", (StructureAnalysisRecord,)),
+                Preset("duplicate", (ParameterAdvice,)),
+            )
+        },
+    ),
+)
+def test_task_registration_rejects_invalid_identifiers(changes) -> None:
+    fields = {"task": "stub_task", "stages": (), "presets": ()} | changes
+    handler = GraphHandler(
+        spec=TaskGraph(**fields),
+        build_context=lambda request, normalized, runtime: SimpleNamespace(),
+    )
+    with Runtime() as runtime, pytest.raises(ValueError):
+        Dispatcher(runtime).register(handler)
+
+
+@pytest.mark.parametrize("ids", (("duplicate", "duplicate"), (" ", "second")))
+def test_task_graph_rejects_invalid_record_ids(ids) -> None:
+    @dataclass
+    class FirstRecord:
+        value: str = "first"
+
+    @dataclass
+    class SecondRecord:
+        value: str = "second"
+
+    with pytest.raises(ValueError):
+        TaskGraph(
+            task="stub_task",
+            stages=(
+                Stage(FirstRecord, (), lambda *, ctx: FirstRecord()),
+                Stage(SecondRecord, (), lambda *, ctx: SecondRecord()),
+            ),
+            presets=(Preset("both", (FirstRecord, SecondRecord)),),
+            record_ids=((FirstRecord, ids[0]), (SecondRecord, ids[1])),
+        )
+
+
+@pytest.mark.parametrize("preset", (False, True))
+def test_registered_task_requires_stable_ids_and_dispatches(
+    isolated_record_registry,
+    tmp_path,
+    preset,
+) -> None:
+    @dataclass
+    class StubRecord:
+        value: str
+
+    graph = TaskGraph(
+        task="stub_task",
+        stages=(
+            Stage(
+                StubRecord,
+                (),
+                lambda *, ctx: StubRecord(ctx.formula),
+                id="produce_stub",
+            ),
+        ),
+        presets=(Preset("only", (StubRecord,)),),
+        selectable_outputs=(StubRecord,),
+    )
+    handler = GraphHandler(
+        spec=graph,
+        build_context=lambda request, normalized, runtime: SimpleNamespace(
+            formula=normalized.inspection.structure.reduced_formula
+        ),
+    )
+    structure_path = tmp_path / "Si.cif"
+    make_structure().to(filename=structure_path)
+    request = ComputeRequest(
+        draft=CalculationDraft(
+            PathStructureSource(structure_path),
+            intent=CalculationIntent(task="stub_task"),
+        ),
+        selection=PresetSelection("only") if preset else RecordSelection((StubRecord,)),
+    )
+    with Runtime() as runtime:
+        dispatcher = Dispatcher(runtime)
+        with pytest.raises(ValueError):
+            dispatcher.register(handler)
+        dispatcher.register(
+            replace(handler, spec=replace(graph, record_ids=((StubRecord, "stub"),)))
+        )
+        result = dispatcher.compute(request)
+
+    if not preset:
+        assert request.to_dict()["selection"] == {"records": ["stub"]}
+    assert resolve_output_types(["stub"]) == (StubRecord,)
+    assert result.draft.structure.source.origin == "path"
+    assert result.to_dict()["records"] == {"stub": {"value": "Si"}}

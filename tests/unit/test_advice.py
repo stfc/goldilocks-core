@@ -111,7 +111,9 @@ def test_advise_parameters_uses_likely_metal_smearing_from_analysis() -> None:
 
 def test_advise_parameters_uses_metal_smearing_from_ml_classification() -> None:
     """A model-classified metal gets the same metallic smearing as a likely metal."""
-    advice = advise_parameters(make_analysis(electronic_character="metal"))
+    advice = advise_parameters(
+        make_analysis(electronic_character="metal", electronic_character_source="model")
+    )
 
     assert advice.smearing.smearing_type == "cold"
     assert advice.smearing.width_ry == 0.01
@@ -154,14 +156,17 @@ def test_advise_smearing_defaults_to_fixed_occupations_when_character_unknown() 
     assert "Metallicity is unknown" in advice.smearing.provenance.reason
 
 
-def test_advise_spin_orbit_user_hint_records_provenance_and_heavy_elements() -> None:
+@pytest.mark.parametrize("enabled", [False, True])
+def test_advise_spin_orbit_user_hint_records_provenance_and_heavy_elements(
+    enabled: bool,
+) -> None:
     """An operator SOC hint overrides the decision and carries heavy elements."""
     advice = advise_parameters(
         make_analysis(heavy_elements=("I",)),
-        hints=CalculationHints(spin_orbit_coupling=True),
+        hints=CalculationHints(spin_orbit_coupling=enabled),
     )
 
-    assert advice.spin_orbit.enabled is True
+    assert advice.spin_orbit.enabled is enabled
     assert advice.spin_orbit.consider is False
     assert advice.spin_orbit.heavy_elements == ("I",)
     assert advice.spin_orbit.provenance.source == "user_hint"
@@ -210,14 +215,15 @@ def test_advise_pseudo_requirements_inherits_soc_hint_provenance() -> None:
     assert requirements.relativistic == "full"
 
 
-def test_advise_magnetism_user_hint_carries_magnetic_elements() -> None:
+@pytest.mark.parametrize("enabled", [False, True])
+def test_advise_magnetism_user_hint_carries_magnetic_elements(enabled: bool) -> None:
     """An operator spin hint carries the detected magnetic elements."""
     advice = advise_parameters(
         make_analysis(magnetic_elements=("Fe",)),
-        hints=CalculationHints(spin_polarized=True),
+        hints=CalculationHints(spin_polarized=enabled),
     )
 
-    assert advice.magnetism.spin_polarized is True
+    assert advice.magnetism.spin_polarized is enabled
     assert advice.magnetism.magnetic_elements == ("Fe",)
     assert advice.magnetism.provenance.source == "user_hint"
 

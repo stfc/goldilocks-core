@@ -2,24 +2,11 @@ import numpy as np
 import pytest
 
 from goldilocks_core.contracts import (
-    BundleRecord,
     CalculationHints,
     CalculationIntent,
-    ConvergenceAdvice,
-    KPointSelection,
-    MagnetismAdvice,
-    ParameterAdvice,
-    PresetRequest,
-    Provenance,
-    PseudopotentialRequirements,
     Records,
-    Result,
-    SelectionRecord,
-    SmearingAdvice,
-    SpinOrbitAdvice,
     StructureAnalysisRecord,
     StructureFeatureVector,
-    VdwAdvice,
 )
 
 
@@ -36,68 +23,6 @@ def _make_analysis() -> StructureAnalysisRecord:
         magnetic_elements=(),
         heavy_elements=(),
     )
-
-
-def _make_advice() -> ParameterAdvice:
-    provenance = Provenance(source="default", reason="baseline default")
-    return ParameterAdvice(
-        smearing=SmearingAdvice(
-            smearing_type=None,
-            width_ry=None,
-            provenance=provenance,
-        ),
-        magnetism=MagnetismAdvice(
-            spin_polarized=False,
-            magnetic_elements=(),
-            provenance=provenance,
-        ),
-        spin_orbit=SpinOrbitAdvice(
-            enabled=False,
-            consider=False,
-            heavy_elements=(),
-            provenance=provenance,
-        ),
-        pseudopotential_requirements=PseudopotentialRequirements(
-            functional="PBE",
-            accuracy="efficiency",
-            pseudo_type=None,
-            relativistic="scalar",
-            provenance=provenance,
-        ),
-        convergence=ConvergenceAdvice(conv_thr=1e-6, provenance=provenance),
-        vdw=VdwAdvice(use_vdw=False, method=None, provenance=provenance),
-    )
-
-
-def _make_k_points() -> KPointSelection:
-    provenance = Provenance(source="default", reason="baseline default")
-    return KPointSelection(
-        grid=(4, 4, 4),
-        shift=(0, 0, 0),
-        mesh_type="monkhorst-pack",
-        provenance=provenance,
-    )
-
-
-def _make_selection() -> SelectionRecord:
-    return SelectionRecord(pseudopotentials=())
-
-
-def test_contracts_serialize_to_json_safe_dicts() -> None:
-    result = Result(
-        intent=CalculationIntent(),
-        analysis=_make_analysis(),
-        advice=_make_advice(),
-        k_points=_make_k_points(),
-        selection=_make_selection(),
-    )
-
-    data = result.to_dict()
-
-    assert data["analysis"]["elements"] == ["Si"]
-    assert data["k_points"]["grid"] == [4, 4, 4]
-    assert "grid" not in data
-    assert "contains_heavy_elements" not in data
 
 
 def test_core_records_maps_requested_types_and_serializes_record_names() -> None:
@@ -164,34 +89,6 @@ def test_feature_vectors_serialize_numpy_values_as_json_lists() -> None:
     ).to_dict()
 
     assert data["values"] == [1.0, 2.0]
-
-
-def test_job_records_serialize_to_json_safe_dicts() -> None:
-    result = Result(
-        intent=CalculationIntent(),
-        analysis=_make_analysis(),
-        advice=_make_advice(),
-        k_points=_make_k_points(),
-        selection=_make_selection(),
-        bundle=BundleRecord(path="run/", manifest={"manifest_version": 2}),
-    )
-
-    data = result.to_dict()
-
-    assert data["bundle"]["path"] == "run/"
-    assert data["k_points"]["grid"] == [4, 4, 4]
-
-
-def test_preset_request_validates_mode() -> None:
-    PresetRequest(structure="Si.cif", mode="recommend")
-    PresetRequest(structure="Si.cif", mode="generate")
-
-    try:
-        PresetRequest(structure="Si.cif", mode="invalid")
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("expected ValueError for invalid mode")
 
 
 def test_calculation_intent_defaults_to_pbesol() -> None:

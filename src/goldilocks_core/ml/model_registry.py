@@ -5,13 +5,15 @@ import tomllib
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, get_args
 
 from goldilocks_core.assets import AssetFile, AssetSpec
 from goldilocks_core.contracts import ModelSource, ModelSpec, ModelType, PathLike
 
 MODEL_REGISTRY_ENV = "GOLDILOCKS_MODEL_REGISTRY"
 _REGISTRY_RESOURCE = "registry.toml"
+_VALID_MODEL_SOURCES = frozenset(get_args(ModelSource))
+_VALID_MODEL_TYPES = frozenset(get_args(ModelType))
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +35,13 @@ class QrfFeatureSettings:
     lattice_symprec: float
     metallicity_graph_radius: float
     metallicity_max_neighbors: int
+
+
+@dataclass(frozen=True, slots=True)
+class RegisteredModel:
+    id: str
+    role: str
+    spec: ModelSpec
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +112,26 @@ def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
     )
 
 
+def registered_models(path: PathLike | None = None) -> tuple[RegisteredModel, ...]:
+    config = load_default_qrf_config(path)
+    return (
+        RegisteredModel(
+            id=config.model_asset.id if config.model_asset else config.model.name,
+            role="k_point_advisor",
+            spec=config.model,
+        ),
+        RegisteredModel(
+            id=(
+                config.metallicity_asset.id
+                if config.metallicity_asset
+                else config.metallicity_model.name
+            ),
+            role="metallicity_classifier",
+            spec=config.metallicity_model,
+        ),
+    )
+
+
 def model_asset_specs(path: PathLike | None = None) -> tuple[AssetSpec, ...]:
     config = load_default_qrf_config(path)
     return tuple(
@@ -146,7 +175,31 @@ def _asset_spec(data: dict[str, Any] | None) -> AssetSpec | None:
 
 
 def _model_spec(data: dict[str, Any], location: str) -> ModelSpec:
-    source = cast(ModelSource, data.get("source", "local"))
+    identity = {
+        "name": data["name"],
+        "version": str(data["version"]),
+        "target": data["target"],
+        "feature_set": data["feature_set"],
+    }
+    for field, value in identity.items():
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"model {field} must be a non-empty string; got {value!r}")
+    revision = data.get("revision")
+    if revision is not None and (not isinstance(revision, str) or not revision.strip()):
+        raise ValueError(
+            f"model revision must be a non-empty string, or absent; got {revision!r}"
+        )
+
+    source_value = data.get("source", "local")
+    if source_value not in _VALID_MODEL_SOURCES:
+        valid = ", ".join(sorted(_VALID_MODEL_SOURCES))
+        raise ValueError(f"model source must be one of {valid}; got {source_value!r}")
+    source = cast(ModelSource, source_value)
+    model_type_value = data["model_type"]
+    if model_type_value not in _VALID_MODEL_TYPES:
+        valid = ", ".join(sorted(_VALID_MODEL_TYPES))
+        raise ValueError(f"model type must be one of {valid}; got {model_type_value!r}")
+    model_type = cast(ModelType, model_type_value)
     optional_material = {
         field: data.get(field) for field in ("licence", "licence_text", "citation")
     }
@@ -157,14 +210,14 @@ def _model_spec(data: dict[str, Any], location: str) -> ModelSpec:
             )
 
     return ModelSpec(
-        name=data["name"],
-        version=str(data["version"]),
-        model_type=cast(ModelType, data["model_type"]),
-        target=data["target"],
-        feature_set=data["feature_set"],
+        name=identity["name"],
+        version=identity["version"],
+        model_type=model_type,
+        target=identity["target"],
+        feature_set=identity["feature_set"],
         source=source,
         location=data.get("location", location),
-        revision=data.get("revision"),
+        revision=revision,
         **optional_material,
     )
 

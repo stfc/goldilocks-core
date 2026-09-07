@@ -6,14 +6,15 @@ flow is staged so later calculation types can reuse analysis, advice, resource
 selection, and output handling.
 
 ```text
-Load -> Analyze -> Advise -> Kmesh
-Load + Advice + Kmesh -> Select
+Load -> Analyze -> Advise
+Load -> Kmesh
+Load + Advice -> Select
 Load + Advice + Select + Kmesh -> Generate
 ```
 
 The executor resolves this dependency graph from typed stage inputs and
-outputs. Stages are functions with no stage base classes; only source
-resolution and bundle publication touch the filesystem.
+outputs. Stages are functions with no stage base classes; only source and asset
+resolution and generated-input bundle writing touch the filesystem.
 
 ## Modules
 
@@ -25,76 +26,65 @@ resolution and bundle publication touch the filesystem.
 | `pseudo/source.py` | One source-resolution interface for request metadata, operator roots, and installed tables. |
 | `contracts/` | Data records and serialization shared between stages. |
 | `runtime/graph.py` | Stage-agnostic, type-keyed DAG executor (`TaskGraph`/`Stage`/`Preset`/`execute`). |
-| `runtime/task.py` | `GraphHandler`: a task's graph plus its context-builder and result-assembler hooks. |
-| `runtime/scf.py` | The SCF task: run context, stage graph, and result assembly. |
+| `runtime/task.py` | `GraphHandler`: a task graph, context builder, and factual warning collector. |
+| `runtime/scf.py` | The SCF Calculation Task, stage graph, Presets, context, and warning collection. |
 | `runtime/models.py` | `Runtime`: kmesh/metallicity model lifecycle (load/reset/close), exposed as read-only services. |
 | `runtime/dispatch.py` | `Dispatcher`: task registry and dispatch by `intent.task` through `GraphHandler`s. |
-| `runtime/jobs.py` | `run_core_job` (preset) and `query_records` (query) entrypoints. |
-| `runtime/service.py` | `Service`: process-owned lifecycle, locking, operations, and discovery shared by every entry point. |
-| `io/structures.py` | Structure loading. |
+| `runtime/jobs.py` | Short-lived `compute` convenience entry point. |
+| `runtime/service.py` | `Service`: process-owned lifecycle, locking, Capabilities, Structure Inspection, Compute, and directory output. |
+| `io/structures.py` | One Structure Source normalization path for Inspection and Compute. |
 | `analysis.py` | Structure facts. |
 | `advice/` | Scientific and numerical recommendations. |
-| `kmesh/`, `advice/` | Concrete k-point selection. |
+| `kmesh/` | K-point resolution and mesh mathematics. |
 | `selection.py` | Pseudopotentials and cutoffs. |
 | `generation/` | Calculation-specific file generation. |
-| `bundle.py` | Generated files and manifest output. |
-| `server/request.py` | Canonical JSON request deserialization shared by transports. |
-| `server/http.py`, `server/mcp.py` | Thin optional HTTP and MCP adapters over one `Service`. |
+| `bundle.py` | Generated-input directory bundles and their manifests. |
+| `server/request.py` | Existing transport request/response conversion around the Core computation model. |
+| `server/http.py` | Optional HTTP lifecycle, errors, and preset/query routes. |
+| `server/mcp.py` | Optional local stdio MCP adapter. |
 
 Stages communicate through dataclasses. They do not need to inherit from a Core
 class, and callers can invoke any stage function directly.
 
 ## Standard workflow
 
-`PresetRequest` carries a preset run (`mode` = `recommend`/`generate`);
-`QueryRequest` carries an explicit record query (`outputs`). `Service`
-exposes `recommend`, `generate`, and `compute` over a process-owned
-`Runtime` and `Dispatcher`, serializing dispatch so lazy model state is
-safe to reuse. `run_core_job` and `query_records` are short-lived convenience
-entry points. The dispatcher runs the registered `scf_single_point` task.
+`ComputeRequest` carries a `CalculationDraft` and exactly one
+`PresetSelection` or `RecordSelection`. `Service.compute` dispatches it through
+a process-owned `Runtime`. Execution state is request-local; shared models
+synchronize their first lazy load. `recommend` and `generate` are DAG Preset IDs only.
 
 ```python
-with Service() as core:
-    request = PresetRequest(structure="Fe.cif")
-    result = core.generate(request, output_dir="run")
-```
-
-`mode` selects a task preset:
-
-- `recommend`: request Analyze, Advise, Kmesh, and Select
-  records
-- `generate`: additionally request GeneratedFiles and optionally publish them
-  when `output_dir` is set
-
-`CalculationIntent.task` describes the calculation. The built-in runtime
-currently accepts only `scf_single_point`.
-
-## Flexible Python use
-
-`run_core_job` is optional convenience, not an access restriction. Advanced
-callers can import stage functions and compose them themselves:
-
-```python
-from goldilocks_core.advice import advise_parameters
-from goldilocks_core.analysis import analyze_structure
-from goldilocks_core.advice.kdistance import QrfBackend
-from goldilocks_core.generation import generate_inputs
-from goldilocks_core.io.structures import load_structure
-from goldilocks_core.kmesh import resolve_kpoints
-from goldilocks_core.selection import select_pseudopotentials
-
-structure = load_structure("Fe.cif")
-analysis = analyze_structure(structure)
-advice = advise_parameters(analysis, intent, hints)
-kpoints = resolve_kpoints(structure, hints, QrfBackend())
-selection = select_pseudopotentials(
-    structure, advice.pseudopotential_requirements, metadata
+request = ComputeRequest(
+    CalculationDraft(PathStructureSource("Fe.cif")),
+    PresetSelection("generate"),
 )
-files = generate_inputs(structure, intent, advice, selection, kpoints)
+with Service() as core:
+    result = core.compute(request, output=DirectoryOutput("run"))
 ```
 
-This supports custom ordering, extra project-specific steps, intermediate
-inspection, and calculation-specific generation without extending a framework.
+The built-in `scf_single_point` Calculation Task provides `recommend` and
+`generate` Presets. Explicit Record selection executes only the required
+subgraph. The generic dispatcher constructs every `ComputationResult`; Task
+Handlers supply context and collect factual warnings.
+
+## Transport adapters
+
+Python exposes Capabilities, Structure Inspection, and Compute. The existing CLI
+and HTTP/MCP preset/query interfaces convert their inputs to `ComputeRequest`.
+`server/request.py` retains the flat transport request and response documents;
+Core constructors validate domain values.
+
+HTTP and MCP accept inline structures and resolve pseudopotentials and models
+from the server environment. They return JSON without creating output
+directories.
+HTTP Compute handlers execute concurrently over one process-owned Runtime.
+Task Graph declarations are immutable, execution state is request-local, and
+shared models synchronize only their first lazy load.
+
+HTTP and MCP never accept structure paths, pseudopotential roots or metadata
+payloads, registered table overrides, model locations, or output paths.
+Python and CLI own trusted local filesystem controls. HTTP and MCP remain
+optional imports.
 
 ## Runtime assets
 
@@ -122,7 +112,9 @@ The canonical store is external to the package. Its root is
 `<root>/<asset-id>/<version>/`; temporary downloads and source archives are
 removed after installation. A shipped runtime profile pins exact asset IDs and
 versions. Installed tables are resolved lazily by the SCF graph; transport
-deserialization performs no asset-store I/O. The CLI installs assets only
+deserialization performs no asset-store I/O. Analyze uses the installed default
+metallicity classifier when available and falls back to structure-only
+heuristics when that asset is absent or the structure is disordered. The CLI installs assets only
 through explicit lifecycle commands or `--fetch-missing`, which installs the
 exact missing dependency Core reported. See
 [Pseudopotential tables](pseudopotentials.md) for the normalized table layout
@@ -136,7 +128,7 @@ Validate where data enters or causes side effects:
   metadata;
 - source adapters validate provider data before producing internal records;
 - generators reject unsupported or incomplete inputs before rendering;
-- bundle writing confines paths to a new output directory.
+- bundle writing refuses existing destinations and confines generated file paths.
 
 Intermediate records remain ordinary Python data. Custom stage authors are
 responsible for returning coherent records; Core does not defensively re-check
@@ -145,14 +137,12 @@ every possible malformed internal object.
 Scientific choices belong in Analyze, Advise, Kmesh, and Select. Select
 resolves the configured source and chooses a concrete pseudopotential per
 element without making scientific policy beyond the stated requirements.
-Generate maps completed choices to calculation syntax. Optional bundle
-publication writes files but does not run calculations or copy
-pseudopotential libraries.
+Generate maps completed choices to calculation syntax. Optional directory
+output writes generated inputs and a manifest but does not run calculations.
 
-Runner/AiiDA workflows, schedulers, auth, frontend state, and completed-output
-analysis are outside this package. HTTP and MCP are optional thin transports;
-they do not add queues, persistence, sessions, or pod management.
-
+Runner/AiiDA workflows, schedulers, authentication, and completed-output
+analysis are outside this repository. Browser state does not enter Core Records.
+HTTP and MCP do not add queues, persistence, sessions, or pod management.
 
 ## Engineering invariants
 
@@ -162,18 +152,18 @@ boundaries, concurrency safety, or the task extension model.
 - The SCF handler registers lazily on first dispatch so importing
   `runtime.dispatch` does not pull in stage implementations or their
   `ml.*` dependencies. Explicit registration wins over the default.
-- `Service` serializes dispatch with a re-entrant lock so model lazy
-  init and inference never overlap across concurrent requests.
-- `run_core_job` and `query_records` reuse a caller-owned runtime if
-  given one (left open); they create and close an owned runtime per
-  call otherwise.
+- `Service` executes Computations concurrently over one process-owned
+  `Runtime`. Model backends synchronize resource acquisition, not inference;
+  `Dispatcher` synchronizes lazy default-task registration. Model configuration
+  is cached for the backend's lifetime; reset releases loaded model resources.
+- The top-level `compute` convenience reuses a caller-owned runtime when given
+  one and otherwise closes its owned runtime after one call.
 - The runtime imports no task-specific code. New tasks bring their own
   context and stage graph; they do not edit the generic executor.
 - Importing `goldilocks_core` never imports FastAPI or the MCP SDK.
   The `[http]` and `[mcp]` extras are lazy boundaries.
-- `server/request.py` rejects unknown keys and bad types with
-  named-field `RequestError`. Stage `ValueError`s are not caught
-  there; they surface to the transport's error handler.
+- `server/request.py` rejects unknown fields and bad transport types and
+  constructs Core computation contracts without revalidating Records.
 - `DimensionalityClassificationError` is an `Exception`, not a
   `ValueError`, so HTTP maps it explicitly to 422.
 - MCP maps only known stage errors to `ToolError`; internal defects

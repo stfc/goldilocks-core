@@ -20,14 +20,13 @@ from typing import Any, Literal
 from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled
 from goldilocks_core.contracts import (
     PseudoAccuracy,
-    QueryRequest,
     SmearingType,
     VdwMethod,
 )
 from goldilocks_core.pseudo.source import PseudoTableMismatch
 from goldilocks_core.pseudo.validation import PseudoImportError
 from goldilocks_core.runtime.service import Service
-from goldilocks_core.server.request import from_dict
+from goldilocks_core.server.request import from_dict, result_to_dict
 
 try:
     from mcp.server.mcpserver import MCPServer
@@ -145,9 +144,7 @@ def _run(body: dict[str, Any], service: Service) -> dict[str, Any]:
     """
     request = from_dict(body)
     try:
-        if isinstance(request, QueryRequest):
-            return service.compute(request).to_dict()
-        return service.run_preset(request).to_dict()
+        return result_to_dict(service.compute(request))
     except (
         PseudoTableMismatch,
         PseudoImportError,
@@ -184,15 +181,15 @@ def create_server(
 
     @server.tool(description="List every registered Core task with stages and presets.")
     async def list_tasks() -> dict[str, Any]:
-        return {"tasks": [task.to_dict() for task in state.describe_tasks()]}
+        return {"tasks": [task.to_dict() for task in state.capabilities().tasks]}
 
     @server.tool(description="List target DFT codes with registered input writers.")
     async def list_codes() -> dict[str, Any]:
-        return {"codes": list(state.describe_codes())}
+        return {"codes": list(state.capabilities().target_codes)}
 
     @server.tool(description="List available k-mesh models known to the runtime.")
     async def list_models() -> dict[str, Any]:
-        return {"models": state.describe_models()}
+        return {"models": state.runtime.describe_models()}
 
     @server.tool(description="Run the recommend preset and return Result JSON.")
     async def recommend(

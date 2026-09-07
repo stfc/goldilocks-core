@@ -10,17 +10,25 @@ from goldilocks_core.cli.assets import install as install_assets
 from goldilocks_core.cli.assets import statuses as asset_statuses
 from goldilocks_core.cli.assets import verify as verify_assets
 from goldilocks_core.contracts import (
+    CalculationDraft,
     CalculationHints,
     CalculationIntent,
+    ComputationResult,
+    ComputeRequest,
+    DirectoryOutput,
+    GeneratedFiles,
+    KPointSelection,
     ModelSpec,
-    PresetRequest,
-    QueryRequest,
-    Result,
+    PathStructureSource,
+    PresetSelection,
+    RecordSelection,
+    StructureAnalysisRecord,
     resolve_output_types,
 )
 from goldilocks_core.examples import structures_path
 from goldilocks_core.generation import available_codes, available_tasks
-from goldilocks_core.runtime import Runtime, query_records, run_core_job
+from goldilocks_core.runtime import Runtime, compute
+from goldilocks_core.server.request import result_to_dict
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -106,10 +114,11 @@ def main() -> None:
         while True:
             try:
                 with Runtime(asset_store=store) as runtime:
-                    output = (
-                        query_records(request, runtime=runtime)
-                        if args.command == "compute"
-                        else run_core_job(request, runtime=runtime)
+                    destination = getattr(args, "out", None)
+                    output = compute(
+                        request,
+                        runtime=runtime,
+                        output=DirectoryOutput(destination) if destination else None,
                     )
                 break
             except AssetNotInstalled as error:
@@ -124,12 +133,12 @@ def main() -> None:
         raise SystemExit(2) from error
 
     if args.command == "compute":
-        print(json.dumps(output.to_dict(), indent=2, sort_keys=True))
+        print(json.dumps(result_to_dict(output), indent=2, sort_keys=True))
         return
 
     result = output
     if args.json:
-        rendered = {"request": request.to_dict(), **result.to_dict()}
+        rendered = {"request": request.to_dict(), **result_to_dict(result)}
         print(json.dumps(rendered, indent=2, sort_keys=True))
         return
 
@@ -225,7 +234,7 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _request_from_args(args: argparse.Namespace) -> PresetRequest | QueryRequest:
+def _request_from_args(args: argparse.Namespace) -> ComputeRequest:
     intent = CalculationIntent(
         code=args.code,
         task=args.task,
@@ -250,25 +259,20 @@ def _request_from_args(args: argparse.Namespace) -> PresetRequest | QueryRequest
     pseudo_root = str(Path(args.pseudo_root).expanduser()) if args.pseudo_root else None
     kmesh_model = _model_spec_from_args(args)
 
-    if args.command == "compute":
-        return QueryRequest(
-            structure=args.structure,
-            outputs=_parse_outputs(args.outputs),
+    return ComputeRequest(
+        draft=CalculationDraft(
+            structure=PathStructureSource(args.structure),
             intent=intent,
             hints=hints,
             pseudo_root=pseudo_root,
             pseudo_table=args.pseudo_table,
             kmesh_model=kmesh_model,
-        )
-    return PresetRequest(
-        structure=args.structure,
-        intent=intent,
-        hints=hints,
-        mode=args.command,
-        pseudo_root=pseudo_root,
-        pseudo_table=args.pseudo_table,
-        output_dir=getattr(args, "out", None),
-        kmesh_model=kmesh_model,
+        ),
+        selection=(
+            RecordSelection(_parse_outputs(args.outputs))
+            if args.command == "compute"
+            else PresetSelection(args.command)
+        ),
     )
 
 
@@ -348,15 +352,15 @@ def _parse_optional_bool(value: str | None) -> bool | None:
     return value == "true"
 
 
-def _print_human_summary(result: Result) -> None:
-    grid = result.k_points.grid
-    print(f"formula: {result.analysis.reduced_formula}")
-    print(f"code: {result.intent.code}")
-    print(f"task: {result.intent.task}")
+def _print_human_summary(result: ComputationResult) -> None:
+    grid = result.records[KPointSelection].grid
+    print(f"formula: {result.records[StructureAnalysisRecord].reduced_formula}")
+    print(f"code: {result.draft.intent.code}")
+    print(f"task: {result.draft.intent.task}")
     print(f"k-grid: {grid[0]} {grid[1]} {grid[2]}")
-    if result.generated_files:
+    if result.records.get(GeneratedFiles):
         print("generated files:")
-        for generated_file in result.generated_files:
+        for generated_file in result.records[GeneratedFiles]:
             print(f"  {generated_file.path}")
     if result.bundle is not None:
         print(f"bundle: {result.bundle.path}")

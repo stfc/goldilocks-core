@@ -9,13 +9,15 @@ from goldilocks_core.contracts.types import (
     JsonDict,
     KPointGrid,
     PseudoAccuracy,
+    PseudoType,
+    RelativisticTreatment,
+    SmearingType,
     VdwMethod,
 )
 from goldilocks_core.contracts.validate import (
     _validate_finite_positive,
     _validate_kpoint_grid,
     _validate_optional_boolean,
-    _validate_optional_nonempty_str,
     _validate_positive_integer,
     _validate_relativistic_mode,
     _validate_smearing,
@@ -32,7 +34,7 @@ class KmeshHints:
 
 @dataclass(frozen=True, slots=True)
 class SmearingHints:
-    smearing_type: str | None = None
+    smearing_type: SmearingType | None = None
     smearing_width_ry: float | None = None
 
 
@@ -45,8 +47,8 @@ class SpinHints:
 @dataclass(frozen=True, slots=True)
 class PseudoHints:
     accuracy: PseudoAccuracy | None = None
-    pseudo_type: str | None = None
-    relativistic_mode: str | None = None
+    pseudo_type: PseudoType | None = None
+    relativistic_mode: RelativisticTreatment | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +61,7 @@ class ConvergenceHints:
 @dataclass(frozen=True, slots=True)
 class VdwHints:
     use_vdw: bool | None = None
-    vdw_method: str | None = None
+    vdw_method: VdwMethod | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,13 +106,13 @@ class CalculationHints:
 
     k_spacing: float | None = None
     k_grid: KPointGrid | None = None
-    smearing_type: str | None = None
+    smearing_type: SmearingType | None = None
     smearing_width_ry: float | None = None
     spin_polarized: bool | None = None
     spin_orbit_coupling: bool | None = None
     pseudo_accuracy: PseudoAccuracy | None = None
-    pseudo_type: str | None = None
-    relativistic_mode: str | None = None
+    pseudo_type: PseudoType | None = None
+    relativistic_mode: RelativisticTreatment | None = None
     conv_thr: float | None = None
     mixing_beta: float | None = None
     electron_maxstep: int | None = None
@@ -163,9 +165,11 @@ class CalculationHints:
                 "CalculationHints.pseudo_accuracy must be 'efficiency', "
                 f"'precision', or None; got {self.pseudo_accuracy!r}"
             )
-        _validate_optional_nonempty_str(
-            self.pseudo_type, "CalculationHints.pseudo_type"
-        )
+        if self.pseudo_type not in {None, "NC", "USPP", "PAW"}:
+            raise ValueError(
+                "CalculationHints.pseudo_type must be 'NC', 'USPP', 'PAW', "
+                f"or None; got {self.pseudo_type!r}"
+            )
         _validate_relativistic_mode(
             self.relativistic_mode, "CalculationHints.relativistic_mode"
         )

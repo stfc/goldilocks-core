@@ -1,7 +1,7 @@
 # CLI reference
 
-The `goldilocks` command is a thin wrapper over `Service`. Preset commands
-build `PresetRequest`; `compute` builds `QueryRequest`.
+The `goldilocks` command is a thin wrapper over Core. Preset and record-query
+commands build `ComputeRequest` with `PresetSelection` or `RecordSelection`.
 
 ## Commands
 
@@ -100,15 +100,15 @@ path.
 
 | Flag | Type | Default | Maps to |
 | --- | --- | --- | --- |
-| `structure` | positional | — | `PresetRequest.structure` or `QueryRequest.structure` |
+| `structure` | positional | — | `CalculationDraft.structure` |
 | `--code` | choice | `quantum_espresso` | `CalculationIntent.code` |
 | `--task` | choice | `scf_single_point` | `CalculationIntent.task` |
 | `--functional` | str | `PBEsol` | `CalculationIntent.functional` (canonicalized; e.g. `PBESOL` → `PBEsol`) |
 | `--pseudo-accuracy` | `efficiency` or `precision` | `efficiency` | `CalculationIntent.pseudo_accuracy` |
 | `--pseudo-type` | str | None | `CalculationHints.pseudo_type` |
 | `--relativistic-mode` | str | None | `CalculationHints.relativistic_mode` |
-| `--pseudo-root` | path | None | `PresetRequest.pseudo_root` or `QueryRequest.pseudo_root` |
-| `--pseudo-table` | table ID | None | Exact installed `PresetRequest.pseudo_table` or `QueryRequest.pseudo_table` |
+| `--pseudo-root` | path | None | `CalculationDraft.pseudo_root` |
+| `--pseudo-table` | table ID | None | Exact installed `CalculationDraft.pseudo_table` |
 | `--fetch-missing` | flag | False | Install each exact missing dependency reported by Core, then retry |
 | `--model` | path | None | request `kmesh_model` (local k-index model) |
 | `--model-name` | str | `cli-kmesh-model` with `--model` | Model name recorded in Kmesh provenance; requires `--model` |
@@ -153,8 +153,8 @@ and is rejected by the shared `CalculationHints` contract before job execution.
 
 ### JSON (`--json`)
 
-`recommend` and `generate` print
-`{"request": request.to_dict(), **result.to_dict()}` with stable keys.
+`recommend` and `generate` print the typed request plus the existing preset
+response fields: intent, scientific Records, generated files, warnings and bundle.
 `compute` always prints the selected `Records` JSON and does not use a
 request envelope.
 
@@ -168,7 +168,7 @@ code: quantum_espresso
 task: scf_single_point
 k-grid: 8 8 8
 generated files:
-  inputs/qe.in
+  qe.in
 bundle: run/
 warnings:
   - Electronic character is unknown from structure facts alone...

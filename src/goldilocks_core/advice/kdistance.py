@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from threading import Lock
+
 from pymatgen.core import Structure
 
 from goldilocks_core.assets import AssetStore
@@ -57,14 +59,24 @@ class QrfBackend:
         self._asset_store = asset_store
         self._resources: QrfResources | None = None
         self._closed = False
+        self._load_lock = Lock()
 
     def __call__(self, structure: Structure) -> KPointSelection:
-        if self._closed:
-            raise RuntimeError("QrfBackend is closed.")
-        if self._resources is None:
-            self._resources = self._load_resources()
+        with self._load_lock:
+            if self._closed:
+                raise RuntimeError("QrfBackend is closed.")
+            if self._resources is None:
+                if self._config is None:
+                    self._config = load_default_qrf_config(self._registry_path)
+                self._resources = load_qrf_resources(
+                    self._config,
+                    metallicity_checkpoint=self._metallicity_checkpoint,
+                    metallicity_atom_init=self._metallicity_atom_init,
+                    asset_store=self._asset_store,
+                )
+            resources = self._resources
         prediction = predict_kdistance_with_resources(
-            structure, self._config, self._resources
+            structure, self._config, resources
         )
         return kdistance_to_selection(
             structure,
@@ -76,18 +88,10 @@ class QrfBackend:
         )
 
     def reset(self) -> None:
-        self._resources = None
+        with self._load_lock:
+            self._resources = None
 
     def close(self) -> None:
-        self._resources = None
-        self._closed = True
-
-    def _load_resources(self) -> QrfResources:
-        if self._config is None:
-            self._config = load_default_qrf_config(self._registry_path)
-        return load_qrf_resources(
-            self._config,
-            metallicity_checkpoint=self._metallicity_checkpoint,
-            metallicity_atom_init=self._metallicity_atom_init,
-            asset_store=self._asset_store,
-        )
+        with self._load_lock:
+            self._resources = None
+            self._closed = True

@@ -76,6 +76,7 @@ def _select_for_element(
             filename=None,
             filepath=None,
             functional=None,
+            relativistic=None,
             ecutwfc_ry=None,
             ecutrho_ry=None,
             provenance=Provenance(
@@ -96,6 +97,7 @@ def _select_for_element(
         filename=selected.filename,
         filepath=selected.filepath,
         functional=selected.functional,
+        relativistic=selected.relativistic,
         ecutwfc_ry=ecutwfc,
         ecutrho_ry=ecutrho,
         provenance=Provenance(
@@ -146,6 +148,13 @@ def _selection_warnings(
     requirements: PseudopotentialRequirements,
 ) -> tuple[str, ...]:
     warnings = list(selected.warnings)
+    if selected.relativistic != requirements.relativistic:
+        provider = "SSSP" if selected.provider == "sssp" else "PseudoDojo"
+        warnings.append(
+            f"Selected {provider} pseudopotential for {element} declares "
+            f"{selected.relativistic} treatment within a "
+            f"{requirements.relativistic} table; verify this compatibility."
+        )
     if selected.accuracy is None:
         warnings.append(
             f"Selected custom pseudopotential for {element} has no registered "

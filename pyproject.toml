@@ -12,6 +12,7 @@ license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "dscribe>=2.1",
+    "goldilocks-ml>=0.1.0",
     "joblib==1.5.3",
     "matminer>=0.10.1",
     "numpy>=2.4.4",

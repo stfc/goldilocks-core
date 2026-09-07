@@ -9,10 +9,10 @@ from goldilocks_core.contracts import KPointSelection, Provenance
 
 def test_build_parser_parses_required_arguments() -> None:
     parser = build_parser()
-    args = parser.parse_args(["example.cif", "--model", "model.joblib"])
+    args = parser.parse_args(["example.cif", "--model", "model-dir"])
 
     assert args.structure == "example.cif"
-    assert args.model == "model.joblib"
+    assert args.model == "model-dir"
 
 
 def test_main_loads_structure_and_prints_recommended_mesh(
@@ -50,7 +50,7 @@ def test_main_loads_structure_and_prints_recommended_mesh(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["goldilocks-kmesh", "Si.cif", "--model", "model.joblib"],
+        ["goldilocks-kmesh", "Si.cif", "--model", "model-dir"],
     )
     monkeypatch.setattr(cli_kmesh, "load_structure", fake_load_structure)
     monkeypatch.setattr(cli_kmesh, "advise_kpoints", fake_advise_kpoints)
@@ -59,5 +59,5 @@ def test_main_loads_structure_and_prints_recommended_mesh(
 
     assert calls["structure_path"] == "Si.cif"
     assert calls["loaded_structure"] is structure
-    assert calls["model_location"] == "model.joblib"
+    assert calls["model_location"] == "model-dir"
     assert capsys.readouterr().out == "recommended mesh: (3, 3, 3)\n"

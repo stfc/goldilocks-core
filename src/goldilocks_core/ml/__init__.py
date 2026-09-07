@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from goldilocks_core.ml.kindex import predict_kindex
 from goldilocks_core.ml.model_registry import (
     QrfFeatureSettings,
     QrfKpointsConfig,
@@ -18,5 +17,4 @@ __all__ = [
     "load_model",
     "model_asset_specs",
     "predict_kdistance",
-    "predict_kindex",
 ]

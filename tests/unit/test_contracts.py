@@ -1,13 +1,16 @@
 import numpy as np
 import pytest
+from pymatgen.core import Structure
 
 from goldilocks_core.contracts import (
+    PREDICTION_RESOLVERS,
     BundleRecord,
     CalculationHints,
     CalculationIntent,
     ConvergenceAdvice,
     KPointSelection,
     MagnetismAdvice,
+    ModelPrediction,
     ParameterAdvice,
     PresetRequest,
     Provenance,
@@ -19,6 +22,7 @@ from goldilocks_core.contracts import (
     SpinOrbitAdvice,
     StructureAnalysisRecord,
     StructureFeatureVector,
+    StructureModel,
     VdwAdvice,
 )
 
@@ -196,3 +200,74 @@ def test_preset_request_validates_mode() -> None:
 
 def test_calculation_intent_defaults_to_pbesol() -> None:
     assert CalculationIntent().functional == "PBEsol"
+
+
+def _make_prediction(parameter: str = "k_points") -> ModelPrediction:
+    return ModelPrediction(
+        parameter=parameter,
+        quantity="k_index",
+        value=2.2,
+        target_contract="k_points.k_index.qrf.goldilocks_kdist_ultra.v1",
+        model_id="goldilocks_kdist_ultra.v1",
+    )
+
+
+def test_model_prediction_serializes_to_json_safe_dict() -> None:
+    data = _make_prediction().to_dict()
+
+    assert data["parameter"] == "k_points"
+    assert data["value"] == 2.2
+    assert data["warnings"] == []
+
+
+def test_model_prediction_defaults_have_no_details_or_warnings() -> None:
+    prediction = _make_prediction()
+
+    assert prediction.details is None
+    assert prediction.warnings == ()
+
+
+class _DummyStructureModel:
+    def predict(self, structure: Structure) -> ModelPrediction:
+        return _make_prediction()
+
+
+def test_structure_model_protocol_matches_structurally() -> None:
+    model: StructureModel = _DummyStructureModel()
+
+    assert isinstance(model, StructureModel)
+
+    lattice_structure = Structure(
+        lattice=[[3.5, 0, 0], [0, 3.5, 0], [0, 0, 3.5]],
+        species=["Si"],
+        coords=[[0.0, 0.0, 0.0]],
+    )
+    prediction = model.predict(lattice_structure)
+
+    assert prediction.parameter == "k_points"
+
+
+def test_structure_model_protocol_rejects_objects_without_predict() -> None:
+    assert not isinstance(object(), StructureModel)
+
+
+def test_prediction_resolvers_table_routes_by_parameter() -> None:
+    def resolver(structure: Structure, prediction: ModelPrediction) -> str:
+        return f"resolved {prediction.parameter} for {structure.formula}"
+
+    PREDICTION_RESOLVERS["_test_only_parameter"] = resolver
+    try:
+        lattice_structure = Structure(
+            lattice=[[3.5, 0, 0], [0, 3.5, 0], [0, 0, 3.5]],
+            species=["Si"],
+            coords=[[0.0, 0.0, 0.0]],
+        )
+        prediction = _make_prediction(parameter="_test_only_parameter")
+
+        result = PREDICTION_RESOLVERS[prediction.parameter](
+            lattice_structure, prediction
+        )
+
+        assert result == "resolved _test_only_parameter for Si1"
+    finally:
+        del PREDICTION_RESOLVERS["_test_only_parameter"]

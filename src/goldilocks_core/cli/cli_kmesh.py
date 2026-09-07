@@ -19,7 +19,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model",
         required=True,
-        help="The model to use for recommendation.",
+        help=(
+            "Directory holding a goldilocks-ml k-index model record "
+            "(model.json beside its estimator)."
+        ),
     )
     return parser
 

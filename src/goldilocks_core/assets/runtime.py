@@ -5,15 +5,22 @@ from concurrent.futures import ThreadPoolExecutor
 
 from goldilocks_core.assets import AssetInstallation, AssetStore, InstalledAsset
 from goldilocks_core.assets.profiles import profile
+from goldilocks_core.contracts import PathLike
 from goldilocks_core.ml.model_registry import model_asset_specs
 from goldilocks_core.pseudo.install import table_installations
 from goldilocks_core.pseudo.registry import load_tables
 
+WORKBENCH_PROFILE = "workbench"
 
-def catalogue() -> dict[str, AssetInstallation]:
+
+def catalogue(
+    *,
+    model_registry_path: PathLike | None = None,
+    pseudo_registry_path: PathLike | None = None,
+) -> dict[str, AssetInstallation]:
     installations = (
-        *(AssetInstallation(spec) for spec in model_asset_specs()),
-        *table_installations(),
+        *(AssetInstallation(spec) for spec in model_asset_specs(model_registry_path)),
+        *table_installations(pseudo_registry_path),
     )
     registrations: dict[str, AssetInstallation] = {}
     for installation in installations:
@@ -30,6 +37,8 @@ def references(
     entries = dict(entries or catalogue())
     if name in entries:
         return (entries[name],)
+    if name == WORKBENCH_PROFILE:
+        return tuple(entries[asset_id] for asset_id in sorted(entries))
     table_reference = _table_reference(name, entries)
     if table_reference is not None:
         return (table_reference,)

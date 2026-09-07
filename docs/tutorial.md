@@ -107,8 +107,10 @@ replaces separate task, code, and model discovery operations.
 ## CLI
 
 ```bash
-uv run goldilocks recommend structure.cif --k-grid 4 4 4 --json
-uv run goldilocks generate structure.cif --pseudo-root pseudos --k-grid 4 4 4 --out run --json
+uv run goldilocks capabilities --json
+uv run goldilocks inspect structure.cif --json
+uv run goldilocks compute structure.cif --preset recommend --k-grid 4 4 4 --no-out --json
+uv run goldilocks compute structure.cif --preset generate --pseudo-root pseudos --k-grid 4 4 4 --out run --json
 ```
 
 ## HTTP
@@ -117,25 +119,31 @@ HTTP Structure Sources are explicit inline content:
 
 ```json
 {
-  "structure": {
-    "content": "data_Si ...",
-    "format": "cif"
+  "draft": {
+    "structure": {
+      "kind": "inline",
+      "name": "structure.cif",
+      "content": "data_Si ...",
+      "format": "cif"
+    },
+    "hints": {"k_grid": [4, 4, 4]},
+    "pseudo_table": "pseudodojo-pbesol-efficiency-sr"
   },
-  "hints": {"k_grid": [4, 4, 4]}
+  "selection": {"preset": "generate"}
 }
 ```
 
-Send this body to `POST /generate`. The JSON response contains the selected
-scientific Records and generated input contents. Use `POST /recommend` for
-recommendations, or add `"outputs": ["analysis"]` and call `POST /compute`
-for a Record query. The server stores no output.
+Send this body to `POST /compute`. The multipart response contains canonical
+Result JSON, including generated input contents. The server stores no output.
+Use `GET /capabilities` and `POST /inspect` for the other public scientific
+operations.
 
 ## MCP
 
-Local stdio MCP exposes `recommend`, `generate`, `compute`, `list_tasks`,
-`list_codes`, and `list_models`. Scientific tools accept the same flat structure,
-intent, and hints as HTTP; `compute` also requires an `outputs` list.
-Results remain in memory without an output directory.
+Local stdio MCP exposes `capabilities`, `inspect_structure`, and `compute`.
+Compute accepts the same inline draft, optional registered table ID, and
+selection shape as HTTP. Compute returns the Result in memory without writing
+an output directory.
 
 MCP does not accept structure paths, pseudopotential roots, model locations, or
 publication paths. Use the CLI or Python interface for trusted local filesystem

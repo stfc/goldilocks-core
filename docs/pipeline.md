@@ -110,7 +110,7 @@ compatible registered table. Resolution happens only when selected Records
 depend on pseudopotentials.
 
 Transport adapters expose only source variants appropriate to their seam.
-HTTP and MCP accept inline structures and resolve pseudopotentials on the server.
-They do not accept structure paths, pseudopotential roots or metadata payloads,
-table overrides, model locations, or output paths. Python and CLI retain trusted
-local sources and output targets.
+HTTP and MCP accept inline structures and stable registered table IDs. They do
+not accept structure paths, pseudopotential roots or metadata payloads, model
+locations, or publication paths. Python and CLI retain trusted local sources
+and output targets.

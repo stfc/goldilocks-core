@@ -74,14 +74,15 @@ uv run goldilocks assets install default
 uv run goldilocks assets verify default
 uv run goldilocks assets install pseudodojo-pbesol-efficiency-sr
 ```
-Query Records or run a recommendation or generation command. Without an explicit
+Inspect a structure, query Records, or run a named Preset. Without an explicit
 pseudopotential source, Core chooses a compatible registered table. Use
 `--pseudo-table` or `--pseudo-root` to override that choice:
 
 ```bash
-uv run goldilocks recommend structure.cif --k-grid 4 4 4 --json
-uv run goldilocks compute structure.cif --outputs analysis,k_points --k-grid 4 4 4
-uv run goldilocks generate structure.cif --pseudo-table sssp-pbesol-efficiency-sr --out run --json
+uv run goldilocks capabilities --json
+uv run goldilocks inspect structure.cif --json
+uv run goldilocks compute structure.cif --outputs analysis,k_points --no-out --json
+uv run goldilocks compute structure.cif --preset generate --pseudo-table sssp-pbesol-efficiency-sr --out run --json
 ```
 
 The default asset store is `$XDG_DATA_HOME/goldilocks/assets`, or
@@ -92,7 +93,7 @@ The default asset store is `$XDG_DATA_HOME/goldilocks/assets`, or
 Example structures are installed with the package:
 
 ```bash
-uv run goldilocks compute "$(uv run goldilocks examples path)/Si.cif" --outputs analysis
+uv run goldilocks inspect "$(uv run goldilocks examples path)/Si.cif" --json
 ```
 
 HTTP and MCP are optional:
@@ -103,14 +104,28 @@ uv run goldilocks serve http --host 127.0.0.1 --port 8000
 uv run goldilocks serve mcp
 ```
 
-HTTP publishes `/recommend`, `/generate`, `/compute`, `/tasks`, `/codes`,
-`/models`, and `/health`. MCP exposes `recommend`, `generate`, `compute`,
-`list_tasks`, `list_codes`, and `list_models` as local stdio tools.
+HTTP publishes `/capabilities`, `/inspect`, `/compute`, `/health`, and `/ready`.
+Compute returns one multipart response containing canonical Result JSON.
+It never creates a server output directory. MCP publishes `capabilities`,
+`inspect_structure`, and `compute` as local stdio tools.
 
-Both transports accept flat requests containing inline structure content,
-intent, and hints. They resolve pseudopotentials and models on the server,
-return JSON, and never create output directories. Python and CLI retain
-trusted local filesystem controls.
+HTTP and MCP accept inline structures and may select one registered
+pseudopotential table by stable ID. They do not accept structure paths,
+pseudopotential roots or metadata payloads, model locations, or publication
+paths. Python and CLI retain trusted local path and publication controls.
+
+## Static application serving
+
+The HTTP process can serve a built static application after the Core routes.
+Core remains authoritative for structure data, scientific defaults, selection,
+provenance, and generated inputs.
+
+Pass `--static-root DIRECTORY` or set
+`GOLDILOCKS_WORKBENCH_STATIC_ROOT` to a directory containing `index.html`.
+Static files are mounted after Core routes, so they cannot shadow the HTTP
+contract. `/health` reports process liveness; `/ready` verifies every registered
+runtime asset required by Workbench. The server stores no projects, sessions,
+Results, archives, or run history.
 
 ## Generated-input bundles
 

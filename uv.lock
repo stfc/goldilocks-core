@@ -3,10 +3,10 @@ revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
-    "python_full_version == '3.13.*' and sys_platform == 'win32'",
-    "python_full_version < '3.13' and sys_platform == 'win32'",
     "python_full_version >= '3.14' and sys_platform != 'win32'",
+    "python_full_version == '3.13.*' and sys_platform == 'win32'",
     "python_full_version == '3.13.*' and sys_platform != 'win32'",
+    "python_full_version < '3.13' and sys_platform == 'win32'",
     "python_full_version < '3.13' and sys_platform != 'win32'",
 ]
 
@@ -905,10 +905,12 @@ dependencies = [
 [package.optional-dependencies]
 http = [
     { name = "fastapi" },
+    { name = "pydantic" },
     { name = "uvicorn" },
 ]
 mcp = [
     { name = "mcp" },
+    { name = "pydantic" },
 ]
 
 [package.dev-dependencies]
@@ -929,6 +931,8 @@ requires-dist = [
     { name = "mcp", marker = "extra == 'mcp'" },
     { name = "numpy", specifier = ">=2.4.4" },
     { name = "pandas", specifier = ">=2.0" },
+    { name = "pydantic", marker = "extra == 'http'", specifier = ">=2.12" },
+    { name = "pydantic", marker = "extra == 'mcp'", specifier = ">=2.12" },
     { name = "pymatgen", specifier = ">=2026.3.23" },
     { name = "requests", specifier = ">=2.32" },
     { name = "scikit-learn", specifier = "==1.7.2" },

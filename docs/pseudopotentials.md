@@ -28,7 +28,7 @@ uv run goldilocks assets verify default
 You can now run a PBEsol calculation:
 
 ```bash
-uv run goldilocks recommend structure.cif
+uv run goldilocks compute structure.cif --preset recommend --no-out
 ```
 
 ## Choose a different table
@@ -68,7 +68,7 @@ Install the table, then select the same ID:
 
 ```bash
 uv run goldilocks assets install pseudodojo-pbesol-efficiency-fr
-uv run goldilocks recommend structure.cif --spin-orbit-coupling true --pseudo-table pseudodojo-pbesol-efficiency-fr
+uv run goldilocks compute structure.cif --preset recommend --spin-orbit-coupling true --pseudo-table pseudodojo-pbesol-efficiency-fr --no-out
 ```
 
 Python requests carry the ID; Core verifies and loads its installed manifest
@@ -156,7 +156,7 @@ to replace a corrupt table transactionally.
 Use `--pseudo-root` to read a directory that you manage:
 
 ```bash
-uv run goldilocks generate structure.cif --pseudo-root pseudos --k-grid 4 4 4 --out run
+uv run goldilocks compute structure.cif --preset generate --pseudo-root pseudos --k-grid 4 4 4 --out run
 ```
 
 Goldilocks reads `.upf` and `.UPF` files recursively. It does not copy or
@@ -179,8 +179,12 @@ UPF files, or follow the one table-level filename above.
 `pseudo_metadata`, `pseudo_root`, and `pseudo_table` are mutually exclusive.
 Explicit metadata is useful for in-memory callers; an explicit root remains
 operator-managed; an exact table ID resolves through the verified asset store.
-HTTP and MCP use server-managed pseudopotentials and do not accept source
-overrides. Build explicit Python metadata with `parse_upf_metadata`.
+HTTP and MCP expose only `pseudo_table`: callers may choose a registered
+scientific set by stable ID without transmitting metadata, roots, or files.
+Build explicit metadata with `parse_upf_metadata`, which binds the file's SHA-256
+and size from one binary read. Generation rereads the file once and requires that
+binding to match. `source_identifier` must be a provider-relative identity or URL,
+not an absolute or home-relative host path.
 
 ## Find installed files
 

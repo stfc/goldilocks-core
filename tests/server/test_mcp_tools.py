@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 
 import pytest
 
@@ -11,8 +10,6 @@ create_server = pytest.importorskip("goldilocks_core.server.mcp").create_server
 
 
 def _call(server, name: str, arguments: dict) -> dict:
-    """Call an MCP tool through the in-process harness."""
-
     async def call() -> dict:
         result = await server.call_tool(name, arguments)
         assert not result.is_error
@@ -22,165 +19,171 @@ def _call(server, name: str, arguments: dict) -> dict:
     return asyncio.run(call())
 
 
-def test_mcp_lists_six_tools_with_constrained_outputs(test_service) -> None:
-    """Publish the three transport tools plus three discovery tools."""
-    server = create_server(test_service)
-    tools = asyncio.run(server.list_tools())
+def test_mcp_exposes_exactly_three_scientific_tools(test_service) -> None:
+    tools = asyncio.run(create_server(test_service).list_tools())
 
     assert {tool.name for tool in tools} == {
-        "recommend",
-        "generate",
+        "capabilities",
+        "inspect_structure",
         "compute",
-        "list_tasks",
-        "list_codes",
-        "list_models",
     }
+    assert all(tool.input_schema["additionalProperties"] is False for tool in tools)
     compute = next(tool for tool in tools if tool.name == "compute")
-    output_names = compute.input_schema["properties"]["outputs"]["items"]["enum"]
-    assert "analysis" in output_names
-    assert "advice" in output_names
-    assert compute.input_schema["$defs"]["_Hints"]["additionalProperties"] is False
-    assert compute.input_schema["additionalProperties"] is False
+    draft = compute.input_schema["$defs"]["CalculationDraft"]
+    assert draft["additionalProperties"] is False
+    assert set(draft["properties"]) == {
+        "structure",
+        "intent",
+        "hints",
+        "pseudo_table",
+    }
+    assert "DirectoryOutput" not in compute.input_schema["$defs"]
+    assert "ArchiveOutput" not in compute.input_schema["$defs"]
+    assert compute.input_schema["$defs"]["RecordSelection"]["properties"]["records"][
+        "items"
+    ] == {"type": "string"}
 
 
-@pytest.mark.parametrize(
-    "removed", ["kmesh_model", "pseudo_metadata", "pseudo_root", "output_dir"]
-)
-def test_mcp_tool_schemas_exclude_deployment_configuration(
-    test_service, removed: str
-) -> None:
-    """Tool schemas never expose deployment configuration to clients."""
-    server = create_server(test_service)
-    tools = asyncio.run(server.list_tools())
-
-    for tool in tools:
-        assert removed not in tool.input_schema.get("properties", {})
-
-
-def test_mcp_recommend_returns_core_result(test_service, request_body) -> None:
-    """Return CoreResult JSON from the recommend tool."""
-    server = create_server(test_service)
-
-    data = _call(server, "recommend", request_body)
-
-    assert data["analysis"]["reduced_formula"] == "Si"
-    assert data["k_points"]["grid"] == [3, 3, 3]
-    assert data["generated_files"] == []
-
-
-def test_mcp_rejects_unknown_root_arguments(test_service, request_body) -> None:
-    """Reject fields outside the published root tool schema."""
-    server = create_server(test_service)
-
-    with pytest.raises(ToolError, match="Unknown recommend arguments: surprise"):
-        asyncio.run(
-            server.call_tool(
-                "recommend",
-                {**request_body, "surprise": True},
-            )
-        )
-
-
-def test_mcp_rejects_type_coercion_in_hints(test_service, request_body) -> None:
-    """Reject string-to-bool and string-to-int coercion instead of converting."""
-    server = create_server(test_service)
-
-    with pytest.raises(ToolError):
-        asyncio.run(
-            server.call_tool(
-                "recommend",
-                {**request_body, "hints": {"spin_polarized": "yes"}},
-            )
-        )
-    with pytest.raises(ToolError):
-        asyncio.run(
-            server.call_tool(
-                "recommend",
-                {**request_body, "hints": {"k_grid": ["3", "3", "3"]}},
-            )
-        )
-
-
-class _SlowPresetService:
-    """Delay a real computation long enough to outlast a discovery request."""
-
-    def __init__(self, service, delay: float) -> None:
-        self._service = service
-        self._delay = delay
-
-    def compute(self, request):
-        time.sleep(self._delay)
-        return self._service.compute(request)
-
-
-def test_mcp_list_tools_stays_responsive_during_slow_compute(
+def test_mcp_capabilities_and_inspection_return_core_contracts(
     test_service,
+    sample_structure_path: str,
     sample_structure_text: str,
 ) -> None:
-    """Answer discovery while a recommendation runs in a worker thread."""
-    server = create_server(_SlowPresetService(test_service, delay=0.8))
-    body = {"structure": sample_structure_text, "hints": {"k_grid": [3, 3, 3]}}
-
-    async def scenario() -> float:
-        pending = asyncio.create_task(server.call_tool("recommend", body))
-        await asyncio.sleep(0.1)
-        started = time.perf_counter()
-        await server.list_tools()
-        elapsed = time.perf_counter() - started
-        await pending
-        return elapsed
-
-    elapsed = asyncio.run(scenario())
-    assert elapsed < 0.5
-
-
-def test_mcp_generate_returns_core_result_and_files(test_service, request_body) -> None:
-    """Return generated files; output locations are server-managed."""
     server = create_server(test_service)
 
-    data = _call(server, "generate", request_body)
-
-    assert data["generated_files"][0]["path"] == "qe.in"
-    assert data["bundle"] is None
-
-
-def test_mcp_rejects_deployment_configuration_arguments(
-    test_service, request_body
-) -> None:
-    """Reject client-supplied model and filesystem configuration."""
-    server = create_server(test_service)
-
-    with pytest.raises(ToolError, match="Unknown recommend arguments: kmesh_model"):
-        _call(
-            server,
-            "recommend",
-            {
-                **request_body,
-                "kmesh_model": {
-                    "name": "m",
-                    "version": "1",
-                    "model_type": "random_forest",
-                    "target": "k_index",
-                    "feature_set": "cslr",
-                    "source": "local",
-                    "location": "/tmp/model.pkl",
-                },
-            },
-        )
-
-
-def test_mcp_compute_returns_requested_records(test_service, request_body) -> None:
-    """Return only records named by the compute outputs argument."""
-    server = create_server(test_service)
-
-    data = _call(
+    capabilities = _call(server, "capabilities", {})
+    inline = _call(
         server,
-        "compute",
+        "inspect_structure",
         {
-            **request_body,
-            "outputs": ["analysis", "advice"],
+            "source": {
+                "name": "uploaded.cif",
+                "content": sample_structure_text,
+                "format": "cif",
+            }
         },
     )
 
-    assert set(data) == {"analysis", "advice"}
-    assert data["analysis"]["reduced_formula"] == "Si"
+    assert capabilities["tasks"][0]["id"] == "scf_single_point"
+    assert inline["source"]["name"] == "uploaded.cif"
+    with pytest.raises(ToolError, match="Transports do not accept file paths"):
+        asyncio.run(
+            server.call_tool("inspect_structure", {"source": sample_structure_path})
+        )
+
+
+def test_mcp_compute_memory_returns_canonical_result(
+    test_service,
+    sample_structure_text: str,
+) -> None:
+    result = _call(
+        create_server(test_service),
+        "compute",
+        {
+            "draft": {
+                "structure": {
+                    "name": "Si.cif",
+                    "content": sample_structure_text,
+                    "format": "cif",
+                },
+                "hints": {"k_grid": [3, 3, 3]},
+            },
+            "selection": {"records": ["k_points"]},
+        },
+    )
+
+    assert result["schema_version"] == 1
+    assert result["selection"] == {"records": ["k_points"]}
+    assert result["records"]["k_points"]["grid"] == [3, 3, 3]
+    assert result["bundle"] is None
+
+
+def test_mcp_selects_custom_records_through_core_registry(
+    custom_record_service,
+    sample_structure_text: str,
+) -> None:
+    result = _call(
+        create_server(custom_record_service),
+        "compute",
+        {
+            "draft": {
+                "structure": {
+                    "name": "Si.cif",
+                    "content": sample_structure_text,
+                    "format": "cif",
+                },
+                "intent": {"task": "custom_task"},
+            },
+            "selection": {"records": ["custom_summary"]},
+        },
+    )
+
+    assert result["selection"] == {"records": ["custom_summary"]}
+    assert result["records"] == {"custom_summary": {"value": "custom result"}}
+
+
+@pytest.mark.parametrize("kind", ["directory", "archive"])
+def test_mcp_rejects_explicit_local_output_paths(
+    test_service,
+    sample_structure_text: str,
+    tmp_path,
+    kind: str,
+) -> None:
+    destination = tmp_path / ("ready.zip" if kind == "archive" else "ready")
+    with pytest.raises(ToolError):
+        asyncio.run(
+            create_server(test_service).call_tool(
+                "compute",
+                {
+                    "draft": {
+                        "structure": {
+                            "name": "Si.cif",
+                            "content": sample_structure_text,
+                            "format": "cif",
+                        }
+                    },
+                    "selection": {"records": ["analysis"]},
+                    "output": {"kind": kind, "path": str(destination)},
+                },
+            )
+        )
+    assert not destination.exists()
+
+
+def test_mcp_rejects_unknown_and_deployment_configuration(
+    test_service, sample_structure_text: str
+) -> None:
+    server = create_server(test_service)
+    inline = {
+        "name": "Si.cif",
+        "content": sample_structure_text,
+        "format": "cif",
+    }
+
+    with pytest.raises(ToolError, match="Unknown compute arguments: unexpected"):
+        asyncio.run(server.call_tool("compute", {"unexpected": True}))
+    with pytest.raises(ToolError, match="Extra inputs are not permitted"):
+        asyncio.run(
+            server.call_tool(
+                "compute",
+                {
+                    "draft": {"structure": inline},
+                    "selection": {"preset": "recommend", "records": ["analysis"]},
+                },
+            )
+        )
+    for field, value in (
+        ("pseudo_root", "/server/pseudos"),
+        ("pseudo_metadata", []),
+        ("kmesh_model", {"location": "/server/model.pkl"}),
+    ):
+        with pytest.raises(ToolError, match="Extra inputs are not permitted"):
+            asyncio.run(
+                server.call_tool(
+                    "compute",
+                    {
+                        "draft": {"structure": inline, field: value},
+                        "selection": {"records": ["analysis"]},
+                    },
+                )
+            )

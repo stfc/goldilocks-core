@@ -6,9 +6,9 @@ import sys
 from pathlib import Path
 
 from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled, AssetStore
-from goldilocks_core.cli.assets import install as install_assets
-from goldilocks_core.cli.assets import statuses as asset_statuses
-from goldilocks_core.cli.assets import verify as verify_assets
+from goldilocks_core.assets.runtime import install as install_assets
+from goldilocks_core.assets.runtime import statuses as asset_statuses
+from goldilocks_core.assets.runtime import verify as verify_assets
 from goldilocks_core.contracts import (
     CalculationDraft,
     CalculationHints,
@@ -19,16 +19,17 @@ from goldilocks_core.contracts import (
     GeneratedFiles,
     KPointSelection,
     ModelSpec,
+    ParameterAdvice,
     PathStructureSource,
     PresetSelection,
     RecordSelection,
-    StructureAnalysisRecord,
+    SelectionRecord,
     resolve_output_types,
 )
 from goldilocks_core.examples import structures_path
 from goldilocks_core.generation import available_codes, available_tasks
-from goldilocks_core.runtime import Runtime, compute
-from goldilocks_core.server.request import result_to_dict
+from goldilocks_core.io.structures import StructureInputError
+from goldilocks_core.runtime import Runtime, Service, compute
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -38,21 +39,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    for command in ("recommend", "generate"):
-        subparser = subparsers.add_parser(command)
-        _add_common_arguments(subparser)
-        if command == "generate":
-            subparser.add_argument(
-                "--out",
-                help="Output directory for a portable Core bundle.",
-            )
+    capabilities = subparsers.add_parser(
+        "capabilities", help="Describe available Core tasks, presets, and assets."
+    )
+    capabilities.add_argument("--json", action="store_true", help="Print JSON output.")
 
-    compute = subparsers.add_parser("compute")
+    inspect = subparsers.add_parser("inspect", help="Inspect a structure source.")
+    inspect.add_argument("structure", help="Path to the input structure file.")
+    inspect.add_argument("--json", action="store_true", help="Print JSON output.")
+
+    compute = subparsers.add_parser("compute", help="Run one Core computation.")
     _add_common_arguments(compute)
-    compute.add_argument(
-        "--outputs",
-        required=True,
-        help="Comma-separated record type ids to compute.",
+    selection = compute.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--preset", help="Named computation preset id.")
+    selection.add_argument(
+        "--outputs", help="Comma-separated record type ids to compute."
+    )
+    output = compute.add_mutually_exclusive_group()
+    output.add_argument("--out", help="Write generated inputs and their manifest.")
+    output.add_argument(
+        "--no-out", action="store_true", help="Return memory-only structured output."
     )
 
     serve = subparsers.add_parser(
@@ -63,6 +69,14 @@ def build_parser() -> argparse.ArgumentParser:
     http = transports.add_parser("http", help="Run the HTTP transport.")
     http.add_argument("--host", default="127.0.0.1")
     http.add_argument("--port", type=int, default=8000)
+    http.add_argument(
+        "--static-root",
+        type=Path,
+        help=(
+            "Directory containing the built Workbench. "
+            "Defaults to GOLDILOCKS_WORKBENCH_STATIC_ROOT."
+        ),
+    )
     transports.add_parser("mcp", help="Run the MCP stdio transport.")
 
     examples = subparsers.add_parser(
@@ -96,6 +110,34 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
+    if args.command == "capabilities":
+        with Service() as service:
+            capabilities = service.capabilities()
+        if args.json:
+            print(json.dumps(capabilities.to_dict(), indent=2, sort_keys=True))
+        else:
+            print(f"Goldilocks Core {capabilities.core_version}")
+            for task in capabilities.tasks:
+                presets = ", ".join(preset.id for preset in task.presets)
+                print(f"{task.id}: {presets}")
+        return
+    if args.command == "inspect":
+        try:
+            with Service() as service:
+                inspection = service.inspect_structure(
+                    PathStructureSource(args.structure)
+                )
+        except (StructureInputError, ValueError) as error:
+            parser.print_usage(sys.stderr)
+            print(f"{parser.prog}: error: {error}", file=sys.stderr)
+            raise SystemExit(2) from error
+        if args.json:
+            print(json.dumps(inspection.to_dict(), indent=2, sort_keys=True))
+        else:
+            print(f"structure: {inspection.source.name}")
+            print(f"formula: {inspection.structure.reduced_formula}")
+            print(f"sites: {inspection.structure.site_count}")
+        return
     if args.command == "examples":
         print(structures_path())
         return
@@ -111,15 +153,11 @@ def main() -> None:
     try:
         _validate_backend_options(args)
         request = _request_from_args(args)
+        target = _output_from_args(args)
         while True:
             try:
                 with Runtime(asset_store=store) as runtime:
-                    destination = getattr(args, "out", None)
-                    output = compute(
-                        request,
-                        runtime=runtime,
-                        output=DirectoryOutput(destination) if destination else None,
-                    )
+                    output = compute(request, runtime=runtime, output=target)
                 break
             except AssetNotInstalled as error:
                 key = (error.reference.id, error.reference.version)
@@ -127,22 +165,22 @@ def main() -> None:
                     raise
                 attempted.add(key)
                 install_assets(error.reference.id, store=store)
-    except (AssetCorrupt, AssetNotInstalled, KeyError, ValueError) as error:
+    except (
+        AssetCorrupt,
+        AssetNotInstalled,
+        FileExistsError,
+        KeyError,
+        ValueError,
+    ) as error:
         parser.print_usage(sys.stderr)
         print(f"{parser.prog}: error: {error}", file=sys.stderr)
         raise SystemExit(2) from error
 
-    if args.command == "compute":
-        print(json.dumps(result_to_dict(output), indent=2, sort_keys=True))
-        return
-
-    result = output
     if args.json:
-        rendered = {"request": request.to_dict(), **result_to_dict(result)}
-        print(json.dumps(rendered, indent=2, sort_keys=True))
+        print(json.dumps(output.to_dict(), indent=2, sort_keys=True))
         return
 
-    _print_human_summary(result)
+    _print_human_summary(output)
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
@@ -259,6 +297,11 @@ def _request_from_args(args: argparse.Namespace) -> ComputeRequest:
     pseudo_root = str(Path(args.pseudo_root).expanduser()) if args.pseudo_root else None
     kmesh_model = _model_spec_from_args(args)
 
+    selection = (
+        PresetSelection(args.preset)
+        if args.preset is not None
+        else RecordSelection(_parse_outputs(args.outputs))
+    )
     return ComputeRequest(
         draft=CalculationDraft(
             structure=PathStructureSource(args.structure),
@@ -268,12 +311,14 @@ def _request_from_args(args: argparse.Namespace) -> ComputeRequest:
             pseudo_table=args.pseudo_table,
             kmesh_model=kmesh_model,
         ),
-        selection=(
-            RecordSelection(_parse_outputs(args.outputs))
-            if args.command == "compute"
-            else PresetSelection(args.command)
-        ),
+        selection=selection,
     )
+
+
+def _output_from_args(args: argparse.Namespace) -> DirectoryOutput | None:
+    if args.out is not None:
+        return DirectoryOutput(args.out)
+    return None
 
 
 def _parse_outputs(value: str) -> tuple[type, ...]:
@@ -309,7 +354,11 @@ def _serve(args: argparse.Namespace) -> None:
     if args.transport == "http":
         from goldilocks_core.server.http import serve
 
-        serve(host=args.host, port=args.port)
+        serve(
+            host=args.host,
+            port=args.port,
+            static_root=args.static_root,
+        )
         return
 
     from goldilocks_core.server.mcp import serve
@@ -353,14 +402,51 @@ def _parse_optional_bool(value: str | None) -> bool | None:
 
 
 def _print_human_summary(result: ComputationResult) -> None:
-    grid = result.records[KPointSelection].grid
-    print(f"formula: {result.records[StructureAnalysisRecord].reduced_formula}")
+    structure = result.draft.structure
+    print(f"structure: {structure.source.name}")
+    print(f"formula: {structure.structure.reduced_formula}")
     print(f"code: {result.draft.intent.code}")
     print(f"task: {result.draft.intent.task}")
-    print(f"k-grid: {grid[0]} {grid[1]} {grid[2]}")
-    if result.records.get(GeneratedFiles):
+    advice = result.records.get(ParameterAdvice)
+    if advice is not None:
+        smearing = advice.smearing.smearing_type or "none"
+        if advice.smearing.width_ry is not None:
+            smearing = f"{smearing}@{advice.smearing.width_ry:g} Ry"
+        pseudo_type = advice.pseudopotential_requirements.pseudo_type or "any"
+        soc = (
+            "on"
+            if advice.spin_orbit.enabled
+            else "consider"
+            if advice.spin_orbit.consider
+            else "off"
+        )
+        print(
+            "advice: "
+            f"smearing={smearing}; "
+            f"spin={'on' if advice.magnetism.spin_polarized else 'off'}; "
+            f"SOC={soc}; "
+            "pseudo="
+            f"{advice.pseudopotential_requirements.functional}/"
+            f"{advice.pseudopotential_requirements.accuracy}/"
+            f"{pseudo_type}/"
+            f"{advice.pseudopotential_requirements.relativistic}; "
+            f"vdW={'on' if advice.vdw.use_vdw else 'off'}"
+        )
+    k_points = result.records.get(KPointSelection)
+    if k_points is not None:
+        grid = k_points.grid
+        print(f"k-grid: {grid[0]} {grid[1]} {grid[2]}")
+    selection = result.records.get(SelectionRecord)
+    if selection is not None:
+        selected = ", ".join(
+            f"{pseudo.element}={pseudo.filename or 'unresolved'}"
+            for pseudo in selection.pseudopotentials
+        )
+        print(f"selection: {selected or 'no pseudopotentials'}")
+    generated_files = result.records.get(GeneratedFiles, ())
+    if generated_files:
         print("generated files:")
-        for generated_file in result.records[GeneratedFiles]:
+        for generated_file in generated_files:
             print(f"  {generated_file.path}")
     if result.bundle is not None:
         print(f"bundle: {result.bundle.path}")

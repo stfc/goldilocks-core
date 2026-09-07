@@ -17,7 +17,9 @@ _RECOGNIZED_LABELS = {
     "perdewzunger": "LDA",
     "slapwpbxpbc": "PBE",
     "slapwpbepbepbe": "PBE",
+    "slapwpbxpbcpbe": "PBE",
     "slapwpsxpsc": "PBEsol",
+    "slapwpsxpscpbesol": "PBEsol",
 }
 
 

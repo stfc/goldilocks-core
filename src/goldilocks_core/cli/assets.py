@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 
 from goldilocks_core.assets import AssetInstallation, AssetStore, InstalledAsset
 from goldilocks_core.assets.profiles import profile
@@ -64,11 +65,18 @@ def _table_reference(
 def install(
     name: str, *, store: AssetStore | None = None
 ) -> tuple[InstalledAsset, ...]:
+    """Install independent assets concurrently with ordered, verified results."""
     target = store or AssetStore()
-    return tuple(
-        target.install(registration.spec, registration.prepare)
-        for registration in references(name)
-    )
+    registrations = references(name)
+    executor = ThreadPoolExecutor(max_workers=8)
+    try:
+        return tuple(
+            executor.map(
+                lambda item: target.install(item.spec, item.prepare), registrations
+            )
+        )
+    finally:
+        executor.shutdown(wait=True, cancel_futures=True)
 
 
 def statuses(
@@ -79,7 +87,7 @@ def statuses(
         (
             registration.spec.id,
             registration.spec.version,
-            target.status(registration.spec.id, registration.spec.version),
+            target.status_spec(registration.spec),
         )
         for registration in references(name)
     )
@@ -88,6 +96,5 @@ def statuses(
 def verify(name: str, *, store: AssetStore | None = None) -> tuple[InstalledAsset, ...]:
     target = store or AssetStore()
     return tuple(
-        target.verify(registration.spec.id, registration.spec.version)
-        for registration in references(name)
+        target.verify_spec(registration.spec) for registration in references(name)
     )

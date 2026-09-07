@@ -75,7 +75,7 @@ def install_dojo_fixture(
     upf: bytes = UPF,
     report_functional: object = "PBEsol",
     table_functional: str = "PBEsol",
-) -> InstalledAsset:
+) -> tuple[InstalledAsset, PseudoTable]:
     """Install one synthetic PseudoDojo table."""
     upfs = tmp_path / "upfs.tgz"
     reports = tmp_path / "reports.tgz"
@@ -111,10 +111,11 @@ def install_sssp_fixture(
     *,
     upf: bytes = UPF,
     sidecar_functional: str | None = None,
-) -> InstalledAsset:
+) -> tuple[InstalledAsset, PseudoTable]:
     """Install one synthetic SSSP table."""
     upfs = tmp_path / "table.tar.gz"
     sidecar = tmp_path / "table.json"
+    licence = tmp_path / "LICENSE.txt"
     archive(upfs, {"nested/Si.upf": upf})
     facts = {
         "filename": "Si.upf",
@@ -126,12 +127,14 @@ def install_sssp_fixture(
     if sidecar_functional is not None:
         facts["functional"] = sidecar_functional
     sidecar.write_text(json.dumps({"Si": facts}))
+    licence.write_text("SSSP fixture licence\n")
     spec = AssetSpec(
         "pseudopotentials/sssp-fixture",
         "1",
         (
             AssetFile("pseudopotentials", "source/table.tar.gz", upfs.as_uri()),
             AssetFile("metadata", "source/table.json", sidecar.as_uri()),
+            AssetFile("licence", "source/LICENSE.txt", licence.as_uri()),
         ),
     )
     registry_table = table("sssp", spec)
@@ -154,6 +157,7 @@ def test_pseudodojo_normalizes_reports_and_verified_upfs(tmp_path: Path) -> None
     assert metadata[0].cutoffs.ecutrho_ry == 160.0
     assert metadata[0].table_id == "pseudopotentials/pseudodojo-fixture"
     assert not list(installed.root.rglob("*.tgz"))
+    assert "CC BY 4.0" in installed.path("LICENSE.txt").read_text()
 
 
 def test_pseudodojo_decodes_serialized_lda_functional(tmp_path: Path) -> None:
@@ -180,6 +184,17 @@ def test_sssp_normalizes_sidecar_and_verified_upfs(tmp_path: Path) -> None:
     assert metadata[0].cutoffs.ecutrho_ry == 120.0
     assert metadata[0].table_id == "pseudopotentials/sssp-fixture"
     assert not list(installed.root.rglob("*.tar.gz"))
+    assert installed.path("LICENSE.txt").read_text() == "SSSP fixture licence\n"
+
+
+def test_sssp_preserves_nonrelativistic_upf_provenance(tmp_path: Path) -> None:
+    upf = UPF.replace(b'relativistic="scalar"', b'relativistic="non-relativistic"')
+    installed, _ = install_sssp_fixture(tmp_path, upf=upf)
+
+    metadata = load_installed_table(installed)
+
+    assert metadata[0].relativistic == "non-relativistic"
+    assert metadata[0].pseudo_info["upf_relativistic"] == "non-relativistic"
 
 
 def test_pseudodojo_rejects_report_registry_disagreement(tmp_path: Path) -> None:
@@ -205,7 +220,7 @@ def test_pseudodojo_accepts_nonrelativistic_header_in_scalar_table(
     installed, _ = install_dojo_fixture(tmp_path, upf=upf)
     metadata = load_installed_table(installed)
 
-    assert metadata[0].relativistic == "scalar"
+    assert metadata[0].relativistic == "non-relativistic"
 
 
 def test_sssp_rejects_sidecar_registry_disagreement(tmp_path: Path) -> None:
@@ -229,7 +244,7 @@ def test_sssp_accepts_nonrelativistic_header_in_scalar_table(tmp_path: Path) -> 
     installed, _ = install_sssp_fixture(tmp_path, upf=upf)
     metadata = load_installed_table(installed)
 
-    assert metadata[0].relativistic == "scalar"
+    assert metadata[0].relativistic == "non-relativistic"
 
 
 def test_installed_pseudo_manifest_rejects_unknown_entry_fields(

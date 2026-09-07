@@ -14,15 +14,22 @@ import requests
 from goldilocks_core.assets import (
     AssetCorrupt,
     AssetFile,
+    AssetInstallation,
     AssetNotInstalled,
     AssetSpec,
     AssetStore,
     asset_root,
 )
 from goldilocks_core.assets.download import download
+from goldilocks_core.cli import assets as asset_runtime
 
 
-def source_spec(source: Path, *, checksum: str | None = None) -> AssetSpec:
+def source_spec(
+    source: Path,
+    *,
+    checksum: str | None = None,
+    preparation_revision: str = "1",
+) -> AssetSpec:
     return AssetSpec(
         id="models/example",
         version="1",
@@ -35,6 +42,7 @@ def source_spec(source: Path, *, checksum: str | None = None) -> AssetSpec:
                 size=source.stat().st_size,
             ),
         ),
+        preparation_revision=preparation_revision,
     )
 
 
@@ -97,6 +105,27 @@ def test_verify_rejects_unknown_manifest_fields(tmp_path: Path) -> None:
 
     with pytest.raises(AssetCorrupt, match="manifest fields are invalid"):
         store.verify("models/example", "1")
+
+
+def test_install_replaces_a_stale_preparation_revision(tmp_path: Path) -> None:
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"first payload")
+    store = AssetStore(tmp_path / "store")
+    first = store.install(source_spec(source))
+    first_fingerprint = json.loads(
+        (first.root / "manifest.json").read_text(encoding="utf-8")
+    )["preparation_fingerprint"]
+
+    source.write_bytes(b"other payload")
+    revised = source_spec(source, preparation_revision="2")
+    second = store.install(revised)
+
+    assert second.path("data/payload.bin").read_bytes() == b"other payload"
+    second_fingerprint = json.loads(
+        (second.root / "manifest.json").read_text(encoding="utf-8")
+    )["preparation_fingerprint"]
+    assert second_fingerprint == revised.preparation_fingerprint
+    assert second_fingerprint != first_fingerprint
 
 
 def test_install_repairs_a_corrupt_asset(tmp_path: Path) -> None:
@@ -211,12 +240,22 @@ def test_asset_root_uses_override_then_xdg(monkeypatch, tmp_path: Path) -> None:
     assert asset_root() == tmp_path / "xdg" / "goldilocks" / "assets"
 
 
-def _flaky_server(failures: int, payload: bytes):
-    """Serve the given number of 503s, then the payload, over a real socket."""
+def _flaky_server(
+    failures: int, payload: bytes, barrier: threading.Barrier | None = None
+):
+    """Serve transient failures and optionally require overlapping requests."""
     served = {"count": 0}
 
     class _Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
+            if barrier is not None:
+                try:
+                    barrier.wait(timeout=3)
+                except threading.BrokenBarrierError:
+                    self.send_response(500)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
             served["count"] += 1
             if served["count"] <= failures:
                 self.send_response(503)
@@ -315,3 +354,50 @@ def test_references_rejects_unknown_names() -> None:
 
     with pytest.raises(KeyError, match="unknown asset 'not-a-table-or-profile'"):
         references("not-a-table-or-profile", {})
+
+
+@pytest.mark.parametrize("corrupt", (False, True))
+def test_profile_downloads_overlap_and_publish_only_verified_assets(
+    tmp_path: Path, monkeypatch, corrupt: bool
+) -> None:
+    payload = b"parallel verified payload"
+    server, thread, _ = _flaky_server(0, payload, threading.Barrier(2))
+    digest = hashlib.sha256(payload).hexdigest()
+    registrations = tuple(
+        AssetInstallation(
+            AssetSpec(
+                id=f"models/parallel-{index}",
+                version="1",
+                files=(
+                    AssetFile(
+                        role="payload",
+                        path="payload.bin",
+                        url=f"http://127.0.0.1:{server.server_port}/{index}",
+                        size=len(payload),
+                        checksum="sha256:"
+                        + ("0" * 64 if corrupt and index == 0 else digest),
+                    ),
+                ),
+            )
+        )
+        for index in range(2)
+    )
+    monkeypatch.setattr(asset_runtime, "references", lambda name: registrations)
+    store = AssetStore(tmp_path / "assets")
+    try:
+        if corrupt:
+            with pytest.raises(ValueError, match="checksum mismatch"):
+                asset_runtime.install("fixture", store=store)
+            assert store.status("models/parallel-0", "1") == "missing"
+        else:
+            installed = asset_runtime.install("fixture", store=store)
+            assert tuple(item.id for item in installed) == tuple(
+                entry.spec.id for entry in registrations
+            )
+            assert installed[0].path("payload.bin").read_bytes() == payload
+        verified = store.verify("models/parallel-1", "1")
+        assert verified.path("payload.bin").read_bytes() == payload
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()

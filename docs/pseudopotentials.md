@@ -131,6 +131,11 @@ uv run goldilocks assets verify pseudodojo-pbesol-efficiency-fr
 The state is `installed`, `missing`, or `corrupt`. Run `assets install` again
 to replace a corrupt table transactionally.
 
+Verification checks the installed files and the registered sources and
+preparation revision. Manifest schema v2 records that preparation fingerprint;
+older manifests or a changed registered preparation are `corrupt` until you run
+`assets install` again. Runtime table and model loading use the same check.
+
 ## Use your own UPF files
 
 Use `--pseudo-root` to read a directory that you manage:
@@ -185,6 +190,11 @@ or repair its contents.
 Pseudopotential files keep their upstream licences. The Goldilocks BSD licence
 does not apply to those files. Goldilocks does not include UPF files in its
 wheel or source archive.
+
+Installed tables include `LICENSE.txt`: the upstream licence file for SSSP,
+and a CC BY 4.0 notice with source links for PseudoDojo. Each registered model
+asset retains a pinned `MODEL_CARD.md`; its registry metadata records the
+licence and citation.
 
 PseudoDojo table definitions record CC BY 4.0. Cite van Setten et al.,
 *Computer Physics Communications* 226, 39–54 (2018).

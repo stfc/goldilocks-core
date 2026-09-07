@@ -8,7 +8,7 @@ export function RecordReview({
 }: {
   readonly result: ComputationResult;
 }) {
-  const records = Object.entries(result.records);
+  const records = Object.keys(result.records);
   return (
     <Stack component="section" gap="xs" miw={0}>
       <Group component="header" justify="space-between">
@@ -18,7 +18,7 @@ export function RecordReview({
         </Text>
       </Group>
       <Accordion multiple order={4}>
-        {records.map(([name, value]) => (
+        {records.map((name) => (
           <Accordion.Item key={name} value={name} className="record-card">
             <Accordion.Control>
               <Group justify="space-between">
@@ -31,24 +31,6 @@ export function RecordReview({
                 name={name as keyof ComputationResult["records"]}
                 result={result}
               />
-              <Accordion order={5} mt="sm">
-                <Accordion.Item value="json">
-                  <Accordion.Control>
-                    Raw {readableName(name)} record (JSON)
-                  </Accordion.Control>
-                  <Accordion.Panel>
-                    <Code
-                      block
-                      role="region"
-                      mah={400}
-                      tabIndex={0}
-                      aria-label={`Raw ${readableName(name)} record`}
-                    >
-                      {JSON.stringify(value, null, 2)}
-                    </Code>
-                  </Accordion.Panel>
-                </Accordion.Item>
-              </Accordion>
             </Accordion.Panel>
           </Accordion.Item>
         ))}

@@ -165,7 +165,7 @@ test("prepares and downloads a real Core calculation", async ({ page }) => {
   }
 });
 
-test("opens scientific details and raw JSON independently with the keyboard", async ({
+test("opens and closes scientific details with the keyboard", async ({
   page,
 }) => {
   await page.goto("/");
@@ -173,27 +173,12 @@ test("opens scientific details and raw JSON independently with the keyboard", as
   await page.getByRole("button", { name: "Generate recommendation" }).click();
 
   const sampling = page.getByRole("button", { name: /^K Points/ });
-  const rawControl = page.getByRole("button", {
-    name: "Raw K Points record (JSON)",
-  });
-  const rawRecord = page.getByRole("region", {
-    name: "Raw K Points record",
-    exact: true,
-  });
   await expect(sampling).toHaveAttribute("aria-expanded", "false");
-  await expect(rawControl).toBeHidden();
   await sampling.press("Enter");
   await expect(page.getByText("QE shift flags", { exact: true })).toBeVisible();
-  await expect(rawControl).toBeVisible();
-  await expect(rawRecord).toBeHidden();
-
-  await rawControl.press("Enter");
-  await expect(rawRecord).toContainText('"grid"');
-  await expect(sampling).toHaveAttribute("aria-expanded", "true");
-  await rawControl.press("Enter");
-  await expect(rawRecord).toBeHidden();
-  await expect(page.getByText("QE shift flags", { exact: true })).toBeVisible();
   await expectNoAxeViolations(page);
+  await sampling.press("Enter");
+  await expect(page.getByText("QE shift flags", { exact: true })).toBeHidden();
 });
 
 test("applies a paired smearing treatment and width override", async ({

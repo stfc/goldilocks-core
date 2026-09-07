@@ -6,7 +6,7 @@ calculation draft lives in the browser, and each compute response's result
 and archive bytes are held only for the current view.
 
 Scientific record cards show labelled values, units, decision reasons, and
-provenance. Each card has a separate raw-JSON disclosure for technical inspection.
+provenance.
 The pseudopotential dropdown follows the selected functional and accuracy;
 changing either resets an explicit table to Automatic. Core validates the
 selected table when computing.

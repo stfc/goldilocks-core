@@ -141,12 +141,12 @@ def test_build_kmesh_entries_returns_indexed_mesh_entries() -> None:
     entries = build_kmesh_entries(structure, candidates)
 
     assert len(entries) > 0
-    # Rung 0 is the Gamma-only mesh; the base is load-bearing for every
+    # Rung 1 is the Gamma-only mesh; the base is load-bearing for every
     # consumer that maps a predicted k-index onto this table.
-    assert entries[0].k_index == 0
+    assert entries[0].k_index == 1
     assert entries[0].mesh == (1, 1, 1)
-    assert entries[-1].k_index == len(entries) - 1
-    assert [entry.k_index for entry in entries] == list(range(len(entries)))
+    assert entries[-1].k_index == len(entries)
+    assert [entry.k_index for entry in entries] == list(range(1, len(entries) + 1))
     # The mesh ordering is load-bearing: the ML k-index maps onto this table.
     meshes = [entry.mesh for entry in entries]
     assert meshes == [(index, index, index) for index in range(1, len(entries) + 1)]

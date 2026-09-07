@@ -22,11 +22,12 @@ def _select_kmesh_entry(
     entries: list[KMeshEntry],
     predicted_k_index: float,
 ) -> KMeshEntry:
-    target_index = max(0, math.ceil(predicted_k_index))
+    target_index = max(1, math.ceil(predicted_k_index))
     max_k_index = entries[-1].k_index
     target_index = min(target_index, max_k_index)
 
-    return entries[target_index]
+    # k_index is 1-based, so rung n is at list position n - 1.
+    return entries[target_index - 1]
 
 
 def ml_kmesh_advisor(spec: ModelSpec) -> KMeshAdvisor:

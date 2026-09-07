@@ -10,11 +10,12 @@ Load -> Analyze -> Advise
 Load -> Kmesh
 Load + Advice -> Select
 Load + Advice + Select + Kmesh -> Generate
+Analysis + Advice + Kmesh + Select + Generate -> DFT Input Data
 ```
 
 The executor resolves this dependency graph from typed stage inputs and
 outputs. Stages are functions with no stage base classes; only source and asset
-resolution and generated-input bundle writing touch the filesystem.
+resolution, input rendering, and publication touch the filesystem.
 
 ## Modules
 
@@ -31,14 +32,15 @@ resolution and generated-input bundle writing touch the filesystem.
 | `runtime/models.py` | `Runtime`: kmesh/metallicity model lifecycle (load/reset/close), exposed as read-only services. |
 | `runtime/dispatch.py` | `Dispatcher`: task registry and dispatch by `intent.task` through `GraphHandler`s. |
 | `runtime/jobs.py` | Short-lived `compute` convenience entry point. |
-| `runtime/service.py` | `Service`: process-owned lifecycle, locking, Capabilities, Structure Inspection, Compute, and directory output. |
+| `runtime/service.py` | `Service`: process-owned lifecycle, locking, Capabilities, Structure Inspection, Compute, and publication. |
 | `io/structures.py` | One Structure Source normalization path for Inspection and Compute. |
 | `analysis.py` | Structure facts. |
 | `advice/` | Scientific and numerical recommendations. |
 | `kmesh/` | K-point resolution and mesh mathematics. |
 | `selection.py` | Pseudopotentials and cutoffs. |
 | `generation/` | Calculation-specific file generation. |
-| `bundle.py` | Generated-input directory bundles and their manifests. |
+| `input_data.py` | Reads external files into complete DFT Input Data; trusts internal Records. |
+| `publication.py` | Publishes assembled bytes as directories or ZIPs; validates output paths. |
 | `server/request.py` | Strict HTTP/MCP validation directly into native Core requests. |
 | `server/wire.py` | Mechanically derived Core response schemas. |
 | `server/http.py`, `server/http_contract.py` | Optional HTTP lifecycle, errors, and scientific route adapter. |
@@ -77,14 +79,15 @@ contracts; Core constructors validate domain values once. Responses serialize
 Core contracts mechanically.
 
 HTTP accepts inline structures and stable Pseudopotential Set IDs. Compute
-returns one multipart response containing the canonical `ComputationResult`.
-HTTP never accepts or creates a server output directory.
+returns one multipart response containing the canonical `ComputationResult`
+and, when the Result contains complete DFT Input Data, ZIP bytes produced from
+that same execution. HTTP never accepts or creates a server output directory.
 HTTP Compute handlers execute concurrently over one process-owned Runtime.
 Task Graph declarations are immutable, execution state is request-local, and
 shared models synchronize only their first lazy load.
 
-Local MCP accepts inline structures and returns Results in memory.
-HTTP and MCP may carry a stable registered
+Local MCP accepts inline structures and supports server-chosen automatic
+publication or memory output. HTTP and MCP may carry a stable registered
 Pseudopotential Set ID, but never structure paths, pseudopotential roots or
 metadata payloads, model locations, or publication paths. Python and CLI own
 trusted local filesystem controls. HTTP and MCP remain optional imports.
@@ -133,7 +136,7 @@ Validate where data enters or causes side effects:
   metadata;
 - source adapters validate provider data before producing internal records;
 - generators reject unsupported or incomplete inputs before rendering;
-- bundle writing refuses existing destinations and confines generated file paths.
+- publication writes atomically to new destinations and confines logical paths.
 
 Intermediate records remain ordinary Python data. Custom stage authors are
 responsible for returning coherent records; Core does not defensively re-check
@@ -142,8 +145,8 @@ every possible malformed internal object.
 Scientific choices belong in Analyze, Advise, Kmesh, and Select. Select
 resolves the configured source and chooses a concrete pseudopotential per
 element without making scientific policy beyond the stated requirements.
-Generate maps completed choices to calculation syntax. Optional directory
-output writes generated inputs and a manifest but does not run calculations.
+Generate maps completed choices to calculation syntax. Optional publication
+writes complete DFT Input Data but does not run calculations.
 
 Runner/AiiDA workflows, schedulers, authentication, and completed-output
 analysis are outside this repository. Browser state does not enter Core Records.

@@ -121,7 +121,7 @@ def test_cli_compute_preset_returns_canonical_memory_result(tmp_path: Path) -> N
     assert result["selection"] == {"preset": "recommend"}
     assert result["draft"]["structure"]["structure"]["reduced_formula"] == "Si"
     assert result["records"]["k_points"]["grid"] == [3, 3, 3]
-    assert result["bundle"] is None
+    assert result["publication"] is None
 
 
 def _generate_arguments(pseudo_root: Path) -> tuple[str, ...]:
@@ -160,7 +160,7 @@ def test_cli_omitted_output_keeps_non_publishable_results_in_memory(
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert json.loads(completed.stdout)["bundle"] is None
+    assert json.loads(completed.stdout)["publication"] is None
     assert not (tmp_path / "goldilocks_out").exists()
 
 
@@ -172,9 +172,64 @@ def test_cli_compute_publishes_an_explicit_directory(tmp_path: Path) -> None:
 
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
-    assert result["bundle"]["path"] == str(destination)
-    assert (destination / "qe.in").is_file()
-    assert (destination / "manifest.json").is_file()
+    assert result["publication"]["kind"] == "directory"
+    assert result["publication"]["path"] == str(destination)
+    assert (destination / "inputs" / "qe.in").is_file()
+    assert (destination / "goldilocks.json").is_file()
+
+
+def test_cli_human_compute_summary_reports_science_and_publication(
+    tmp_path: Path,
+) -> None:
+    pseudo_root = _pseudo_root(tmp_path / "pseudos")
+    destination = tmp_path / "ready"
+    arguments = tuple(
+        argument
+        for argument in _generate_arguments(pseudo_root)
+        if argument != "--json"
+    )
+
+    completed = _run_cli(*arguments, "--out", str(destination))
+
+    assert completed.returncode == 0, completed.stderr
+    assert "structure: Si.cif" in completed.stdout
+    assert "formula: Si" in completed.stdout
+    assert "code: quantum_espresso" in completed.stdout
+    assert "task: scf_single_point" in completed.stdout
+    assert "k-grid: 3 3 3" in completed.stdout
+    assert "selection: Si=Si.UPF" in completed.stdout
+    assert "dft input data:" in completed.stdout
+    assert "pseudopotential set:" in completed.stdout
+    assert f"published directory: {destination}" in completed.stdout
+
+
+def test_cli_compute_publishes_an_explicit_archive(tmp_path: Path) -> None:
+    pseudo_root = _pseudo_root(tmp_path / "pseudos")
+    destination = tmp_path / "ready.zip"
+
+    completed = _run_cli(
+        *_generate_arguments(pseudo_root), "--archive", str(destination)
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["publication"]["kind"] == "archive"
+    assert result["publication"]["path"] == str(destination)
+    assert destination.read_bytes().startswith(b"PK")
+
+
+def test_cli_compute_automatically_publishes_complete_input_data(
+    tmp_path: Path,
+) -> None:
+    pseudo_root = _pseudo_root(tmp_path / "pseudos")
+
+    completed = _run_cli(*_generate_arguments(pseudo_root), cwd=tmp_path)
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["publication"]["kind"] == "directory"
+    assert result["publication"]["path"] == str(tmp_path / "goldilocks_out")
+    assert (tmp_path / "goldilocks_out" / "goldilocks.json").is_file()
 
 
 def test_cli_human_advice_summary_uses_the_normalized_draft_formula() -> None:
@@ -242,8 +297,11 @@ def test_cli_rejects_multiple_selection_and_output_variants() -> None:
         "analysis",
         "--out",
         "run",
-        "--no-out",
+        "--archive",
+        "run.zip",
     )
 
     assert selection.returncode == 2
+    assert "not allowed with argument" in selection.stderr
     assert output.returncode == 2
+    assert "not allowed with argument" in output.stderr

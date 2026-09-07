@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from goldilocks_core.contracts.serial import to_jsonable
 from goldilocks_core.contracts.types import JsonDict
@@ -54,11 +54,12 @@ class Records(Mapping[type, Any]):
 
 
 @dataclass(frozen=True, slots=True)
-class BundleRecord:
-    """Location and manifest of a generated-input directory."""
+class Publication:
+    """Published location and file paths relative to the output root."""
 
+    kind: Literal["directory", "archive"]
     path: str
-    manifest: JsonDict
+    files: tuple[str, ...]
 
     def to_dict(self) -> JsonDict:
         return to_jsonable(self)
@@ -70,8 +71,8 @@ class ComputationResult:
 
     ``records`` holds every computed record for the requested selection;
     ``warnings`` aggregates every stage's warnings and is the authoritative
-    place to check for incomplete or degraded results. ``bundle`` is set
-    only when a local caller requests a generated-input directory.
+    place to check for incomplete or degraded results. ``publication`` is
+    set only when the request named an output target.
     """
 
     draft: CalculationDraft
@@ -80,7 +81,7 @@ class ComputationResult:
     selection: ComputationSelection
     records: Records
     warnings: tuple[str, ...] = ()
-    bundle: BundleRecord | None = None
+    publication: Publication | None = None
     schema_version: int = field(default=1, init=False)
 
     def to_dict(self) -> JsonDict:
@@ -92,5 +93,5 @@ class ComputationResult:
             "selection": self.selection.to_dict(),
             "records": self.records.to_dict(),
             "warnings": list(self.warnings),
-            "bundle": to_jsonable(self.bundle),
+            "publication": to_jsonable(self.publication),
         }

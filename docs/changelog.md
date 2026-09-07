@@ -10,6 +10,14 @@ All notable changes to goldilocks-core are documented here.
   CLI, HTTP, and local stdio MCP.
 - Typed Calculation Draft, Computation Selection, Computation Result, and
   stable Record contracts.
+- Complete DFT Input Data publication as a directory or deterministic ZIP,
+  including source and canonical structures, generated inputs, exact
+  pseudopotentials, licences, citations, provenance, and manifest file hashes.
+  Publication uses private staging and atomic no-overwrite installation; it
+  assumes an operator-controlled destination parent.
+  DFT Input Data captures file contents during assembly; publication no longer
+  resolves Asset references or revalidates internal Records. Runtime provenance
+  retains model identities and preparation fingerprints without file inventories.
 - Transactional runtime asset installation and verification for models and
   registered PseudoDojo and SSSP Pseudopotential Sets.
 - Generated OpenAPI and TypeScript contracts for Workbench.
@@ -32,9 +40,10 @@ All notable changes to goldilocks-core are documented here.
 - `recommend` and `generate` are Preset IDs selected through Compute.
 - The unified `goldilocks` command provides scientific operations, asset
   lifecycle commands, examples, and optional HTTP/MCP serving.
-- CLI and Python support explicit generated-input directory bundles or memory
-  output. HTTP returns canonical Result JSON in one multipart response; local
-  MCP returns the Result in memory. Neither transport writes output directories.
+- CLI supports automatic, directory, archive, and memory output. Local MCP
+  supports server-chosen automatic publication or memory output; it does not
+  accept publication paths. HTTP pairs reviewed Result JSON with its exact
+  optional unstored ZIP in one multipart response.
 - Readiness tracks asset changes, and installed metallicity assets drive
   electronic-character analysis. Model configuration is cached per backend;
   reset reloads model resources without rereading configuration.

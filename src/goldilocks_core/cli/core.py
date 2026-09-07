@@ -10,15 +10,18 @@ from goldilocks_core.assets.runtime import install as install_assets
 from goldilocks_core.assets.runtime import statuses as asset_statuses
 from goldilocks_core.assets.runtime import verify as verify_assets
 from goldilocks_core.contracts import (
+    ArchiveOutput,
     CalculationDraft,
     CalculationHints,
     CalculationIntent,
     ComputationResult,
     ComputeRequest,
+    DftInputData,
     DirectoryOutput,
     GeneratedFiles,
     KPointSelection,
     ModelSpec,
+    OutputTarget,
     ParameterAdvice,
     PathStructureSource,
     PresetSelection,
@@ -56,7 +59,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--outputs", help="Comma-separated record type ids to compute."
     )
     output = compute.add_mutually_exclusive_group()
-    output.add_argument("--out", help="Write generated inputs and their manifest.")
+    output.add_argument("--out", help="Publish a ready-to-run directory.")
+    output.add_argument("--archive", help="Publish a ready-to-run ZIP archive.")
     output.add_argument(
         "--no-out", action="store_true", help="Return memory-only structured output."
     )
@@ -315,10 +319,14 @@ def _request_from_args(args: argparse.Namespace) -> ComputeRequest:
     )
 
 
-def _output_from_args(args: argparse.Namespace) -> DirectoryOutput | None:
+def _output_from_args(args: argparse.Namespace) -> OutputTarget | None:
+    if args.no_out:
+        return None
     if args.out is not None:
         return DirectoryOutput(args.out)
-    return None
+    if args.archive is not None:
+        return ArchiveOutput(args.archive)
+    return DirectoryOutput()
 
 
 def _parse_outputs(value: str) -> tuple[type, ...]:
@@ -443,13 +451,22 @@ def _print_human_summary(result: ComputationResult) -> None:
             for pseudo in selection.pseudopotentials
         )
         print(f"selection: {selected or 'no pseudopotentials'}")
+    input_data = result.records.get(DftInputData)
+    if input_data is not None:
+        print(
+            f"dft input data: {len(input_data.artifacts)} artifacts, "
+            f"{len(input_data.citations)} citations"
+        )
+        pseudo_set = input_data.pseudopotential_set
+        version = f"@{pseudo_set.version}" if pseudo_set.version is not None else ""
+        print(f"pseudopotential set: {pseudo_set.id}{version}")
     generated_files = result.records.get(GeneratedFiles, ())
     if generated_files:
         print("generated files:")
         for generated_file in generated_files:
             print(f"  {generated_file.path}")
-    if result.bundle is not None:
-        print(f"bundle: {result.bundle.path}")
+    if result.publication is not None:
+        print(f"published {result.publication.kind}: {result.publication.path}")
     if result.warnings:
         print("warnings:")
         for warning in result.warnings:

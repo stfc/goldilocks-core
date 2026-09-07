@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 import pytest
 
@@ -89,13 +90,14 @@ def test_mcp_compute_memory_returns_canonical_result(
                 "hints": {"k_grid": [3, 3, 3]},
             },
             "selection": {"records": ["k_points"]},
+            "output": {"kind": "memory"},
         },
     )
 
     assert result["schema_version"] == 1
     assert result["selection"] == {"records": ["k_points"]}
     assert result["records"]["k_points"]["grid"] == [3, 3, 3]
-    assert result["bundle"] is None
+    assert result["publication"] is None
 
 
 def test_mcp_selects_custom_records_through_core_registry(
@@ -115,11 +117,52 @@ def test_mcp_selects_custom_records_through_core_registry(
                 "intent": {"task": "custom_task"},
             },
             "selection": {"records": ["custom_summary"]},
+            "output": {"kind": "memory"},
         },
     )
 
     assert result["selection"] == {"records": ["custom_summary"]}
     assert result["records"] == {"custom_summary": {"value": "custom result"}}
+
+
+def test_mcp_compute_automatically_publishes_complete_results(
+    publishable_service,
+    sample_structure_text: str,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    import goldilocks_core.publication as publication_module
+
+    class AutomaticRootPath(type(Path())):
+        @classmethod
+        def cwd(cls):
+            return cls(tmp_path)
+
+    monkeypatch.setattr(publication_module, "Path", AutomaticRootPath)
+    result = _call(
+        create_server(publishable_service),
+        "compute",
+        {
+            "draft": {
+                "structure": {
+                    "name": "Si.cif",
+                    "content": sample_structure_text,
+                    "format": "cif",
+                },
+                "hints": {"k_grid": [3, 3, 3]},
+                "pseudo_table": "fixture-table",
+            },
+            "selection": {"preset": "generate"},
+        },
+    )
+
+    assert result["draft"]["pseudo_table"] == "fixture-table"
+    assert result["draft"]["pseudo_root"] is None
+    assert result["draft"]["pseudo_metadata"] is None
+    assert result["draft"]["kmesh_model"] is None
+    assert result["publication"]["kind"] == "directory"
+    assert result["publication"]["path"] == str(tmp_path / "goldilocks_out")
+    assert (tmp_path / "goldilocks_out" / "goldilocks.json").is_file()
 
 
 @pytest.mark.parametrize("kind", ["directory", "archive"])
@@ -169,6 +212,7 @@ def test_mcp_rejects_unknown_and_deployment_configuration(
                 {
                     "draft": {"structure": inline},
                     "selection": {"preset": "recommend", "records": ["analysis"]},
+                    "output": {"kind": "memory"},
                 },
             )
         )
@@ -184,6 +228,7 @@ def test_mcp_rejects_unknown_and_deployment_configuration(
                     {
                         "draft": {"structure": inline, field: value},
                         "selection": {"records": ["analysis"]},
+                        "output": {"kind": "memory"},
                     },
                 )
             )

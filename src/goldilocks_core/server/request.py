@@ -108,6 +108,9 @@ RecordSelectionDocument = Annotated[
     ),
 ]
 type SelectionDocument = PresetSelectionDocument | RecordSelectionDocument
+MemoryOutputDocument = create_model(
+    "MemoryOutput", __config__=_STRICT, kind=(Literal["memory"], ...)
+)
 ComputeRequestDocument = Annotated[
     ComputeRequest,
     ValidateAs(

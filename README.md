@@ -58,9 +58,9 @@ with Service() as core:
 ```
 
 Use `RecordSelection` instead of `PresetSelection` to request specific Records.
-Pass `DirectoryOutput(path)` with a complete `generate` selection to write a
-generated-input bundle, or `None` for memory-only output. The top-level
-`compute()` convenience uses the same Compute contract.
+Pass `ArchiveOutput`, `DirectoryOutput`, or `None` to select archive, directory,
+or memory-only output. The top-level `compute()` convenience uses the same
+Compute contract.
 
 See the [tutorial](docs/tutorial.md) and
 [pipeline reference](docs/pipeline.md) for complete examples.
@@ -105,8 +105,9 @@ uv run goldilocks serve mcp
 ```
 
 HTTP publishes `/capabilities`, `/inspect`, `/compute`, `/health`, and `/ready`.
-Compute returns one multipart response containing canonical Result JSON.
-It never creates a server output directory. MCP publishes `capabilities`,
+Compute returns one multipart response containing canonical Result JSON and,
+when complete DFT Input Data was requested, its exact in-memory ZIP. It never
+creates a server output directory. MCP publishes `capabilities`,
 `inspect_structure`, and `compute` as local stdio tools.
 
 HTTP and MCP accept inline structures and may select one registered
@@ -127,13 +128,14 @@ contract. `/health` reports process liveness; `/ready` verifies every registered
 runtime asset required by Workbench. The server stores no projects, sessions,
 Results, archives, or run history.
 
-## Generated-input bundles
+## Ready-to-run Output
 
-`DirectoryOutput(path)` writes generated inputs and `manifest.json` into a new
-directory. For Quantum ESPRESSO the generated input is `qe.in`.
+A Ready-to-run Output uses one directory/ZIP layout:
 
-The bundle does not copy pseudopotentials or run calculations. Supply the
-selected UPFs under the input's `pseudo_dir` before running Quantum ESPRESSO.
+```text
+source/  structure/  inputs/  pseudo/  licences/
+CITATIONS.md  README.md  goldilocks.json
+```
 
 ## Documentation
 

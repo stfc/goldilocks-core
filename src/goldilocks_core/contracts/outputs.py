@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from goldilocks_core.contracts.advice import ParameterAdvice
 from goldilocks_core.contracts.analysis import StructureAnalysisRecord
+from goldilocks_core.contracts.input_data import DftInputData
 from goldilocks_core.contracts.kpoints import KPointSelection
 from goldilocks_core.contracts.registry import record_type_id, record_types_by_id
 from goldilocks_core.contracts.result import GeneratedFiles
@@ -13,6 +14,7 @@ OUTPUT_RECORD_TYPES: tuple[type, ...] = (
     KPointSelection,
     SelectionRecord,
     GeneratedFiles,
+    DftInputData,
 )
 
 OUTPUT_TYPES_BY_ID: dict[str, type] = {

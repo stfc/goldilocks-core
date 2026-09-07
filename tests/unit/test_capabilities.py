@@ -29,6 +29,7 @@ def test_service_capabilities_discovers_portable_scientific_choices() -> None:
         "k_points",
         "selection",
         "generated_files",
+        "dft_input_data",
     }
     assert {model["role"] for model in document["models"]} == {
         "k_point_advisor",

@@ -37,7 +37,7 @@ goldilocks = "goldilocks_core.cli.core:main"
 
 [dependency-groups]
 dev = [
-    "mutmut>=3.6.0",
+    "mutmut>=3.7.0",
     "pre-commit>=4.5.1",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",

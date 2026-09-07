@@ -42,15 +42,16 @@ Preset IDs only; there are no `recommend` or `generate` commands.
 
 Choose at most one output option:
 
-- `--out DIRECTORY` writes a generated-input bundle to a new directory;
+- `--out DIRECTORY` publishes a new ready-to-run directory;
+- `--archive FILE.zip` publishes a new ready-to-run archive;
 - `--no-out` keeps the Result in memory;
-- omission also keeps the Result in memory.
+- omission automatically publishes a directory only when the Result contains
+  complete DFT Input Data.
 
-Directory output requires the complete `generate` record set. Core never
-overwrites an existing destination. `--json` prints the canonical
-`ComputationResult`, including bundle metadata. Human output reports the
+Core never overwrites an existing destination. `--json` prints the canonical
+`ComputationResult`, including publication metadata. Human output reports the
 structure, formula when available, target code, task, important selected
-Records, warnings, and bundle path.
+Records, warnings, and publication kind and absolute path.
 
 ## Scientific controls
 
@@ -116,12 +117,14 @@ uv run goldilocks serve mcp
 HTTP exposes `GET /capabilities`, `POST /inspect`, `POST /compute`,
 `GET /health`, and `GET /ready`. HTTP accepts inline structure content and an
 optional registered pseudopotential table ID. Compute returns one multipart
-response with canonical Result JSON, including any generated input contents.
+response with canonical JSON and the exact optional unstored ZIP produced by
+that execution.
 
 Local stdio MCP exposes exactly `capabilities`, `inspect_structure`, and
 `compute`. MCP also accepts inline structure content and an optional registered
-table ID. Compute returns the Result in memory without writing an output
-directory.
+table ID. Omitted Compute output automatically publishes complete DFT Input
+Data to a server-chosen directory; explicit `memory` output suppresses
+publication.
 
 HTTP and MCP do not accept structure paths, pseudopotential roots or metadata
 payloads, model locations, or publication paths. Use Python or CLI for trusted

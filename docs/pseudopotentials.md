@@ -121,7 +121,7 @@ cutoffs as PBEsol-validated.
 
 Some UPFs in SSSP's scalar-relativistic tables declare themselves
 non-relativistic. Goldilocks preserves that per-file treatment on the selected
-record instead of relabelling it scalar. Core permits the file only
+record and archive instead of relabelling it scalar. Core permits the file only
 for a scalar request and emits a compatibility warning for operator review.
 
 The registry also contains `pseudodojo-pbe-lanthanides-sr`. It assumes
@@ -176,6 +176,25 @@ The recognized sidecar filenames are a fixed convention:
 Other parent-directory layouts are not searched: keep sidecars beside their
 UPF files, or follow the one table-level filename above.
 
+Generating publishable DFT Input Data from a local root also requires the
+operator to declare the real redistribution terms and source citation. Put a
+`goldilocks-pseudopotentials.json` sidecar at the root:
+
+```json
+{
+    "schema_version": 1,
+    "licence": "the actual licence name or SPDX expression",
+    "licence_file": "LICENSE.txt",
+    "citation": "the citation requested by this pseudopotential source"
+}
+```
+
+`licence_file` is a relative path contained under the root. Goldilocks reads
+and publishes that file verbatim with the selected UPFs. It does not infer a
+licence from a provider name, UPF filename, or cutoff sidecar. Recommendation
+can inspect a root without this publication sidecar, but generation fails
+clearly until complete legal and citation material is supplied.
+
 `pseudo_metadata`, `pseudo_root`, and `pseudo_table` are mutually exclusive.
 Explicit metadata is useful for in-memory callers; an explicit root remains
 operator-managed; an exact table ID resolves through the verified asset store.
@@ -224,7 +243,8 @@ before you redistribute an SSSP table.
 Asset installation stores licence material as `LICENSE.txt` beside each
 normalized table. PseudoDojo installations receive the table's CC BY 4.0
 notice; SSSP installations preserve the upstream record's complete mixed-family
-licence file.
+licence file. Workbench calculation archives include that installed licence
+material with the selected UPFs.
 
 Upstream sources:
 

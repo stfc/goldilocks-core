@@ -53,7 +53,7 @@ print(result.warnings)
 `recommend` is a Preset ID. It requests analysis, advice, k-points, and
 pseudopotential selection without generating runnable input data.
 
-## Generate an input bundle
+## Generate and publish inputs
 
 Select the `generate` Preset and a Core output target:
 
@@ -64,15 +64,17 @@ request = ComputeRequest(request.draft, PresetSelection("generate"))
 with Service() as core:
     result = core.compute(request, output=DirectoryOutput("run"))
 
-print(result.bundle.path)
+print(result.publication.path)
 ```
 
-The destination must not already exist. Omit the output target or use `None`
-for memory-only structured output.
+The destination must not already exist. Use `ArchiveOutput("run.zip")` for a
+ready-to-run archive, `DirectoryOutput()` for automatic directory allocation,
+or `None` for memory-only structured output.
 
-The bundle contains `qe.in` and `manifest.json` with scientific choices and
-provenance. It does not copy pseudopotentials. Supply the selected UPFs under
-`pseudo/` so the generated input's `pseudo_dir = './pseudo'` resolves correctly.
+A publication contains generated inputs, canonical and original structures,
+exact pseudopotentials, licence material, citations, and `goldilocks.json`
+provenance with file hashes. Extract an archive and run Quantum ESPRESSO from
+its root so `pseudo_dir = './pseudo'` resolves correctly.
 
 ## Select explicit Records
 
@@ -110,7 +112,7 @@ replaces separate task, code, and model discovery operations.
 uv run goldilocks capabilities --json
 uv run goldilocks inspect structure.cif --json
 uv run goldilocks compute structure.cif --preset recommend --k-grid 4 4 4 --no-out --json
-uv run goldilocks compute structure.cif --preset generate --pseudo-root pseudos --k-grid 4 4 4 --out run --json
+uv run goldilocks compute structure.cif --preset generate --pseudo-root pseudos --k-grid 4 4 4 --archive run.zip --json
 ```
 
 ## HTTP
@@ -134,16 +136,18 @@ HTTP Structure Sources are explicit inline content:
 ```
 
 Send this body to `POST /compute`. The multipart response contains canonical
-Result JSON, including generated input contents. The server stores no output.
-Use `GET /capabilities` and `POST /inspect` for the other public scientific
-operations.
+Result JSON and, because the `generate` preset produces complete DFT Input Data,
+the exact ZIP from that execution. Record selections without DFT Input Data omit
+the archive part. The server stores neither. Use `GET /capabilities` and
+`POST /inspect` for the other public scientific operations.
 
 ## MCP
 
 Local stdio MCP exposes `capabilities`, `inspect_structure`, and `compute`.
 Compute accepts the same inline draft, optional registered table ID, and
-selection shape as HTTP. Compute returns the Result in memory without writing
-an output directory.
+selection shape as HTTP. Omitted output automatically publishes complete DFT
+Input Data to a server-chosen directory. Explicit `memory` output suppresses
+publication.
 
 MCP does not accept structure paths, pseudopotential roots, model locations, or
 publication paths. Use the CLI or Python interface for trusted local filesystem

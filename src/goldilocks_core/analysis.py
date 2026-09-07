@@ -206,8 +206,19 @@ def _electronic_character_warnings(
     *,
     source: str,
 ) -> tuple[str, ...]:
+    if source == "heuristic_missing_model":
+        return (
+            "No electronic-character model is installed; falling back to the "
+            "composition heuristic. Run 'goldilocks assets install "
+            "models/metallicity-is-metal' for a confirmed classification.",
+            *_heuristic_character_warnings(character),
+        )
     if source != "heuristic":
         return ()
+    return _heuristic_character_warnings(character)
+
+
+def _heuristic_character_warnings(character: ElectronicCharacter) -> tuple[str, ...]:
     if character == "likely_metal":
         return (
             "All elements are metallic; treat metallicity as likely, not "

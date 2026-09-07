@@ -29,14 +29,13 @@ def test_elemental_metal_uses_modest_cold_smearing_in_qe_rydberg_units(
         )
     )
 
-    assert result.analysis.electronic_character == "likely_metal"
+    assert result.analysis.electronic_character == "metal"
     assert result.advice.smearing.smearing_type == "cold"
     assert result.advice.smearing.width_ry == METALLIC_SMEARING_WIDTH_RY == 0.01
     qe_input = result.generated_files[0].content
     assert "  occupations = 'smearing'" in qe_input
     assert "  smearing = 'cold'" in qe_input
     assert "  degauss = 0.01" in qe_input
-    assert "Metallicity is inferred" in " ".join(result.warnings)
 
 
 def test_heavy_element_prompts_for_soc_without_silently_enabling_it() -> None:

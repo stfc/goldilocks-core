@@ -23,9 +23,11 @@ class StructureAnalysisRecord:
     :class:`SymmetryUnavailable` when symmetry analysis itself failed; an
     ``int``/``str`` value is a successful determination. The electronic
     character comes from the source named in ``electronic_character_source``
-    (``"heuristic"`` or a model classifier); ``electronic_character_confidence``
-    is ``None`` for heuristic classifications. Warnings are provenance-bearing:
-    they state what could not be determined, not what was chosen.
+    (``"heuristic"`` when no model is configured at all, ``"heuristic_missing_model"``
+    when one is configured but its asset is not installed, or a model classifier's
+    own source name otherwise); ``electronic_character_confidence`` is ``None``
+    for heuristic classifications. Warnings are provenance-bearing: they state
+    what could not be determined, not what was chosen.
     """
 
     formula: str

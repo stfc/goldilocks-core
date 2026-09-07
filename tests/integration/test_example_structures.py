@@ -54,7 +54,7 @@ def test_bundled_structures_exercise_distinct_advice_branches() -> None:
     assert silicon.analysis.heavy_elements == ()
 
     # Iron: magnetic metal, so spin polarisation and metallic smearing.
-    assert iron.analysis.electronic_character == "likely_metal"
+    assert iron.analysis.electronic_character == "metal"
     assert iron.advice.magnetism.spin_polarized is True
     assert iron.advice.smearing.smearing_type == "cold"
 

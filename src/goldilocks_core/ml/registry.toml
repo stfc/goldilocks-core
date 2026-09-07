@@ -65,3 +65,35 @@ path = "atom_init.json"
 url = "https://huggingface.co/JunwenYin/metallicity-goldilocks-CGCNN/resolve/a95dc7d8902c8088f709e13c602864167838cc17/atom_init.json"
 checksum = "sha256:cb90bd2257dbf8cfc4e6b2b6d4348d4616e8e9680f1339b1461137032e0f1894"
 size = 28392
+
+# The electronic-character classifier goldilocks-ml publishes and serves
+# directly (goldilocks.is_metal.dft_band_gap_zero.v1). Distinct from
+# [defaults.kpoints.metallicity] above, which is the older checkpoint the QRF
+# k-distance backend still consumes as an internal feature block.
+[defaults.electronic_character]
+target_contract = "goldilocks.is_metal.dft_band_gap_zero.v1"
+
+[defaults.electronic_character.asset]
+id = "models/metallicity-is-metal"
+version = "1.0"
+
+[[defaults.electronic_character.asset.files]]
+role = "model_record"
+path = "model.json"
+url = "https://data-collections.psdi.ac.uk/api/records/ba06w-n6a68/files/model.json/content"
+checksum = "sha256:9b845e4995dc6e6bc9c5d28f52efb00a7c537729f25cf20a9a371ff7ab90e6f6"
+size = 16686
+
+[[defaults.electronic_character.asset.files]]
+role = "estimator"
+path = "is_metal.pt"
+url = "https://data-collections.psdi.ac.uk/api/records/ba06w-n6a68/files/is_metal.pt/content"
+checksum = "sha256:12881ca00cbd3444cadd7757e0f0ffe362447fa37f32ff84c5f4661f3fcf8284"
+size = 501981
+
+[[defaults.electronic_character.asset.files]]
+role = "atom_init"
+path = "atom_init.json"
+url = "https://data-collections.psdi.ac.uk/api/records/ba06w-n6a68/files/atom_init.json/content"
+checksum = "sha256:cb90bd2257dbf8cfc4e6b2b6d4348d4616e8e9680f1339b1461137032e0f1894"
+size = 28392

@@ -123,7 +123,13 @@ def test_run_core_job_aggregates_kmesh_warnings() -> None:
     assert warning in result.warnings
 
 
-def test_run_core_job_aggregates_advice_warnings() -> None:
+def test_run_core_job_no_longer_hedges_once_a_model_answers_metallicity() -> None:
+    # Before #174, Runtime() with no configured model fell back to the
+    # composition heuristic, which cannot tell "insulator" from "unknown" for
+    # Si and left a "verify manually" warning. The default electronic
+    # character model (test-stubbed here; the real goldilocks-ml classifier
+    # agrees) commits to insulator instead, so there is nothing left to warn
+    # about -- see test_advice.py for the heuristic's own "unknown" case.
     result = run_core_job(
         PresetRequest(
             structure=make_structure(),
@@ -132,9 +138,10 @@ def test_run_core_job_aggregates_advice_warnings() -> None:
         )
     )
 
-    warning = "Verify smearing manually for likely metallic systems."
-    assert warning in result.warnings
-    assert result.warnings.count(warning) == 1
+    assert result.analysis.electronic_character == "insulator"
+    assert result.analysis.electronic_character_source == "model"
+    assert result.advice.smearing.smearing_type == "fixed"
+    assert not any("verify" in warning.lower() for warning in result.warnings)
 
 
 def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> None:
@@ -162,9 +169,23 @@ def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> 
         "goldilocks_core.ml.qrf.metallicity.load_metallicity_model",
         lambda path: object(),
     )
+
+    class FakeStructureModel:
+        def predict(self, structure):
+            from goldilocks_ml.inference import ModelPrediction
+
+            return ModelPrediction(
+                parameter="metallicity",
+                quantity="is_metal",
+                value=False,
+                target_contract="goldilocks.is_metal.dft_band_gap_zero.v1",
+                model_id="stub",
+                details={"score": 0.1},
+            )
+
     monkeypatch.setattr(
-        "goldilocks_core.ml.qrf.metallicity.classify_metallicity",
-        lambda structure, model, atom_init, **settings: ("insulator", 0.9),
+        "goldilocks_ml.inference.load_model",
+        lambda model_dir: FakeStructureModel(),
     )
     monkeypatch.setattr(
         "goldilocks_core.ml.qrf.features.extract_qrf_features",
@@ -175,8 +196,7 @@ def test_run_core_job_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> 
     )
 
     with Runtime(
-        metallicity_checkpoint=checkpoint,
-        metallicity_atom_init=atom_table,
+        metallicity_model_dir="metal-model/",
         kmesh_service=QrfBackend(
             config=config,
             metallicity_checkpoint=str(checkpoint),

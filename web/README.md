@@ -14,11 +14,13 @@ newer installed:
 ```bash
 uv sync --extra http
 npm --prefix web ci
+uv run goldilocks assets install workbench
 uv run --extra http poe workbench
 ```
 
-Open **http://127.0.0.1:5173**. The task downloads runtime assets and starts the
-backend on port 8000 and the frontend on port 5173.
+The asset step installs the models and pseudopotential tables. The final command
+starts the backend on port 8000 and the frontend on port 5173.
+Open **http://127.0.0.1:5173**.
 
 To serve a built frontend instead, stop those servers and run:
 

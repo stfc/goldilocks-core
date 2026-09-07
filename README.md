@@ -15,6 +15,32 @@ cd goldilocks-core
 uv sync
 ```
 
+### Start the Workbench
+
+With Node.js 24 or newer installed, run:
+
+```bash
+uv sync --extra http
+npm --prefix web ci
+uv run goldilocks assets install workbench
+uv run --extra http poe workbench
+```
+
+The asset step installs the models and pseudopotential tables. Open
+**http://127.0.0.1:5173**, upload a CIF or POSCAR, review the recommended
+settings, and download the generated inputs.
+
+For a built frontend instead, stop the development servers and run:
+
+```bash
+uv run --extra http poe stage
+```
+
+Then open **http://127.0.0.1:8000**. See the [Workbench guide](web/README.md)
+for Docker and development checks.
+
+### Generate inputs from the command line
+
 Download the prediction models and default pseudopotential table, then generate
 inputs for the bundled silicon structure:
 
@@ -29,8 +55,6 @@ pseudopotentials, structures, and supporting data.
 Treat the recommended settings as a starting point: review warnings and check
 convergence for your calculation. The [quickstart](docs/quickstart.md) explains
 the output and how to run it.
-
-Prefer a browser? Use the [Workbench](web/README.md).
 
 ## Guides and reference
 

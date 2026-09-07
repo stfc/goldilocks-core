@@ -14,8 +14,10 @@ and relativistic treatment:
 uv run goldilocks capabilities --json
 ```
 
-The `pseudopotential_sets` array lists the available tables. Use `assets status`
-to check which are installed.
+The `pseudopotential_sets` array lists the registered tables. Its
+`supported_elements` lists elements permitted by Core's selection policy, not
+just those present in the upstream library. Use `assets status` to check which
+tables are installed.
 
 Without an explicit source, Goldilocks chooses a compatible registered table,
 preferring PseudoDojo unless the structure contains lanthanides or actinides. It
@@ -44,6 +46,13 @@ treatment, and element coverage must match the request. In particular:
 - Some files in SSSP scalar-relativistic tables declare non-relativistic
   treatment. Goldilocks permits this exception for scalar requests, preserves
   the per-file treatment, and emits a compatibility warning.
+
+In the Workbench, the table dropdown shows choices that support every element
+in your structure at the selected functional and accuracy. Selecting a table
+also sets its relativistic-treatment hint; selecting an `fr` table does **not**
+enable SOC. Choosing Automatic or changing functional or accuracy clears both
+the table override and its treatment hint. Direct Python, CLI, and HTTP
+requests must still supply compatible requirements explicitly.
 
 The [scientific guide](science.md#check-pseudopotentials-and-cutoffs) explains
 what to check before using selected cutoffs.

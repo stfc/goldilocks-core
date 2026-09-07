@@ -8,7 +8,6 @@ import {
   SimpleGrid,
   Stack,
   Text,
-  VisuallyHidden,
 } from "@mantine/core";
 import { ArrowRight } from "lucide-react";
 
@@ -63,9 +62,18 @@ export function CalculationForm({
       capabilities.pseudopotential_sets.map((item) => item.functional),
     ),
   ];
+  const elements = [
+    ...new Set(
+      inspection.structure.sites.flatMap((site) =>
+        site.species.map((species) => species.symbol),
+      ),
+    ),
+  ];
   const matchingTables = capabilities.pseudopotential_sets.filter(
     (table) =>
-      table.functional === intent.functional && table.accuracy === accuracy,
+      table.functional === intent.functional &&
+      table.accuracy === accuracy &&
+      elements.every((element) => table.supported_elements.includes(element)),
   );
   const inspecting = snapshot.operation === "inspect";
   const busy = snapshot.operation !== null;
@@ -108,6 +116,7 @@ export function CalculationForm({
             void workspace.dispatch({
               type: "draft.patch",
               intent: { functional: event.currentTarget.value },
+              hints: { relativistic_mode: null },
               pseudoTable: null,
             })
           }
@@ -122,7 +131,7 @@ export function CalculationForm({
               intent: {
                 pseudo_accuracy: parsePseudoAccuracy(event.currentTarget.value),
               },
-              hints: { pseudo_accuracy: null },
+              hints: { pseudo_accuracy: null, relativistic_mode: null },
               pseudoTable: null,
             })
           }
@@ -137,12 +146,20 @@ export function CalculationForm({
         disabled={inspecting}
         aria-describedby="pseudo-table-help"
         value={draft.pseudo_table ?? ""}
-        onChange={(event) =>
+        onChange={(event) => {
+          const table = matchingTables.find(
+            (item) => item.id === event.currentTarget.value,
+          );
           void workspace.dispatch({
             type: "draft.patch",
-            pseudoTable: event.currentTarget.value || null,
-          })
-        }
+            pseudoTable: table?.id ?? null,
+            hints: {
+              relativistic_mode: table
+                ? parseRelativisticMode(table.relativistic_treatment)
+                : null,
+            },
+          });
+        }}
         data={[
           { value: "", label: "Automatic" },
           ...matchingTables.map((table) => ({
@@ -153,14 +170,15 @@ export function CalculationForm({
       />
       {matchingTables.length === 0 ? (
         <Text id="pseudo-table-help" c="red" size="sm" role="status">
-          No registered table matches these settings. Choose another functional
-          or accuracy.
+          No registered table supports this structure with these settings.
+          Choose another functional or accuracy.
         </Text>
       ) : (
-        <VisuallyHidden id="pseudo-table-help" role="status">
-          Showing {intent.functional} / {accuracy} tables. Automatic lets Core
-          choose; changing either setting resets the table.
-        </VisuallyHidden>
+        <Text id="pseudo-table-help" c="dimmed" size="sm">
+          The table sets pseudopotential relativistic treatment, not spin-orbit
+          coupling. Automatic lets Core choose; changing functional or accuracy
+          resets both the table and its treatment.
+        </Text>
       )}
 
       <ScientificOverrides hints={hints} inspecting={inspecting} />
@@ -313,6 +331,13 @@ function usesSmearingWidth(type: SmearingType | null): boolean {
 function parsePseudoAccuracy(value: string): PseudoAccuracy {
   if (value === "efficiency" || value === "precision") return value;
   throw new Error(`Unsupported pseudopotential accuracy: ${value}`);
+}
+
+function parseRelativisticMode(value: string) {
+  if (value === "scalar" || value === "full" || value === "non-relativistic") {
+    return value;
+  }
+  throw new Error(`Unsupported relativistic treatment: ${value}`);
 }
 
 function parseSmearingType(value: string): SmearingType | null {

@@ -247,7 +247,6 @@ def test_service_capabilities_describes_the_complete_core_catalog() -> None:
         "citation": "van Setten et al., Comput. Phys. Commun. 226, 39 (2018)",
         "default": True,
     }
-    assert len(supported_elements) == 72
     assert {"H", "Si", "Pt"}.issubset(supported_elements)
 
     serialized = to_portable(capabilities)
@@ -406,3 +405,15 @@ def test_capability_catalogs_use_deterministic_identity_order() -> None:
         item["supported_elements"] == sorted(item["supported_elements"])
         for item in capabilities["pseudopotential_sets"]
     )
+
+
+def test_capabilities_only_advertise_elements_allowed_by_selection_policy() -> None:
+    with Service() as service:
+        tables = {
+            table["id"]: set(table["supported_elements"])
+            for table in service.capabilities()["pseudopotential_sets"]
+        }
+
+    assert tables["pseudodojo-pbe-lanthanides-sr"] == set()
+    assert "Ce" in tables["sssp-pbe-efficiency-sr"]
+    assert "Si" in tables["pseudodojo-pbe-efficiency-fr"]

@@ -542,6 +542,141 @@ test("prepares a real Core recommendation from POSCAR", async ({ page }) => {
   });
 });
 
+test("every eligible table override produces an archive with its treatment", async ({
+  page,
+  request,
+}) => {
+  const response = await request.get("/capabilities");
+  const catalog = (await response.json()) as {
+    pseudopotential_sets: {
+      id: string;
+      version: string;
+      functional: string;
+      accuracy: string;
+      relativistic_treatment: string;
+      supported_elements: string[];
+    }[];
+  };
+  const tables = catalog.pseudopotential_sets.filter((table) =>
+    table.supported_elements.includes("Si"),
+  );
+  expect(
+    tables
+      .filter((table) => table.relativistic_treatment === "full")
+      .map((table) => table.id),
+  ).toEqual([
+    "pseudodojo-pbe-efficiency-fr",
+    "pseudodojo-pbe-precision-fr",
+    "pseudodojo-pbesol-efficiency-fr",
+    "pseudodojo-pbesol-precision-fr",
+  ]);
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
+  for (const table of tables) {
+    await test.step(table.id, async () => {
+      await page.getByLabel("Functional").selectOption(table.functional);
+      await page.getByLabel("Accuracy").selectOption(table.accuracy);
+      await page.getByLabel("Pseudopotential table").selectOption(table.id);
+      const computed = page.waitForResponse(
+        (response) => new URL(response.url()).pathname === "/compute",
+      );
+      await page.locator('button[type="submit"]').click();
+      expect((await computed).status()).toBe(200);
+      await expect(page.getByLabel("Pseudopotential set")).toHaveText(table.id);
+      const downloadStarted = page.waitForEvent("download");
+      await page
+        .getByRole("button", { name: "Download input files (.zip)" })
+        .click();
+      const download = await downloadStarted;
+      const entries = unzipSync(
+        new Uint8Array(await readFile(await download.path())),
+      );
+      verifyArchive(entries, {
+        sourceName: "Si.cif",
+        tableId: table.id,
+        tableVersion: table.version,
+      });
+      const result = JSON.parse(textEntry(entries, "goldilocks.json")) as {
+        records: {
+          selection: {
+            pseudopotentials: { relativistic: string; filename: string }[];
+          };
+        };
+      };
+      const pseudos = result.records.selection.pseudopotentials;
+      expect(pseudos.map((pseudo) => pseudo.relativistic)).toEqual([
+        table.relativistic_treatment,
+      ]);
+      const input = textEntry(entries, "inputs/qe.in");
+      expect(input).not.toMatch(/lspinorb\s*=\s*\.true\./i);
+      for (const pseudo of pseudos) {
+        expect(input).toContain(pseudo.filename);
+        expect(Object.keys(entries)).toContain(`pseudo/${pseudo.filename}`);
+      }
+    });
+  }
+});
+
+test("table treatment resets with Automatic and functional changes", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
+  const expectedTables: Record<string, string> = {
+    automatic: "pseudodojo-pbesol-efficiency-sr",
+    functional: "pseudodojo-lda-efficiency-sr",
+    accuracy: "pseudodojo-pbesol-precision-sr",
+  };
+  for (const [reset, expectedTable] of Object.entries(expectedTables)) {
+    await page.getByLabel("Functional").selectOption("PBEsol");
+    await page.getByLabel("Accuracy").selectOption("efficiency");
+    await page
+      .getByLabel("Pseudopotential table")
+      .selectOption("pseudodojo-pbesol-efficiency-fr");
+    if (reset === "automatic") {
+      await page.getByLabel("Pseudopotential table").selectOption("");
+    } else if (reset === "functional") {
+      await page.getByLabel("Functional").selectOption("LDA");
+    } else {
+      await page.getByLabel("Accuracy").selectOption("precision");
+    }
+    await page.locator('button[type="submit"]').click();
+    await expect(page.getByLabel("Pseudopotential set")).toHaveText(
+      expectedTable,
+    );
+  }
+});
+
+test("table choices exclude unsupported elements and disallowed lanthanide tables", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
+  await page.getByLabel("Functional").selectOption("PBE");
+  const table = page.getByLabel("Pseudopotential table");
+  await expect(
+    table.locator('option[value="pseudodojo-pbe-lanthanides-sr"]'),
+  ).toHaveCount(0);
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "POSCAR",
+    mimeType: "text/plain",
+    buffer: Buffer.from(
+      "Cerium\n1.0\n5.16 0 0\n0 5.16 0\n0 0 5.16\nCe\n1\nDirect\n0 0 0\n",
+    ),
+  });
+  await expect(page.getByText("Ce1", { exact: true })).toBeVisible();
+  await page.getByLabel("Functional").selectOption("PBE");
+  await expect(table.locator("option")).toHaveText([
+    "Automatic",
+    "SSSP_1.3.0_PBE_efficiency · PBE · efficiency · scalar",
+  ]);
+  await table.selectOption("sssp-pbe-efficiency-sr");
+  await page.locator('button[type="submit"]').click();
+  await expect(page.getByLabel("Pseudopotential set")).toHaveText(
+    "sssp-pbe-efficiency-sr",
+  );
+});
+
 interface ArchiveManifest {
   readonly pseudopotential_set: {
     readonly id: string;

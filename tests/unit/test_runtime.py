@@ -190,22 +190,31 @@ def test_recommend_returns_complete_result_without_generated_files() -> None:
     assert result.generated_files == ()
 
 
-def test_analyze_fails_loudly_when_no_metallicity_model_is_installed(
+def test_analyze_falls_back_to_heuristic_when_no_metallicity_model_is_installed(
     monkeypatch,
 ) -> None:
     # #174: Runtime() resolves a real model by default, same as the QRF
-    # k-distance backend resolves its own assets -- no silent heuristic
-    # fallback when nothing is configured or installed.
+    # k-distance backend resolves its own assets -- but a missing asset is a
+    # "not installed yet" state, not a configuration error, so this degrades
+    # to the composition heuristic and warns rather than failing the request.
     def raise_not_installed(self: AssetStore, asset_id: str, version: str):
         raise AssetNotInstalled(AssetReference(asset_id, version), self.root)
 
     monkeypatch.setattr(AssetStore, "resolve", raise_not_installed)
 
-    with (
-        Runtime() as runtime,
-        pytest.raises(AssetNotInstalled, match="models/metallicity-is-metal"),
-    ):
-        Dispatcher(runtime).compute(make_query_request((StructureAnalysisRecord,)))
+    with Runtime() as runtime:
+        records = Dispatcher(runtime).compute(
+            make_query_request((StructureAnalysisRecord,))
+        )
+
+    analysis = records[StructureAnalysisRecord]
+    assert analysis.electronic_character == "unknown"
+    assert analysis.electronic_character_source == "heuristic_missing_model"
+    assert analysis.electronic_character_confidence is None
+    assert any(
+        "models/metallicity-is-metal" in warning
+        for warning in analysis.analysis_warnings
+    )
 
 
 def test_analyze_uses_configured_metallicity_model(monkeypatch) -> None:

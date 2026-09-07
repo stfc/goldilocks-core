@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING
 from pymatgen.core import Structure
 
 from goldilocks_core.advice.kdistance import QrfBackend
-from goldilocks_core.assets import AssetStore
+from goldilocks_core.analysis import heuristic_metallicity
+from goldilocks_core.assets import AssetNotInstalled, AssetStore
 from goldilocks_core.contracts import (
     PREDICTION_RESOLVERS,
     ElectronicCharacter,
@@ -45,9 +46,11 @@ class MetallicityModel:
     ``model_dir`` overrides where the model record lives; left unset, it is
     resolved from the runtime asset store on first use, same as the QRF
     k-distance backend resolves its own assets. An asset that is not
-    installed raises ``AssetNotInstalled`` -- same as QRF -- rather than
-    silently guessing from a heuristic: a model that is expected to run and
-    does not is a configuration bug, worth failing loudly over.
+    installed is not treated as fatal: this falls back to the composition
+    heuristic (``source="heuristic_missing_model"``) and lets
+    ``analyze_structure`` attach a warning that names the missing asset and
+    the install command to fetch it, so a fresh checkout still produces a
+    usable (if less confident) analysis instead of failing the whole request.
     """
 
     __slots__ = ("_model_dir", "_registry_path", "_asset_store", "_model", "_closed")
@@ -74,7 +77,11 @@ class MetallicityModel:
         from goldilocks_ml.inference import load_model
 
         if self._model is None:
-            self._model = load_model(self._resolve_model_dir())
+            try:
+                model_dir = self._resolve_model_dir()
+            except AssetNotInstalled:
+                return heuristic_metallicity(structure), "heuristic_missing_model", None
+            self._model = load_model(model_dir)
 
         prediction = self._model.predict(structure)
         resolver = PREDICTION_RESOLVERS[prediction.parameter]

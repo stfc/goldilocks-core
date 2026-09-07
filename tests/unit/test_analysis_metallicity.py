@@ -54,6 +54,31 @@ def test_analyze_structure_uses_runtime_metallicity_classifier() -> None:
     )
 
 
+def test_missing_model_asset_warns_and_names_the_install_command() -> None:
+    structure = Structure(Lattice.cubic(2.9), ["Fe"], [[0.0, 0.0, 0.0]])
+
+    analysis = analyze_structure(
+        structure,
+        metallicity_classifier=lambda actual: (
+            heuristic_metallicity(actual),
+            "heuristic_missing_model",
+            None,
+        ),
+    )
+
+    assert analysis.electronic_character == "likely_metal"
+    assert analysis.electronic_character_source == "heuristic_missing_model"
+    assert any(
+        "goldilocks assets install models/metallicity-is-metal" in warning
+        for warning in analysis.analysis_warnings
+    )
+    # Still gets the ordinary heuristic-uncertainty warning too.
+    assert any(
+        "treat metallicity as likely" in warning
+        for warning in analysis.analysis_warnings
+    )
+
+
 def test_heuristic_metallicity_classifies_all_metal_and_non_metal() -> None:
     metal = Structure(Lattice.cubic(2.9), ["Fe"], [[0.0, 0.0, 0.0]])
     non_metal = Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])

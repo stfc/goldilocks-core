@@ -6,11 +6,12 @@ Upstream Python package for DFT input recommendation.
 
 ```bash
 uv sync --group dev
-uv run pytest
-uv run ruff check src tests
-uv run ruff format src tests
+uv run poe check        # ruff check + format gate + pytest
+uv run poe web-check    # workbench frontend: lint + vitest + build
 uv run pre-commit run --all-files
 ```
+
+`uv run poe` lists tasks, including `workbench` (backend :8000 + Vite :5173 in one command).
 
 Run `pre-commit` before committing. CI (on `main` and PRs) runs Ruff, pytest with branch coverage, focused mutation testing, and distribution validation — all via `uv`.
 

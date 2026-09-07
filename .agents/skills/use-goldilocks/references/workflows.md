@@ -5,22 +5,26 @@ Use these canonical patterns before reading implementation files.
 ## Inspect a Structure Source
 
 ```python
-from goldilocks_core.io.structures import PathStructureSource
-from goldilocks_core.runtime.service import Service
+from goldilocks_core import PathStructureSource, Service
 
 with Service() as core:
     inspection = core.inspect_structure(PathStructureSource("structure.cif"))
 
-print(inspection["structure"]["reduced_formula"])
-print(inspection["canonical_cif"])
+print(inspection.structure.reduced_formula)
+print(inspection.canonical_cif)
 ```
 
 ## Compute a Preset
 
 ```python
-from goldilocks_core.calculation import CalculationHints
-from goldilocks_core.request import CalculationDraft, ComputeRequest, PresetSelection
-from goldilocks_core.serialization import to_portable
+from goldilocks_core import (
+    CalculationDraft,
+    CalculationHints,
+    ComputeRequest,
+    PathStructureSource,
+    PresetSelection,
+    Service,
+)
 
 request = ComputeRequest(
     CalculationDraft(
@@ -33,7 +37,7 @@ request = ComputeRequest(
 with Service() as core:
     result = core.compute(request)
 
-records = to_portable(result)["records"]
+records = result.records.to_dict()
 print(records["analysis"]["reduced_formula"])
 print(records["k_points"]["grid"])
 print(records["selection"]["pseudopotentials"])
@@ -46,13 +50,12 @@ print(result.warnings)
 ## Publish Ready-to-run Output
 
 ```python
-from goldilocks_core.publication import DirectoryOutput
+from goldilocks_core import DirectoryOutput
 
-request = ComputeRequest(request.draft, PresetSelection("generate"))
 with Service() as core:
     result = core.compute(request, output=DirectoryOutput("run-dir"))
 
-print(result.publication["path"])
+print(result.publication.path)
 ```
 
 The destination must not exist. Use `ArchiveOutput("run.zip")` for ZIP,
@@ -71,10 +74,8 @@ uv run goldilocks compute structure.cif --preset generate --pseudo-table pseudod
 ## Select Records
 
 ```python
-from goldilocks_core.analysis import StructureAnalysisRecord
-from goldilocks_core.kmesh.resolve import KPointSelection
-from goldilocks_core.request import ComputeRequest, RecordSelection
-from goldilocks_core.runtime.jobs import compute
+from goldilocks_core import ComputeRequest, RecordSelection, compute
+from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
 
 query = ComputeRequest(
     request.draft,
@@ -104,7 +105,7 @@ cutoffs or redistribution terms.
 ## Use a local k-point model
 
 ```python
-from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.contracts import ModelSpec
 
 model = ModelSpec(
     name="local-kmesh-model",

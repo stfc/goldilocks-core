@@ -47,9 +47,13 @@ work; use top-level `compute()` for one call.
 ## Canonical entry points
 
 ```python
-from goldilocks_core.io.structures import PathStructureSource
-from goldilocks_core.request import CalculationDraft, ComputeRequest, PresetSelection
-from goldilocks_core.runtime.service import Service
+from goldilocks_core import (
+    CalculationDraft,
+    ComputeRequest,
+    PathStructureSource,
+    PresetSelection,
+    Service,
+)
 
 request = ComputeRequest(
     CalculationDraft(PathStructureSource("structure.cif")),

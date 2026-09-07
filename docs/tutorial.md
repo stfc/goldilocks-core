@@ -1,158 +1,129 @@
-# Tutorial
+# Python API
 
-This tutorial inspects a structure, computes recommendations, and publishes
-Quantum ESPRESSO SCF inputs through the canonical Python interface.
+Use Goldilocks to generate inputs from a script. First complete the
+[installation and asset setup](quickstart.md#1-install). Run the examples in
+order in the same Python session, or save them in a script and run
+`uv run your_script.py`.
 
-## Inspect a structure
+## Generate inputs
 
-```python
-from goldilocks_core.io.structures import PathStructureSource
-from goldilocks_core.runtime.service import Service
-
-source = PathStructureSource("structure.cif")
-with Service() as core:
-    inspection = core.inspect_structure(source)
-
-print(inspection["structure"]["reduced_formula"])
-print(inspection["canonical_cif"])
-```
-
-The inspection is a dict retaining source identity, canonical CIF, lattice,
-sites, species occupancies, formula, and periodicity.
-
-## Compute a recommendation
-
-Install the default assets before computing recommendations:
-
-```bash
-uv run goldilocks assets install default
-```
-
-Use an explicit grid for a deterministic first run that does not load the
-k-point model:
+This example writes to `si-python/`. Choose another name if it already exists.
 
 ```python
-from goldilocks_core.calculation import CalculationHints
-from goldilocks_core.request import CalculationDraft, ComputeRequest, PresetSelection
-from goldilocks_core.serialization import to_portable
-
-request = ComputeRequest(
-    CalculationDraft(
-        source,
-        hints=CalculationHints(k_grid=(4, 4, 4)),
-        pseudo_table="pseudodojo-pbesol-efficiency-sr",
-    ),
-    PresetSelection("recommend"),
+from goldilocks_core import (
+    CalculationDraft,
+    ComputeRequest,
+    DirectoryOutput,
+    PathStructureSource,
+    PresetSelection,
+    compute,
 )
+from goldilocks_core.examples.structures import structure
 
-with Service() as core:
-    result = core.compute(request)
-
-print(to_portable(result)["records"]["analysis"]["reduced_formula"])
-print(to_portable(result)["records"]["k_points"]["grid"])
-print(result.warnings)
-```
-
-`recommend` is a Preset ID. It requests analysis, advice, k-points, and
-pseudopotential selection without generating runnable input data.
-
-## Generate and publish inputs
-
-Select the `generate` Preset and a Core output target:
-
-```python
-from goldilocks_core.publication import DirectoryOutput
-
-request = ComputeRequest(request.draft, PresetSelection("generate"))
-with Service() as core:
-    result = core.compute(request, output=DirectoryOutput("run"))
+source = PathStructureSource(structure("Si.cif"))
+request = ComputeRequest(
+    draft=CalculationDraft(structure=source),
+    selection=PresetSelection("generate"),
+)
+result = compute(request, output=DirectoryOutput("si-python"))
 
 print(result.publication["path"])
+for warning in result.warnings:
+    print(warning)
 ```
 
-The destination must not already exist. Use `ArchiveOutput("run.zip")` for a
-ready-to-run archive, `DirectoryOutput()` for automatic directory allocation,
-or `None` for memory-only structured output.
+Replace `structure("Si.cif")` with a path to your own CIF or POSCAR.
+`CalculationDraft` holds the structure and settings;
+`PresetSelection("generate")` asks for input files. `DirectoryOutput` writes
+them to a new directory. See the [quickstart](quickstart.md#2-generate-an-input)
+for its contents.
 
-A publication contains generated inputs, canonical and original structures,
-exact pseudopotentials, licence material, citations, and `goldilocks.json`
-provenance with file hashes. Extract an archive and run Quantum ESPRESSO from
-its root so `pseudo_dir = './pseudo'` resolves correctly.
+## Read a recommendation
 
-## Select explicit Records
+`result.records` holds the computed results, keyed by record type:
 
 ```python
-from goldilocks_core.analysis import StructureAnalysisRecord
-from goldilocks_core.kmesh.resolve import KPointSelection
-from goldilocks_core.request import RecordSelection
+from goldilocks_core import KPointSelection
+
+k_points = result.records[KPointSelection]
+print(k_points["grid"])
+print(k_points["provenance"].reason)
+```
+
+This prints the selected grid and the reason for it. Model-dependent values can
+change with the installed model; review warnings and check convergence rather
+than treating the recommendation as a verified result.
+
+## Choose settings yourself
+
+Pass `CalculationHints` for the settings you want to control:
+
+```python
+from goldilocks_core import CalculationHints
+
+request = ComputeRequest(
+    draft=CalculationDraft(
+        structure=source,
+        hints=CalculationHints(k_grid=(4, 4, 4)),
+    ),
+    selection=PresetSelection("recommend"),
+)
+result = compute(request)
+print(result.records[KPointSelection]["grid"])
+```
+
+The grid is now `[4, 4, 4]`. An explicit grid bypasses the k-point model; other
+settings are still recommended. The
+[scientific controls](cli.md#scientific-controls) list the available hints.
+
+`recommend` returns recommendations without generating input files. `generate`
+adds the input files. Neither writes to disk through the Python API unless you
+supply an output target.
+
+## Choose an output
+
+| `output` argument                | Result                             |
+| -------------------------------- | ---------------------------------- |
+| Omitted or `None`                | Keep the result in memory          |
+| `DirectoryOutput("si-python")`   | Write a new directory              |
+| `ArchiveOutput("si-python.zip")` | Write a ZIP with the same contents |
+
+Import `ArchiveOutput` from `goldilocks_core` to use it. Use the `generate`
+preset when writing outputs; choose a destination that does not already exist.
+
+## Inspect structures and reuse loaded models
+
+Use a `Service` for repeated calls:
+
+```python
+from goldilocks_core import Service
+
+with Service() as core:
+    inspection = core.inspect_structure(source)
+    print(inspection["structure"]["reduced_formula"])
+    result = core.compute(request)
+```
+
+Keep related computations inside the `with` block to reuse loaded models.
+`core.capabilities()` lists the available tasks, presets, and controls.
+
+## Request only the results you need
+
+For example, request only the k-point grid:
+
+```python
+from goldilocks_core import RecordSelection
 
 query = ComputeRequest(
-    request.draft,
-    RecordSelection((StructureAnalysisRecord, KPointSelection)),
+    draft=request.draft,
+    selection=RecordSelection((KPointSelection,)),
 )
-with Service() as core:
-    result = core.compute(query)
+result = compute(query)
+print(result.records[KPointSelection]["grid"])
 ```
 
-Only dependencies required by the selected Records execute.
+Only the required stages run. This example retains the explicit grid from the
+earlier request.
 
-## Reuse Runtime state
-
-```python
-with Service() as core:
-    capabilities = core.capabilities()
-    first = core.compute(request)
-    second = core.compute(query)
-
-print([preset["id"] for preset in capabilities["tasks"][0]["presets"]])
-```
-
-One Service reuses lazy model state across concurrent Compute calls.
-Capabilities replaces separate task, code, and model discovery operations.
-
-## CLI
-
-```bash
-uv run goldilocks capabilities --json
-uv run goldilocks inspect structure.cif --json
-uv run goldilocks compute structure.cif --preset recommend --k-grid 4 4 4 --no-out --json
-uv run goldilocks compute structure.cif --preset generate --pseudo-root pseudos --k-grid 4 4 4 --archive run.zip --json
-```
-
-## HTTP
-
-HTTP Structure Sources are explicit inline content:
-
-```json
-{
-  "draft": {
-    "structure": {
-      "kind": "inline",
-      "name": "structure.cif",
-      "content": "data_Si ...",
-      "format": "cif"
-    },
-    "hints": {"k_grid": [4, 4, 4]},
-    "pseudo_table": "pseudodojo-pbesol-efficiency-sr"
-  },
-  "selection": {"preset": "generate"}
-}
-```
-
-Send this body to `POST /compute`. The multipart response contains canonical
-Result JSON and, because the `generate` preset produces complete DFT Input Data,
-the exact ZIP from that execution. Record selections without DFT Input Data omit
-the archive part. The server stores neither. Use `GET /capabilities` and
-`POST /inspect` for the other public scientific operations.
-
-## MCP
-
-Local stdio MCP exposes `capabilities`, `inspect_structure`, and `compute`.
-Compute accepts the same inline draft, optional registered table ID, and
-selection shape as HTTP. Omitted output automatically publishes complete DFT
-Input Data to a server-chosen directory. Explicit `memory` output suppresses
-publication.
-
-MCP does not accept structure paths, pseudopotential roots, model locations, or
-publication paths. Use the CLI or Python interface for trusted local filesystem
-configuration.
+See [Recommendations](science.md) to interpret other settings, or
+[Architecture](architecture.md) to extend the computation workflow.

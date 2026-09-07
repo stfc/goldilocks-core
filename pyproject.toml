@@ -37,6 +37,29 @@ mcp = ["mcp", "pydantic>=2.12"]
 [project.scripts]
 goldilocks = "goldilocks_core.cli.core:main"
 
+[tool.poe.tasks.fmt]
+help = "Format src, tests, and scripts with ruff"
+cmd = "ruff format src tests scripts"
+
+[tool.poe.tasks.lint]
+help = "Check style and complexity, matching the CI gate"
+sequence = [
+    { cmd = "ruff check src tests scripts" },
+    { cmd = "ruff format --check src tests scripts" },
+    { cmd = "python scripts/check_complexity.py" },
+]
+
+[tool.poe.tasks.test]
+help = "Run the pytest suite"
+cmd = "pytest"
+
+[tool.poe.tasks.check]
+help = "Lint and test, the local pre-PR gate"
+sequence = [
+    { ref = "lint" },
+    { ref = "test" },
+]
+
 [tool.poe.tasks.serve]
 help = "Install assets and serve the Core HTTP backend on :8000"
 shell = """
@@ -154,7 +177,19 @@ pytest_add_cli_args = ["-q"]
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+select = [
+    "E", "F", "I", # baseline
+    "B",            # bugbear: real footguns
+    "UP",           # modern python; ceremony prevention
+    "C4",           # comprehensions over loops
+    "SIM",          # collapse ceremony
+    "RET",          # return discipline
+    "PIE",          # useless constructs
+    "PERF",         # needless work
+    "TID",          # import hygiene, banned modules
+    "RUF",          # ruff-specific: noqa discipline, mutable defaults
+    "BLE",          # no blind exception catches
+]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10

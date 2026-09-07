@@ -219,7 +219,7 @@ def test_pseudo_root_publication_uses_explicit_legal_sidecar(tmp_path: Path) -> 
     with Service() as service:
         result = service.compute(request)
         licence_path.unlink()
-        with pytest.raises(ValueError, match="cannot read contained.*licence_file"):
+        with pytest.raises(ValueError, match=r"cannot read contained.*licence_file"):
             service.compute(request)
 
     input_data = result.records[DftInputData]
@@ -416,9 +416,11 @@ files = [
         PresetSelection("generate"),
     )
 
-    with Runtime(asset_store=store, pseudo_registry_path=registry) as runtime:
-        with Service(runtime) as service:
-            result = service.compute(request)
+    with (
+        Runtime(asset_store=store, pseudo_registry_path=registry) as runtime,
+        Service(runtime) as service,
+    ):
+        result = service.compute(request)
     input_data = result.records[DftInputData]
     installed_root = store.root / table.asset.id / table.version
     (installed_root / "pseudos/Si.UPF").write_bytes(b"changed after compute")
@@ -502,16 +504,18 @@ def test_only_used_model_identities_licences_and_citations_are_published(
             request,
             draft=replace(request.draft, hints=CalculationHints(pseudo_type="NC")),
         )
-    with Runtime(asset_store=store, registry_path=registry) as runtime:
-        with Service(runtime) as service:
-            first = service.compute(request)
-            registry.write_text(
-                original_registry.replace("QRF95", "QRF96")
-                .replace('version = "1"', 'version = "2"')
-                .replace("Elena Patyukova", "Changed registry author"),
-                encoding="utf-8",
-            )
-            result = service.compute(request)
+    with (
+        Runtime(asset_store=store, registry_path=registry) as runtime,
+        Service(runtime) as service,
+    ):
+        first = service.compute(request)
+        registry.write_text(
+            original_registry.replace("QRF95", "QRF96")
+            .replace('version = "1"', 'version = "2"')
+            .replace("Elena Patyukova", "Changed registry author"),
+            encoding="utf-8",
+        )
+        result = service.compute(request)
 
     assert result.records[KPointSelection] == first.records[KPointSelection]
     assert Publisher().files(result.records[DftInputData]) == Publisher().files(
@@ -582,24 +586,24 @@ def test_staggered_model_loads_publish_both_classifier_snapshots(
         lambda structure, model, atom_init, settings: (np.zeros(1), ["fixture"]),
     )
     request = _explicit_request(tmp_path)
-    with Runtime(asset_store=store, registry_path=registry) as runtime:
-        with Service(runtime) as service:
-            service.compute(request)
-            registry.write_text(
-                original.replace(
-                    'name = "metallicity-goldilocks-CGCNN"',
-                    'name = "updated-classifier"',
-                ),
-                encoding="utf-8",
+    with (
+        Runtime(asset_store=store, registry_path=registry) as runtime,
+        Service(runtime) as service,
+    ):
+        service.compute(request)
+        registry.write_text(
+            original.replace(
+                'name = "metallicity-goldilocks-CGCNN"',
+                'name = "updated-classifier"',
+            ),
+            encoding="utf-8",
+        )
+        result = service.compute(
+            replace(
+                request,
+                draft=replace(request.draft, hints=CalculationHints(pseudo_type="NC")),
             )
-            result = service.compute(
-                replace(
-                    request,
-                    draft=replace(
-                        request.draft, hints=CalculationHints(pseudo_type="NC")
-                    ),
-                )
-            )
+        )
 
     published = Publisher().files(result.records[DftInputData])
     files = {item["path"]: item["content"] for item in published}
@@ -627,6 +631,7 @@ def test_custom_model_revisions_and_legal_material(
         "goldilocks_core.advice.kindex.predict_kindex",
         lambda structure, spec: 1.0,
     )
+
     common = {
         "name": "shared-operator-model",
         "version": "1",
@@ -662,18 +667,20 @@ def test_custom_model_revisions_and_legal_material(
         request.selection,
     )
 
-    with Runtime(
-        asset_store=AssetStore(tmp_path / "same-name-assets"),
-        metallicity_checkpoint="metallicity.ckpt",
-        metallicity_atom_init="atom-init.json",
-        metallicity_model=metallicity_model,
-    ) as runtime:
-        with Service(runtime) as service:
-            if missing_legal:
-                with pytest.raises(ValueError, match="must declare non-empty licence"):
-                    service.compute(request)
-                return
-            input_data = service.compute(request).records[DftInputData]
+    with (
+        Runtime(
+            asset_store=AssetStore(tmp_path / "same-name-assets"),
+            metallicity_checkpoint="metallicity.ckpt",
+            metallicity_atom_init="atom-init.json",
+            metallicity_model=metallicity_model,
+        ) as runtime,
+        Service(runtime) as service,
+    ):
+        if missing_legal:
+            with pytest.raises(ValueError, match="must declare non-empty licence"):
+                service.compute(request)
+            return
+        input_data = service.compute(request).records[DftInputData]
 
     assert {
         (model["target"], model["revision"])

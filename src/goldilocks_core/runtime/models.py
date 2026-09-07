@@ -63,14 +63,14 @@ class KMeshService(Protocol):
 
 class MetallicityModel:
     __slots__ = (
-        "_checkpoint",
-        "_atom_init",
-        "_registry_path",
         "_asset_store",
-        "_model",
+        "_atom_init",
+        "_checkpoint",
+        "_closed",
         "_config",
         "_load_lock",
-        "_closed",
+        "_model",
+        "_registry_path",
     )
 
     def __init__(

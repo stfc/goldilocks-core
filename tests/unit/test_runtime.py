@@ -579,7 +579,7 @@ def test_record_registration_is_atomic_when_an_id_conflicts() -> None:
             )
         )
 
-    assert RECORD_TYPE_IDS == registered
+    assert registered == RECORD_TYPE_IDS
 
 
 @pytest.mark.parametrize(

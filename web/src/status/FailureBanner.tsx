@@ -1,3 +1,4 @@
+import { ActionIcon, Alert, Button } from "@mantine/core";
 import { RotateCw, X } from "lucide-react";
 
 import type { CoreFailure } from "../api/coreClient";
@@ -16,45 +17,51 @@ export function FailureBanner({
   readonly onDismiss: () => void;
 }) {
   return (
-    <div className="failure-banner" role="alert">
-      <div>
-        <strong>{failureTitle(failure.kind)}</strong>
-        <span>{failure.message}</span>
+    <Alert
+      className="failure-banner"
+      classNames={{
+        body: "failure-banner__body",
+        message: "failure-banner__message",
+      }}
+      role="alert"
+    >
+      <div className="failure-banner__copy">
+        <strong>{FAILURE_TITLES[failure.kind] ?? "Calculation failed"}</strong>
+        <span className="failure-banner__description">{failure.message}</span>
       </div>
       <div className="failure-banner__actions">
         {retryAvailable ? (
-          <button type="button" onClick={onRetry}>
-            <RotateCw aria-hidden="true" size={15} />
+          <Button
+            className="failure-banner__action"
+            type="button"
+            onClick={onRetry}
+            leftSection={<RotateCw aria-hidden="true" size={15} />}
+          >
             Retry
-          </button>
+          </Button>
         ) : null}
         {dismissAvailable ? (
-          <button type="button" aria-label="Dismiss error" onClick={onDismiss}>
+          <ActionIcon
+            className="failure-banner__action"
+            type="button"
+            aria-label="Dismiss error"
+            onClick={onDismiss}
+          >
             <X aria-hidden="true" size={17} />
-          </button>
+          </ActionIcon>
         ) : null}
       </div>
-    </div>
+    </Alert>
   );
 }
 
-function failureTitle(kind: string): string {
-  switch (kind) {
-    case "invalid_request":
-      return "Check the request";
-    case "assets_unavailable":
-    case "asset_not_installed":
-    case "asset_corrupt":
-      return "Runtime assets unavailable";
-    case "invalid_structure":
-      return "Check the structure";
-    case "pseudo_table_mismatch":
-      return "Pseudopotential set mismatch";
-    case "network_error":
-      return "Cannot reach Core";
-    case "invalid_response":
-      return "Unexpected server response";
-    default:
-      return "Calculation failed";
-  }
-}
+const FAILURE_TITLES: Readonly<Record<string, string>> = {
+  invalid_request: "Check the request",
+  assets_unavailable: "Runtime assets unavailable",
+  asset_not_installed: "Runtime assets unavailable",
+  asset_corrupt: "Runtime assets unavailable",
+  invalid_structure: "Check the structure",
+  pseudo_table_mismatch: "Pseudopotential set mismatch",
+  network_error: "Cannot reach Core",
+  invalid_response: "Unexpected server response",
+};

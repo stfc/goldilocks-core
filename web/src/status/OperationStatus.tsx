@@ -1,3 +1,4 @@
+import { VisuallyHidden } from "@mantine/core";
 import type { WorkspaceOperation } from "../workspace/workspace";
 import "./OperationStatus.css";
 
@@ -9,31 +10,27 @@ export function OperationStatus({
   readonly hasFailure: boolean;
 }) {
   return (
-    <div
-      className="visually-hidden"
+    <VisuallyHidden
       role="status"
       aria-label="Workbench status"
       aria-live="polite"
       aria-atomic="true"
     >
       {operationMessage(operation, hasFailure)}
-    </div>
+    </VisuallyHidden>
   );
 }
+
+const OPERATION_MESSAGES: Readonly<Record<WorkspaceOperation, string>> = {
+  capabilities: "Loading capabilities",
+  inspect: "Inspecting structure",
+  compute: "Computing recommendation",
+};
 
 function operationMessage(
   operation: WorkspaceOperation | null,
   hasFailure: boolean,
 ): string {
   if (hasFailure) return "Needs attention";
-  switch (operation) {
-    case null:
-      return "Ready";
-    case "capabilities":
-      return "Loading capabilities";
-    case "inspect":
-      return "Inspecting structure";
-    case "compute":
-      return "Computing recommendation";
-  }
+  return operation === null ? "Ready" : OPERATION_MESSAGES[operation];
 }

@@ -8,7 +8,7 @@ import {
   type ComputeRequest,
   type StructureInspection,
   type StructureSource,
-} from "./coreClient";
+} from "../../src/api/coreClient";
 
 const capabilities: Capabilities = {
   core_version: "1.2.3",
@@ -79,7 +79,11 @@ const computationResult: ComputationResult = {
   selection: { preset: "generate" },
   publication: null,
   warnings: [],
-  records: { generated_files: [{ path: "inputs/qe.in", role: "input", content: "&CONTROL\n/" }] },
+  records: {
+    generated_files: [
+      { path: "inputs/qe.in", role: "input", content: "&CONTROL\n/" },
+    ],
+  },
   draft: {
     structure: inspection,
     intent: capabilities.default_intent,
@@ -132,6 +136,28 @@ function preparedResponse(
 }
 
 describe("HttpCoreClient", () => {
+  it("contains an archive filename supplied by an untrusted response", async () => {
+    const client = new HttpCoreClient(
+      "",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          preparedResponse(
+            computationResult,
+            "reviewed ZIP bytes",
+            "../escape.zip",
+          ),
+        ),
+    );
+
+    const prepared = await client.compute(request);
+
+    expect(prepared.archive?.filename).toBe("goldilocks-inputs.zip");
+    await expect(prepared.archive?.blob.text()).resolves.toBe(
+      "reviewed ZIP bytes",
+    );
+  });
+
   it("rejects JSON operations with the wrong content type", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify(capabilities), {
@@ -172,9 +198,9 @@ describe("HttpCoreClient", () => {
         details: { attempt: 2 },
       },
     };
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      Response.json(payload, { status: 503 }),
-    );
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json(payload, { status: 503 }));
     const client = new HttpCoreClient("", fetcher);
 
     const failure = await client
@@ -193,9 +219,9 @@ describe("HttpCoreClient", () => {
   });
 
   it("loads Capabilities as generated Core types", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      Response.json(capabilities),
-    );
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json(capabilities));
     const client = new HttpCoreClient("/core", fetcher);
 
     await expect(client.capabilities()).resolves.toEqual(capabilities);
@@ -223,7 +249,9 @@ describe("HttpCoreClient", () => {
 
   it("rejects a computation response with the wrong content type", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      Response.json({ error: { kind: "unexpected", message: "not multipart" } }),
+      Response.json({
+        error: { kind: "unexpected", message: "not multipart" },
+      }),
     );
     const client = new HttpCoreClient("", fetcher);
 
@@ -271,9 +299,9 @@ describe("HttpCoreClient", () => {
   });
 
   it("inspects an inline Structure Source through the Core operation", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      Response.json(inspection),
-    );
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json(inspection));
     const client = new HttpCoreClient("", fetcher);
 
     await expect(client.inspectStructure(source)).resolves.toEqual(inspection);

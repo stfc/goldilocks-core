@@ -138,6 +138,11 @@ async function parseJson<T>(response: Response): Promise<T> {
 
 async function parseVersionedJson<T>(response: Response): Promise<T> {
   const payload = await parseJson<unknown>(response);
+  requireSchemaVersion(payload, response.status);
+  return payload as T;
+}
+
+function requireSchemaVersion(payload: unknown, status: number): void {
   if (
     payload === null ||
     typeof payload !== "object" ||
@@ -149,11 +154,10 @@ async function parseVersionedJson<T>(response: Response): Promise<T> {
       "Goldilocks Core returned an incompatible schema version.",
       false,
       {},
-      response.status,
+      status,
       payload,
     );
   }
-  return payload as T;
 }
 
 async function ensureSuccess(response: Response): Promise<void> {
@@ -189,9 +193,7 @@ async function decodeResponse(response: Response): Promise<unknown> {
   }
 }
 
-function isErrorEnvelope(
-  value: unknown,
-): value is {
+function isErrorEnvelope(value: unknown): value is {
   readonly error: {
     readonly kind: string;
     readonly message: string;
@@ -251,27 +253,10 @@ async function parsePreparedComputation(
     );
   }
 
-  let result: ComputationResult;
+  let payload: unknown;
   try {
-    const payload = JSON.parse(await resultPart.text()) as unknown;
-    if (
-      payload === null ||
-      typeof payload !== "object" ||
-      !("schema_version" in payload) ||
-      payload.schema_version !== 1
-    ) {
-      throw new CoreFailure(
-        "invalid_response",
-        "Goldilocks Core returned an incompatible schema version.",
-        false,
-        {},
-        response.status,
-        payload,
-      );
-    }
-    result = payload as ComputationResult;
-  } catch (error) {
-    if (error instanceof CoreFailure) throw error;
+    payload = JSON.parse(await resultPart.text()) as unknown;
+  } catch {
     throw new CoreFailure(
       "invalid_response",
       "Goldilocks Core returned unreadable result JSON.",
@@ -280,10 +265,15 @@ async function parsePreparedComputation(
       response.status,
     );
   }
+  requireSchemaVersion(payload, response.status);
+  const result = payload as ComputationResult;
 
   const archivePart = form.get("archive");
   if (archivePart === null) return { result, archive: null };
-  if (!(archivePart instanceof Blob) || archivePart.type !== "application/zip") {
+  if (
+    !(archivePart instanceof Blob) ||
+    archivePart.type !== "application/zip"
+  ) {
     throw new CoreFailure(
       "invalid_response",
       "Goldilocks Core returned an invalid prepared archive.",

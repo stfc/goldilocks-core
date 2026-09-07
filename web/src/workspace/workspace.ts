@@ -103,6 +103,18 @@ export function createWorkspace(
     return true;
   }
 
+  function failOperation(owner: OperationOwner, error: unknown): void {
+    if (activeOperation !== owner) return;
+    if (!(error instanceof CoreFailure)) {
+      completeOperation(owner);
+      throw error;
+    }
+    completeOperation(owner, {
+      failure: error,
+      failureOperation: owner.operation,
+    });
+  }
+
   function start(): Promise<void> {
     if (store.getState().capabilities !== null) return Promise.resolve();
     if (startup !== null) return startup.promise;
@@ -118,15 +130,7 @@ export function createWorkspace(
       },
       (error: unknown) => {
         if (startup?.owner === owner) startup = null;
-        if (activeOperation !== owner) return;
-        if (!(error instanceof CoreFailure)) {
-          completeOperation(owner);
-          throw error;
-        }
-        completeOperation(owner, {
-          failure: error,
-          failureOperation: "capabilities",
-        });
+        failOperation(owner, error);
       },
     );
     startup = { owner, promise };
@@ -158,15 +162,7 @@ export function createWorkspace(
         failureOperation: null,
       });
     } catch (error) {
-      if (activeOperation !== owner) return;
-      if (!(error instanceof CoreFailure)) {
-        completeOperation(owner);
-        throw error;
-      }
-      completeOperation(owner, {
-        failure: error,
-        failureOperation: "inspect",
-      });
+      failOperation(owner, error);
     }
   }
 
@@ -176,10 +172,8 @@ export function createWorkspace(
     const snapshot = store.getState();
     const currentDraft = snapshot.draft;
     if (
-      currentDraft?.intent === null ||
-      currentDraft?.intent === undefined ||
-      currentDraft.hints === null ||
-      currentDraft.hints === undefined ||
+      !currentDraft?.intent ||
+      !currentDraft.hints ||
       snapshot.operation === "inspect"
     ) {
       return;
@@ -189,9 +183,7 @@ export function createWorkspace(
       ...currentDraft,
       intent: { ...currentDraft.intent, ...action.intent },
       hints: { ...currentDraft.hints, ...action.hints },
-      ...("pseudoTable" in action
-        ? { pseudo_table: action.pseudoTable }
-        : {}),
+      ...("pseudoTable" in action ? { pseudo_table: action.pseudoTable } : {}),
     };
     store.setState({
       draft,
@@ -220,24 +212,51 @@ export function createWorkspace(
         failureOperation: null,
       });
     } catch (error) {
-      if (activeOperation !== owner) return;
-      if (!(error instanceof CoreFailure)) {
-        completeOperation(owner);
-        throw error;
-      }
-      completeOperation(owner, {
-        failure: error,
-        failureOperation: "compute",
-      });
+      failOperation(owner, error);
     }
   }
 
   function downloadReviewed(): void {
     const snapshot = store.getState();
     const archive = snapshot.reviewed?.archive;
-    if (archive === null || archive === undefined || snapshot.outOfDate) return;
+    if (!archive || snapshot.outOfDate) return;
     store.setState({ lastDownload: archive });
     saveArchive(archive);
+  }
+
+  async function retryFailure(): Promise<void> {
+    const { failureOperation, attemptedSource } = store.getState();
+    switch (failureOperation) {
+      case "capabilities":
+        return start();
+      case "inspect":
+        if (attemptedSource !== null) await openSource(attemptedSource);
+        return;
+      case "compute":
+        return computeReview();
+      case null:
+        return;
+    }
+  }
+
+  async function reset(): Promise<void> {
+    const capabilities = store.getState().capabilities;
+    const pendingStartup =
+      startup !== null && activeOperation === startup.owner ? startup : null;
+    draftRevision = 0;
+    if (pendingStartup === null) {
+      activeOperation = null;
+      startup = null;
+    }
+    store.setState(
+      {
+        ...EMPTY_SNAPSHOT,
+        capabilities,
+        operation: pendingStartup?.owner.operation ?? null,
+      },
+      true,
+    );
+    if (capabilities === null && pendingStartup === null) await start();
   }
 
   async function dispatch(action: WorkspaceAction): Promise<void> {
@@ -257,25 +276,8 @@ export function createWorkspace(
       case "review.download":
         downloadReviewed();
         return;
-      case "failure.retry": {
-        const snapshot = store.getState();
-        switch (snapshot.failureOperation) {
-          case "capabilities":
-            await start();
-            return;
-          case "inspect":
-            if (snapshot.attemptedSource !== null) {
-              await openSource(snapshot.attemptedSource);
-            }
-            return;
-          case "compute":
-            await computeReview();
-            return;
-          case null:
-            return;
-        }
-        return;
-      }
+      case "failure.retry":
+        return retryFailure();
       case "failure.dismiss":
         if (store.getState().capabilities === null) return;
         store.setState({
@@ -284,26 +286,8 @@ export function createWorkspace(
           failureOperation: null,
         });
         return;
-      case "workspace.reset": {
-        const capabilities = store.getState().capabilities;
-        const pendingStartup =
-          startup !== null && activeOperation === startup.owner ? startup : null;
-        draftRevision = 0;
-        if (pendingStartup === null) {
-          activeOperation = null;
-          startup = null;
-        }
-        store.setState(
-          {
-            ...EMPTY_SNAPSHOT,
-            capabilities,
-            operation: pendingStartup?.owner.operation ?? null,
-          },
-          true,
-        );
-        if (capabilities === null && pendingStartup === null) await start();
-        return;
-      }
+      case "workspace.reset":
+        return reset();
     }
   }
 

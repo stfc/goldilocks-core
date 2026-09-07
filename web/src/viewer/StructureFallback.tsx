@@ -1,3 +1,4 @@
+import { Alert, Button } from "@mantine/core";
 import type { Ref } from "react";
 
 import type { StructureInspection } from "../api/coreClient";
@@ -18,9 +19,10 @@ export function StructureFallback({
       ? "1 atomic site"
       : `${String(structure.site_count)} atomic sites`;
   return (
-    <div
+    <Alert
       ref={containerRef}
       className="viewport__fallback"
+      classNames={{ message: "viewport__fallback-content" }}
       hidden={hidden}
       role="status"
       aria-label="3D structure preview unavailable"
@@ -34,9 +36,9 @@ export function StructureFallback({
         The parsed structure and recommendation remain available without the
         interactive preview.
       </small>
-      <button type="button" onClick={onRetry}>
+      <Button className="viewport__retry" type="button" onClick={onRetry}>
         Retry 3D preview
-      </button>
-    </div>
+      </Button>
+    </Alert>
   );
 }

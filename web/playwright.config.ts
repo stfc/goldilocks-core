@@ -6,7 +6,7 @@ import { defineConfig } from "@playwright/test";
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
 
 export default defineConfig({
-  testDir: "./e2e",
+  testDir: "./tests/e2e",
   outputDir:
     process.env.PLAYWRIGHT_OUTPUT_DIR ??
     join(tmpdir(), "goldilocks-workbench-playwright"),

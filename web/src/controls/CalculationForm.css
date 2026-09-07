@@ -1,0 +1,214 @@
+.calculation-form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.field {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.field__wrapper {
+  --input-height: var(--target-size);
+  --input-size: var(--target-size);
+}
+
+.field__label,
+.k-grid-field legend {
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.05em;
+  font-weight: 400;
+  text-transform: uppercase;
+}
+
+.field__input {
+  padding: 0 var(--space-3);
+  color: var(--color-text);
+  border: var(--border-strong);
+  background: var(--color-control);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: normal;
+}
+
+.field__select {
+  padding-right: 1.75rem;
+}
+
+.field__number {
+  padding-right: calc(var(--space-3) + 1.5rem);
+}
+
+.field__section {
+  color: var(--color-text-secondary);
+}
+
+.field__number-controls {
+  height: calc(var(--target-size) - 2px);
+}
+
+.field__number-control {
+  height: calc(var(--target-size) / 2 - 1px);
+  color: var(--color-text-secondary);
+  border-inline-start: var(--border-subtle);
+}
+
+.field__number-control:not(:disabled):hover {
+  background: var(--color-accent-surface);
+}
+
+.field__input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.advanced-controls {
+  border: var(--border-subtle);
+  background: var(--color-control);
+}
+
+.advanced-controls__item {
+  border: 0;
+  background: transparent;
+}
+
+.advanced-controls__control {
+  min-height: var(--target-size);
+  padding: 0 var(--space-3);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.advanced-controls__control:hover {
+  background: transparent;
+}
+
+.advanced-controls__label {
+  padding: 0;
+  font-weight: 400;
+}
+
+.advanced-controls__chevron {
+  width: 1rem;
+  color: var(--color-accent-bright);
+  transform: none;
+}
+
+.advanced-controls__indicator::before {
+  content: "+";
+  font-size: 1rem;
+}
+
+.advanced-controls__chevron[data-rotate] .advanced-controls__indicator::before {
+  content: "−";
+}
+
+.advanced-controls__content {
+  padding: 0;
+}
+
+.advanced-controls__summary {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-3);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+.advanced-controls__body {
+  display: grid;
+  padding: var(--space-3);
+  gap: var(--space-3);
+  border-top: var(--border-subtle);
+}
+
+.k-grid-field {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: var(--space-2);
+  border: 0;
+}
+
+.k-grid-field legend {
+  margin-bottom: var(--space-1);
+}
+
+.k-grid-inputs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.k-grid-inputs__input {
+  padding: 0 calc(var(--space-1) + 1.5rem) 0 var(--space-1);
+  text-align: center;
+}
+
+.check-field {
+  min-height: var(--target-size);
+  display: flex;
+  align-items: center;
+}
+
+.check-field__body {
+  align-items: center;
+}
+
+.check-field__label {
+  padding-inline-start: var(--space-3);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.check-field__input {
+  border: var(--border-strong);
+  background: var(--color-control);
+}
+
+.check-field__input:checked {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+.check-field__icon {
+  color: var(--color-accent-ink);
+}
+
+.primary-action {
+  padding: 0 var(--space-4);
+  color: var(--color-accent-ink);
+  border: 1px solid var(--color-accent-border);
+  background: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.primary-action__inner {
+  justify-content: space-between;
+}
+
+.primary-action:not(:disabled):hover {
+  background: var(--color-accent-hover);
+}
+
+@media (max-width: 26rem) {
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+}

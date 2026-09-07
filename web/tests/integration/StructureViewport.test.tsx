@@ -1,13 +1,28 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { MantineProvider } from "@mantine/core";
+import {
+  act,
+  render as renderComponent,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import type { ReactElement } from "react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { inspection } from "../test/workbenchFixtures";
-import { StructureViewport } from "./StructureViewport";
+import { inspection } from "../support/workbenchFixtures";
+import { StructureViewport } from "../../src/viewer/StructureViewport";
 import type {
   StructureViewer,
   StructureViewerFactory,
-} from "./structureViewer";
+} from "../../src/viewer/structureViewer";
+
+function render(component: ReactElement) {
+  return renderComponent(component, {
+    wrapper: ({ children }) => (
+      <MantineProvider env="test">{children}</MantineProvider>
+    ),
+  });
+}
 
 describe("StructureViewport", () => {
   it("owns the viewer lifecycle and updates canonical structure content", async () => {

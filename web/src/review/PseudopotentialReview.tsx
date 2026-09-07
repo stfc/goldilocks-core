@@ -1,3 +1,5 @@
+import { Accordion } from "@mantine/core";
+
 import type { ComputationResult } from "../api/coreClient";
 import { artifactDigest } from "./artifacts";
 
@@ -51,10 +53,28 @@ export function PseudopotentialReview({
         <span>Licence</span>
         <strong>{table.licence}</strong>
       </p>
-      <details className="citation">
-        <summary>Citation and provenance</summary>
-        <p>{table.citation}</p>
-      </details>
+      <Accordion
+        order={4}
+        chevron={
+          <span className="review-disclosure__glyph" aria-hidden="true" />
+        }
+        disableChevronRotation
+        classNames={{
+          root: "citation",
+          item: "review-disclosure__item",
+          control: "review-disclosure__control citation__control",
+          label: "review-disclosure__label citation__label",
+          chevron: "review-disclosure__indicator",
+          content: "review-disclosure__content",
+        }}
+      >
+        <Accordion.Item value="citation">
+          <Accordion.Control>Citation and provenance</Accordion.Control>
+          <Accordion.Panel>
+            <p>{table.citation}</p>
+          </Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
     </section>
   );
 }

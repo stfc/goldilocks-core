@@ -9,16 +9,16 @@ import type {
   PreparedComputation,
   StructureInspection,
   StructureSource,
-} from "../api/coreClient";
-import { CoreFailure } from "../api/coreClient";
+} from "../../src/api/coreClient";
+import { CoreFailure } from "../../src/api/coreClient";
 import {
   capabilities,
   computationResult,
   draft,
   inspection,
   source,
-} from "../test/workbenchFixtures";
-import { createWorkspace } from "./workspace";
+} from "../support/workbenchFixtures";
+import { createWorkspace } from "../../src/workspace/workspace";
 
 class CoreStub implements CoreClient {
   capabilitiesResult: Promise<Capabilities> = Promise.resolve(capabilities);
@@ -35,7 +35,9 @@ class CoreStub implements CoreClient {
     return this.capabilitiesResult;
   }
 
-  inspectStructure(sourceToInspect: StructureSource): Promise<StructureInspection> {
+  inspectStructure(
+    sourceToInspect: StructureSource,
+  ): Promise<StructureInspection> {
     this.inspectedSources.push(sourceToInspect);
     return (
       this.inspectionResults.shift() ??
@@ -63,6 +65,39 @@ function prepared(
 }
 
 describe("Workspace", () => {
+  it("ignores a superseded inspection failure without releasing its replacement", async () => {
+    const obsolete = deferred<StructureInspection>();
+    const replacement = deferred<StructureInspection>();
+    const core = new CoreStub();
+    core.inspectionResults = [obsolete.promise, replacement.promise];
+    const workspace = createWorkspace(core);
+    await workspace.dispatch({ type: "workspace.start" });
+
+    const first = workspace.dispatch({ type: "source.open", source });
+    const replacementSource = { ...source, name: "replacement.cif" };
+    const second = workspace.dispatch({
+      type: "source.open",
+      source: replacementSource,
+    });
+    obsolete.reject(
+      new CoreFailure("invalid_structure", "Obsolete source failed", false),
+    );
+    await first;
+
+    expect(workspace.getSnapshot()).toMatchObject({
+      attemptedSource: replacementSource,
+      operation: "inspect",
+      failure: null,
+    });
+    replacement.resolve(inspection);
+    await second;
+    expect(workspace.getSnapshot()).toMatchObject({
+      source: replacementSource,
+      operation: null,
+      failure: null,
+    });
+  });
+
   it("retries a failed recomputation and replaces the reviewed snapshot", async () => {
     const failure = new CoreFailure(
       "temporary_failure",
@@ -100,7 +135,8 @@ describe("Workspace", () => {
   });
 
   it("reset ignores obsolete source work and retains Capabilities", async () => {
-    let finishInspection: (value: StructureInspection) => void = () => undefined;
+    let finishInspection: (value: StructureInspection) => void = () =>
+      undefined;
     const pendingInspection = new Promise<StructureInspection>((resolve) => {
       finishInspection = resolve;
     });
@@ -184,7 +220,9 @@ describe("Workspace", () => {
       filename: "goldilocks-inputs.zip",
     };
     const core = new CoreStub();
-    core.preparedResults = [Promise.resolve(prepared(computationResult, archive))];
+    core.preparedResults = [
+      Promise.resolve(prepared(computationResult, archive)),
+    ];
     const saveArchive = vi.fn<(download: ArchiveDownload) => void>();
     const workspace = createWorkspace(core, saveArchive);
     await workspace.dispatch({ type: "workspace.start" });
@@ -428,10 +466,13 @@ describe("Workspace", () => {
 function deferred<T>(): {
   readonly promise: Promise<T>;
   readonly resolve: (value: T) => void;
+  readonly reject: (reason: unknown) => void;
 } {
   let resolve: (value: T) => void = () => undefined;
-  const promise = new Promise<T>((finish) => {
+  let reject: (reason: unknown) => void = () => undefined;
+  const promise = new Promise<T>((finish, fail) => {
     resolve = finish;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }

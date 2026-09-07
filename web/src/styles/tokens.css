@@ -1,12 +1,14 @@
 :root {
   color-scheme: light;
-  font-family: Inter, "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-family:
+    Inter, "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   color: #1e272b;
   background: #f0eee8;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 
-  --font-sans: Inter, "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-sans:
+    Inter, "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
   --text-xs: 0.8125rem;
   --text-sm: 0.875rem;
@@ -79,7 +81,7 @@
   --mono: var(--font-mono);
 }
 
-:root[data-theme="dark"] {
+:root[data-mantine-color-scheme="dark"] {
   color-scheme: dark;
   color: #f3f7f6;
   background: #10171b;

@@ -1,20 +1,28 @@
 .failure-banner {
   position: relative;
   z-index: 18;
-  display: flex;
   width: 100%;
   min-height: 4.25rem;
   padding: var(--space-3) var(--space-5);
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-5);
   color: var(--color-danger-text);
   border-bottom: 1px solid var(--color-danger-border);
   background: var(--color-danger-surface);
   box-shadow: var(--elevation-status);
 }
 
-.failure-banner > div:first-child {
+.failure-banner__body {
+  width: 100%;
+}
+
+.failure-banner__message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  overflow: visible;
+}
+
+.failure-banner__copy {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -24,7 +32,7 @@
   font-size: var(--text-base);
 }
 
-.failure-banner span {
+.failure-banner__description {
   margin-top: var(--space-1);
   color: var(--color-danger-muted);
   font-size: var(--text-sm);
@@ -37,7 +45,7 @@
   gap: var(--space-2);
 }
 
-.failure-banner button {
+.failure-banner__action {
   display: flex;
   min-width: var(--target-size);
   min-height: var(--target-size);
@@ -53,13 +61,13 @@
   font-size: var(--text-xs);
 }
 
-.failure-banner button:not(:disabled):hover {
+.failure-banner__action:not(:disabled):hover {
   color: var(--color-danger-surface);
   background: var(--color-danger);
 }
 
 @media (max-width: 47.5rem) {
-  .failure-banner {
+  .failure-banner__message {
     align-items: stretch;
     flex-direction: column;
     gap: var(--space-3);

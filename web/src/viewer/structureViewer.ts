@@ -9,7 +9,9 @@ export type StructureViewerFactory = (
   element: HTMLElement,
 ) => StructureViewer | Promise<StructureViewer>;
 
-export const attachStructureViewer: StructureViewerFactory = async (element) => {
+export const attachStructureViewer: StructureViewerFactory = async (
+  element,
+) => {
   const probe = document.createElement("canvas");
   if (
     probe.getContext("webgl2") === null &&
@@ -18,20 +20,29 @@ export const attachStructureViewer: StructureViewerFactory = async (element) => 
     throw new Error("WebGL is unavailable");
   }
   const { createViewer } = await import("3dmol");
+  const surface = document.createElement("div");
+  surface.style.cssText = "position:relative;width:100%;height:100%";
+  element.append(surface);
   const rootStyle = getComputedStyle(document.documentElement);
   const backgroundColor = rootStyle
     .getPropertyValue("--color-viewer-background")
     .trim();
   const unitCellColor = rootStyle.getPropertyValue("--color-unit-cell").trim();
-  const viewer: GLViewer = createViewer(element, {
-    antialias: true,
-    backgroundColor,
-  });
+  let viewer: GLViewer;
+  try {
+    viewer = createViewer(surface, {
+      antialias: true,
+      backgroundColor,
+    });
+  } catch (error) {
+    surface.remove();
+    throw error;
+  }
   const observer = new ResizeObserver(() => {
     viewer.resize();
     viewer.render();
   });
-  observer.observe(element);
+  observer.observe(surface);
 
   return {
     show(canonicalCif): void {
@@ -53,7 +64,7 @@ export const attachStructureViewer: StructureViewerFactory = async (element) => 
     dispose(): void {
       observer.disconnect();
       viewer.clear();
-      element.replaceChildren();
+      surface.remove();
     },
   };
 };

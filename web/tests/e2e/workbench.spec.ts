@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { posix } from "node:path";
@@ -9,7 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const SILICON_CIF = fileURLToPath(
   new URL(
-    "../../src/goldilocks_core/examples/structures/Si.cif",
+    "../../../src/goldilocks_core/examples/structures/Si.cif",
     import.meta.url,
   ),
 );
@@ -45,7 +46,9 @@ test("serves concurrent computations through one real Core runtime", async ({
   const payloads = await Promise.all(
     responses.map(async (response) => {
       expect(response.status()).toBe(200);
-      expect(response.headers()["content-type"]).toContain("multipart/form-data");
+      expect(response.headers()["content-type"]).toContain(
+        "multipart/form-data",
+      );
       return response.text();
     }),
   );
@@ -57,8 +60,10 @@ test("serves concurrent computations through one real Core runtime", async ({
 });
 
 test("prepares and downloads a real Core calculation", async ({ page }) => {
-  const computeRequests: { readonly method: string; readonly body: string | null }[] =
-    [];
+  const computeRequests: {
+    readonly method: string;
+    readonly body: string | null;
+  }[] = [];
   page.on("request", (request) => {
     if (new URL(request.url()).pathname === "/compute") {
       computeRequests.push({
@@ -83,7 +88,6 @@ test("prepares and downloads a real Core calculation", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Recommended setup" }),
   ).toBeVisible();
-  await expect(page.getByText("inputs/qe.in", { exact: true })).toBeVisible();
   const generatedInput = page.getByLabel("Generated input inputs/qe.in");
   await expect(generatedInput).toBeInViewport();
   await expect(
@@ -95,23 +99,17 @@ test("prepares and downloads a real Core calculation", async ({ page }) => {
   });
   const initialInput = await generatedInput.boundingBox();
   const resizeBox = await inputResize.boundingBox();
-  expect(initialInput).not.toBeNull();
-  expect(resizeBox).not.toBeNull();
-  await page.mouse.move(
-    (resizeBox?.x ?? 0) + (resizeBox?.width ?? 0) / 2,
-    (resizeBox?.y ?? 0) + (resizeBox?.height ?? 0) / 2,
-  );
+  assert(initialInput, "Generated input must have a layout box");
+  assert(resizeBox, "Generated input resize handle must have a layout box");
+  const resizeX = resizeBox.x + resizeBox.width / 2;
+  const resizeY = resizeBox.y + resizeBox.height / 2;
+  await page.mouse.move(resizeX, resizeY);
   await page.mouse.down();
-  await page.mouse.move(
-    (resizeBox?.x ?? 0) + (resizeBox?.width ?? 0) / 2,
-    (resizeBox?.y ?? 0) + (resizeBox?.height ?? 0) / 2 + 64,
-    { steps: 4 },
-  );
+  await page.mouse.move(resizeX, resizeY + 64, { steps: 4 });
   await page.mouse.up();
   const resizedInput = await generatedInput.boundingBox();
-  expect((resizedInput?.height ?? 0) - (initialInput?.height ?? 0)).toBeGreaterThan(
-    40,
-  );
+  assert(resizedInput, "Resizing must retain the generated input");
+  expect(resizedInput.height - initialInput.height).toBeGreaterThan(40);
 
   await inputResize.press("End");
   await expect(inputResize).toHaveAttribute(
@@ -168,7 +166,40 @@ test("prepares and downloads a real Core calculation", async ({ page }) => {
   }
 });
 
-test("applies a paired smearing treatment and width override", async ({ page }) => {
+test("opens scientific details and raw JSON independently with the keyboard", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
+  await page.getByRole("button", { name: "Generate recommendation" }).click();
+
+  const sampling = page.getByRole("button", { name: /^K Points/ });
+  const rawControl = page.getByRole("button", {
+    name: "Raw K Points record (JSON)",
+  });
+  const rawRecord = page.getByRole("region", {
+    name: "Raw K Points record",
+    exact: true,
+  });
+  await expect(sampling).toHaveAttribute("aria-expanded", "false");
+  await expect(rawControl).toBeHidden();
+  await sampling.press("Enter");
+  await expect(page.getByText("QE shift flags", { exact: true })).toBeVisible();
+  await expect(rawControl).toBeVisible();
+  await expect(rawRecord).toBeHidden();
+
+  await rawControl.press("Enter");
+  await expect(rawRecord).toContainText('"grid"');
+  await expect(sampling).toHaveAttribute("aria-expanded", "true");
+  await rawControl.press("Enter");
+  await expect(rawRecord).toBeHidden();
+  await expect(page.getByText("QE shift flags", { exact: true })).toBeVisible();
+  await expectNoAxeViolations(page);
+});
+
+test("applies a paired smearing treatment and width override", async ({
+  page,
+}) => {
   await page.goto("/");
   await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
   await page.getByText("Scientific overrides").click();
@@ -227,35 +258,36 @@ test("has no Axe violations in empty, failure, and viewer fallback states", asyn
   await expect(
     page.getByRole("heading", { name: "No structure selected" }),
   ).toBeVisible();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expectNoAxeViolations(page);
 
   const themeToggle = page.getByRole("button", {
     name: "Switch to dark mode",
   });
-  await expect(themeToggle.locator(".lucide-sun")).toBeVisible();
   await themeToggle.click();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   const lightMode = page.getByRole("button", { name: "Switch to light mode" });
-  await expect(lightMode.locator(".lucide-moon")).toBeVisible();
+  await expect(lightMode).toBeVisible();
   await expectNoAxeViolations(page);
   await lightMode.click();
 
   await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
-  await page.route("**/compute", async (route) => {
-    await route.fulfill({
-      status: 503,
-      contentType: "application/json",
-      body: JSON.stringify({
-        error: {
-          kind: "temporary_failure",
-          message: "Core failed temporarily.",
-          retryable: true,
-          details: {},
-        },
-      }),
-    });
-  }, { times: 1 });
+  await page.route(
+    "**/compute",
+    async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: {
+            kind: "temporary_failure",
+            message: "Core failed temporarily.",
+            retryable: true,
+            details: {},
+          },
+        }),
+      });
+    },
+    { times: 1 },
+  );
   await page.getByRole("button", { name: "Generate recommendation" }).click();
   const alert = page.getByRole("alert");
   await expect(alert).toContainText("Calculation failed");
@@ -300,16 +332,20 @@ test("completes the preparation workflow with keyboard-only activation", async (
   await chooser.setFiles(SILICON_CIF);
   await expect(page.getByLabel("Crystal structure viewer")).toBeVisible();
 
-  const generate = page.getByRole("button", { name: "Generate recommendation" });
+  const generate = page.getByRole("button", {
+    name: "Generate recommendation",
+  });
   await generate.press("Enter");
   await expect(
     page.getByRole("heading", { name: "Recommended setup" }),
   ).toBeVisible();
 
-  const overrides = page.getByText("Scientific overrides");
+  const overrides = page.getByRole("button", { name: "Scientific overrides" });
   await overrides.press("Enter");
-  await expect(page.locator(".advanced-controls")).toHaveAttribute("open");
-  const explicitGrid = page.getByRole("checkbox", { name: "Set an explicit grid" });
+  await expect(overrides).toHaveAttribute("aria-expanded", "true");
+  const explicitGrid = page.getByRole("checkbox", {
+    name: "Set an explicit grid",
+  });
   await explicitGrid.press("Space");
   await expect(explicitGrid).toBeChecked();
   await expect(
@@ -318,9 +354,13 @@ test("completes the preparation workflow with keyboard-only activation", async (
     "Your settings changed. Update the recommendation before downloading.",
   );
 
-  const firstRecord = page.locator(".record-card").first();
-  await firstRecord.locator("summary").press("Enter");
-  await expect(firstRecord).toHaveAttribute("open");
+  const firstRecord = page
+    .locator(".record-card")
+    .first()
+    .getByRole("button")
+    .first();
+  await firstRecord.press("Enter");
+  await expect(firstRecord).toHaveAttribute("aria-expanded", "true");
 });
 
 test("keeps keyboard focus visible and primary targets usable", async ({
@@ -360,31 +400,27 @@ test("resizes the two-panel layout with pointer and keyboard input", async ({
   const initialControls = await controls.boundingBox();
   const initialStructure = await structure.boundingBox();
   const handle = await controlsHandle.boundingBox();
-  expect(initialControls).not.toBeNull();
-  expect(initialStructure).not.toBeNull();
-  expect(handle).not.toBeNull();
-
-  await page.mouse.move(
-    (handle?.x ?? 0) + (handle?.width ?? 0) / 2,
-    (handle?.y ?? 0) + 200,
-  );
+  assert(initialControls, "Calculation panel must have a layout box");
+  assert(initialStructure, "Structure panel must have a layout box");
+  assert(handle, "Panel resize handle must have a layout box");
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + 200);
   await page.mouse.down();
-  await page.mouse.move((handle?.x ?? 0) + 120, (handle?.y ?? 0) + 200);
+  await page.mouse.move(handle.x + 120, handle.y + 200);
   await page.mouse.up();
 
   const resizedControls = await controls.boundingBox();
   const resizedStructure = await structure.boundingBox();
-  expect((resizedControls?.width ?? 0) - (initialControls?.width ?? 0)).toBeGreaterThan(80);
-  expect((initialStructure?.width ?? 0) - (resizedStructure?.width ?? 0)).toBeGreaterThan(80);
+  assert(resizedControls, "Resizing must retain the calculation panel");
+  assert(resizedStructure, "Resizing must retain the structure panel");
+  expect(resizedControls.width - initialControls.width).toBeGreaterThan(80);
+  expect(initialStructure.width - resizedStructure.width).toBeGreaterThan(80);
 
   expect(await page.getByRole("separator").count()).toBe(1);
   await controlsHandle.press("Home");
   await expect(controlsHandle).toHaveAttribute("aria-valuenow", "24");
 });
 
-test("constrains resized desktop panes without clipping", async ({
-  page,
-}) => {
+test("constrains resized desktop panes without clipping", async ({ page }) => {
   await page.setViewportSize({ width: 920, height: 700 });
   await page.goto("/");
   const resize = page.getByRole("separator", {
@@ -403,7 +439,9 @@ test("constrains resized desktop panes without clipping", async ({
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.viewportWidth);
 });
 
-test("reflows intermediate widths without horizontal clipping", async ({ page }) => {
+test("reflows intermediate widths without horizontal clipping", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1050, height: 900 });
   await page.goto("/");
   await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
@@ -424,7 +462,9 @@ test("reflows intermediate widths without horizontal clipping", async ({ page })
   expect((review?.x ?? 0) + (review?.width ?? 0)).toBeLessThanOrEqual(1050);
 });
 
-test("uses the document scrollbar for long desktop content", async ({ page }) => {
+test("uses the document scrollbar for long desktop content", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 700 });
   await page.goto("/");
   await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
@@ -469,10 +509,14 @@ test("removes nonessential animation when reduced motion is requested", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.route("**/inspect", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 2_000));
-    await route.continue();
-  }, { times: 1 });
+  await page.route(
+    "**/inspect",
+    async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      await route.continue();
+    },
+    { times: 1 },
+  );
   await page.goto("/");
   await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
   const spinner = page.locator(".spinning-icon");

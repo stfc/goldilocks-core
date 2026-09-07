@@ -4,7 +4,7 @@ import type {
   ComputationResult,
   StructureInspection,
   StructureSource,
-} from "../api/coreClient";
+} from "../../src/api/coreClient";
 
 export const source: StructureSource = {
   kind: "inline",

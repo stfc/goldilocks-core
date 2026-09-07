@@ -30,6 +30,11 @@
   text-align: center;
 }
 
+.viewport__fallback-content {
+  display: grid;
+  justify-items: center;
+}
+
 .viewport__fallback[hidden] {
   display: none;
 }
@@ -54,7 +59,7 @@
   line-height: var(--leading-relaxed);
 }
 
-.viewport__fallback button {
+.viewport__retry {
   min-height: var(--target-size);
   margin: var(--space-4) auto 0;
   padding: 0 var(--space-4);
@@ -66,7 +71,7 @@
   font-size: var(--text-xs);
 }
 
-.viewport__fallback button:hover {
+.viewport__retry:hover {
   color: var(--color-accent-ink);
   background: var(--color-accent-hover);
 }
@@ -142,7 +147,6 @@
     right: var(--space-3);
     bottom: var(--space-3);
   }
-
 }
 
 @media (max-width: 24rem) {

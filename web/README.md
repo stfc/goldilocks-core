@@ -5,6 +5,12 @@ transport. It owns no state the server keeps: capabilities load once, the
 calculation draft lives in the browser, and each compute response's result
 and archive bytes are held only for the current view.
 
+Scientific record cards show labelled values, units, decision reasons, and
+provenance. Each card has a separate raw-JSON disclosure for technical inspection.
+The pseudopotential dropdown follows the selected functional and accuracy;
+changing either resets an explicit table to Automatic. Core validates the
+selected table when computing.
+
 ## Run it
 
 One task does the backend steps and starts both processes — assets install,
@@ -44,12 +50,26 @@ uv run poe stage
 ## Checks
 
 ```bash
-npm run lint        # eslint, zero warnings allowed
-npm run test        # vitest unit tests
+npm run format      # apply Prettier formatting
+npm run format:check # verify formatting without edits
+npm run lint        # strict type-aware ESLint, zero warnings allowed
+npm run test        # Vitest unit and integration tests
 npm run build       # tsc -b && vite build
-npm run check       # lint + tests + build
+npm run check       # formatting + lint + tests + build
 npm run test:e2e    # Playwright against a real server
 ```
+
+Tests live under `tests/`: `unit/` for isolated scientific presentation,
+`integration/` for UI, workspace, and HTTP contracts, `e2e/` for real-server
+browser workflows, and `support/` for shared fixtures and setup.
+
+Mantine owns interactive components and the shared theme. ESLint enforces
+cyclomatic and cognitive complexity limits of 15, nesting depth of 3,
+no nested ternaries, React Hooks correctness, and static accessibility.
+Focusable ARIA window splitters have a documented exception to the accessibility
+plugin's non-interactive-element rule; browser tests exercise their keyboard behavior.
+ESLint is pinned to version 9 because the accessibility plugin's peer range
+does not yet include version 10; npm currently marks that ESLint release unsupported.
 
 The API contract is generated, never hand-edited. Regenerate both artifacts
 from the running package and commit them together with backend changes:

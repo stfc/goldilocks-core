@@ -14,5 +14,10 @@
     "noUncheckedIndexedAccess": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "playwright.config.ts", "eslint.config.js", "e2e/**/*.ts"]
+  "include": [
+    "vite.config.ts",
+    "playwright.config.ts",
+    "eslint.config.js",
+    "tests/e2e/**/*.ts"
+  ]
 }

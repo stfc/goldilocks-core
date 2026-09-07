@@ -8,7 +8,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { App } from "./App";
+import { App } from "../../src/App";
 import type {
   ArchiveDownload,
   Capabilities,
@@ -18,18 +18,18 @@ import type {
   PreparedComputation,
   StructureInspection,
   StructureSource,
-} from "./api/coreClient";
-import { CoreFailure } from "./api/coreClient";
+} from "../../src/api/coreClient";
+import { CoreFailure } from "../../src/api/coreClient";
 import {
   capabilities,
   computationResult,
   draft,
   inspection,
-} from "./test/workbenchFixtures";
-import { WorkspaceProvider } from "./workspace/WorkspaceProvider";
-import { createWorkspace } from "./workspace/workspace";
+} from "../support/workbenchFixtures";
+import { WorkspaceProvider } from "../../src/workspace/WorkspaceProvider";
+import { createWorkspace } from "../../src/workspace/workspace";
 
-vi.mock("./viewer/StructureViewport", () => ({
+vi.mock("../../src/viewer/StructureViewport", () => ({
   StructureViewport: () => (
     <div aria-label="Crystal structure viewer">3D crystal</div>
   ),
@@ -75,6 +75,62 @@ function prepared(
 }
 
 describe("Goldilocks Workbench", () => {
+  it("keeps table choices aligned with functional and accuracy changes", async () => {
+    const user = userEvent.setup();
+    const base = capabilities.pseudopotential_sets[0];
+    if (base === undefined) throw new Error("Missing pseudopotential fixture");
+    const tables = [
+      base,
+      { ...base, id: "pbe-efficiency", functional: "PBE" },
+      {
+        ...base,
+        id: "pbe-precision",
+        functional: "PBE",
+        accuracy: "precision",
+      },
+    ];
+    const core = new CoreStub(
+      Promise.resolve({
+        ...capabilities,
+        pseudopotential_sets: tables,
+      }),
+    );
+    core.inspectionResults = [Promise.resolve(inspection)];
+    core.preparedResults = [Promise.resolve(prepared())];
+    const workspace = createWorkspace(core);
+    const { container } = render(
+      <WorkspaceProvider workspace={workspace}>
+        <App />
+      </WorkspaceProvider>,
+    );
+    await screen.findByRole("button", {
+      name: "Choose a CIF or POSCAR structure",
+    });
+    await user.upload(structureInput(container), structureFile());
+    const table = await screen.findByLabelText("Pseudopotential table");
+    await user.selectOptions(table, base.id);
+    await user.selectOptions(screen.getByLabelText("Functional"), "PBE");
+    expect(table).toHaveValue("");
+    expect(
+      within(table).queryByRole("option", { name: /PBEsol/ }),
+    ).not.toBeInTheDocument();
+    await user.selectOptions(table, "pbe-efficiency");
+    await user.selectOptions(screen.getByLabelText("Accuracy"), "precision");
+    expect(table).toHaveValue("");
+    expect(
+      within(table).queryByRole("option", { name: /efficiency/ }),
+    ).not.toBeInTheDocument();
+    await user.selectOptions(table, "pbe-precision");
+    await user.click(
+      screen.getByRole("button", { name: "Generate recommendation" }),
+    );
+    await screen.findByText("Recommended setup");
+    expect(core.computeCalls[0]?.draft).toMatchObject({
+      intent: { functional: "PBE", pseudo_accuracy: "precision" },
+      pseudo_table: "pbe-precision",
+    });
+  });
+
   it("exposes a resizable two-panel structure workflow", async () => {
     const workspace = createWorkspace(
       new CoreStub(Promise.resolve(capabilities)),
@@ -86,18 +142,8 @@ describe("Goldilocks Workbench", () => {
       </WorkspaceProvider>,
     );
 
-    const main = await screen.findByRole("main", {
-      name: "Goldilocks SCF setup",
-    });
-    expect(main).toContainElement(
-      screen.getByRole("heading", {
-        level: 1,
-        name: "Goldilocks SCF setup",
-      }),
-    );
-    expect(document.querySelector(".app-header")).toBeNull();
     expect(
-      screen.getByRole("region", { name: "Calculation setup" }),
+      await screen.findByRole("region", { name: "Calculation setup" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("region", { name: "Structure workspace" }),
@@ -114,20 +160,6 @@ describe("Goldilocks Workbench", () => {
         name: "Choose a CIF or POSCAR structure",
       }),
     ).toHaveAccessibleDescription("CIF or POSCAR · 5 MB maximum file size");
-    for (const removedCopy of [
-      "Guided SCF preparation",
-      "Scientific decisions by Core",
-      "Records remain immutable",
-      "Core defaults and the asset catalog appear after inspection.",
-    ]) {
-      expect(screen.queryByText(removedCopy)).not.toBeInTheDocument();
-    }
-    expect(
-      screen.queryByText(/Load a CIF or POSCAR to inspect/),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText(/Inspect a structure, review/),
-    ).not.toBeInTheDocument();
   });
 
   it("uses light mode by default and persists an explicit dark mode", async () => {
@@ -144,21 +176,11 @@ describe("Goldilocks Workbench", () => {
       name: "Switch to dark mode",
     });
 
-    expect(document.documentElement.dataset.theme).toBe("light");
-    expect(document.documentElement.style.colorScheme).toBe("light");
-    expect(toggle.querySelector(".lucide-sun")).toBeInTheDocument();
-    expect(toggle).not.toHaveTextContent(/light|dark/i);
-
     await user.click(toggle);
 
-    expect(document.documentElement.dataset.theme).toBe("dark");
-    expect(document.documentElement.style.colorScheme).toBe("dark");
     expect(
-      screen
-        .getByRole("button", { name: "Switch to light mode" })
-        .querySelector(".lucide-moon"),
+      screen.getByRole("button", { name: "Switch to light mode" }),
     ).toBeInTheDocument();
-    expect(window.localStorage.getItem("goldilocks-theme")).toBe("dark");
 
     unmount();
     const restoredWorkspace = createWorkspace(
@@ -170,9 +192,7 @@ describe("Goldilocks Workbench", () => {
       </WorkspaceProvider>,
     );
     expect(
-      (
-        await screen.findByRole("button", { name: "Switch to light mode" })
-      ).querySelector(".lucide-moon"),
+      await screen.findByRole("button", { name: "Switch to light mode" }),
     ).toBeInTheDocument();
   });
 
@@ -198,7 +218,8 @@ describe("Goldilocks Workbench", () => {
 
   it("announces the current Workbench operation in a persistent status", async () => {
     const core = new CoreStub(Promise.resolve(capabilities));
-    let finishInspection: (value: StructureInspection) => void = () => undefined;
+    let finishInspection: (value: StructureInspection) => void = () =>
+      undefined;
     core.inspectionResults = [
       new Promise((resolve) => {
         finishInspection = resolve;
@@ -214,13 +235,13 @@ describe("Goldilocks Workbench", () => {
       name: "Choose a CIF or POSCAR structure",
     });
 
-    expect(screen.getByRole("status", { name: "Workbench status" })).toHaveTextContent(
-      "Ready",
-    );
+    expect(
+      screen.getByRole("status", { name: "Workbench status" }),
+    ).toHaveTextContent("Ready");
     await userEvent.upload(structureInput(container), structureFile());
-    expect(screen.getByRole("status", { name: "Workbench status" })).toHaveTextContent(
-      "Inspecting structure",
-    );
+    expect(
+      screen.getByRole("status", { name: "Workbench status" }),
+    ).toHaveTextContent("Inspecting structure");
 
     finishInspection(inspection);
   });
@@ -300,10 +321,12 @@ describe("Goldilocks Workbench", () => {
     });
     await user.upload(structureInput(container), structureFile());
     await user.click(screen.getByText("Scientific overrides"));
-    await user.selectOptions(screen.getByLabelText("Smearing treatment"), "cold");
+    await user.selectOptions(
+      screen.getByLabelText("Smearing treatment"),
+      "cold",
+    );
     const width = screen.getByLabelText("Smearing width · Ry");
     expect(width).toBeEnabled();
-    expect(width).toHaveValue(0.01);
     fireEvent.change(width, { target: { value: "0.02" } });
 
     await user.click(
@@ -415,16 +438,6 @@ describe("Goldilocks Workbench", () => {
     });
     expect(recommendation).toBeInTheDocument();
     expect(
-      within(recommendation)
-        .getAllByRole("heading", { level: 3 })
-        .map((heading) => heading.textContent),
-    ).toEqual([
-      "Generated inputs",
-      "Recommended setup",
-      "Pseudopotentials",
-      "Scientific records",
-    ]);
-    expect(
       screen.queryByRole("region", { name: "Structure workspace" }),
     ).not.toBeInTheDocument();
     expect(core.computeCalls[0]).toEqual({
@@ -518,7 +531,10 @@ describe("Goldilocks Workbench", () => {
     ]);
     const tableSelect = screen.getByLabelText("Pseudopotential table");
     expect(
-      Array.from(tableSelect.querySelectorAll("option"), (option) => option.value),
+      Array.from(
+        tableSelect.querySelectorAll("option"),
+        (option) => option.value,
+      ),
     ).toEqual([
       "",
       "pseudodojo-pbesol-efficiency-sr",

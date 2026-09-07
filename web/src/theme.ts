@@ -1,44 +1,44 @@
-import { useState } from "react";
+import {
+  Button,
+  createTheme,
+  localStorageColorSchemeManager,
+} from "@mantine/core";
 
 export type Theme = "light" | "dark";
 
-const STORAGE_KEY = "goldilocks-theme";
-const THEME_COLORS: Readonly<Record<Theme, string>> = {
-  light: "#f0eee8",
-  dark: "#10171b",
-};
+export const colorSchemeManager = localStorageColorSchemeManager({
+  key: "goldilocks-theme",
+});
 
-export function useTheme(): {
-  readonly theme: Theme;
-  readonly toggleTheme: () => void;
-} {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const initial = storedTheme();
-    applyTheme(initial);
-    return initial;
-  });
-
-  return {
-    theme,
-    toggleTheme: () => {
-      setTheme((current) => {
-        const next = current === "light" ? "dark" : "light";
-        window.localStorage.setItem(STORAGE_KEY, next);
-        applyTheme(next);
-        return next;
-      });
-    },
-  };
-}
-
-function storedTheme(): Theme {
-  return window.localStorage.getItem(STORAGE_KEY) === "dark" ? "dark" : "light";
-}
-
-function applyTheme(theme: Theme): void {
-  document.documentElement.dataset.theme = theme;
-  document.documentElement.style.colorScheme = theme;
-  document
-    .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
-    ?.setAttribute("content", THEME_COLORS[theme]);
-}
+export const workbenchTheme = createTheme({
+  primaryColor: "gold",
+  colors: {
+    gold: [
+      "#fff9e7",
+      "#fff0bf",
+      "#ffe38d",
+      "#f8d363",
+      "#e7bd52",
+      "#d5a62b",
+      "#b29043",
+      "#94701b",
+      "#745000",
+      "#4f3700",
+    ],
+  },
+  fontFamily:
+    'Inter, "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif',
+  fontFamilyMonospace: '"IBM Plex Mono", "SFMono-Regular", Consolas, monospace',
+  defaultRadius: 0,
+  respectReducedMotion: true,
+  components: {
+    Button: Button.extend({
+      styles: {
+        root: { height: "var(--target-size)" },
+        inner: { gap: "var(--space-2)" },
+        label: { fontWeight: "inherit" },
+        section: { margin: 0 },
+      },
+    }),
+  },
+});

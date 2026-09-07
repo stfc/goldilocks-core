@@ -1,10 +1,8 @@
-import { type ChangeEvent, type DragEvent, useRef, useState } from "react";
+import { type DragEvent, useRef, useState } from "react";
+import { Button, FileButton } from "@mantine/core";
 import { LoaderCircle, Upload } from "lucide-react";
 
-import type {
-  StructureInspection,
-  StructureSource,
-} from "../api/coreClient";
+import type { StructureInspection, StructureSource } from "../api/coreClient";
 
 export function StructureSourceControls({
   source,
@@ -17,7 +15,7 @@ export function StructureSourceControls({
   readonly inspecting: boolean;
   readonly onOpen: (source: StructureSource) => Promise<void>;
 }) {
-  const input = useRef<HTMLInputElement>(null);
+  const resetFileInput = useRef<(() => void) | null>(null);
   const selectionEpoch = useRef(0);
   const [dragging, setDragging] = useState(false);
   const [readError, setReadError] = useState<string | null>(null);
@@ -49,10 +47,9 @@ export function StructureSourceControls({
     }
   }
 
-  function fileSelected(event: ChangeEvent<HTMLInputElement>): void {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-    if (file !== undefined) void openFile(file);
+  function fileSelected(file: File | null): void {
+    resetFileInput.current?.();
+    if (file !== null) void openFile(file);
   }
 
   function fileDropped(event: DragEvent<HTMLDivElement>): void {
@@ -60,6 +57,12 @@ export function StructureSourceControls({
     setDragging(false);
     const file = event.dataTransfer.files[0];
     if (file !== undefined) void openFile(file);
+  }
+
+  let sourceHelp = "CIF or POSCAR · 5 MB maximum file size";
+  if (source !== null) sourceHelp = "Inspecting structure";
+  if (inspection !== null) {
+    sourceHelp = `${String(inspection.structure.site_count)} sites · parsed`;
   }
 
   return (
@@ -79,7 +82,6 @@ export function StructureSourceControls({
         onDrop={fileDropped}
         aria-busy={inspecting}
       >
-        <input ref={input} hidden type="file" onChange={fileSelected} />
         <span className="file-drop__mark" aria-hidden="true">
           {inspecting ? (
             <LoaderCircle className="spinning-icon" size={18} />
@@ -87,39 +89,35 @@ export function StructureSourceControls({
             <Upload size={18} />
           )}
         </span>
-        {source === null ? (
-          <>
-            <strong>Drop a structure</strong>
-            <span id="structure-source-help">
-              CIF or POSCAR · 5 MB maximum file size
-            </span>
-          </>
-        ) : (
-          <>
-            <strong>{source.name}</strong>
-            <span id="structure-source-help">
-              {inspection === null
-                ? "Inspecting structure"
-                : `${String(inspection.structure.site_count)} sites · parsed`}
-            </span>
-          </>
-        )}
-        <button
-          className="text-button"
-          type="button"
-          aria-describedby="structure-source-help"
-          aria-label={
-            source === null
-              ? "Choose a CIF or POSCAR structure"
-              : "Replace structure file"
-          }
-          onClick={() => {
-            input.current?.click();
-          }}
+        <strong className="file-drop__name">
+          {source?.name ?? "Drop a structure"}
+        </strong>
+        <span id="structure-source-help" className="file-drop__help">
+          {sourceHelp}
+        </span>
+        <FileButton
+          resetRef={resetFileInput}
+          onChange={fileSelected}
           disabled={inspecting}
         >
-          {source === null ? "Browse files" : "Replace file"}
-        </button>
+          {(fileButtonProps) => (
+            <Button
+              {...fileButtonProps}
+              classNames={{ root: "text-button" }}
+              variant="subtle"
+              type="button"
+              aria-describedby="structure-source-help"
+              aria-label={
+                source === null
+                  ? "Choose a CIF or POSCAR structure"
+                  : "Replace structure file"
+              }
+              disabled={inspecting}
+            >
+              {source === null ? "Browse files" : "Replace file"}
+            </Button>
+          )}
+        </FileButton>
       </div>
       {readError === null ? null : (
         <p className="field-error" role="alert">

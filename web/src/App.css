@@ -96,7 +96,6 @@
   transform: translate(-50%, -50%) rotate(45deg);
 }
 
-.empty-stage h1,
 .empty-stage h2 {
   margin: 0;
   color: var(--color-text);
@@ -108,16 +107,10 @@
 
 .stage-navigation,
 .panel-navigation {
-  display: flex;
   min-width: var(--target-size);
-  min-height: var(--target-size);
   padding: 0 var(--space-3);
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
   color: var(--color-text-secondary);
   border: var(--border-strong);
-  border-radius: 0;
   background: var(--color-overlay);
   font-family: var(--font-mono);
   font-size: var(--text-xs);

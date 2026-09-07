@@ -4,6 +4,8 @@ import {
   Checkbox,
   NativeSelect,
   NumberInput,
+  SimpleGrid,
+  Stack,
 } from "@mantine/core";
 import { ArrowRight } from "lucide-react";
 
@@ -12,21 +14,6 @@ import { useWorkspace, useWorkspaceSnapshot } from "../workspace/useWorkspace";
 import "./CalculationForm.css";
 
 const K_GRID_AXES = ["x", "y", "z"] as const;
-const SELECT_CLASSES = {
-  root: "field",
-  wrapper: "field__wrapper",
-  label: "field__label",
-  input: "field__input field__select",
-  section: "field__section",
-};
-const NUMBER_CLASSES = {
-  root: "field",
-  wrapper: "field__wrapper",
-  label: "field__label",
-  input: "field__input field__number",
-  controls: "field__number-controls",
-  control: "field__number-control",
-};
 type SmearingType = NonNullable<
   NonNullable<CalculationDraft["hints"]>["smearing_type"]
 >;
@@ -87,8 +74,9 @@ export function CalculationForm({
   if (snapshot.operation === "compute") submitLabel = "Computing";
 
   return (
-    <form
-      className="calculation-form"
+    <Stack
+      component="form"
+      gap="var(--space-4)"
       onSubmit={(event) => {
         event.preventDefault();
         onShowRecommendation();
@@ -102,7 +90,6 @@ export function CalculationForm({
       ) : null}
       <NativeSelect
         label="Task"
-        classNames={SELECT_CLASSES}
         value={intent.task}
         disabled
         data={capabilities.tasks.map((task) => ({
@@ -110,10 +97,9 @@ export function CalculationForm({
           label: task.name,
         }))}
       />
-      <div className="field-row">
+      <SimpleGrid className="field-row" spacing="var(--space-3)">
         <NativeSelect
           label="Functional"
-          classNames={SELECT_CLASSES}
           value={intent.functional}
           disabled={inspecting}
           data={functionals}
@@ -127,7 +113,6 @@ export function CalculationForm({
         />
         <NativeSelect
           label="Accuracy"
-          classNames={SELECT_CLASSES}
           value={accuracy}
           disabled={inspecting}
           onChange={(event) =>
@@ -145,10 +130,9 @@ export function CalculationForm({
             { value: "precision", label: "Precision" },
           ]}
         />
-      </div>
+      </SimpleGrid>
       <NativeSelect
         label="Pseudopotential table"
-        classNames={SELECT_CLASSES}
         disabled={inspecting}
         aria-describedby="pseudo-table-help"
         value={draft.pseudo_table ?? ""}
@@ -192,7 +176,7 @@ export function CalculationForm({
       >
         {submitLabel}
       </Button>
-    </form>
+    </Stack>
   );
 }
 
@@ -211,13 +195,17 @@ function ScientificOverrides({
   const smearingType = hints.smearing_type ?? null;
   const smearingWidth = hints.smearing_width_ry;
 
+  function patchHints(patch: Partial<typeof hints>): void {
+    void workspace.dispatch({ type: "draft.patch", hints: patch });
+  }
+
   function updateKGrid(index: 0 | 1 | 2, raw: string | number): void {
     if (kGrid === null) return;
     const value = Number(raw);
     if (!Number.isInteger(value) || value < 1 || value > 99) return;
     const next = [...kGrid];
     next[index] = value;
-    void workspace.dispatch({ type: "draft.patch", hints: { k_grid: next } });
+    patchHints({ k_grid: next });
   }
 
   return (
@@ -227,14 +215,7 @@ function ScientificOverrides({
       chevron={
         <span className="advanced-controls__indicator" aria-hidden="true" />
       }
-      classNames={{
-        root: "advanced-controls",
-        item: "advanced-controls__item",
-        control: "advanced-controls__control",
-        label: "advanced-controls__label",
-        chevron: "advanced-controls__chevron",
-        content: "advanced-controls__content",
-      }}
+      className="advanced-controls"
     >
       <Accordion.Item value="scientific-overrides">
         <Accordion.Control>Scientific overrides</Accordion.Control>
@@ -244,46 +225,34 @@ function ScientificOverrides({
             {smearingSummary(smearingType, smearingWidth)} · spin {spinSetting}{" "}
             · vdW {vdwSetting}
           </p>
-          <div className="advanced-controls__body">
+          <Stack
+            p="var(--space-3)"
+            gap="var(--space-3)"
+            style={{ borderTop: "var(--border-subtle)" }}
+          >
             <fieldset className="k-grid-field">
               <legend>K-point grid</legend>
               <Checkbox
                 label="Set an explicit grid"
-                size="md"
-                classNames={{
-                  root: "check-field",
-                  body: "check-field__body",
-                  input: "check-field__input",
-                  label: "check-field__label",
-                  icon: "check-field__icon",
-                }}
                 checked={explicitKGrid}
                 disabled={inspecting}
-                onChange={(event) =>
-                  void workspace.dispatch({
-                    type: "draft.patch",
-                    hints: {
-                      k_grid: event.currentTarget.checked ? [1, 1, 1] : null,
-                    },
-                  })
-                }
+                onChange={(event) => {
+                  patchHints({
+                    k_grid: event.currentTarget.checked ? [1, 1, 1] : null,
+                  });
+                }}
               />
-              <div className="k-grid-inputs">
+              <SimpleGrid cols={3} spacing="var(--space-2)">
                 {([0, 1, 2] as const).map((index) => (
                   <NumberInput
                     key={index}
                     aria-label={`K-point grid ${K_GRID_AXES[index]}`}
-                    classNames={{
-                      ...NUMBER_CLASSES,
-                      input: "field__input k-grid-inputs__input",
-                    }}
-                    role="spinbutton"
+                    classNames={{ input: "k-grid-inputs__input" }}
                     aria-valuemin={1}
                     aria-valuemax={99}
                     aria-valuenow={kGrid?.[index]}
                     min={1}
                     max={99}
-                    clampBehavior="none"
                     disabled={!explicitKGrid || inspecting}
                     value={kGrid?.[index] ?? ""}
                     placeholder="Auto"
@@ -292,67 +261,53 @@ function ScientificOverrides({
                     }}
                   />
                 ))}
-              </div>
+              </SimpleGrid>
             </fieldset>
-            <div className="field-row">
+            <SimpleGrid className="field-row" spacing="var(--space-3)">
               <NativeSelect
                 label="Smearing treatment"
-                classNames={SELECT_CLASSES}
                 disabled={inspecting}
                 value={smearingType ?? ""}
                 onChange={(event) => {
                   const selected = parseSmearingType(event.currentTarget.value);
-                  void workspace.dispatch({
-                    type: "draft.patch",
-                    hints: {
-                      smearing_type: selected,
-                      smearing_width_ry: usesSmearingWidth(selected)
-                        ? (smearingWidth ?? 0.01)
-                        : null,
-                    },
+                  patchHints({
+                    smearing_type: selected,
+                    smearing_width_ry: usesSmearingWidth(selected)
+                      ? (smearingWidth ?? 0.01)
+                      : null,
                   });
                 }}
                 data={SMEARING_OPTIONS}
               />
               <NumberInput
                 label="Smearing width · Ry"
-                classNames={NUMBER_CLASSES}
-                role="spinbutton"
                 aria-valuemin={0.001}
                 aria-valuenow={smearingWidth ?? undefined}
                 step={0.001}
                 disabled={inspecting || !usesSmearingWidth(smearingType)}
                 min={0.001}
-                clampBehavior="none"
                 value={smearingWidth ?? ""}
                 placeholder="Select smearing"
                 onChange={(value) => {
                   const width = Number(value);
                   if (!Number.isFinite(width) || width <= 0) return;
-                  void workspace.dispatch({
-                    type: "draft.patch",
-                    hints: { smearing_width_ry: width },
-                  });
+                  patchHints({ smearing_width_ry: width });
                 }}
               />
-            </div>
+            </SimpleGrid>
             {BOOLEAN_HINT_FIELDS.map((field) => (
               <NativeSelect
                 key={field.hint}
                 label={field.label}
-                classNames={SELECT_CLASSES}
                 disabled={inspecting}
                 value={String(hints[field.hint] ?? "")}
-                onChange={(event) =>
-                  void workspace.dispatch({
-                    type: "draft.patch",
-                    hints: {
-                      [field.hint]: parseOptionalSwitch(
-                        event.currentTarget.value,
-                      ),
-                    },
-                  })
-                }
+                onChange={(event) => {
+                  patchHints({
+                    [field.hint]: parseOptionalSwitch(
+                      event.currentTarget.value,
+                    ),
+                  });
+                }}
                 data={[
                   { value: "", label: "Automatic" },
                   { value: "true", label: field.enabled },
@@ -360,7 +315,7 @@ function ScientificOverrides({
                 ]}
               />
             ))}
-          </div>
+          </Stack>
         </Accordion.Panel>
       </Accordion.Item>
     </Accordion>

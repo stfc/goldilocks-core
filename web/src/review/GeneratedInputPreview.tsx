@@ -1,3 +1,4 @@
+import { Group } from "@mantine/core";
 import { type KeyboardEvent, type PointerEvent, useRef, useState } from "react";
 
 const DEFAULT_INPUT_HEIGHT = 352;
@@ -73,12 +74,20 @@ export function GeneratedInputPreview({
     inputHeight ?? Math.min(DEFAULT_INPUT_HEIGHT, fullHeight);
   return (
     <div className="code-frame">
-      <div className="code-frame__heading">
+      <Group
+        className="code-frame__heading"
+        justify="space-between"
+        align="stretch"
+        wrap="nowrap"
+        gap={12}
+        py={8}
+        px={12}
+      >
         <span>{path}</span>
         {digest === undefined ? null : (
           <code>{digest?.slice(0, 10) ?? "unlisted"}</code>
         )}
-      </div>
+      </Group>
       <pre
         role="region"
         key={`${path}\0${content}`}

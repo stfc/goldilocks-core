@@ -1,4 +1,4 @@
-import { Accordion } from "@mantine/core";
+import { Accordion, Box, Center, Group, Text } from "@mantine/core";
 
 import type { ComputationResult } from "../api/coreClient";
 import { artifactDigest } from "./artifacts";
@@ -14,7 +14,7 @@ export function PseudopotentialReview({
   const table = inputData.pseudopotential_set;
   return (
     <section className="review-section pseudo-review">
-      <header>
+      <Group component="header" gap={12} wrap="nowrap" mb={16}>
         <span className="review-section__index">C</span>
         <div>
           <h3>Pseudopotentials</h3>
@@ -22,26 +22,49 @@ export function PseudopotentialReview({
             {table.provider} · {table.version ?? "unversioned"}
           </p>
         </div>
-      </header>
-      <div className="pseudo-table-id">
+      </Group>
+      <Group
+        className="pseudo-table-id"
+        justify="space-between"
+        wrap="nowrap"
+        gap={12}
+        p={12}
+      >
         <span>
           {table.functional} · {table.accuracy}
         </span>
         <code>{table.id}</code>
-      </div>
+      </Group>
       <ul className="pseudo-files">
         {selection.pseudopotentials.map((item) => {
           const digest = artifactDigest(inputData.artifacts, item.filename);
           return (
             <li key={item.element}>
-              <span className="element-badge">{item.element}</span>
-              <div>
-                <strong>{item.filename ?? "Filename unavailable"}</strong>
-                <span>
+              <Center component="span" className="element-badge" w={32} h={32}>
+                {item.element}
+              </Center>
+              <Box miw={0}>
+                <Text
+                  component="strong"
+                  inherit
+                  truncate
+                  fw={500}
+                  display="block"
+                >
+                  {item.filename ?? "Filename unavailable"}
+                </Text>
+                <Text
+                  component="span"
+                  inherit
+                  truncate
+                  c="var(--color-text-muted)"
+                  mt={4}
+                  display="block"
+                >
                   {item.relativistic ?? "unknown"} · {item.ecutwfc_ry ?? "—"} /{" "}
                   {item.ecutrho_ry ?? "—"} Ry
-                </span>
-              </div>
+                </Text>
+              </Box>
               {digest === null ? null : (
                 <code title={digest}>{digest.slice(0, 8)}</code>
               )}
@@ -49,24 +72,27 @@ export function PseudopotentialReview({
           );
         })}
       </ul>
-      <p className="licence-line">
+      <Group
+        component="p"
+        justify="space-between"
+        align="stretch"
+        wrap="nowrap"
+        gap={12}
+        mt={12}
+        mb={0}
+        c="var(--color-text-secondary)"
+        fz="var(--text-xs)"
+      >
         <span>Licence</span>
-        <strong>{table.licence}</strong>
-      </p>
+        <Text component="strong" inherit c="var(--color-text)" fw={550}>
+          {table.licence}
+        </Text>
+      </Group>
       <Accordion
         order={4}
-        chevron={
-          <span className="review-disclosure__glyph" aria-hidden="true" />
-        }
+        chevron={<span aria-hidden="true" />}
         disableChevronRotation
-        classNames={{
-          root: "citation",
-          item: "review-disclosure__item",
-          control: "review-disclosure__control citation__control",
-          label: "review-disclosure__label citation__label",
-          chevron: "review-disclosure__indicator",
-          content: "review-disclosure__content",
-        }}
+        className="review-disclosure citation"
       >
         <Accordion.Item value="citation">
           <Accordion.Control>Citation and provenance</Accordion.Control>

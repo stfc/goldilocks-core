@@ -9,6 +9,8 @@ import {
   type StructureViewerFactory,
 } from "./structureViewer";
 
+const LATTICE_AXES = ["a", "b", "c"];
+
 export function StructureViewport({
   inspection,
   createViewer = attachStructureViewer,
@@ -77,18 +79,12 @@ export function StructureViewport({
         <span>{inspection.structure.site_count} atomic sites</span>
       </h2>
       <dl className="viewport__metrics">
-        <div>
-          <dt>a</dt>
-          <dd>{formatLength(lattice.lengths_angstrom[0])}</dd>
-        </div>
-        <div>
-          <dt>b</dt>
-          <dd>{formatLength(lattice.lengths_angstrom[1])}</dd>
-        </div>
-        <div>
-          <dt>c</dt>
-          <dd>{formatLength(lattice.lengths_angstrom[2])}</dd>
-        </div>
+        {lattice.lengths_angstrom.map((length, index) => (
+          <div key={index}>
+            <dt>{LATTICE_AXES[index]}</dt>
+            <dd>{length.toFixed(3)} Å</dd>
+          </div>
+        ))}
         <div>
           <dt>V</dt>
           <dd>{lattice.volume_angstrom3.toFixed(2)} Å³</dd>
@@ -96,8 +92,4 @@ export function StructureViewport({
       </dl>
     </section>
   );
-}
-
-function formatLength(value: number): string {
-  return `${value.toFixed(3)} Å`;
 }

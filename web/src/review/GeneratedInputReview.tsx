@@ -1,4 +1,4 @@
-import { Tabs } from "@mantine/core";
+import { Group, Tabs } from "@mantine/core";
 import { useState } from "react";
 
 import type { ComputationResult } from "../api/coreClient";
@@ -17,13 +17,13 @@ export function GeneratedInputReview({
   const inputData = result.records.dft_input_data;
   return (
     <section className="review-section generated-review">
-      <header>
+      <Group component="header" gap={12} wrap="nowrap" mb={16}>
         <span className="review-section__index">A</span>
         <div>
           <h3>Generated inputs</h3>
           <p>{files.length} files</p>
         </div>
-      </header>
+      </Group>
       {file === undefined ? (
         <p className="no-files">No generated input files.</p>
       ) : (

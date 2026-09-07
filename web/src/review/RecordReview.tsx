@@ -1,4 +1,4 @@
-import { Accordion } from "@mantine/core";
+import { Accordion, Group } from "@mantine/core";
 
 import type { ComputationResult } from "../api/coreClient";
 import { ScientificRecord } from "./ScientificRecord";
@@ -11,31 +11,23 @@ export function RecordReview({
   const records = Object.entries(result.records);
   return (
     <section className="review-section record-review">
-      <header>
+      <Group component="header" gap={12} wrap="nowrap" mb={16}>
         <span className="review-section__index">D</span>
         <div>
           <h3>Scientific records</h3>
           <p>{records.length} records</p>
         </div>
-      </header>
+      </Group>
       <Accordion
         multiple
         order={4}
-        chevron={
-          <span className="review-disclosure__glyph" aria-hidden="true" />
-        }
+        chevron={<span aria-hidden="true" />}
         disableChevronRotation
-        classNames={{
-          root: "record-list",
-          item: "record-card",
-          control: "review-disclosure__control record-card__control",
-          label: "review-disclosure__label record-card__label",
-          chevron: "review-disclosure__indicator",
-          content: "review-disclosure__content",
-        }}
+        className="review-disclosure record-list"
+        style={{ display: "grid", gap: 8 }}
       >
         {records.map(([name, value]) => (
-          <Accordion.Item key={name} value={name}>
+          <Accordion.Item key={name} value={name} className="record-card">
             <Accordion.Control>
               <span>{readableName(name)}</span>
               <code className="record-card__key">{name}</code>
@@ -47,21 +39,9 @@ export function RecordReview({
               />
               <Accordion
                 order={5}
-                chevron={
-                  <span
-                    className="review-disclosure__glyph"
-                    aria-hidden="true"
-                  />
-                }
+                chevron={<span aria-hidden="true" />}
                 disableChevronRotation
-                classNames={{
-                  root: "record-raw",
-                  item: "review-disclosure__item",
-                  control: "review-disclosure__control record-raw__control",
-                  label: "review-disclosure__label record-raw__label",
-                  chevron: "review-disclosure__indicator",
-                  content: "review-disclosure__content",
-                }}
+                className="review-disclosure record-raw"
               >
                 <Accordion.Item value="json">
                   <Accordion.Control>

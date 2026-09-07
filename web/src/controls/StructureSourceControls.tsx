@@ -103,7 +103,7 @@ export function StructureSourceControls({
           {(fileButtonProps) => (
             <Button
               {...fileButtonProps}
-              classNames={{ root: "text-button" }}
+              className="text-button"
               variant="subtle"
               type="button"
               aria-describedby="structure-source-help"

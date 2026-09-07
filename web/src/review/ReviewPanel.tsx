@@ -1,4 +1,4 @@
-import { Alert, Button } from "@mantine/core";
+import { Box, Button, Flex, Group, Stack, Text } from "@mantine/core";
 import { ArrowLeft, Download, LoaderCircle } from "lucide-react";
 
 import type { ComputationResult } from "../api/coreClient";
@@ -24,11 +24,17 @@ export function ReviewPanel({
       aria-label="Recommendation results"
       aria-busy={snapshot.operation === "compute"}
     >
-      <header className="review-heading">
-        <div>
+      <Group
+        component="header"
+        className="review-heading"
+        justify="space-between"
+        wrap="nowrap"
+        gap={0}
+      >
+        <Group gap={12} wrap="nowrap">
           <span>03</span>
           <h2>Recommendation</h2>
-        </div>
+        </Group>
         <Button
           className="panel-navigation"
           leftSection={<ArrowLeft aria-hidden="true" size={15} />}
@@ -37,48 +43,53 @@ export function ReviewPanel({
         >
           Structure
         </Button>
-      </header>
+      </Group>
 
-      {result === null && snapshot.operation === "compute" && (
-        <div className="review-empty review-empty--loading" role="status">
-          <LoaderCircle
-            className="spinning-icon"
-            aria-hidden="true"
-            size={18}
-          />
-          <strong>Computing recommendation</strong>
-        </div>
-      )}
-      {result === null && snapshot.operation !== "compute" && (
-        <div className="review-empty">
-          <div className="review-empty__diagram" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </div>
-          <strong>No recommendation</strong>
-        </div>
+      {result === null && (
+        <Stack
+          className="review-empty"
+          align="center"
+          justify="center"
+          gap={0}
+          role={snapshot.operation === "compute" ? "status" : undefined}
+        >
+          {snapshot.operation === "compute" ? (
+            <LoaderCircle
+              className="spinning-icon"
+              aria-hidden="true"
+              size={18}
+              style={{ marginBottom: 16, color: "var(--color-accent-bright)" }}
+            />
+          ) : (
+            <div className="review-empty__diagram" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+          )}
+          <Text component="strong" fz="var(--text-lg)" fw={550} lh="inherit">
+            {snapshot.operation === "compute"
+              ? "Computing recommendation"
+              : "No recommendation"}
+          </Text>
+        </Stack>
       )}
       {result !== null && (
         <>
           {snapshot.outOfDate ? (
-            <Alert
-              classNames={{
-                root: "stale-banner",
-                message: "stale-banner__message",
-              }}
+            <Box
+              className="stale-banner"
               role="status"
               aria-label="Recommendation notice"
               aria-live="polite"
               aria-atomic="true"
+              fz="var(--text-sm)"
             >
-              <p>
-                Your settings changed. Update the recommendation before
-                downloading.
-              </p>
-            </Alert>
+              Your settings changed. Update the recommendation before
+              downloading.
+            </Box>
           ) : null}
-          <div className="download-bar">
+          <Flex className="download-bar" justify="space-between" gap={16}>
             <Button
               classNames={{
                 root: "download-action",
@@ -106,7 +117,7 @@ export function ReviewPanel({
                 {snapshot.lastDownload.filename} is ready
               </p>
             )}
-          </div>
+          </Flex>
           <GeneratedInputReview result={result} />
           <RecommendationSummary result={result} />
           <PseudopotentialReview result={result} />
@@ -135,13 +146,13 @@ function RecommendationSummary({
   }
   return (
     <section className="review-section recommendation-summary">
-      <header>
+      <Group component="header" gap={12} wrap="nowrap" mb={16}>
         <span className="review-section__index">B</span>
         <div>
           <h3>Recommended setup</h3>
           <p>{intent.functional} · Quantum ESPRESSO</p>
         </div>
-      </header>
+      </Group>
       <dl className="recommendation-metrics">
         <div>
           <dt>K-grid</dt>
@@ -181,23 +192,20 @@ function Warnings({ result }: { readonly result: ComputationResult }) {
   ];
   if (warnings.length === 0) return null;
   return (
-    <Alert
-      classNames={{
-        root: "warning-list",
-        message: "warning-list__message",
-      }}
+    <Box
+      className="warning-list"
       role="status"
       aria-label="Scientific warnings"
       aria-live="polite"
       aria-atomic="true"
     >
       <h3>Warnings</h3>
-      <ul>
+      <Stack component="ul" gap={8} mt={12} mb={0} pl={20}>
         {warnings.map((warning) => (
           <li key={warning}>{warning}</li>
         ))}
-      </ul>
-    </Alert>
+      </Stack>
+    </Box>
   );
 }
 

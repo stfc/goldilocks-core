@@ -10,23 +10,10 @@
   position: sticky;
   z-index: 5;
   top: 0;
-  display: flex;
   min-height: 4rem;
   padding: 0 var(--space-5);
-  align-items: center;
-  justify-content: space-between;
   border-bottom: var(--border-subtle);
   background: var(--color-header);
-}
-
-.review-heading > div,
-.review-section > header {
-  display: flex;
-  align-items: center;
-}
-
-.review-heading > div {
-  gap: var(--space-3);
 }
 
 .review-heading > div > span {
@@ -43,12 +30,8 @@
 }
 
 .review-empty {
-  display: flex;
   min-height: calc(100dvh - 4rem);
   padding: 3.75rem 2.375rem;
-  align-items: center;
-  flex-direction: column;
-  justify-content: center;
   text-align: center;
 }
 
@@ -81,34 +64,11 @@
   left: 4.625rem;
 }
 
-.review-empty strong {
-  font-size: var(--text-lg);
-  font-weight: 550;
-}
-
-.review-empty--loading svg {
-  margin-bottom: var(--space-4);
-  color: var(--color-accent-bright);
-}
-
 .stale-banner {
   padding: var(--space-3) var(--space-5);
   color: var(--color-accent-text);
-  border: 0;
   border-bottom: 1px solid var(--color-accent-border);
   background: var(--color-accent-surface);
-}
-
-.stale-banner__message,
-.warning-list__message {
-  color: inherit;
-  overflow: visible;
-}
-
-.stale-banner p {
-  margin: 0;
-  font-size: var(--text-sm);
-  line-height: var(--leading-base);
 }
 
 .review-section {
@@ -116,15 +76,13 @@
   border-bottom: var(--border-subtle);
 }
 
-.review-section > header {
-  margin-bottom: var(--space-4);
-  gap: var(--space-3);
+.review-section__index {
+  display: grid;
+  place-items: center;
 }
 
 .review-section__index,
 .element-badge {
-  display: grid;
-  place-items: center;
   color: var(--color-accent-text);
   border: 1px solid var(--color-accent-border);
 }
@@ -178,18 +136,13 @@
   color: var(--color-text);
 }
 
-.record-list {
-  display: grid;
-  gap: var(--space-2);
-}
-
 .record-card,
 .pseudo-table-id {
   border: var(--border-subtle);
   background: var(--color-control);
 }
 
-.review-disclosure__control {
+.review-disclosure .mantine-Accordion-control {
   --review-disclosure-glyph: "+";
   min-height: var(--target-size);
   padding: var(--space-2) var(--space-3);
@@ -198,28 +151,28 @@
   font-size: var(--text-sm);
 }
 
-.review-disclosure__control:hover {
+.review-disclosure .mantine-Accordion-control:hover {
   background: var(--color-control);
 }
 
-.review-disclosure__control[data-active] {
+.review-disclosure .mantine-Accordion-control[data-active] {
   --review-disclosure-glyph: "−";
 }
 
-.review-disclosure__label {
+.review-disclosure .mantine-Accordion-label {
   min-width: 0;
   padding: 0;
   text-align: left;
   white-space: normal;
 }
 
-.record-card__label {
+.record-list > .mantine-Accordion-item > h4 .mantine-Accordion-label {
   display: flex;
   align-items: center;
   gap: var(--space-3);
 }
 
-.review-disclosure__indicator {
+.review-disclosure .mantine-Accordion-chevron {
   width: 0.625rem;
   min-width: 0.625rem;
   flex: 0 0 auto;
@@ -229,7 +182,7 @@
   font-size: 1rem;
 }
 
-.review-disclosure__glyph::before {
+.review-disclosure .mantine-Accordion-chevron > span::before {
   content: var(--review-disclosure-glyph);
 }
 
@@ -241,7 +194,7 @@
   text-overflow: ellipsis;
 }
 
-.review-disclosure__content {
+.review-disclosure .mantine-Accordion-content {
   padding: 0;
 }
 
@@ -251,7 +204,8 @@
   border-top: var(--border-subtle);
 }
 
-.review-disclosure__item {
+.record-raw .mantine-Accordion-item,
+.citation .mantine-Accordion-item {
   border: 0;
 }
 
@@ -292,14 +246,6 @@
   overflow-wrap: anywhere;
 }
 
-.pseudo-table-id {
-  display: flex;
-  padding: var(--space-3);
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-
 .pseudo-table-id span {
   color: var(--color-text-secondary);
   font-size: var(--text-xs);
@@ -332,48 +278,12 @@
   border-bottom: 0;
 }
 
-.element-badge {
-  width: 2rem;
-  height: 2rem;
-}
-
-.pseudo-files div {
-  min-width: 0;
-}
-
-.pseudo-files strong,
-.pseudo-files div span {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pseudo-files strong {
-  font-weight: 500;
-}
-
-.pseudo-files div span,
 .pseudo-files > li > code {
   margin-top: var(--space-1);
   color: var(--color-text-muted);
 }
 
-.licence-line {
-  display: flex;
-  margin: var(--space-3) 0 0;
-  justify-content: space-between;
-  gap: var(--space-3);
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-}
-
-.licence-line strong {
-  color: var(--color-text);
-  font-weight: 550;
-}
-
-.citation__control {
+.citation .mantine-Accordion-control {
   padding-right: 0;
   padding-left: 0;
 }
@@ -426,10 +336,6 @@
 }
 
 .code-frame__heading {
-  display: flex;
-  padding: var(--space-2) var(--space-3);
-  justify-content: space-between;
-  gap: var(--space-3);
   color: var(--color-text-secondary);
   border-bottom: var(--border-subtle);
 }
@@ -484,16 +390,8 @@
 .warning-list {
   padding: var(--space-5);
   color: var(--color-danger-text);
-  border: 0;
   border-bottom: 1px solid var(--color-danger-border);
   background: var(--color-danger-surface);
-}
-
-.warning-list ul {
-  display: grid;
-  margin: var(--space-3) 0 0;
-  padding-left: var(--space-5);
-  gap: var(--space-2);
 }
 
 .warning-list li {
@@ -504,11 +402,8 @@
 }
 
 .download-bar {
-  display: flex;
   padding: var(--space-3) var(--space-5);
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
   border-bottom: var(--border-subtle);
   background: var(--color-surface-raised);
 }
@@ -545,11 +440,9 @@
 .review-section__index,
 .element-badge,
 .record-card__key,
-.record-raw__control,
-.citation__control,
-.pseudo-files strong,
-.pseudo-files div span,
-.pseudo-files > li > code,
+.record-raw .mantine-Accordion-control,
+.citation .mantine-Accordion-control,
+.pseudo-files,
 .file-tabs__tab,
 .code-frame__heading,
 .download-action,

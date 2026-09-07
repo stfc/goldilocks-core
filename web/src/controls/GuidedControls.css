@@ -1,7 +1,6 @@
 .control-rail {
   min-width: 0;
   min-height: 100dvh;
-  overflow: visible;
   border-right: var(--border-strong);
   background: var(--color-surface);
 }
@@ -9,20 +8,6 @@
 .rail-section {
   padding: var(--space-6) var(--space-5);
   border-bottom: var(--border-subtle);
-}
-
-.section-heading {
-  display: flex;
-  margin-bottom: var(--space-5);
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-
-.section-heading > div {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
 }
 
 .section-heading > div > span {

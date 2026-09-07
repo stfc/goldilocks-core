@@ -1,26 +1,19 @@
-.calculation-form {
-  display: grid;
-  gap: var(--space-4);
-}
-
 .field-row {
-  display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-3);
 }
 
-.field {
+.mantine-InputWrapper-root {
   display: grid;
   min-width: 0;
   gap: var(--space-2);
 }
 
-.field__wrapper {
+.mantine-Input-wrapper {
   --input-height: var(--target-size);
-  --input-size: var(--target-size);
 }
 
-.field__label,
+.mantine-InputWrapper-label,
+.advanced-controls .mantine-Accordion-control,
 .k-grid-field legend {
   color: var(--color-text-secondary);
   font-family: var(--font-mono);
@@ -30,7 +23,7 @@
   text-transform: uppercase;
 }
 
-.field__input {
+.mantine-Input-input {
   padding: 0 var(--space-3);
   color: var(--color-text);
   border: var(--border-strong);
@@ -40,33 +33,28 @@
   line-height: normal;
 }
 
-.field__select {
+.mantine-NativeSelect-input {
   padding-right: 1.75rem;
 }
 
-.field__number {
+.mantine-NumberInput-input {
   padding-right: calc(var(--space-3) + 1.5rem);
 }
 
-.field__section {
+.mantine-Input-section {
   color: var(--color-text-secondary);
 }
 
-.field__number-controls {
-  height: calc(var(--target-size) - 2px);
-}
-
-.field__number-control {
-  height: calc(var(--target-size) / 2 - 1px);
+.mantine-NumberInput-control {
   color: var(--color-text-secondary);
   border-inline-start: var(--border-subtle);
 }
 
-.field__number-control:not(:disabled):hover {
+.mantine-NumberInput-control:not(:disabled):hover {
   background: var(--color-accent-surface);
 }
 
-.field__input::placeholder {
+.mantine-Input-input::placeholder {
   color: var(--color-text-muted);
 }
 
@@ -75,31 +63,26 @@
   background: var(--color-control);
 }
 
-.advanced-controls__item {
+.advanced-controls .mantine-Accordion-item {
   border: 0;
   background: transparent;
 }
 
-.advanced-controls__control {
+.advanced-controls .mantine-Accordion-control {
   min-height: var(--target-size);
   padding: 0 var(--space-3);
-  color: var(--color-text-secondary);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
 }
 
-.advanced-controls__control:hover {
+.advanced-controls .mantine-Accordion-control:hover {
   background: transparent;
 }
 
-.advanced-controls__label {
+.advanced-controls .mantine-Accordion-label {
   padding: 0;
   font-weight: 400;
 }
 
-.advanced-controls__chevron {
+.advanced-controls .mantine-Accordion-chevron {
   width: 1rem;
   color: var(--color-accent-bright);
   transform: none;
@@ -110,11 +93,13 @@
   font-size: 1rem;
 }
 
-.advanced-controls__chevron[data-rotate] .advanced-controls__indicator::before {
+.advanced-controls
+  .mantine-Accordion-chevron[data-rotate]
+  .advanced-controls__indicator::before {
   content: "−";
 }
 
-.advanced-controls__content {
+.advanced-controls .mantine-Accordion-content {
   padding: 0;
 }
 
@@ -125,13 +110,6 @@
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: var(--leading-relaxed);
-}
-
-.advanced-controls__body {
-  display: grid;
-  padding: var(--space-3);
-  gap: var(--space-3);
-  border-top: var(--border-subtle);
 }
 
 .k-grid-field {
@@ -146,44 +124,38 @@
   margin-bottom: var(--space-1);
 }
 
-.k-grid-inputs {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-2);
-}
-
 .k-grid-inputs__input {
   padding: 0 calc(var(--space-1) + 1.5rem) 0 var(--space-1);
   text-align: center;
 }
 
-.check-field {
+.mantine-Checkbox-root {
   min-height: var(--target-size);
   display: flex;
   align-items: center;
 }
 
-.check-field__body {
+.mantine-Checkbox-body {
   align-items: center;
 }
 
-.check-field__label {
+.mantine-Checkbox-label {
   padding-inline-start: var(--space-3);
   color: var(--color-text-secondary);
   font-size: var(--text-sm);
 }
 
-.check-field__input {
+.mantine-Checkbox-input {
   border: var(--border-strong);
   background: var(--color-control);
 }
 
-.check-field__input:checked {
+.mantine-Checkbox-input:checked {
   border-color: var(--color-accent);
   background: var(--color-accent);
 }
 
-.check-field__icon {
+.mantine-Checkbox-icon {
   color: var(--color-accent-ink);
 }
 

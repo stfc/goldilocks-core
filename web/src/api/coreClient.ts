@@ -114,25 +114,16 @@ async function parseJson<T>(response: Response): Promise<T> {
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.toLowerCase().startsWith("application/json")) {
     const rawResponse = await decodeResponse(response);
-    throw new CoreFailure(
-      "invalid_response",
-      "Goldilocks Core returned an invalid JSON response.",
-      false,
-      {},
+    throw invalidResponse(
       response.status,
+      "returned an invalid JSON response",
       rawResponse,
     );
   }
   try {
     return (await response.json()) as T;
   } catch {
-    throw new CoreFailure(
-      "invalid_response",
-      "Goldilocks Core returned unreadable JSON.",
-      false,
-      {},
-      response.status,
-    );
+    throw invalidResponse(response.status, "returned unreadable JSON");
   }
 }
 
@@ -149,12 +140,9 @@ function requireSchemaVersion(payload: unknown, status: number): void {
     !("schema_version" in payload) ||
     payload.schema_version !== 1
   ) {
-    throw new CoreFailure(
-      "invalid_response",
-      "Goldilocks Core returned an incompatible schema version.",
-      false,
-      {},
+    throw invalidResponse(
       status,
+      "returned an incompatible schema version",
       payload,
     );
   }
@@ -220,12 +208,9 @@ async function parsePreparedComputation(
 ): Promise<PreparedComputation> {
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.toLowerCase().startsWith("multipart/form-data")) {
-    throw new CoreFailure(
-      "invalid_response",
-      "Goldilocks Core returned an invalid computation response.",
-      false,
-      {},
+    throw invalidResponse(
       response.status,
+      "returned an invalid computation response",
     );
   }
 
@@ -233,37 +218,22 @@ async function parsePreparedComputation(
   try {
     form = await response.formData();
   } catch {
-    throw new CoreFailure(
-      "invalid_response",
-      "Goldilocks Core returned unreadable computation data.",
-      false,
-      {},
+    throw invalidResponse(
       response.status,
+      "returned unreadable computation data",
     );
   }
 
   const resultPart = form.get("result");
   if (!(resultPart instanceof Blob)) {
-    throw new CoreFailure(
-      "invalid_response",
-      "Goldilocks Core omitted the computation result.",
-      false,
-      {},
-      response.status,
-    );
+    throw invalidResponse(response.status, "omitted the computation result");
   }
 
   let payload: unknown;
   try {
     payload = JSON.parse(await resultPart.text()) as unknown;
   } catch {
-    throw new CoreFailure(
-      "invalid_response",
-      "Goldilocks Core returned unreadable result JSON.",
-      false,
-      {},
-      response.status,
-    );
+    throw invalidResponse(response.status, "returned unreadable result JSON");
   }
   requireSchemaVersion(payload, response.status);
   const result = payload as ComputationResult;
@@ -274,12 +244,9 @@ async function parsePreparedComputation(
     !(archivePart instanceof Blob) ||
     archivePart.type !== "application/zip"
   ) {
-    throw new CoreFailure(
-      "invalid_response",
-      "Goldilocks Core returned an invalid prepared archive.",
-      false,
-      {},
+    throw invalidResponse(
       response.status,
+      "returned an invalid prepared archive",
     );
   }
   const filename =
@@ -299,4 +266,19 @@ function safeArchiveFilename(candidate: string): string {
     candidate.toLowerCase().endsWith(".zip")
     ? candidate
     : "goldilocks-inputs.zip";
+}
+
+function invalidResponse(
+  status: number,
+  reason: string,
+  rawResponse?: unknown,
+): CoreFailure {
+  return new CoreFailure(
+    "invalid_response",
+    `Goldilocks Core ${reason}.`,
+    false,
+    {},
+    status,
+    rawResponse,
+  );
 }

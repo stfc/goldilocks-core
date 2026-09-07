@@ -13,15 +13,13 @@ import { CoreFailure } from "../api/coreClient";
 
 export type WorkspaceOperation = "capabilities" | "inspect" | "compute";
 
-export type ReviewedComputation = PreparedComputation;
-
 export interface WorkspaceSnapshot {
   readonly capabilities: Capabilities | null;
   readonly source: StructureSource | null;
   readonly attemptedSource: StructureSource | null;
   readonly inspection: StructureInspection | null;
   readonly draft: CalculationDraft | null;
-  readonly reviewed: ReviewedComputation | null;
+  readonly reviewed: PreparedComputation | null;
   readonly outOfDate: boolean;
   readonly lastDownload: ArchiveDownload | null;
   readonly operation: WorkspaceOperation | null;
@@ -96,11 +94,10 @@ export function createWorkspace(
   function completeOperation(
     owner: OperationOwner,
     update: Partial<WorkspaceSnapshot> = {},
-  ): boolean {
-    if (activeOperation !== owner) return false;
+  ): void {
+    if (activeOperation !== owner) return;
     activeOperation = null;
     store.setState({ ...update, operation: null });
-    return true;
   }
 
   function failOperation(owner: OperationOwner, error: unknown): void {
@@ -122,11 +119,7 @@ export function createWorkspace(
     const promise = core.capabilities().then(
       (capabilities) => {
         if (startup?.owner === owner) startup = null;
-        completeOperation(owner, {
-          capabilities,
-          failure: null,
-          failureOperation: null,
-        });
+        completeOperation(owner, { capabilities });
       },
       (error: unknown) => {
         if (startup?.owner === owner) startup = null;
@@ -152,14 +145,12 @@ export function createWorkspace(
         inspection,
         draft: {
           structure: source,
-          intent: { ...capabilities.default_intent },
-          hints: { ...capabilities.default_hints },
+          intent: capabilities.default_intent,
+          hints: capabilities.default_hints,
         },
         reviewed: null,
         outOfDate: false,
         lastDownload: null,
-        failure: null,
-        failureOperation: null,
       });
     } catch (error) {
       failOperation(owner, error);
@@ -208,8 +199,6 @@ export function createWorkspace(
         reviewed: prepared,
         outOfDate: revision !== draftRevision,
         lastDownload: null,
-        failure: null,
-        failureOperation: null,
       });
     } catch (error) {
       failOperation(owner, error);

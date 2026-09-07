@@ -1,5 +1,7 @@
 import {
   Button,
+  Checkbox,
+  NumberInput,
   createTheme,
   localStorageColorSchemeManager,
 } from "@mantine/core";
@@ -39,6 +41,12 @@ export const workbenchTheme = createTheme({
         label: { fontWeight: "inherit" },
         section: { margin: 0 },
       },
+    }),
+    NumberInput: NumberInput.extend({
+      defaultProps: { role: "spinbutton", clampBehavior: "none" },
+    }),
+    Checkbox: Checkbox.extend({
+      defaultProps: { size: "md" },
     }),
   },
 });

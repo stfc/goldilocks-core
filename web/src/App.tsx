@@ -3,7 +3,6 @@ import { ArrowRight } from "lucide-react";
 import {
   Button,
   MantineProvider,
-  VisuallyHidden,
   useComputedColorScheme,
   useMantineColorScheme,
 } from "@mantine/core";
@@ -75,29 +74,9 @@ function Workbench() {
         />
       )}
 
-      {snapshot.capabilities === null ? (
-        <main
-          className="workbench-grid workbench-grid--loading"
-          aria-labelledby="workbench-title"
-        >
-          <VisuallyHidden>
-            <h1 id="workbench-title">Goldilocks SCF setup</h1>
-          </VisuallyHidden>
-          <section className="structure-stage" aria-label="Structure workspace">
-            <div className="empty-stage empty-stage--loading" role="status">
-              <div className="empty-stage__orbital" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-                <i />
-              </div>
-              <h1>Loading Workbench</h1>
-            </div>
-          </section>
-        </main>
-      ) : (
-        <WorkspaceLayout
-          controls={
+      <WorkspaceLayout
+        controls={
+          snapshot.capabilities === null ? null : (
             <GuidedControls
               theme={theme}
               onToggleTheme={toggleTheme}
@@ -108,49 +87,62 @@ function Workbench() {
                 setWorkspaceView("recommendation");
               }}
             />
-          }
-        >
-          {workspaceView === "recommendation" ? (
-            <ReviewPanel
-              onShowStructure={() => {
-                setWorkspaceView("structure");
-              }}
-            />
-          ) : (
-            <section
-              id="structure-panel"
-              className="structure-stage"
-              aria-label="Structure workspace"
-            >
-              {snapshot.inspection === null ? (
-                <EmptyStage loading={snapshot.operation === "inspect"} />
-              ) : (
-                <StructureViewport
-                  key={theme}
-                  inspection={snapshot.inspection}
-                />
-              )}
-              {snapshot.reviewed === null ? null : (
-                <Button
-                  className="stage-navigation"
-                  rightSection={<ArrowRight aria-hidden="true" size={15} />}
-                  type="button"
-                  onClick={() => {
-                    setWorkspaceView("recommendation");
-                  }}
-                >
-                  Recommendation
-                </Button>
-              )}
-            </section>
-          )}
-        </WorkspaceLayout>
-      )}
+          )
+        }
+      >
+        {workspaceView === "recommendation" ? (
+          <ReviewPanel
+            onShowStructure={() => {
+              setWorkspaceView("structure");
+            }}
+          />
+        ) : (
+          <section
+            id="structure-panel"
+            className="structure-stage"
+            aria-label="Structure workspace"
+          >
+            {snapshot.inspection === null ? (
+              <EmptyStage
+                loading={
+                  snapshot.capabilities === null ||
+                  snapshot.operation === "inspect"
+                }
+                label={
+                  snapshot.capabilities === null
+                    ? "Loading Workbench"
+                    : undefined
+                }
+              />
+            ) : (
+              <StructureViewport key={theme} inspection={snapshot.inspection} />
+            )}
+            {snapshot.reviewed === null ? null : (
+              <Button
+                className="stage-navigation"
+                rightSection={<ArrowRight aria-hidden="true" size={15} />}
+                type="button"
+                onClick={() => {
+                  setWorkspaceView("recommendation");
+                }}
+              >
+                Recommendation
+              </Button>
+            )}
+          </section>
+        )}
+      </WorkspaceLayout>
     </div>
   );
 }
 
-function EmptyStage({ loading }: { readonly loading: boolean }) {
+function EmptyStage({
+  loading,
+  label = loading ? "Reading structure" : "No structure selected",
+}: {
+  readonly loading: boolean;
+  readonly label?: string | undefined;
+}) {
   return (
     <div
       className={`empty-stage${loading ? " empty-stage--loading" : ""}`}
@@ -162,7 +154,7 @@ function EmptyStage({ loading }: { readonly loading: boolean }) {
         <span />
         <i />
       </div>
-      <h2>{loading ? "Reading structure" : "No structure selected"}</h2>
+      <h2>{label}</h2>
     </div>
   );
 }

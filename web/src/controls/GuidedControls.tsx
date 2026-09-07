@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ActionIcon } from "@mantine/core";
+import { ActionIcon, Group } from "@mantine/core";
 import { Moon, Sun } from "lucide-react";
 
 import type { Theme } from "../theme";
@@ -33,7 +33,7 @@ export function GuidedControls({
           title="Structure"
           action={
             <ActionIcon
-              classNames={{ root: "theme-toggle" }}
+              className="theme-toggle"
               variant="default"
               size="var(--target-size)"
               aria-label={
@@ -81,12 +81,19 @@ function SectionHeading({
   readonly action?: ReactNode;
 }) {
   return (
-    <header className="section-heading">
-      <div>
+    <Group
+      component="header"
+      justify="space-between"
+      gap="var(--space-3)"
+      mb="var(--space-5)"
+      wrap="nowrap"
+      className="section-heading"
+    >
+      <Group gap="var(--space-3)" wrap="nowrap">
         <span>{number}</span>
         <h2>{title}</h2>
-      </div>
+      </Group>
       {action}
-    </header>
+    </Group>
   );
 }

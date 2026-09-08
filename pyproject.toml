@@ -91,6 +91,9 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "goldilocks_core.contracts".msg = "the contracts package was dissolved; import from the domain module that defines the name"
 

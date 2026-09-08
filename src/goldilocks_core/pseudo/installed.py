@@ -3,14 +3,18 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import tarfile
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from goldilocks_core.assets.records import InstalledAsset
 from goldilocks_core.assets.store import AssetCorrupt
 from goldilocks_core.pseudo.metadata import PseudoMetadata
+from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
 from goldilocks_core.pseudo.registry import PseudoTable
 from goldilocks_core.pseudo.validation import (
+    PseudoImportError,
     finite_positive_cutoff,
     required_functional,
 )
@@ -81,6 +85,111 @@ def write_table_manifest(
     )
 
 
+def archive_files(archive: Path, suffix: str = "") -> Iterator[tuple[str, BinaryIO]]:
+    with tarfile.open(archive, "r:gz") as tar:
+        for member in tar.getmembers():
+            if not member.isfile() or not member.name.lower().endswith(suffix):
+                continue
+            source = tar.extractfile(member)
+            if source is None:
+                raise PseudoImportError(f"cannot extract {member.name}")
+            with source:
+                yield member.name, source
+
+
+def extract_upf(
+    source: BinaryIO,
+    target: Path,
+    element: str,
+    table: PseudoTable,
+    md5: str,
+    mismatch: str,
+) -> dict[str, Any]:
+    digest = hashlib.md5()
+    with target.open("xb") as output:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+            output.write(chunk)
+    if digest.hexdigest() != md5.lower():
+        raise PseudoImportError(mismatch)
+    parsed = parse_upf_metadata(target)
+    if parsed.element != element:
+        raise PseudoImportError(
+            f"{element}: UPF element is {parsed.element or 'unknown'}"
+        )
+    functional = required_functional(parsed.functional, f"UPF functional for {element}")
+    if functional != table.functional:
+        raise PseudoImportError(
+            f"{element}: UPF functional {functional} does not match "
+            f"table functional {table.functional}"
+        )
+    if parsed.relativistic != table.relativistic and not (
+        table.relativistic == "scalar" and parsed.relativistic == "non-relativistic"
+    ):
+        raise PseudoImportError(
+            f"{element}: UPF relativistic treatment "
+            f"{parsed.relativistic or 'unknown'} does not match table "
+            f"treatment {table.relativistic}"
+        )
+    return {
+        "element": element,
+        "path": f"pseudos/{target.name}",
+        "md5": digest.hexdigest(),
+        "header_format": parsed.header_format,
+        "upf_relativistic": parsed.relativistic,
+        "pseudo_type": parsed.pseudo_type,
+        "z_valence": parsed.z_valence,
+    }
+
+
+def _validate_manifest(
+    data: Any,
+    installed: InstalledAsset,
+    table: PseudoTable | None,
+) -> None:
+    if not isinstance(data, dict) or set(data) != _TOP_LEVEL_FIELDS:
+        raise ValueError("pseudopotential manifest fields are invalid")
+    if (
+        isinstance(data["schema_version"], bool)
+        or data["schema_version"] != _SCHEMA_VERSION
+    ):
+        raise ValueError(
+            "unsupported pseudopotential manifest schema_version "
+            f"{data['schema_version']!r}"
+        )
+    if data["id"] != installed.id or data["version"] != installed.version:
+        raise ValueError("pseudopotential manifest identity does not match asset")
+    for field in ("provider", "licence", "citation"):
+        data[field] = _nonempty_string(data[field], field)
+    data["functional"] = required_functional(data["functional"], "table functional")
+    for field, allowed, label in (
+        ("accuracy", {"efficiency", "precision"}, "accuracy"),
+        ("relativistic", _RELATIVISTIC, "relativistic treatment"),
+    ):
+        if data[field] not in allowed:
+            raise ValueError(f"unsupported table {label} {data[field]!r}")
+    if not isinstance(data["entries"], list) or not data["entries"]:
+        raise ValueError("pseudopotential manifest entries must be non-empty")
+    if table is not None:
+        declared = {
+            field: getattr(table, field)
+            for field in (
+                "version",
+                "provider",
+                "functional",
+                "accuracy",
+                "relativistic",
+                "licence",
+                "citation",
+            )
+        }
+        declared["id"] = table.asset.id
+        if declared != {field: data[field] for field in declared}:
+            raise ValueError(
+                "pseudopotential manifest disagrees with registry declaration"
+            )
+
+
 def load_installed_table(
     installed: InstalledAsset,
     *,
@@ -89,71 +198,18 @@ def load_installed_table(
     try:
         manifest_path = installed.path(TABLE_MANIFEST)
         data = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict) or set(data) != _TOP_LEVEL_FIELDS:
-            raise ValueError("pseudopotential manifest fields are invalid")
-        if (
-            isinstance(data["schema_version"], bool)
-            or data["schema_version"] != _SCHEMA_VERSION
-        ):
-            raise ValueError(
-                "unsupported pseudopotential manifest schema_version "
-                f"{data['schema_version']!r}"
-            )
-        if data["id"] != installed.id or data["version"] != installed.version:
-            raise ValueError("pseudopotential manifest identity does not match asset")
-        provider = _nonempty_string(data["provider"], "provider")
-        functional = required_functional(data["functional"], "table functional")
-        accuracy = data["accuracy"]
-        if accuracy not in {"efficiency", "precision"}:
-            raise ValueError(f"unsupported table accuracy {accuracy!r}")
-        relativistic = data["relativistic"]
-        if relativistic not in _RELATIVISTIC:
-            raise ValueError(
-                f"unsupported table relativistic treatment {relativistic!r}"
-            )
-        licence = _nonempty_string(data["licence"], "licence")
-        citation = _nonempty_string(data["citation"], "citation")
-        raw_entries = data["entries"]
-        if not isinstance(raw_entries, list) or not raw_entries:
-            raise ValueError("pseudopotential manifest entries must be non-empty")
-
-        if table is not None:
-            declared = (
-                table.asset.id,
-                table.version,
-                table.provider,
-                table.functional,
-                table.accuracy,
-                table.relativistic,
-                table.licence,
-                table.citation,
-            )
-            manifested = (
-                data["id"],
-                data["version"],
-                provider,
-                functional,
-                accuracy,
-                relativistic,
-                licence,
-                citation,
-            )
-            if declared != manifested:
-                raise ValueError(
-                    "pseudopotential manifest disagrees with registry declaration"
-                )
-
+        _validate_manifest(data, installed, table)
         metadata: list[PseudoMetadata] = []
         elements: list[str] = []
         paths: list[str] = []
-        for entry in raw_entries:
+        for entry in data["entries"]:
             _validate_entry_shape(entry)
             element = _nonempty_string(entry["element"], "entry element")
             relative_path = _nonempty_string(entry["path"], "entry path")
             path = installed.path(relative_path)
             if _md5(path) != entry["md5"].lower():
                 raise ValueError(f"entry md5 does not match {relative_path}")
-            entry_relativistic = entry.get("upf_relativistic", relativistic)
+            entry_relativistic = entry.get("upf_relativistic", data["relativistic"])
             metadata.append(
                 PseudoMetadata(
                     filepath=str(path),
@@ -161,29 +217,27 @@ def load_installed_table(
                     header_format=_nonempty_string(
                         entry["header_format"], "header_format"
                     ),
-                    provider=provider,
-                    accuracy=accuracy,
+                    provider=data["provider"],
+                    accuracy=data["accuracy"],
                     element=element,
                     pseudo_type=entry["pseudo_type"],
-                    functional=functional,
+                    functional=data["functional"],
                     relativistic=entry_relativistic,
                     z_valence=entry["z_valence"],
                     table_id=data["id"],
                     cutoffs={
-                        "ecutwfc_ry": finite_positive_cutoff(
-                            entry["ecutwfc_ry"], f"{element} ecutwfc_ry"
-                        ),
-                        "ecutrho_ry": finite_positive_cutoff(
-                            entry["ecutrho_ry"], f"{element} ecutrho_ry"
-                        ),
+                        field: finite_positive_cutoff(
+                            entry[field], f"{element} {field}"
+                        )
+                        for field in ("ecutwfc_ry", "ecutrho_ry")
                     },
                     source_identifier=entry["source_identifier"],
                     frozen_4f_core=entry["frozen_4f_core"],
                     pseudo_info={
                         "table_version": data["version"],
-                        "licence": licence,
-                        "citation": citation,
-                        "upf_relativistic": entry.get("upf_relativistic", relativistic),
+                        "licence": data["licence"],
+                        "citation": data["citation"],
+                        "upf_relativistic": entry_relativistic,
                     },
                 )
             )

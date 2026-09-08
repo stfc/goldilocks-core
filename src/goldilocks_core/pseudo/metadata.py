@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from pathlib import PurePath, PurePosixPath, PureWindowsPath
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Annotated, TypedDict
 
 from goldilocks_core.functionals import normalize_functional_label
@@ -47,7 +47,7 @@ class PseudoMetadata:
     pseudo_info: Annotated[JsonDict, Portable()] = field(default_factory=dict)
     warnings: tuple[str, ...] = ()
 
-    def __post_init__(self) -> None:
+    def _validate_identity(self) -> None:
         for field_name in ("filepath", "filename", "header_format"):
             value = getattr(self, field_name)
             if not isinstance(value, str) or not value.strip():
@@ -57,7 +57,6 @@ class PseudoMetadata:
                 )
         if (
             self.filename in {".", ".."}
-            or PurePath(self.filename).name != self.filename
             or "/" in self.filename
             or "\\" in self.filename
         ):
@@ -95,26 +94,40 @@ class PseudoMetadata:
             raise ValueError(
                 "PseudoMetadata.content_size_bytes must be a non-negative integer"
             )
-        if self.accuracy is not None and self.accuracy not in {
-            "efficiency",
-            "precision",
-        }:
-            raise ValueError(
-                "PseudoMetadata.accuracy must be 'efficiency', 'precision', "
-                f"or None; got {self.accuracy!r}"
-            )
-        if self.pseudo_type is not None and self.pseudo_type not in {
-            "NC",
-            "USPP",
-            "PAW",
-        }:
-            raise ValueError(
-                "PseudoMetadata.pseudo_type must be NC, USPP, PAW, or None; "
-                f"got {self.pseudo_type!r}"
-            )
+
+    def __post_init__(self) -> None:
+        self._validate_identity()
+        for field_name, allowed, description in (
+            (
+                "accuracy",
+                {None, "efficiency", "precision"},
+                "'efficiency', 'precision', or None",
+            ),
+            ("pseudo_type", {None, "NC", "USPP", "PAW"}, "NC, USPP, PAW, or None"),
+        ):
+            value = getattr(self, field_name)
+            if value not in allowed:
+                raise ValueError(
+                    f"PseudoMetadata.{field_name} must be {description}; got {value!r}"
+                )
         validate_relativistic_mode(self.relativistic, "PseudoMetadata.relativistic")
         functional = normalize_functional_label(self.functional)
         object.__setattr__(self, "functional", functional)
+        self._normalize_numerics()
+        for field_name, expected, description in (
+            ("frozen_4f_core", bool, "a boolean"),
+            ("pseudo_info", dict, "a dictionary"),
+        ):
+            if not isinstance(getattr(self, field_name), expected):
+                raise ValueError(f"PseudoMetadata.{field_name} must be {description}")
+        object.__setattr__(self, "pseudo_info", dict(self.pseudo_info))
+        object.__setattr__(self, "warnings", tuple(self.warnings))
+        if any(
+            not isinstance(warning, str) or not warning for warning in self.warnings
+        ):
+            raise ValueError("PseudoMetadata.warnings must contain non-empty strings")
+
+    def _normalize_numerics(self) -> None:
         if self.z_valence is not None:
             validate_finite_positive(self.z_valence, "PseudoMetadata.z_valence")
             object.__setattr__(self, "z_valence", float(self.z_valence))
@@ -129,7 +142,7 @@ class PseudoMetadata:
                 )
             normalized = {}
             for field_name in ("ecutwfc_ry", "ecutrho_ry"):
-                value = dict(self.cutoffs).get(field_name)
+                value = self.cutoffs.get(field_name)
                 if value is not None:
                     validate_finite_positive(
                         value, f"PseudoMetadata.cutoffs.{field_name}"
@@ -137,17 +150,6 @@ class PseudoMetadata:
                     value = float(value)
                 normalized[field_name] = value
             object.__setattr__(self, "cutoffs", normalized)
-        if not isinstance(self.frozen_4f_core, bool):
-            raise ValueError("PseudoMetadata.frozen_4f_core must be a boolean")
-        if not isinstance(self.pseudo_info, dict):
-            raise ValueError("PseudoMetadata.pseudo_info must be a dictionary")
-        object.__setattr__(self, "pseudo_info", dict(self.pseudo_info))
-        if not isinstance(self.warnings, tuple):
-            object.__setattr__(self, "warnings", tuple(self.warnings))
-        if any(
-            not isinstance(warning, str) or not warning for warning in self.warnings
-        ):
-            raise ValueError("PseudoMetadata.warnings must contain non-empty strings")
 
 
 @to_portable.register(PseudoMetadata)

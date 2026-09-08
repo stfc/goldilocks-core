@@ -162,12 +162,10 @@ def _serialized_annotation(annotation: Any) -> Any:
     """Project domain annotations through the same exclusions as to_portable."""
     if annotation is Any or annotation is JsonValue:
         return JsonValue
-    if annotation in _SERIALIZED_MODELS:
-        return _SERIALIZED_MODELS[annotation]
     if isinstance(annotation, TypeAliasType):
         return _serialized_annotation(annotation.__value__)
     origin = get_origin(annotation)
-    if origin is Annotated:
+    if origin in (Annotated, Required, NotRequired):
         inner, *metadata = get_args(annotation)
         for item in metadata:
             if isinstance(item, Portable):
@@ -177,8 +175,6 @@ def _serialized_annotation(annotation: Any) -> Any:
                     else _serialized_annotation(item.annotation)
                 )
         return _serialized_annotation(inner)
-    if origin in (Required, NotRequired):
-        return _serialized_annotation(get_args(annotation)[0])
     if is_typeddict(annotation) or (
         isinstance(annotation, type) and is_dataclass(annotation)
     ):
@@ -186,12 +182,8 @@ def _serialized_annotation(annotation: Any) -> Any:
     if origin is None or origin is Literal:
         return annotation
     converted = tuple(_serialized_annotation(item) for item in get_args(annotation))
-    if origin is tuple:
-        return tuple[converted]
-    if origin is list:
-        return list[converted[0]]
-    if origin is dict:
-        return dict[converted[0], converted[1]]
+    if origin in (tuple, list, dict):
+        return origin[converted]
     if origin in (types.UnionType, Union):
         return reduce(or_, converted)
     return annotation
@@ -202,6 +194,8 @@ def _serialized_model(
     *,
     overrides: dict[str, Any] | None = None,
 ) -> type[BaseModel]:
+    if overrides is None and contract in _SERIALIZED_MODELS:
+        return _SERIALIZED_MODELS[contract]
     hints = get_type_hints(contract, include_extras=True)
     names = (
         hints if is_typeddict(contract) else (item.name for item in fields(contract))

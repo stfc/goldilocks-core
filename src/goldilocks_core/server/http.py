@@ -53,8 +53,7 @@ def create_app(
     static_root: str | Path | None = None,
 ) -> Any:
     try:
-        from fastapi import FastAPI, Request
-        from fastapi.exceptions import RequestValidationError
+        from fastapi import FastAPI
         from fastapi.responses import JSONResponse, Response
         from fastapi.staticfiles import StaticFiles
     except ImportError as error:
@@ -78,8 +77,7 @@ def create_app(
     workbench_static_root = _workbench_static_root(static_root)
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        del app
+    async def lifespan(_app: FastAPI):
         try:
             yield
         finally:
@@ -129,11 +127,27 @@ def create_app(
         payload, media_type = _prepared_multipart(result, prepared.archive)
         return Response(payload, media_type=media_type)
 
+    _operational_routes(app, readiness)
+
+    if workbench_static_root is not None:
+        app.mount(
+            "/",
+            StaticFiles(directory=workbench_static_root, html=True),
+            name="workbench-static",
+        )
+
+    return app
+
+
+def _operational_routes(app: Any, readiness: AssetReadiness) -> None:
+    from fastapi import Request
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
+
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(
-        request: Request, error: RequestValidationError
+        _request: Request, error: RequestValidationError
     ) -> JSONResponse:
-        del request
         validation_errors = [
             {
                 "path": ".".join(str(part) for part in item["loc"]),
@@ -156,9 +170,8 @@ def create_app(
 
     @app.exception_handler(OperationFailure)
     async def operation_failure_handler(
-        request: Request, error: OperationFailure
+        _request: Request, error: OperationFailure
     ) -> JSONResponse:
-        del request
         if error.http_status is None:
             raise error.__cause__ or error
         return JSONResponse(
@@ -194,15 +207,6 @@ def create_app(
                 }
             },
         )
-
-    if workbench_static_root is not None:
-        app.mount(
-            "/",
-            StaticFiles(directory=workbench_static_root, html=True),
-            name="workbench-static",
-        )
-
-    return app
 
 
 def serve(

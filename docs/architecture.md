@@ -223,3 +223,14 @@ boundaries, concurrency safety, or the task extension model.
   `ExpectedFailure`; HTTP/MCP do not import an inventory of scientific exceptions.
 - MCP maps only known stage errors to `ToolError`; internal defects
   remain unhandled.
+- `scripts/check_complexity.py` enforces AST import ceilings across all
+  production owners, including new modules. It counts local and type-only imports,
+  resolves re-exports, and counts members accessed through module aliases.
+  The global ceiling is 12 project origin modules and 24 imported symbols, with
+  stricter limits for the adapters, assembly, and SCF. Pure package export files
+  are transparent to consumer counts; executable package modules are checked.
+  Import limits are a backstop, not a substitute for coherent ownership: moving
+  coordination into another oversized module is not a valid reduction.
+  The same gate runs Ruff's McCabe check with a maximum cyclomatic complexity of
+  10 per production function, ignoring `noqa` suppressions. Reduce decision logic
+  and duplication rather than extracting branches into shallow helper fleets.

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import tarfile
@@ -11,8 +10,11 @@ from typing import Any
 from pymatgen.core.libxcfunc import LibxcFunc
 from pymatgen.core.xcfunc import XcFunc
 
-from goldilocks_core.pseudo.installed import write_table_manifest
-from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
+from goldilocks_core.pseudo.installed import (
+    archive_files,
+    extract_upf,
+    write_table_manifest,
+)
 from goldilocks_core.pseudo.registry import PseudoTable
 from goldilocks_core.pseudo.validation import (
     PseudoImportError,
@@ -61,50 +63,38 @@ def preparer(table: PseudoTable):
 
 def _reports(archive: Path) -> dict[str, dict[str, Any]]:
     reports: dict[str, dict[str, Any]] = {}
-    with tarfile.open(archive, "r:gz") as tar:
-        for member in tar.getmembers():
-            if not member.isfile() or not member.name.lower().endswith(".djrepo"):
-                continue
-            element = Path(member.name).stem
-            source = tar.extractfile(member)
-            if source is None:
-                raise PseudoImportError(f"cannot extract {member.name}")
-            report = json.load(source)
-            if not isinstance(report, dict):
+    for name, source in archive_files(archive, ".djrepo"):
+        element = Path(name).stem
+        report = json.load(source)
+        if not isinstance(report, dict):
+            raise PseudoImportError(f"dojo report for {element} must be a JSON object")
+        digest = report.get("md5_upf")
+        if not isinstance(digest, str) or _MD5.fullmatch(digest) is None:
+            raise PseudoImportError(f"dojo report for {element} has invalid md5_upf")
+        functional = _report_functional(
+            report.get("xc"), f"dojo report XC for {element}"
+        )
+        hints = report.get("hints")
+        if not isinstance(hints, dict):
+            raise PseudoImportError(f"dojo report for {element} lacks cutoff hints")
+        cutoff_hints: dict[str, float] = {}
+        for level in ("low", "normal", "high"):
+            values = hints.get(level)
+            if not isinstance(values, dict) or "ecut" not in values:
                 raise PseudoImportError(
-                    f"dojo report for {element} must be a JSON object"
+                    f"dojo report for {element} lacks {level} cutoff hint"
                 )
-            digest = report.get("md5_upf")
-            if not isinstance(digest, str) or _MD5.fullmatch(digest) is None:
-                raise PseudoImportError(
-                    f"dojo report for {element} has invalid md5_upf"
-                )
-            functional = _report_functional(
-                report.get("xc"), f"dojo report XC for {element}"
+            cutoff_hints[level] = (
+                finite_positive_cutoff(values["ecut"], f"dojo {element} {level} ecut")
+                * HARTREE_TO_RYDBERG
             )
-            hints = report.get("hints")
-            if not isinstance(hints, dict):
-                raise PseudoImportError(f"dojo report for {element} lacks cutoff hints")
-            cutoff_hints: dict[str, float] = {}
-            for level in ("low", "normal", "high"):
-                values = hints.get(level)
-                if not isinstance(values, dict) or "ecut" not in values:
-                    raise PseudoImportError(
-                        f"dojo report for {element} lacks {level} cutoff hint"
-                    )
-                cutoff_hints[level] = (
-                    finite_positive_cutoff(
-                        values["ecut"], f"dojo {element} {level} ecut"
-                    )
-                    * HARTREE_TO_RYDBERG
-                )
-            if element in reports:
-                raise PseudoImportError(f"duplicate dojo report for {element}")
-            reports[element] = {
-                "md5": digest.lower(),
-                "functional": functional,
-                "cutoff_hints": cutoff_hints,
-            }
+        if element in reports:
+            raise PseudoImportError(f"duplicate dojo report for {element}")
+        reports[element] = {
+            "md5": digest.lower(),
+            "functional": functional,
+            "cutoff_hints": cutoff_hints,
+        }
     if not reports:
         raise PseudoImportError("no dojo reports found")
     return reports
@@ -154,87 +144,48 @@ def _extract_pseudos(
     table: PseudoTable,
     reports: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
     if table.charge_density_dual is None:
         raise PseudoImportError(
             f"PseudoDojo table {table.id} has no charge-density dual"
         )
+    entries: list[dict[str, Any]] = []
     seen: set[str] = set()
     pseudos = destination / "pseudos"
     pseudos.mkdir()
-    with tarfile.open(archive, "r:gz") as tar:
-        for member in tar.getmembers():
-            if not member.isfile() or not member.name.lower().endswith(".upf"):
-                continue
-            element = Path(member.name).stem
-            if element in seen:
-                raise PseudoImportError(f"duplicate UPF for {element}")
-            report = reports.get(element)
-            if report is None:
-                raise PseudoImportError(f"{element}.upf has no dojo report")
-            if report["functional"] != table.functional:
-                raise PseudoImportError(
-                    f"{element}: report functional {report['functional']} does not "
-                    f"match table functional {table.functional}"
-                )
-            source = tar.extractfile(member)
-            if source is None:
-                raise PseudoImportError(f"cannot extract {member.name}")
-            target = pseudos / f"{element}.upf"
-            digest = hashlib.md5()
-            with target.open("xb") as output:
-                while chunk := source.read(1024 * 1024):
-                    digest.update(chunk)
-                    output.write(chunk)
-            if digest.hexdigest().lower() != report["md5"]:
-                raise PseudoImportError(f"{element}.upf does not match md5_upf")
-
-            parsed = parse_upf_metadata(target)
-            if parsed.element != element:
-                raise PseudoImportError(
-                    f"{element}: UPF element is {parsed.element or 'unknown'}"
-                )
-            upf_functional = required_functional(
-                parsed.functional, f"UPF functional for {element}"
+    for name, source in archive_files(archive, ".upf"):
+        element = Path(name).stem
+        if element in seen:
+            raise PseudoImportError(f"duplicate UPF for {element}")
+        report = reports.get(element)
+        if report is None:
+            raise PseudoImportError(f"{element}.upf has no dojo report")
+        if report["functional"] != table.functional:
+            raise PseudoImportError(
+                f"{element}: report functional {report['functional']} does not "
+                f"match table functional {table.functional}"
             )
-            if upf_functional != table.functional:
-                raise PseudoImportError(
-                    f"{element}: UPF functional {upf_functional} does not match "
-                    f"table functional {table.functional}"
-                )
-            if parsed.relativistic != table.relativistic and not (
-                table.relativistic == "scalar"
-                and parsed.relativistic == "non-relativistic"
-            ):
-                raise PseudoImportError(
-                    f"{element}: UPF relativistic treatment "
-                    f"{parsed.relativistic or 'unknown'} does not match table "
-                    f"treatment {table.relativistic}"
-                )
-
-            cutoff_hints = report["cutoff_hints"]
-            high = cutoff_hints["high"]
-            entries.append(
-                {
-                    "element": element,
-                    "path": target.relative_to(destination).as_posix(),
-                    "md5": digest.hexdigest(),
-                    "header_format": parsed.header_format,
-                    "upf_relativistic": parsed.relativistic,
-                    "pseudo_type": parsed.pseudo_type,
-                    "z_valence": parsed.z_valence,
-                    "ecutwfc_ry": high,
-                    "ecutrho_ry": finite_positive_cutoff(
-                        high * table.charge_density_dual,
-                        f"dojo {element} charge-density cutoff",
-                    ),
-                    "cutoff_hints": cutoff_hints,
-                    "source_identifier": member.name,
-                    "frozen_4f_core": "3plus" in table.upstream_table,
-                }
-            )
-            seen.add(element)
-
+        entry = extract_upf(
+            source,
+            pseudos / f"{element}.upf",
+            element,
+            table,
+            report["md5"],
+            f"{element}.upf does not match md5_upf",
+        )
+        cutoff_hints = report["cutoff_hints"]
+        high = cutoff_hints["high"]
+        entry.update(
+            ecutwfc_ry=high,
+            ecutrho_ry=finite_positive_cutoff(
+                high * table.charge_density_dual,
+                f"dojo {element} charge-density cutoff",
+            ),
+            cutoff_hints=cutoff_hints,
+            source_identifier=name,
+            frozen_4f_core="3plus" in table.upstream_table,
+        )
+        entries.append(entry)
+        seen.add(element)
     missing_reports = set(reports) - seen
     if missing_reports:
         raise PseudoImportError(

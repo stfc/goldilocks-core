@@ -96,37 +96,6 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    if args.command == "capabilities":
-        try:
-            with Service() as service:
-                capabilities = service.capabilities_document()
-        except OperationFailure as error:
-            parser.print_usage(sys.stderr)
-            print(f"{parser.prog}: error: {error}", file=sys.stderr)
-            raise SystemExit(2) from error
-        if args.json:
-            print(json.dumps(capabilities, indent=2, sort_keys=True))
-        else:
-            print(f"Goldilocks Core {capabilities['core_version']}")
-            for task in capabilities["tasks"]:
-                presets = ", ".join(preset["id"] for preset in task["presets"])
-                print(f"{task['id']}: {presets}")
-        return
-    if args.command == "inspect":
-        try:
-            with Service() as service:
-                inspection = service.inspect_document(args.structure)
-        except OperationFailure as error:
-            parser.print_usage(sys.stderr)
-            print(f"{parser.prog}: error: {error}", file=sys.stderr)
-            raise SystemExit(2) from error
-        if args.json:
-            print(json.dumps(inspection, indent=2, sort_keys=True))
-        else:
-            print(f"structure: {inspection['source']['name']}")
-            print(f"formula: {inspection['structure']['reduced_formula']}")
-            print(f"sites: {inspection['structure']['site_count']}")
-        return
     if args.command == "examples":
         print(structures_path())
         return
@@ -138,14 +107,16 @@ def main() -> None:
         return
 
     try:
-        _validate_backend_options(args)
-        request = _request_from_args(args)
-    except (KeyError, ValueError) as error:
-        parser.print_usage(sys.stderr)
-        print(f"{parser.prog}: error: {error}", file=sys.stderr)
-        raise SystemExit(2) from error
-
-    try:
+        if args.command in ("capabilities", "inspect"):
+            _describe(args)
+            return
+        try:
+            _validate_backend_options(args)
+            request = _request_from_args(args)
+        except (KeyError, ValueError) as error:
+            parser.print_usage(sys.stderr)
+            print(f"{parser.prog}: error: {error}", file=sys.stderr)
+            raise SystemExit(2) from error
         with Service() as service:
             output = service.compute_document(
                 request,
@@ -171,6 +142,25 @@ def main() -> None:
         return
 
     _print_human_summary(output)
+
+
+def _describe(args: argparse.Namespace) -> None:
+    with Service() as service:
+        if args.command == "capabilities":
+            output = service.capabilities_document()
+        else:
+            output = service.inspect_document(args.structure)
+    if args.json:
+        print(json.dumps(output, indent=2, sort_keys=True))
+    elif args.command == "capabilities":
+        print(f"Goldilocks Core {output['core_version']}")
+        for task in output["tasks"]:
+            presets = ", ".join(preset["id"] for preset in task["presets"])
+            print(f"{task['id']}: {presets}")
+    else:
+        print(f"structure: {output['source']['name']}")
+        print(f"formula: {output['structure']['reduced_formula']}")
+        print(f"sites: {output['structure']['site_count']}")
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
@@ -373,29 +363,7 @@ def _print_human_summary(result: dict) -> None:
     print(f"task: {result['draft']['intent']['task']}")
     advice = result["records"].get("advice")
     if advice is not None:
-        smearing = advice["smearing"]["smearing_type"] or "none"
-        if advice["smearing"]["width_ry"] is not None:
-            smearing = f"{smearing}@{advice['smearing']['width_ry']:g} Ry"
-        pseudo_type = advice["pseudopotential_requirements"]["pseudo_type"] or "any"
-        soc = (
-            "on"
-            if advice["spin_orbit"]["enabled"]
-            else "consider"
-            if advice["spin_orbit"]["consider"]
-            else "off"
-        )
-        print(
-            "advice: "
-            f"smearing={smearing}; "
-            f"spin={'on' if advice['magnetism']['spin_polarized'] else 'off'}; "
-            f"SOC={soc}; "
-            "pseudo="
-            f"{advice['pseudopotential_requirements']['functional']}/"
-            f"{advice['pseudopotential_requirements']['accuracy']}/"
-            f"{pseudo_type}/"
-            f"{advice['pseudopotential_requirements']['relativistic']}; "
-            f"vdW={'on' if advice['vdw']['use_vdw'] else 'off'}"
-        )
+        _print_advice(advice)
     k_points = result["records"].get("k_points")
     if k_points is not None:
         grid = k_points["grid"]
@@ -430,6 +398,28 @@ def _print_human_summary(result: dict) -> None:
         print("warnings:")
         for warning in result["warnings"]:
             print(f"  - {warning}")
+
+
+def _print_advice(advice: dict) -> None:
+    smearing = advice["smearing"]["smearing_type"] or "none"
+    if advice["smearing"]["width_ry"] is not None:
+        smearing = f"{smearing}@{advice['smearing']['width_ry']:g} Ry"
+    pseudo = advice["pseudopotential_requirements"]
+    soc = (
+        "on"
+        if advice["spin_orbit"]["enabled"]
+        else "consider"
+        if advice["spin_orbit"]["consider"]
+        else "off"
+    )
+    print(
+        f"advice: smearing={smearing}; "
+        f"spin={'on' if advice['magnetism']['spin_polarized'] else 'off'}; "
+        f"SOC={soc}; "
+        f"pseudo={pseudo['functional']}/{pseudo['accuracy']}/"
+        f"{pseudo['pseudo_type'] or 'any'}/{pseudo['relativistic']}; "
+        f"vdW={'on' if advice['vdw']['use_vdw'] else 'off'}"
+    )
 
 
 if __name__ == "__main__":

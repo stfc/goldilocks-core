@@ -285,11 +285,17 @@ test("has no Axe violations in empty, failure, and viewer fallback states", asyn
 
   await page.addInitScript({
     content: `
-      const originalGetContext = HTMLCanvasElement.prototype.getContext;
-      HTMLCanvasElement.prototype.getContext = function (type, ...args) {
-        if (String(type).startsWith("webgl")) return null;
-        return originalGetContext.call(this, type, ...args);
-      };
+      for (const prototype of [
+        HTMLCanvasElement.prototype,
+        globalThis.OffscreenCanvas?.prototype,
+      ]) {
+        if (!prototype) continue;
+        const originalGetContext = prototype.getContext;
+        prototype.getContext = function (type, ...args) {
+          if (String(type).includes("webgl")) return null;
+          return originalGetContext.call(this, type, ...args);
+        };
+      }
     `,
   });
   await page.reload();

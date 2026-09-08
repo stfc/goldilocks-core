@@ -160,10 +160,12 @@ skip_covered = true
 
 [tool.mutmut]
 # source_paths creates parent directories for nested files; also_copy does not.
-# Copy Workbench test inputs without web/node_modules or build outputs.
+# Copy nested test inputs without web/node_modules or build outputs.
 source_paths = [
     "src/goldilocks_core",
     "web/README.md",
+    ".agents/skills/use-goldilocks/references/workflows.md",
+    ".agents/skills/use-goldilocks/references/qe-scf-template.md",
 ]
 # Documentation tests read these files and validate their relative links.
 also_copy = ["README.md", "LICENSE", "docs"]

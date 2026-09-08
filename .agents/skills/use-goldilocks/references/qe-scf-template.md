@@ -52,13 +52,13 @@ K_POINTS automatic
 ```text
 site_count          -> len(structure)
 element_count       -> len(structure.composition.elements)
-k-grid              -> result.records[KPointSelection].grid
-k-shift             -> result.records[KPointSelection].shift
-pseudos             -> result.records[SelectionRecord].pseudopotentials
+k-grid              -> result.records[KPointSelection]["grid"]
+k-shift             -> result.records[KPointSelection]["shift"]
+pseudos             -> result.records[SelectionRecord]["pseudopotentials"]
 ecutwfc / ecutrho   -> max selected cutoffs across elements
-smearing/degauss    -> result.records[ParameterAdvice].smearing
-spin flags          -> ParameterAdvice.magnetism and .spin_orbit
-convergence         -> result.records[ParameterAdvice].convergence
+smearing/degauss    -> result.records[ParameterAdvice]["smearing"]
+spin flags          -> result.records[ParameterAdvice]["magnetism"] and ["spin_orbit"]
+convergence         -> result.records[ParameterAdvice]["convergence"]
 warnings            -> result.warnings
 ```
 
@@ -69,11 +69,12 @@ from pymatgen.core.periodic_table import Element
 from goldilocks_core import (
     CalculationDraft,
     ComputeRequest,
+    KPointSelection,
     PathStructureSource,
     PresetSelection,
+    SelectionRecord,
     Service,
 )
-from goldilocks_core.contracts import KPointSelection, SelectionRecord
 
 request = ComputeRequest(
     CalculationDraft(
@@ -87,18 +88,18 @@ with Service() as core:
 
 selection = result.records[SelectionRecord]
 pseudo_by_element = {
-    pseudo.element: pseudo for pseudo in selection.pseudopotentials
+    pseudo["element"]: pseudo for pseudo in selection["pseudopotentials"]
 }
 elements = tuple(sorted(pseudo_by_element))
-ecutwfc = max(pseudo.ecutwfc_ry or 0.0 for pseudo in pseudo_by_element.values())
-ecutrho = max(pseudo.ecutrho_ry or 0.0 for pseudo in pseudo_by_element.values())
+ecutwfc = max(pseudo["ecutwfc_ry"] or 0.0 for pseudo in pseudo_by_element.values())
+ecutrho = max(pseudo["ecutrho_ry"] or 0.0 for pseudo in pseudo_by_element.values())
 k_points = result.records[KPointSelection]
-grid = k_points.grid
-shift = k_points.shift
+grid = k_points["grid"]
+shift = k_points["shift"]
 
 for element in elements:
     pseudo = pseudo_by_element[element]
-    print(element, float(Element(element).atomic_mass), pseudo.filename)
+    print(element, float(Element(element).atomic_mass), pseudo["filename"])
 ```
 
 Do not proceed to a runnable input if any selected pseudopotential has `filename`, `ecutwfc_ry`, or `ecutrho_ry` set to `None`.

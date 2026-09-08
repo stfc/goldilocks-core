@@ -22,34 +22,34 @@ resolution, input rendering, and publication touch the filesystem.
 | Module | Responsibility |
 | --- | --- |
 | `assets/` | Immutable asset records, profiles, download integrity, transactional installation, and verification. |
-| `ml/model_registry.py` | Complete model runtime configuration and model asset declarations. |
-| `ml/models.py` | `ModelSpec` and the feature-vector tuple type for registered models. |
+| `ml/models.py` | Model identities, registry loading, feature settings, and asset declarations. |
 | `pseudo/registry.py`, `pseudo/import_*` | Complete pseudopotential table declarations and provider-specific normalization. |
 | `pseudo/metadata.py` | The pseudopotential metadata record and its cutoffs. |
-| `pseudo/source.py` | One source-resolution interface for request metadata, operator roots, and installed tables. |
+| `pseudo/source.py` | Request-local pseudo resolution, selection, and deferred verified publication material. |
 | `provenance.py`, `types.py`, `validation.py` | Shared provenance record, shared type vocabulary, and operator-input validators. |
 | `calculation.py` | `CalculationIntent` and `CalculationHints` with validating constructors. |
-| `request.py` | `CalculationDraft`, `ComputeRequest`, and selection records. |
+| `request.py` | Native drafts, requests, selections, local request construction, and request-scoped resource binding. |
 | `result.py` | `ComputationResult`; its `records` field is a plain type-keyed dict. |
 | `serialization.py` | `to_jsonable` (complete form) and `to_portable` (publication/CLI projection). |
 | `runtime/graph.py` | Stage-agnostic, type-keyed DAG executor (`TaskGraph`/`Stage`/`Preset`/`execute`) and its task-description documents. |
-| `runtime/task.py` | `GraphHandler`: a task graph, context builder, and factual warning collector. |
-| `runtime/scf.py` | The SCF Calculation Task, stage graph, Presets, context, and warning collection. |
-| `runtime/models.py` | `Runtime`: kmesh/metallicity model lifecycle (load/reset/close), exposed as read-only services. |
-| `runtime/dispatch.py` | `Dispatcher`: task registry and dispatch by `intent.task` through `GraphHandler`s. |
+| `runtime/scf.py` | The SCF stage graph, Presets, and warning collection; no resource cache or registry configuration. |
+| `runtime/models.py` | Shared model lifecycle and request-local model choice, identity, and legal-material snapshots. |
+| `runtime/dispatch.py` | `Dispatcher` and `GraphHandler`: registration, context construction, and execution by `intent.task`. |
 | `runtime/registry.py` | Stable record-ID registry and output-type resolution shared by transports. |
 | `runtime/capabilities.py` | The `capabilities` document assembly (tasks, models, pseudopotential sets, defaults). |
 | `runtime/jobs.py` | Short-lived `compute` convenience entry point. |
 | `runtime/service.py` | `Service`: process-owned lifecycle, locking, Capabilities, Structure Inspection, Compute, and publication. |
 | `io/structures.py` | One Structure Source normalization path for Inspection and Compute. |
 | `analysis.py` | The `StructureAnalysisRecord` shape and structure-fact analysis. |
-| `advice/` | Scientific recommendations and their domain-owned `TypedDict` shapes. |
+| `advice/parameters.py` | Coupled scientific parameter policy and its domain-owned shapes; scalar decisions are private. |
+| `advice/kdistance.py`, `advice/kindex.py` | Substantive model-backed k-point advisors. |
 | `kmesh/` | K-point resolution and mesh mathematics. |
 | `selection.py` | Pseudopotential selection, its domain shape, and portable projection. |
 | `generation/` | Calculation-specific file generation. |
-| `generation/files.py` | The `GeneratedFiles` tuple alias and file document shapes. |
-| `input_data.py` | Reads external files into complete DFT Input Data; trusts internal Records; provides its portable projection. |
+| `generation/files.py` | Generated text and snapshotted binary artifact contracts. |
+| `input_data.py` | Combines completed scientific records and verified resource material into DFT Input Data. |
 | `publication.py` | Publishes assembled bytes as directories or ZIPs; validates output paths. |
+| `failures.py` | Expected-failure protocol with domain categories and safe public descriptions; no transport dependencies. |
 | `server/request.py` | Strict HTTP/MCP validation directly into native Core requests. |
 | `server/wire.py` | Mechanically derived Core response schemas. |
 | `server/http.py`, `server/http_contract.py` | Optional HTTP lifecycle, errors, and scientific route adapter. |
@@ -124,11 +124,12 @@ domain registry -> download -> verify sources -> prepare -> inventory
 Each domain owns its complete declarations and interpretation. `AssetStore`
 owns only acquisition, integrity, locking, installed manifests, and path
 resolution. PseudoDojo and SSSP preparers convert different upstream layouts
-to the same installed table manifest. `PseudoSource` owns source
-precedence, verifies exact installed table identities against scientific
-requirements, and returns metadata through one narrow interface. Select has no
-registry or filesystem knowledge. Model loaders likewise receive verified
-local paths and perform no network access.
+to the same installed table manifest. `PseudoResolution` owns source precedence,
+compatibility, exact selected metadata, and deferred byte snapshots. Selection-only
+computations do not materialize publication content. Model resolution binds the
+request's advisor and captures identity and legal material only for models used.
+Input assembly receives these completed values, not registry paths, default-model
+flags, or another module's cache. Model loaders perform no network access.
 
 The canonical store is external to the package. Its root is
 `$GOLDILOCKS_ASSET_ROOT` when set, otherwise

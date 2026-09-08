@@ -1,27 +1,42 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from threading import Lock
+from typing import Any
 
-from goldilocks_core.io.structures import normalize_structure
+from goldilocks_core.failures import ExpectedFailure
+from goldilocks_core.io.structures import NormalizedStructure, normalize_structure
 from goldilocks_core.request import ComputeRequest, PresetSelection
 from goldilocks_core.result import ComputationResult
 from goldilocks_core.runtime.graph import (
     CalculationTaskCapability,
+    TaskGraph,
     describe_task,
     execute_graph,
 )
 from goldilocks_core.runtime.models import Runtime
 from goldilocks_core.runtime.registry import register_record_types
-from goldilocks_core.runtime.task import GraphHandler
 
 
-class UnknownTask(ValueError):
-    pass
+def _no_warnings(records: dict[type, Any]) -> tuple[str, ...]:
+    del records
+    return ()
 
 
-class UnavailableRecord(ValueError):
-    pass
+@dataclass(frozen=True, slots=True)
+class GraphHandler:
+    spec: TaskGraph
+    build_context: Callable[[ComputeRequest, NormalizedStructure, Runtime], Any]
+    collect_warnings: Callable[[dict[type, Any]], tuple[str, ...]] = _no_warnings
+
+
+class UnknownTask(ExpectedFailure, ValueError):
+    kind = "invalid_task"
+
+
+class UnavailableRecord(ExpectedFailure, ValueError):
+    kind = "invalid_record"
 
 
 class Dispatcher:

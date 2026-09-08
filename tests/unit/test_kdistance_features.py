@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.ml.model_registry import load_default_qrf_config
+from goldilocks_core.ml.models import load_default_qrf_config
 from goldilocks_core.ml.qrf.features import (
     _require_finite,
     extract_qrf_features,

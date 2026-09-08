@@ -5,7 +5,7 @@ from typing import TypedDict
 
 from goldilocks_core.calculation import CalculationHints, CalculationIntent
 from goldilocks_core.generation.registry import available_codes
-from goldilocks_core.ml.model_registry import registered_models
+from goldilocks_core.ml.models import registered_models
 from goldilocks_core.pseudo.registry import load_tables
 from goldilocks_core.pseudo.source import is_table_eligible_for_elements
 from goldilocks_core.runtime.dispatch import Dispatcher

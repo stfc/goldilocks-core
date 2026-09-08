@@ -8,8 +8,7 @@ import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.advice.kdistance import QrfBackend
-from goldilocks_core.ml.model_registry import load_default_qrf_config
-from goldilocks_core.ml.models import StructureFeatureVector
+from goldilocks_core.ml.models import StructureFeatureVector, load_default_qrf_config
 from goldilocks_core.ml.qrf.inference import _predict_kdistance_quantiles
 
 

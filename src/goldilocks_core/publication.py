@@ -15,7 +15,8 @@ from pathlib import Path, PurePosixPath
 from typing import Literal, TypedDict
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
-from goldilocks_core.input_data import DftInputData, InputArtifact
+from goldilocks_core.generation.files import InputArtifact
+from goldilocks_core.input_data import DftInputData
 
 
 class Publication(TypedDict):

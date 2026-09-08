@@ -16,7 +16,6 @@ from goldilocks_core import (
     compute,
 )
 from goldilocks_core.advice.parameters import ParameterAdvice
-from goldilocks_core.advice.smearing import METALLIC_SMEARING_WIDTH_RY
 from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.generation.files import GeneratedFiles
@@ -46,7 +45,7 @@ def test_elemental_metal_uses_modest_cold_smearing_in_qe_rydberg_units(
 
     assert analysis["electronic_character"] == "likely_metal"
     assert advice["smearing"]["smearing_type"] == "cold"
-    assert advice["smearing"]["width_ry"] == METALLIC_SMEARING_WIDTH_RY == 0.01
+    assert advice["smearing"]["width_ry"] == 0.01
     qe_input = result.records[GeneratedFiles][0]["content"]
     assert "  occupations = 'smearing'" in qe_input
     assert "  smearing = 'cold'" in qe_input

@@ -24,8 +24,7 @@ from goldilocks_core import (
 )
 from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.input_data import DftInputData, input_data_portable
-from goldilocks_core.ml.model_registry import load_default_qrf_config
-from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.ml.models import ModelSpec, load_default_qrf_config
 from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.installed import write_table_manifest
 from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
@@ -501,6 +500,7 @@ def test_only_used_model_identities_licences_and_citations_are_published(
             result = service.compute(request)
 
     input_data = result.records[DftInputData]
+    store.root.rename(tmp_path / "offline-model-assets")
     files = {item["path"]: item["content"] for item in Publisher().files(input_data)}
     manifest = json.loads(files["goldilocks.json"])
     models = (

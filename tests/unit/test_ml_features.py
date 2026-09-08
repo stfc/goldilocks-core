@@ -62,7 +62,7 @@ def test_extract_cslr_features_combines_feature_blocks() -> None:
 def test_composition_featurizer_rejecting_impute_nan_propagates_type_error(
     monkeypatch,
 ) -> None:
-    from goldilocks_core.ml.model_registry import load_default_qrf_config
+    from goldilocks_core.ml.models import load_default_qrf_config
     from goldilocks_core.ml.qrf.features import _composition_features
 
     class RejectImputeNan:

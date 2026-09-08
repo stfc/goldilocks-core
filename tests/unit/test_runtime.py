@@ -38,13 +38,13 @@ from goldilocks_core.pseudo.source import (
     PseudoTableMismatch,
     select_compatible_table,
 )
+from goldilocks_core.runtime.dispatch import GraphHandler
 from goldilocks_core.runtime.graph import Preset, Stage, TaskGraph
 from goldilocks_core.runtime.registry import (
     RECORD_TYPE_IDS,
     register_record_types,
     resolve_output_types,
 )
-from goldilocks_core.runtime.task import GraphHandler
 from goldilocks_core.selection import SelectionRecord
 from goldilocks_core.serialization import to_portable
 
@@ -239,7 +239,8 @@ def test_analyze_uses_heuristic_without_an_installed_metallicity_model(
 def test_analyze_uses_the_installed_default_metallicity_model(
     tmp_path, monkeypatch
 ) -> None:
-    from goldilocks_core.ml import model_registry
+    from importlib.resources import files
+
     from goldilocks_core.ml.qrf import metallicity
 
     checkpoint = tmp_path / "checkpoint-source"
@@ -259,18 +260,23 @@ def test_analyze_uses_the_installed_default_metallicity_model(
     )
     store = AssetStore(tmp_path / "assets")
     store.install(spec)
-    config = replace(
-        model_registry.load_default_qrf_config(),
-        metallicity_asset=spec,
-        metallicity_checkpoint_file="is_metal.ckpt",
-        metallicity_atom_init_file="atom_init.json",
+    template = files("goldilocks_core.ml").joinpath("registry.toml").read_text()
+    registry = tmp_path / "models.toml"
+    registry.write_text(
+        template.split("[defaults.kpoints.metallicity.asset]", 1)[0]
+        + f"\n[defaults.kpoints.metallicity.asset]\nid = {spec.id!r}\n"
+        + f"version = {spec.version!r}\n"
+        + "".join(
+            "\n[[defaults.kpoints.metallicity.asset.files]]\n"
+            f"role = {asset.role!r}\npath = {asset.path!r}\nurl = {asset.url!r}\n"
+            for asset in spec.files
+        )
     )
-    monkeypatch.setattr(model_registry, "load_default_qrf_config", lambda path: config)
     monkeypatch.setattr(metallicity, "load_metallicity_model", lambda path: object())
     monkeypatch.setattr(
         metallicity, "classify_metallicity", lambda *args, **kwargs: ("insulator", 0.94)
     )
-    with Runtime(asset_store=store) as runtime:
+    with Runtime(asset_store=store, registry_path=registry) as runtime:
         result = Dispatcher(runtime).compute(
             make_query_request((StructureAnalysisRecord,))
         )

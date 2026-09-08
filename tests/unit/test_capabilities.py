@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from goldilocks_core import Service
+from goldilocks_core.runtime.dispatch import GraphHandler
 from goldilocks_core.runtime.graph import (
     Preset,
     Stage,
@@ -12,7 +13,6 @@ from goldilocks_core.runtime.graph import (
 )
 from goldilocks_core.runtime.models import Runtime
 from goldilocks_core.runtime.registry import RECORD_TYPE_IDS
-from goldilocks_core.runtime.task import GraphHandler
 from goldilocks_core.serialization import to_portable
 
 

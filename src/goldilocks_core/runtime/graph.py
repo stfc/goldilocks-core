@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, TypedDict
 
+from goldilocks_core.failures import ExpectedFailure
 from goldilocks_core.runtime.registry import record_type_id
 
 
@@ -31,8 +32,8 @@ class CalculationTaskCapability(TypedDict):
     selectable_record_ids: list[str]
 
 
-class UnknownPreset(ValueError):
-    pass
+class UnknownPreset(ExpectedFailure, ValueError):
+    kind = "invalid_preset"
 
 
 @dataclass(frozen=True, slots=True)

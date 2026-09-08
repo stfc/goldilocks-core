@@ -21,9 +21,8 @@ from goldilocks_core.calculation import CalculationHints
 from goldilocks_core.io.structures import InMemoryStructureSource
 from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.installed import load_installed_table, write_table_manifest
-from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.pseudo.registry import PseudoTable, default_table, load_tables
-from goldilocks_core.pseudo.source import source_for_draft
+from goldilocks_core.pseudo.source import PseudoResolution
 from goldilocks_core.request import CalculationDraft
 
 pytestmark = pytest.mark.integration
@@ -114,8 +113,10 @@ def test_default_table_serves_a_fresh_install(tmp_path: Path) -> None:
             data_source="shipped default table",
         ),
     }
-    resolver = source_for_draft(draft, store=store)
-    metadata: tuple[PseudoMetadata, ...] = resolver(structure, requirements)
+    resolver = PseudoResolution(table_id=draft.pseudo_table, store=store)
+    selection = resolver.select(structure, requirements)
 
-    assert {item.element for item in metadata} >= {"Si"}
-    assert metadata[0].table_id == table.asset.id
+    selected = selection["pseudopotentials"]
+    assert {item["element"] for item in selected} == {"Si"}
+    assert selected[0]["filename"] == "Si.upf"
+    assert selected[0]["provenance"].data_source == table.asset.id

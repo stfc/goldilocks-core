@@ -31,12 +31,12 @@ This is the same convention as VASP's `KSPACING` tag. It differs from some codes
 
 | Parameter | Default | Unit | Where defined |
 | --- | --- | --- | --- |
-| convergence threshold | 1e-6 | Ry | `advice/convergence.py` `DEFAULT_CONV_THR` |
-| mixing beta | 0.4 | — | `advice/convergence.py` `DEFAULT_MIXING_BETA` |
-| electron max steps | 80 | — | `advice/convergence.py` `DEFAULT_ELECTRON_MAXSTEP` |
-| metallic smearing width | 0.01 | Ry | `advice/smearing.py` `METALLIC_SMEARING_WIDTH_RY` |
-| smearing type (metallic) | cold | — | `advice/smearing.py` |
-| smearing type (unknown) | fixed | — | `advice/smearing.py` |
+| convergence threshold | 1e-6 | Ry | `advice/parameters.py` `DEFAULT_CONV_THR` |
+| mixing beta | 0.4 | — | `advice/parameters.py` `DEFAULT_MIXING_BETA` |
+| electron max steps | 80 | — | `advice/parameters.py` `DEFAULT_ELECTRON_MAXSTEP` |
+| metallic smearing width | 0.01 | Ry | `advice/parameters.py` `METALLIC_SMEARING_WIDTH_RY` |
+| smearing type (metallic) | cold | — | `advice/parameters.py` |
+| smearing type (unknown) | fixed | — | `advice/parameters.py` |
 | pseudo accuracy | efficiency | — | `CalculationIntent.pseudo_accuracy` |
 | functional | PBEsol | — | `CalculationIntent.functional` |
 

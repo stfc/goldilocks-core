@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from goldilocks_core.ml.model_registry import (
+from goldilocks_core.ml.models import (
     MODEL_REGISTRY_ENV,
     load_default_qrf_config,
 )

@@ -28,7 +28,7 @@ class _DiscoveredCutoffs:
 def load_pseudo_metadata(root: str | Path) -> list[PseudoMetadata]:
     root = Path(root).resolve()
     if not root.is_dir():
-        raise ValueError(f"pseudopotential root is not a directory: {root}")
+        raise PseudoImportError(f"pseudopotential root is not a directory: {root}")
     upf_files = sorted(
         path
         for path in root.rglob("*")

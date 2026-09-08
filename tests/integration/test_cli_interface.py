@@ -8,7 +8,9 @@ from pathlib import Path
 
 import pytest
 
+from goldilocks_core.cli import core
 from goldilocks_core.examples.structures import structure
+from goldilocks_core.pseudo import pp_registry
 
 
 def _run_cli(
@@ -113,6 +115,60 @@ def test_cli_missing_structure_reports_an_operator_error(
     assert completed.returncode == 2
     assert str(missing) in completed.stderr
     assert "Traceback" not in completed.stderr
+
+
+@pytest.mark.parametrize("root_kind", ["missing", "file"])
+def test_cli_invalid_pseudo_root_reports_an_operator_error(
+    tmp_path: Path, root_kind: str
+) -> None:
+    pseudo_root = tmp_path / "pseudos"
+    if root_kind == "file":
+        pseudo_root.write_text("not a directory", encoding="utf-8")
+
+    completed = _run_cli(
+        "compute",
+        str(structure("Si.cif")),
+        "--outputs",
+        "selection",
+        "--pseudo-root",
+        str(pseudo_root),
+        "--no-out",
+        "--json",
+    )
+
+    assert completed.returncode == 2
+    assert "error:" in completed.stderr
+    assert str(pseudo_root) in completed.stderr
+    assert "Traceback" not in completed.stderr
+    assert completed.stdout == ""
+
+
+def test_cli_pseudo_ingestion_programming_error_propagates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pseudo_root = _pseudo_root(tmp_path / "pseudos")
+
+    def broken_parser(path: str | Path) -> None:
+        raise ValueError("unexpected parser bug")
+
+    monkeypatch.setattr(pp_registry, "parse_upf_metadata", broken_parser)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "goldilocks",
+            "compute",
+            str(structure("Si.cif")),
+            "--outputs",
+            "selection",
+            "--pseudo-root",
+            str(pseudo_root),
+            "--no-out",
+        ],
+    )
+
+    with pytest.raises(ValueError, match="unexpected parser bug"):
+        core.main()
 
 
 def test_cli_compute_preset_returns_canonical_memory_result(tmp_path: Path) -> None:

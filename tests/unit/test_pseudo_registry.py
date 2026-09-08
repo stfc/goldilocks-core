@@ -21,12 +21,19 @@ def test_registry_declares_complete_provider_assets() -> None:
         "metadata",
     }
     assert all("pseudo-dojo.org" in file.url for file in dojo.asset.files)
+    assert dojo.asset.preparation_revision == "2"
 
     sssp = tables["sssp-pbe-efficiency-sr"]
+    assert {file.role for file in sssp.asset.files} == {
+        "pseudopotentials",
+        "metadata",
+        "licence",
+    }
     assert all(
         "archive.materialscloud.org/api" in file.url for file in sssp.asset.files
     )
     assert all("rcyfm-68h65" in file.url for file in sssp.asset.files)
+    assert sssp.asset.preparation_revision == "1"
     assert all(
         file.checksum is not None and file.size is not None
         for table in tables.values()

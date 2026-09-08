@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 import tarfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -33,6 +34,7 @@ def preparer(table: PseudoTable):
                 sources["pseudopotentials"], destination, metadata, table
             )
             write_table_manifest(destination, table, entries)
+            shutil.copyfile(sources["licence"], destination / "LICENSE.txt")
         except PseudoImportError:
             raise
         except (

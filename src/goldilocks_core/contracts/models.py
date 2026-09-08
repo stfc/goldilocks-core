@@ -27,3 +27,6 @@ class ModelSpec:
     source: ModelSource
     location: str
     revision: str | None = None
+    licence: str | None = None
+    licence_text: str | None = None
+    citation: str | None = None

@@ -76,7 +76,7 @@ def _resolve_installed(
             f"{'; '.join(problems)}; matching tables: {alternatives}"
         )
 
-    installed = store.resolve(table.asset.id, table.asset.version)
+    installed = store.resolve_spec(table.asset)
     return load_installed_table(installed, table=table)
 
 

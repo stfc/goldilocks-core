@@ -5,34 +5,35 @@ import json
 import sys
 from pathlib import Path
 
-from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled, AssetStore
-from goldilocks_core.assets.runtime import install as install_assets
-from goldilocks_core.assets.runtime import statuses as asset_statuses
-from goldilocks_core.assets.runtime import verify as verify_assets
-from goldilocks_core.contracts import (
-    ArchiveOutput,
+from goldilocks_core.advice.parameters import ParameterAdvice
+from goldilocks_core.assets.runtime import (
+    install as install_assets,
+    statuses as asset_statuses,
+    verify as verify_assets,
+)
+from goldilocks_core.assets.store import AssetCorrupt, AssetNotInstalled, AssetStore
+from goldilocks_core.calculation import CalculationHints, CalculationIntent
+from goldilocks_core.examples.structures import structures_path
+from goldilocks_core.generation.files import GeneratedFiles
+from goldilocks_core.generation.registry import available_codes, available_tasks
+from goldilocks_core.input_data import DftInputData
+from goldilocks_core.io.structures import PathStructureSource, StructureInputError
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.publication import ArchiveOutput, DirectoryOutput, OutputTarget
+from goldilocks_core.request import (
     CalculationDraft,
-    CalculationHints,
-    CalculationIntent,
-    ComputationResult,
     ComputeRequest,
-    DftInputData,
-    DirectoryOutput,
-    GeneratedFiles,
-    KPointSelection,
-    ModelSpec,
-    OutputTarget,
-    ParameterAdvice,
-    PathStructureSource,
     PresetSelection,
     RecordSelection,
-    SelectionRecord,
-    resolve_output_types,
 )
-from goldilocks_core.examples import structures_path
-from goldilocks_core.generation import available_codes, available_tasks
-from goldilocks_core.io.structures import StructureInputError
-from goldilocks_core.runtime import Runtime, Service, compute
+from goldilocks_core.result import ComputationResult
+from goldilocks_core.runtime.jobs import compute
+from goldilocks_core.runtime.models import Runtime
+from goldilocks_core.runtime.registry import resolve_output_types
+from goldilocks_core.runtime.service import Service
+from goldilocks_core.selection import SelectionRecord
+from goldilocks_core.serialization import to_portable
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -118,12 +119,12 @@ def main() -> None:
         with Service() as service:
             capabilities = service.capabilities()
         if args.json:
-            print(json.dumps(capabilities.to_dict(), indent=2, sort_keys=True))
+            print(json.dumps(to_portable(capabilities), indent=2, sort_keys=True))
         else:
-            print(f"Goldilocks Core {capabilities.core_version}")
-            for task in capabilities.tasks:
-                presets = ", ".join(preset.id for preset in task.presets)
-                print(f"{task.id}: {presets}")
+            print(f"Goldilocks Core {capabilities['core_version']}")
+            for task in capabilities["tasks"]:
+                presets = ", ".join(preset["id"] for preset in task["presets"])
+                print(f"{task['id']}: {presets}")
         return
     if args.command == "inspect":
         try:
@@ -136,11 +137,11 @@ def main() -> None:
             print(f"{parser.prog}: error: {error}", file=sys.stderr)
             raise SystemExit(2) from error
         if args.json:
-            print(json.dumps(inspection.to_dict(), indent=2, sort_keys=True))
+            print(json.dumps(to_portable(inspection), indent=2, sort_keys=True))
         else:
-            print(f"structure: {inspection.source.name}")
-            print(f"formula: {inspection.structure.reduced_formula}")
-            print(f"sites: {inspection.structure.site_count}")
+            print(f"structure: {inspection['source']['name']}")
+            print(f"formula: {inspection['structure']['reduced_formula']}")
+            print(f"sites: {inspection['structure']['site_count']}")
         return
     if args.command == "examples":
         print(structures_path())
@@ -181,7 +182,7 @@ def main() -> None:
         raise SystemExit(2) from error
 
     if args.json:
-        print(json.dumps(output.to_dict(), indent=2, sort_keys=True))
+        print(json.dumps(to_portable(output), indent=2, sort_keys=True))
         return
 
     _print_human_summary(output)
@@ -234,18 +235,6 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--model-version",
         help="Model version recorded in metadata when --model is used.",
-    )
-    parser.add_argument(
-        "--model-licence",
-        help="Licence identifier for the local model (required for publication).",
-    )
-    parser.add_argument(
-        "--model-licence-file",
-        help="UTF-8 licence text file for the local model (required for publication).",
-    )
-    parser.add_argument(
-        "--model-citation",
-        help="Citation for the local model (required for publication).",
     )
     parser.add_argument("--k-spacing", type=float)
     parser.add_argument(
@@ -389,14 +378,6 @@ def _serve(args: argparse.Namespace) -> None:
 def _model_spec_from_args(args: argparse.Namespace) -> ModelSpec | None:
     if args.model is None:
         return None
-    licence_text = None
-    if args.model_licence_file is not None:
-        try:
-            licence_text = (
-                Path(args.model_licence_file).expanduser().read_text(encoding="utf-8")
-            )
-        except (OSError, UnicodeError) as error:
-            raise ValueError(f"Cannot read --model-licence-file: {error}") from error
     return ModelSpec(
         name=args.model_name or "cli-kmesh-model",
         version=args.model_version or "unknown",
@@ -405,9 +386,6 @@ def _model_spec_from_args(args: argparse.Namespace) -> ModelSpec | None:
         feature_set="cslr",
         source="local",
         location=args.model,
-        licence=args.model_licence,
-        licence_text=licence_text,
-        citation=args.model_citation,
     )
 
 
@@ -417,9 +395,6 @@ def _validate_backend_options(args: argparse.Namespace) -> None:
         for option, value in (
             ("--model-name", args.model_name),
             ("--model-version", args.model_version),
-            ("--model-licence", args.model_licence),
-            ("--model-licence-file", args.model_licence_file),
-            ("--model-citation", args.model_citation),
         )
         if value is not None
     ]
@@ -437,62 +412,64 @@ def _parse_optional_bool(value: str | None) -> bool | None:
 
 def _print_human_summary(result: ComputationResult) -> None:
     structure = result.draft.structure
-    print(f"structure: {structure.source.name}")
-    print(f"formula: {structure.structure.reduced_formula}")
+    print(f"structure: {structure['source']['name']}")
+    print(f"formula: {structure['structure']['reduced_formula']}")
     print(f"code: {result.draft.intent.code}")
     print(f"task: {result.draft.intent.task}")
     advice = result.records.get(ParameterAdvice)
     if advice is not None:
-        smearing = advice.smearing.smearing_type or "none"
-        if advice.smearing.width_ry is not None:
-            smearing = f"{smearing}@{advice.smearing.width_ry:g} Ry"
-        pseudo_type = advice.pseudopotential_requirements.pseudo_type or "any"
+        smearing = advice["smearing"]["smearing_type"] or "none"
+        if advice["smearing"]["width_ry"] is not None:
+            smearing = f"{smearing}@{advice['smearing']['width_ry']:g} Ry"
+        pseudo_type = advice["pseudopotential_requirements"]["pseudo_type"] or "any"
         soc = (
             "on"
-            if advice.spin_orbit.enabled
+            if advice["spin_orbit"]["enabled"]
             else "consider"
-            if advice.spin_orbit.consider
+            if advice["spin_orbit"]["consider"]
             else "off"
         )
         print(
             "advice: "
             f"smearing={smearing}; "
-            f"spin={'on' if advice.magnetism.spin_polarized else 'off'}; "
+            f"spin={'on' if advice['magnetism']['spin_polarized'] else 'off'}; "
             f"SOC={soc}; "
             "pseudo="
-            f"{advice.pseudopotential_requirements.functional}/"
-            f"{advice.pseudopotential_requirements.accuracy}/"
+            f"{advice['pseudopotential_requirements']['functional']}/"
+            f"{advice['pseudopotential_requirements']['accuracy']}/"
             f"{pseudo_type}/"
-            f"{advice.pseudopotential_requirements.relativistic}; "
-            f"vdW={'on' if advice.vdw.use_vdw else 'off'}"
+            f"{advice['pseudopotential_requirements']['relativistic']}; "
+            f"vdW={'on' if advice['vdw']['use_vdw'] else 'off'}"
         )
     k_points = result.records.get(KPointSelection)
     if k_points is not None:
-        grid = k_points.grid
+        grid = k_points["grid"]
         print(f"k-grid: {grid[0]} {grid[1]} {grid[2]}")
     selection = result.records.get(SelectionRecord)
     if selection is not None:
         selected = ", ".join(
-            f"{pseudo.element}={pseudo.filename or 'unresolved'}"
-            for pseudo in selection.pseudopotentials
+            f"{pseudo['element']}={pseudo['filename'] or 'unresolved'}"
+            for pseudo in selection["pseudopotentials"]
         )
         print(f"selection: {selected or 'no pseudopotentials'}")
     input_data = result.records.get(DftInputData)
     if input_data is not None:
         print(
-            f"dft input data: {len(input_data.artifacts)} artifacts, "
-            f"{len(input_data.citations)} citations"
+            f"dft input data: {len(input_data['artifacts'])} artifacts, "
+            f"{len(input_data['citations'])} citations"
         )
-        pseudo_set = input_data.pseudopotential_set
-        version = f"@{pseudo_set.version}" if pseudo_set.version is not None else ""
-        print(f"pseudopotential set: {pseudo_set.id}{version}")
+        pseudo_set = input_data["pseudopotential_set"]
+        version = (
+            f"@{pseudo_set['version']}" if pseudo_set["version"] is not None else ""
+        )
+        print(f"pseudopotential set: {pseudo_set['id']}{version}")
     generated_files = result.records.get(GeneratedFiles, ())
     if generated_files:
         print("generated files:")
         for generated_file in generated_files:
-            print(f"  {generated_file.path}")
+            print(f"  {generated_file['path']}")
     if result.publication is not None:
-        print(f"published {result.publication.kind}: {result.publication.path}")
+        print(f"published {result.publication['kind']}: {result.publication['path']}")
     if result.warnings:
         print("warnings:")
         for warning in result.warnings:

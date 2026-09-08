@@ -4,54 +4,69 @@ import types
 from dataclasses import fields, is_dataclass
 from functools import reduce
 from operator import or_
-from typing import Any, Literal, TypeAliasType, get_args, get_origin, get_type_hints
+from typing import (
+    Annotated,
+    Any,
+    Literal,
+    NotRequired,
+    Required,
+    TypeAliasType,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+    is_typeddict,
+)
 
 from pydantic import BaseModel, ConfigDict, JsonValue, create_model
 
-from goldilocks_core.contracts import (
-    CalculationHints,
-    CalculationIntent,
-    CalculationTaskCapability,
-    InputArtifact,
-    ModelSpec,
-    PseudoMetadata,
-    PseudopotentialSelection,
-    Publication,
-    RuntimeAssetIdentity,
-    RuntimeIdentity,
-    StructureInspection,
-)
-from goldilocks_core.contracts.registry import record_types_by_id
-from goldilocks_core.server.request import SelectionDocument
-
-_STRICT = ConfigDict(extra="forbid", strict=True)
-
+from goldilocks_core.io.structures import StructureInspection
+from goldilocks_core.result import ComputationResult
+from goldilocks_core.runtime.capabilities import Capabilities
+from goldilocks_core.runtime.graph import CalculationTaskCapability
+from goldilocks_core.runtime.registry import record_types_by_id
+from goldilocks_core.serialization import Portable
 
 _SERIALIZED = ConfigDict(extra="forbid")
-_SERIALIZED_MODELS: dict[type | TypeAliasType, Any] = {}
+_SERIALIZED_MODELS: dict[Any, Any] = {}
+_OMIT = object()
 
 
 def _serialized_annotation(annotation: Any) -> Any:
+    """Project domain annotations through the same exclusions as to_portable."""
+    if annotation is Any or annotation is JsonValue:
+        return JsonValue
     if annotation in _SERIALIZED_MODELS:
         return _SERIALIZED_MODELS[annotation]
     if isinstance(annotation, TypeAliasType):
         return _serialized_annotation(annotation.__value__)
-    if isinstance(annotation, type) and is_dataclass(annotation):
-        return _serialized_model(annotation)
-
     origin = get_origin(annotation)
+    if origin is Annotated:
+        inner, *metadata = get_args(annotation)
+        for item in metadata:
+            if isinstance(item, Portable):
+                return (
+                    _OMIT
+                    if item.annotation is None
+                    else _serialized_annotation(item.annotation)
+                )
+        return _serialized_annotation(inner)
+    if origin in (Required, NotRequired):
+        return _serialized_annotation(get_args(annotation)[0])
+    if is_typeddict(annotation) or (
+        isinstance(annotation, type) and is_dataclass(annotation)
+    ):
+        return _serialized_model(annotation)
     if origin is None or origin is Literal:
         return annotation
     converted = tuple(_serialized_annotation(item) for item in get_args(annotation))
     if origin is tuple:
-        if len(converted) == 2 and converted[1] is Ellipsis:
-            return tuple[converted[0], ...]
         return tuple[converted]
     if origin is list:
         return list[converted[0]]
     if origin is dict:
         return dict[converted[0], converted[1]]
-    if origin is types.UnionType:
+    if origin in (types.UnionType, Union):
         return reduce(or_, converted)
     return annotation
 
@@ -59,89 +74,36 @@ def _serialized_annotation(annotation: Any) -> Any:
 def _serialized_model(
     contract: type,
     *,
-    name: str | None = None,
-    exclude: frozenset[str] = frozenset(),
     overrides: dict[str, Any] | None = None,
 ) -> type[BaseModel]:
-    hints = get_type_hints(contract)
-    replacements = overrides or {}
-    definitions: dict[str, Any] = {}
-    for item in fields(contract):
-        if item.name in exclude:
-            continue
-        annotation = _serialized_annotation(
-            replacements.get(item.name, hints[item.name])
-        )
-        definitions[item.name] = (annotation, ...)
-    document = create_model(
-        name or contract.__name__, __config__=_SERIALIZED, **definitions
+    hints = get_type_hints(contract, include_extras=True)
+    names = (
+        hints if is_typeddict(contract) else (item.name for item in fields(contract))
     )
-    if not exclude and not replacements:
+    definitions: dict[str, Any] = {}
+    for name in names:
+        hint = hints[name]
+        annotation = (
+            overrides[name]
+            if overrides is not None and name in overrides
+            else _serialized_annotation(hint)
+        )
+        if annotation is _OMIT:
+            continue
+        optional = get_origin(hint) is NotRequired or (
+            is_typeddict(contract)
+            and name in contract.__optional_keys__
+            and get_origin(hint) is not Required
+        )
+        definitions[name] = (annotation, None if optional else ...)
+    document = create_model(contract.__name__, __config__=_SERIALIZED, **definitions)
+    if overrides is None:
         _SERIALIZED_MODELS[contract] = document
     return document
 
 
-SerializedIntentDocument = _serialized_model(
-    CalculationIntent,
-    name="SerializedCalculationIntent",
-)
-SerializedHintsDocument = _serialized_model(
-    CalculationHints,
-    name="SerializedCalculationHints",
-)
-SerializedModelDocument = _serialized_model(
-    ModelSpec,
-    name="SerializedModel",
-    exclude=frozenset({"location", "licence_text"}),
-)
-_SERIALIZED_MODELS[ModelSpec] = SerializedModelDocument
-SerializedPseudoMetadataDocument = _serialized_model(
-    PseudoMetadata,
-    name="SerializedPseudoMetadata",
-    exclude=frozenset({"filepath", "pseudo_info"}),
-)
-_SERIALIZED_MODELS[PseudoMetadata] = SerializedPseudoMetadataDocument
-SerializedPseudopotentialDocument = _serialized_model(
-    PseudopotentialSelection,
-    name="SerializedPseudopotentialSelection",
-    exclude=frozenset({"filepath"}),
-)
-_SERIALIZED_MODELS[PseudopotentialSelection] = SerializedPseudopotentialDocument
-
-SerializedInputArtifactDocument = _serialized_model(
-    InputArtifact,
-    name="SerializedInputArtifact",
-    exclude=frozenset({"content"}),
-)
-_SERIALIZED_MODELS[InputArtifact] = SerializedInputArtifactDocument
-SerializedRuntimeAssetDocument = _serialized_model(
-    RuntimeAssetIdentity,
-    name="SerializedRuntimeAsset",
-)
-_SERIALIZED_MODELS[RuntimeAssetIdentity] = SerializedRuntimeAssetDocument
-SerializedRuntimeDocument = _serialized_model(
-    RuntimeIdentity,
-    name="SerializedRuntime",
-    overrides={"models": list[SerializedModelDocument]},
-)
-_SERIALIZED_MODELS[RuntimeIdentity] = SerializedRuntimeDocument
-
-LocalPseudoRootDocument = create_model(
-    "LocalPseudoRoot",
-    __config__=_SERIALIZED,
-    kind=(Literal["local_root"], ...),
-)
-SerializedCalculationDraftDocument = create_model(
-    "SerializedCalculationDraft",
-    __config__=_SERIALIZED,
-    structure=(StructureInspection, ...),
-    intent=(SerializedIntentDocument, ...),
-    hints=(SerializedHintsDocument, ...),
-    pseudo_metadata=(list[SerializedPseudoMetadataDocument] | None, ...),
-    pseudo_root=(LocalPseudoRootDocument | None, ...),
-    pseudo_table=(str | None, ...),
-    kmesh_model=(SerializedModelDocument | None, ...),
-)
+CapabilitiesDocument = _serialized_model(Capabilities)
+StructureInspectionDocument = _serialized_model(StructureInspection)
 
 
 def computation_result_document(
@@ -151,11 +113,11 @@ def computation_result_document(
         record_id
         for task in tasks
         for record_id in (
-            *task.selectable_record_ids,
+            *task["selectable_record_ids"],
             *(
                 output_id
-                for preset in task.presets
-                for output_id in preset.output_record_ids
+                for preset in task["presets"]
+                for output_id in preset["output_record_ids"]
             ),
         )
     )
@@ -168,18 +130,7 @@ def computation_result_document(
             for record_id in advertised_ids
         },
     )
-    return create_model(
-        "ComputationResult",
-        __config__=_STRICT,
-        schema_version=(Literal[1], ...),
-        draft=(SerializedCalculationDraftDocument, ...),
-        task=(str, ...),
-        task_revision=(str, ...),
-        selection=(SelectionDocument, ...),
-        records=(records_document, ...),
-        warnings=(list[str], ...),
-        publication=(_serialized_annotation(Publication) | None, ...),
-    )
+    return _serialized_model(ComputationResult, overrides={"records": records_document})
 
 
 def prepared_computation_document(
@@ -187,7 +138,7 @@ def prepared_computation_document(
 ) -> type[BaseModel]:
     return create_model(
         "PreparedComputation",
-        __config__=_STRICT,
+        __config__=_SERIALIZED,
         result=(computation_result_document(tasks), ...),
         archive=(bytes | None, None),
     )
@@ -195,7 +146,7 @@ def prepared_computation_document(
 
 ErrorDocument = create_model(
     "Error",
-    __config__=_STRICT,
+    __config__=ConfigDict(extra="forbid", strict=True),
     kind=(str, ...),
     message=(str, ...),
     retryable=(bool | None, None),
@@ -205,5 +156,5 @@ ErrorDocument = create_model(
     reason=(str | None, None),
 )
 ErrorResponseDocument = create_model(
-    "ErrorResponse", __config__=_STRICT, error=(ErrorDocument, ...)
+    "ErrorResponse", __config__=_SERIALIZED, error=(ErrorDocument, ...)
 )

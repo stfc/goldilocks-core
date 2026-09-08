@@ -3,14 +3,14 @@ from __future__ import annotations
 import math
 from numbers import Integral, Real
 
-from goldilocks_core.contracts.types import (
+from goldilocks_core.types import (
     _VALID_SMEARING_TYPES,
     _VALID_VDW_METHODS,
     KPointGrid,
 )
 
 
-def _validate_finite_positive(value: Real, field_name: str) -> None:
+def validate_finite_positive(value: Real, field_name: str) -> None:
     if (
         isinstance(value, bool)
         or not isinstance(value, Real)
@@ -22,34 +22,34 @@ def _validate_finite_positive(value: Real, field_name: str) -> None:
         )
 
 
-def _validate_positive_integer(value: int, field_name: str) -> None:
+def validate_positive_integer(value: int, field_name: str) -> None:
     if isinstance(value, bool) or not isinstance(value, Integral) or value < 1:
         raise ValueError(f"{field_name} must be a positive integer; got {value!r}")
 
 
-def _validate_kpoint_grid(grid: object, field_name: str) -> KPointGrid:
+def validate_kpoint_grid(grid: object, field_name: str) -> KPointGrid:
     if not isinstance(grid, tuple | list) or len(grid) != 3:
         raise ValueError(
             f"{field_name} must contain exactly three positive integers; got {grid!r}"
         )
 
     for index, value in enumerate(grid):
-        _validate_positive_integer(value, f"{field_name}[{index}]")
+        validate_positive_integer(value, f"{field_name}[{index}]")
 
     return tuple(int(value) for value in grid)
 
 
-def _validate_boolean(value: object, field_name: str) -> None:
+def validate_boolean(value: object, field_name: str) -> None:
     if not isinstance(value, bool):
         raise ValueError(f"{field_name} must be a boolean; got {value!r}")
 
 
-def _validate_optional_boolean(value: object, field_name: str) -> None:
+def validate_optional_boolean(value: object, field_name: str) -> None:
     if value is not None:
-        _validate_boolean(value, field_name)
+        validate_boolean(value, field_name)
 
 
-def _validate_smearing(
+def validate_smearing(
     smearing_type: str | None,
     width: float | None,
     *,
@@ -74,10 +74,10 @@ def _validate_smearing(
             f"{width_field} is required when {type_field} is {smearing_type!r}"
         )
     if width is not None:
-        _validate_finite_positive(width, width_field)
+        validate_finite_positive(width, width_field)
 
 
-def _validate_vdw_method(method: object, field_name: str) -> None:
+def validate_vdw_method(method: object, field_name: str) -> None:
     if not isinstance(method, str) or method not in _VALID_VDW_METHODS:
         valid = ", ".join(sorted(_VALID_VDW_METHODS))
         raise ValueError(f"{field_name} must be one of {valid}; got {method!r}")
@@ -88,14 +88,14 @@ _VALID_RELATIVISTIC_MODES: frozenset[str] = frozenset(
 )
 
 
-def _validate_optional_nonempty_str(value: object, field_name: str) -> None:
+def validate_optional_nonempty_str(value: object, field_name: str) -> None:
     if value is not None and (not isinstance(value, str) or not value.strip()):
         raise ValueError(
             f"{field_name} must be a non-empty string, or None; got {value!r}"
         )
 
 
-def _validate_relativistic_mode(value: object, field_name: str) -> None:
+def validate_relativistic_mode(value: object, field_name: str) -> None:
     if value is not None and (
         not isinstance(value, str) or value not in _VALID_RELATIVISTIC_MODES
     ):

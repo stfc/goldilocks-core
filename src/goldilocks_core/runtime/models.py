@@ -2,19 +2,24 @@ from __future__ import annotations
 
 import os
 from threading import Lock
+from typing import Protocol, runtime_checkable
 
 from pymatgen.core import Structure
 
 from goldilocks_core.advice.kdistance import QrfBackend
 from goldilocks_core.analysis import heuristic_metallicity
-from goldilocks_core.assets import AssetNotInstalled, AssetStore
-from goldilocks_core.contracts import (
-    ElectronicCharacter,
-    KMeshService,
-    ModelSpec,
-    PathLike,
-)
-from goldilocks_core.ml.model_registry import QrfKpointsConfig
+from goldilocks_core.assets.store import AssetNotInstalled, AssetStore
+from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.types import ElectronicCharacter, JsonDict, PathLike
+
+
+@runtime_checkable
+class KMeshService(Protocol):
+    def __call__(self, structure: Structure) -> JsonDict: ...
+
+    def reset(self) -> None: ...
+
+    def close(self) -> None: ...
 
 
 class MetallicityModel:
@@ -87,11 +92,6 @@ class MetallicityModel:
         )
         return character, "model", confidence
 
-    @property
-    def loaded_config(self) -> QrfKpointsConfig | None:
-        """Registry snapshot belonging to the loaded classifier."""
-        return self._config if self._model is not None else None
-
     def reset(self) -> None:
         with self._load_lock:
             self._model = None
@@ -154,12 +154,6 @@ class Runtime:
     @property
     def uses_default_kmesh_model(self) -> bool:
         return self._uses_default_kmesh_model
-
-    @property
-    def loaded_kmesh_config(self) -> QrfKpointsConfig | None:
-        if self._uses_default_kmesh_model and isinstance(self._backend, QrfBackend):
-            return self._backend.loaded_config
-        return None
 
     @property
     def metallicity_model_spec(self) -> ModelSpec | None:

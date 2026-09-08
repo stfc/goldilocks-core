@@ -75,8 +75,8 @@ def test_sibling_dojo_report_supplies_exact_filename_cutoffs(tmp_path: Path) -> 
     assert metadata.provider == "pseudodojo"
     assert metadata.accuracy is None
     assert metadata.cutoffs is not None
-    assert metadata.cutoffs.ecutwfc_ry == 40.0
-    assert metadata.cutoffs.ecutrho_ry is None
+    assert metadata.cutoffs["ecutwfc_ry"] == 40.0
+    assert metadata.cutoffs["ecutrho_ry"] is None
 
 
 def test_mismatched_dojo_report_is_rejected(tmp_path: Path) -> None:

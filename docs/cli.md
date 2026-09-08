@@ -79,21 +79,8 @@ Records, warnings, and publication kind and absolute path.
 | `--electron-maxstep` | None | `CalculationHints.electron_maxstep` |
 
 `--model`, `--model-name`, and `--model-version` select and identify a local
-k-index model. For `generate`, also supply `--model-licence` (licence identifier),
-`--model-licence-file` (a UTF-8 file containing the full licence text), and
-`--model-citation` (citation text). All five metadata options require `--model`.
-Core refuses to publish a used local model without non-empty licence, licence
-text, and citation; it never supplies a default licence.
-
-```bash
-uv run goldilocks compute Si.cif --preset generate --model model.joblib --model-name my-kmesh --model-version 1 --model-licence LicenseRef-Operator --model-licence-file MODEL-LICENSE.txt --model-citation "Operator model, version 1." --pseudo-root ./pseudos --out ./ready
-```
-
-In Python, supply the same legal material with
-`ModelSpec(..., licence="LicenseRef-Operator", licence_text=Path("MODEL-LICENSE.txt").read_text(encoding="utf-8"), citation="Operator model, version 1.")`
-as `CalculationDraft.kmesh_model`. These are trusted local configuration controls,
-not remote request options. Explicit `--k-grid` or `--k-spacing` bypasses model
-inference, so an unused model does not require publication material.
+k-index model. `--model-name` and `--model-version` require `--model`. Explicit
+`--k-grid` or `--k-spacing` bypasses model inference.
 
 `--fetch-missing` installs only an exact missing asset reported by Core, then
 retries. It does not replace corrupt assets.

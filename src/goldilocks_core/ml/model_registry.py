@@ -7,8 +7,9 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, cast, get_args
 
-from goldilocks_core.assets import AssetFile, AssetSpec
-from goldilocks_core.contracts import ModelSource, ModelSpec, ModelType, PathLike
+from goldilocks_core.assets.records import AssetFile, AssetSpec
+from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.types import ModelSource, ModelType, PathLike
 
 MODEL_REGISTRY_ENV = "GOLDILOCKS_MODEL_REGISTRY"
 _REGISTRY_RESOURCE = "registry.toml"

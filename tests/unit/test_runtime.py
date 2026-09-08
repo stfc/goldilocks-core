@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from threading import Barrier, Event
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from pymatgen.core import Lattice, Structure
@@ -22,36 +23,30 @@ from goldilocks_core import (
     RecordSelection,
     Runtime,
 )
-from goldilocks_core.assets import AssetFile, AssetSpec, AssetStore
-from goldilocks_core.contracts import (
-    CalculationIntent,
-    KPointSelection,
-    ModelSpec,
-    ParameterAdvice,
-    Provenance,
-    PseudoCutoffs,
-    PseudoMetadata,
-    PseudopotentialRequirements,
-    SelectionRecord,
-    StructureAnalysisRecord,
-    resolve_output_types,
-)
-from goldilocks_core.contracts.registry import (
-    RECORD_TYPE_IDS,
-    register_record_types,
-)
+from goldilocks_core.advice.parameters import ParameterAdvice
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.assets.records import AssetFile, AssetSpec
+from goldilocks_core.assets.store import AssetStore
+from goldilocks_core.calculation import CalculationIntent
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.installed import write_table_manifest
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.pseudo.registry import PseudoTable
 from goldilocks_core.pseudo.source import (
     PseudoTableMismatch,
     select_compatible_table,
 )
-from goldilocks_core.runtime import (
-    GraphHandler,
-    Preset,
-    Stage,
-    TaskGraph,
+from goldilocks_core.runtime.graph import Preset, Stage, TaskGraph
+from goldilocks_core.runtime.registry import (
+    RECORD_TYPE_IDS,
+    register_record_types,
+    resolve_output_types,
 )
+from goldilocks_core.runtime.task import GraphHandler
+from goldilocks_core.selection import SelectionRecord
+from goldilocks_core.serialization import to_portable
 
 
 @pytest.fixture
@@ -89,10 +84,7 @@ def make_metadata() -> PseudoMetadata:
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        cutoffs=PseudoCutoffs(
-            ecutwfc_ry=35,
-            ecutrho_ry=140,
-        ),
+        cutoffs={"ecutwfc_ry": 35, "ecutrho_ry": 140},
         source_identifier="synthetic/Si.UPF",
         pseudo_info={
             "licence": "CC-BY-4.0",
@@ -213,16 +205,16 @@ class TrackingBackend:
         self.closes = 0
         self.raise_on_call = raise_on_call
 
-    def __call__(self, structure: Structure) -> KPointSelection:
+    def __call__(self, structure: Structure) -> dict[str, Any]:
         self.calls += 1
         if self.raise_on_call:
             raise AssertionError("kmesh backend must not be called")
-        return KPointSelection(
-            grid=(2, 2, 2),
-            shift=(0, 0, 0),
-            mesh_type="monkhorst-pack",
-            provenance=Provenance(source="model", reason="test backend"),
-        )
+        return {
+            "grid": [2, 2, 2],
+            "shift": [0, 0, 0],
+            "mesh_type": "monkhorst-pack",
+            "provenance": Provenance(source="model", reason="test backend"),
+        }
 
     def reset(self) -> None:
         self.resets += 1
@@ -239,9 +231,9 @@ def test_analyze_uses_heuristic_without_an_installed_metallicity_model(
         result = dispatcher.compute(make_query_request((StructureAnalysisRecord,)))
 
     analysis = result.records[StructureAnalysisRecord]
-    assert analysis.electronic_character == "unknown"
-    assert analysis.electronic_character_source == "heuristic"
-    assert analysis.electronic_character_confidence is None
+    assert analysis["electronic_character"] == "unknown"
+    assert analysis["electronic_character_source"] == "heuristic"
+    assert analysis["electronic_character_confidence"] is None
 
 
 def test_analyze_uses_the_installed_default_metallicity_model(
@@ -283,9 +275,9 @@ def test_analyze_uses_the_installed_default_metallicity_model(
             make_query_request((StructureAnalysisRecord,))
         )
     analysis = result.records[StructureAnalysisRecord]
-    assert analysis.electronic_character == "insulator"
-    assert analysis.electronic_character_source == "model"
-    assert analysis.electronic_character_confidence == 0.94
+    assert analysis["electronic_character"] == "insulator"
+    assert analysis["electronic_character_source"] == "model"
+    assert analysis["electronic_character_confidence"] == 0.94
 
 
 @pytest.mark.parametrize(
@@ -367,7 +359,7 @@ def test_compute_returns_each_requested_record_type(record_type: type) -> None:
         result = dispatcher.compute(make_query_request((record_type,)))
 
     assert tuple(result.records) == (record_type,)
-    assert isinstance(result.records[record_type], record_type)
+    assert isinstance(result.records[record_type], dict)
 
 
 def test_select_only_compute_does_not_invoke_kmesh() -> None:
@@ -377,7 +369,7 @@ def test_select_only_compute_does_not_invoke_kmesh() -> None:
         dispatcher = Dispatcher(runtime)
         result = dispatcher.compute(make_query_request((SelectionRecord,)))
 
-    assert isinstance(result.records[SelectionRecord], SelectionRecord)
+    assert isinstance(result.records[SelectionRecord], dict)
     assert backend.calls == 0
 
 
@@ -391,7 +383,7 @@ def test_analysis_query_does_not_resolve_pseudopotential_source(tmp_path) -> Non
     with Runtime(asset_store=AssetStore(tmp_path / "empty")) as runtime:
         result = Dispatcher(runtime).compute(request)
 
-    assert result.records[StructureAnalysisRecord].reduced_formula == "Si"
+    assert result.records[StructureAnalysisRecord]["reduced_formula"] == "Si"
 
 
 def test_explicit_metadata_selection_does_not_read_registry(
@@ -408,7 +400,9 @@ def test_explicit_metadata_selection_does_not_read_registry(
     with Runtime() as runtime:
         result = Dispatcher(runtime).compute(make_query_request((SelectionRecord,)))
 
-    assert result.records[SelectionRecord].pseudopotentials[0].filename == "Si.UPF"
+    assert (
+        result.records[SelectionRecord]["pseudopotentials"][0]["filename"] == "Si.UPF"
+    )
 
 
 def test_runtime_resolves_one_explicit_installed_table(
@@ -431,9 +425,9 @@ def test_runtime_resolves_one_explicit_installed_table(
     with Runtime(asset_store=store) as runtime:
         result = Dispatcher(runtime).compute(request)
 
-    selected = result.records[SelectionRecord].pseudopotentials[0]
-    assert selected.filename == "Si.upf"
-    assert selected.provenance.data_source == table.id
+    selected = result.records[SelectionRecord]["pseudopotentials"][0]
+    assert selected["filename"] == "Si.upf"
+    assert selected["provenance"].data_source == table.id
 
 
 def test_explicit_table_must_satisfy_scientific_requirements(
@@ -478,13 +472,13 @@ def test_automatic_table_selection_routes_by_element(
         )
         for name in ("pseudodojo", "sssp")
     }
-    requirements = PseudopotentialRequirements(
-        functional=functional,
-        accuracy=accuracy,
-        pseudo_type=None,
-        relativistic="scalar",
-        provenance=Provenance(source="test", reason="test"),
-    )
+    requirements = {
+        "functional": functional,
+        "accuracy": accuracy,
+        "pseudo_type": None,
+        "relativistic": "scalar",
+        "provenance": Provenance(source="test", reason="test"),
+    }
     assert (
         select_compatible_table(
             tables, table_id=None, elements={element}, requirements=requirements
@@ -534,9 +528,9 @@ def test_runtime_reuses_resets_and_closes_owned_models(monkeypatch) -> None:
     assert first.records[KPointSelection] == second.records[KPointSelection]
     for result in (first, second):
         analysis = result.records[StructureAnalysisRecord]
-        assert analysis.electronic_character == "metal"
-        assert analysis.electronic_character_source == "model"
-        assert analysis.electronic_character_confidence == 0.9
+        assert analysis["electronic_character"] == "metal"
+        assert analysis["electronic_character_source"] == "model"
+        assert analysis["electronic_character_confidence"] == 0.9
     assert backend.calls == 2
     assert model_loads == 1
     assert model_refs[0]() is not None
@@ -661,7 +655,7 @@ def test_registered_task_requires_stable_ids_and_dispatches(
     handler = GraphHandler(
         spec=graph,
         build_context=lambda request, normalized, runtime: SimpleNamespace(
-            formula=normalized.inspection.structure.reduced_formula
+            formula=normalized.inspection["structure"]["reduced_formula"]
         ),
     )
     structure_path = tmp_path / "Si.cif"
@@ -683,7 +677,7 @@ def test_registered_task_requires_stable_ids_and_dispatches(
         result = dispatcher.compute(request)
 
     if not preset:
-        assert request.to_dict()["selection"] == {"records": ["stub"]}
+        assert to_portable(request)["selection"] == {"records": ["stub"]}
     assert resolve_output_types(["stub"]) == (StubRecord,)
-    assert result.draft.structure.source.origin == "path"
-    assert result.to_dict()["records"] == {"stub": {"value": "Si"}}
+    assert result.draft.structure["source"]["origin"] == "path"
+    assert to_portable(result)["records"] == {"stub": {"value": "Si"}}

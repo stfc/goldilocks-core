@@ -18,15 +18,14 @@ from goldilocks_core import (
     UnknownTask,
     compute,
 )
-from goldilocks_core.contracts import (
-    GeneratedFiles,
-    KPointSelection,
-    ModelSpec,
-    ParameterAdvice,
-    PseudoMetadata,
-    SelectionRecord,
-    StructureAnalysisRecord,
-)
+from goldilocks_core.advice.parameters import ParameterAdvice
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.generation.files import GeneratedFiles
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.pseudo.metadata import PseudoMetadata
+from goldilocks_core.selection import SelectionRecord
+from goldilocks_core.serialization import to_portable
 
 
 @pytest.fixture
@@ -55,7 +54,7 @@ def test_record_selection_retains_stable_ids_after_caller_mutation() -> None:
     records = [StructureAnalysisRecord, ParameterAdvice]
     selection = RecordSelection(records)
     records.clear()
-    assert selection.to_dict() == {"records": ["analysis", "advice"]}
+    assert to_portable(selection) == {"records": ["analysis", "advice"]}
 
 
 @pytest.mark.parametrize("filename", ("/tmp/Si.UPF", "../Si.UPF", r"C:\Si.UPF"))
@@ -76,7 +75,7 @@ def test_pseudo_metadata_review_excludes_local_paths_and_payloads(
             "raw": b"SECRET PSEUDO BYTES",
         },
     )
-    document = metadata.to_dict()
+    document = to_portable(metadata)
     assert document["source_identifier"] == "synthetic/Si.UPF"
     assert "filepath" not in document
     assert "pseudo_info" not in document
@@ -96,7 +95,7 @@ def test_model_review_retains_citation_without_local_paths_or_payloads() -> None
         licence_text="SECRET MODEL LEGAL PAYLOAD",
         citation="Stable model citation.",
     )
-    document = model.to_dict()
+    document = to_portable(model)
     assert document["citation"] == "Stable model citation."
     assert document["licence"] == "Operator-Licence"
     assert "location" not in document
@@ -128,9 +127,9 @@ def test_recommendation_retains_normalized_input_and_selected_records(
         KPointSelection,
         SelectionRecord,
     }
-    assert result.records[KPointSelection].grid == (2, 2, 1)
-    assert result.draft.structure.source.origin == "path"
-    document = result.to_dict()
+    assert result.records[KPointSelection]["grid"] == [2, 2, 1]
+    assert result.draft.structure["source"]["origin"] == "path"
+    document = to_portable(result)
     assert set(document["records"]) == {"analysis", "advice", "k_points", "selection"}
     assert document["draft"]["structure"]["source"]["name"] == "Si.cif"
     assert str(tmp_path) not in str(document)
@@ -145,9 +144,9 @@ def test_selected_record_keeps_warnings_from_executed_dependencies(draft) -> Non
         )
 
     k_points = full.records[KPointSelection]
-    assert k_points.grid == (2, 2, 1)
+    assert k_points["grid"] == [2, 2, 1]
     assert set(selected.records) == {GeneratedFiles}
-    assert set(k_points.provenance.warnings).issubset(selected.warnings)
+    assert set(k_points["provenance"].warnings).issubset(selected.warnings)
     assert selected.warnings == full.warnings
 
 
@@ -173,4 +172,4 @@ def test_compute_rejects_unavailable_operator_choices(
 
 def test_one_call_compute_uses_the_same_result_contract(draft) -> None:
     result = compute(ComputeRequest(draft, PresetSelection("recommend")), output=None)
-    assert result.records[KPointSelection].grid == (2, 2, 1)
+    assert result.records[KPointSelection]["grid"] == [2, 2, 1]

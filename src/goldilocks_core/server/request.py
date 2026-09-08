@@ -11,16 +11,15 @@ from typing import Annotated, Any, Literal, get_type_hints
 
 from pydantic import ConfigDict, Field, ValidateAs, create_model, model_validator
 
-from goldilocks_core.contracts import (
+from goldilocks_core.calculation import CalculationHints, CalculationIntent
+from goldilocks_core.io.structures import InlineStructureSource
+from goldilocks_core.request import (
     CalculationDraft,
-    CalculationHints,
-    CalculationIntent,
     ComputeRequest,
-    InlineStructureSource,
     PresetSelection,
     RecordSelection,
-    resolve_output_types,
 )
+from goldilocks_core.runtime.registry import resolve_output_types
 
 _STRICT = ConfigDict(extra="forbid", strict=True)
 

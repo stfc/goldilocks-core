@@ -3,12 +3,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 
-from goldilocks_core.assets import AssetInstallation, AssetStore, InstalledAsset
 from goldilocks_core.assets.profiles import profile
-from goldilocks_core.contracts import PathLike
+from goldilocks_core.assets.records import AssetInstallation, InstalledAsset
+from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.ml.model_registry import model_asset_specs
 from goldilocks_core.pseudo.install import table_installations
 from goldilocks_core.pseudo.registry import load_tables
+from goldilocks_core.types import PathLike
 
 WORKBENCH_PROFILE = "workbench"
 

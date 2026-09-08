@@ -1,24 +1,21 @@
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from pymatgen.core import Structure
 
-from goldilocks_core.contracts import (
-    CalcTask,
-    CalculationIntent,
-    CodeName,
-    GeneratedFile,
-    KPointSelection,
-    ParameterAdvice,
-    SelectionRecord,
-)
+from goldilocks_core.advice.parameters import ParameterAdvice
+from goldilocks_core.calculation import CalculationIntent
 from goldilocks_core.generation.errors import GenerationError
+from goldilocks_core.generation.files import GeneratedFiles
 from goldilocks_core.generation.qe.scf import write_qe_scf
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.selection import SelectionRecord
+from goldilocks_core.types import CalcTask, CodeName
 
 Writer = Callable[
     [Structure, CalculationIntent, ParameterAdvice, SelectionRecord, KPointSelection],
-    tuple[GeneratedFile, ...],
+    GeneratedFiles,
 ]
 
 _WRITERS: tuple[tuple[CodeName, CalcTask, Writer], ...] = (
@@ -52,7 +49,7 @@ def generate_inputs(
     advice: ParameterAdvice,
     selection: SelectionRecord,
     k_points: KPointSelection,
-) -> tuple[GeneratedFile, ...]:
+) -> GeneratedFiles:
     return writer_for(intent.code, intent.task)(
         structure, intent, advice, selection, k_points
     )

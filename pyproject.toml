@@ -83,6 +83,8 @@ only_mutate = [
     "src/goldilocks_core/generation/registry.py",
     "src/goldilocks_core/generation/qe/scf.py",
     "src/goldilocks_core/kmesh/math.py",
+    "src/goldilocks_core/runtime/dispatch.py",
+    "src/goldilocks_core/runtime/graph.py",
     "src/goldilocks_core/selection.py",
 ]
 mutate_only_covered_lines = false
@@ -94,6 +96,9 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"goldilocks_core.contracts".msg = "the contracts package was dissolved; import from the domain module that defines the name"
+
 [tool.setuptools.package-data]
 goldilocks_core = [
     "ml/registry.toml",
@@ -102,3 +107,6 @@ goldilocks_core = [
     "examples/structures/README.md",
 ]
 
+
+[tool.ruff.lint.isort]
+combine-as-imports = true

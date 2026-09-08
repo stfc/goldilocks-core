@@ -6,37 +6,22 @@ from pathlib import Path
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
-    ArchiveOutput,
     CalculationDraft,
     CalculationHints,
-    Capabilities,
-    ComputationResult,
     ComputeRequest,
-    DftInputData,
-    DirectoryOutput,
-    GeneratedFile,
     GeneratedFiles,
-    InlineStructureSource,
     InMemoryStructureSource,
-    OutputTarget,
-    PathStructureSource,
     PresetSelection,
-    Publication,
-    Records,
     RecordSelection,
     Service,
-    StructureInspection,
-    StructureSource,
     compute,
 )
-from goldilocks_core.contracts import (
-    KPointSelection,
-    ParameterAdvice,
-    PseudoCutoffs,
-    PseudoMetadata,
-    SelectionRecord,
-    StructureAnalysisRecord,
-)
+from goldilocks_core.advice.parameters import ParameterAdvice
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.pseudo.metadata import PseudoMetadata
+from goldilocks_core.selection import SelectionRecord
+from goldilocks_core.serialization import to_portable
 
 
 def _make_si_structure() -> Structure:
@@ -59,7 +44,7 @@ def _make_si_metadata(root: Path = Path("/pseudo")) -> PseudoMetadata:
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
+        cutoffs={"ecutwfc_ry": 30, "ecutrho_ry": 120},
         source_identifier="synthetic/Si.UPF",
         content_sha256=(hashlib.sha256(content).hexdigest() if materialized else None),
         content_size_bytes=len(content) if materialized else None,
@@ -80,42 +65,6 @@ def _request(selection, pseudo_root: Path = Path("/pseudo")) -> ComputeRequest:
         ),
         selection=selection,
     )
-
-
-def test_root_interface_exposes_three_operations_and_their_contracts() -> None:
-    assert Service.capabilities.__annotations__["return"] == "Capabilities"
-    assert Service.inspect_structure.__annotations__["return"] == (
-        "StructureInspection"
-    )
-    assert Service.compute.__annotations__["return"] == "ComputationResult"
-    assert Capabilities is not None
-    assert StructureInspection is not None
-    assert ComputationResult is not None
-    assert StructureSource is not None
-    assert OutputTarget is not None
-    assert not any(
-        hasattr(Service, name)
-        for name in (
-            "recommend",
-            "generate",
-            "describe_tasks",
-            "describe_codes",
-            "describe_models",
-        )
-    )
-    assert {
-        InlineStructureSource,
-        PathStructureSource,
-        InMemoryStructureSource,
-        ComputeRequest,
-        DirectoryOutput,
-        ArchiveOutput,
-        DftInputData,
-        GeneratedFile,
-        GeneratedFiles,
-        Publication,
-        Records,
-    }
 
 
 def test_root_import_does_not_require_optional_transports() -> None:
@@ -147,20 +96,22 @@ def test_service_capabilities_and_inspection_share_the_root_interface() -> None:
         capabilities = core.capabilities()
         inspection = core.inspect_structure(source)
 
-    assert capabilities.tasks[0].id == "scf_single_point"
-    assert {preset.id for preset in capabilities.tasks[0].presets} == {
+    assert capabilities["tasks"][0]["id"] == "scf_single_point"
+    assert {preset["id"] for preset in capabilities["tasks"][0]["presets"]} == {
         "recommend",
         "generate",
     }
-    assert inspection.structure.reduced_formula == "Si"
+    assert inspection["structure"]["reduced_formula"] == "Si"
 
 
 def test_recommendation_preset_runs_staged_core_pipeline() -> None:
     result = compute(_request(PresetSelection("recommend")))
 
-    assert result.records[StructureAnalysisRecord].reduced_formula == "Si"
-    assert result.records[KPointSelection].grid == (3, 3, 3)
-    assert result.records[SelectionRecord].pseudopotentials[0].filename == "Si.UPF"
+    assert result.records[StructureAnalysisRecord]["reduced_formula"] == "Si"
+    assert result.records[KPointSelection]["grid"] == [3, 3, 3]
+    assert (
+        result.records[SelectionRecord]["pseudopotentials"][0]["filename"] == "Si.UPF"
+    )
     assert GeneratedFiles not in result.records
 
 
@@ -169,8 +120,8 @@ def test_generation_preset_runs_pipeline_through_generated_files(
 ) -> None:
     result = compute(_request(PresetSelection("generate"), tmp_path))
 
-    assert result.records[GeneratedFiles][0].path == "inputs/qe.in"
-    assert "3  3  3  0  0  0" in result.records[GeneratedFiles][0].content
+    assert result.records[GeneratedFiles][0]["path"] == "inputs/qe.in"
+    assert "3  3  3  0  0  0" in result.records[GeneratedFiles][0]["content"]
 
 
 def test_explicit_record_selection_returns_one_generic_result() -> None:
@@ -179,7 +130,7 @@ def test_explicit_record_selection_returns_one_generic_result() -> None:
     )
 
     assert tuple(result.records) == (StructureAnalysisRecord, ParameterAdvice)
-    assert result.to_dict()["selection"] == {"records": ["analysis", "advice"]}
+    assert to_portable(result)["selection"] == {"records": ["analysis", "advice"]}
 
 
 def test_computation_result_serializes_stable_record_ids() -> None:
@@ -194,7 +145,7 @@ def test_computation_result_serializes_stable_record_ids() -> None:
             selection=PresetSelection("recommend"),
         )
     )
-    document = result.to_dict()
+    document = to_portable(result)
 
     assert document["records"]["analysis"]["heavy_elements"] == ["I"]
     assert document["records"]["advice"]["spin_orbit"]["consider"] is True

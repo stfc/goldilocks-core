@@ -1,19 +1,30 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Annotated, Literal, TypedDict
+
 from pymatgen.core import Structure
 
-from goldilocks_core.contracts import (
-    KMeshAdvisor,
-    KmeshHints,
-    KPointSelection,
-    Provenance,
-)
+from goldilocks_core.calculation import CalculationHints
 from goldilocks_core.kmesh.math import k_distance_to_mesh
+from goldilocks_core.provenance import Provenance
+from goldilocks_core.serialization import Portable
+from goldilocks_core.types import KPointGrid, KPointShift
+
+
+class KPointSelection(TypedDict):
+    grid: Annotated[list[int], Portable(KPointGrid)]
+    shift: Annotated[list[Literal[0, 1]], Portable(KPointShift)]
+    mesh_type: str
+    provenance: Provenance
+
+
+type KMeshAdvisor = Callable[[Structure], KPointSelection]
 
 
 def resolve_kpoints(
     structure: Structure,
-    hints: KmeshHints,
+    hints: CalculationHints,
     backend: KMeshAdvisor,
 ) -> KPointSelection:
     """``k_grid`` wins over ``k_spacing``; both bypass the model backend.
@@ -24,30 +35,30 @@ def resolve_kpoints(
             if hints.k_spacing is not None
             else ()
         )
-        return KPointSelection(
-            grid=hints.k_grid,
-            shift=(0, 0, 0),
-            mesh_type="monkhorst-pack",
-            provenance=Provenance(
+        return {
+            "grid": list(hints.k_grid),
+            "shift": [0, 0, 0],
+            "mesh_type": "monkhorst-pack",
+            "provenance": Provenance(
                 source="user_hint",
                 reason="Use the operator-provided explicit k-point grid.",
                 warnings=warnings,
             ),
-        )
+        }
 
     if hints.k_spacing is not None:
-        return KPointSelection(
-            grid=k_distance_to_mesh(structure, hints.k_spacing),
-            shift=(0, 0, 0),
-            mesh_type="monkhorst-pack",
-            provenance=Provenance(
+        return {
+            "grid": list(k_distance_to_mesh(structure, hints.k_spacing)),
+            "shift": [0, 0, 0],
+            "mesh_type": "monkhorst-pack",
+            "provenance": Provenance(
                 source="user_hint",
                 reason="Use the operator-provided VASP-style k-point spacing.",
                 data_source="pymatgen solid-state reciprocal lattice",
             ),
-        )
+        }
 
     return backend(structure)
 
 
-__all__ = ["resolve_kpoints"]
+__all__ = ["KMeshAdvisor", "KPointSelection", "resolve_kpoints"]

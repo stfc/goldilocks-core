@@ -7,11 +7,11 @@ This document records the physical and numerical conventions used by goldilocks-
 | Quantity | Unit | Where used |
 | --- | --- | --- |
 | k-point spacing | Å⁻¹ | `CalculationHints.k_spacing` |
-| Smearing width | Rydberg | `CalculationHints.smearing_width_ry`, `SmearingAdvice.width_ry` |
-| Wavefunction cutoff | Rydberg | `PseudopotentialSelection.ecutwfc_ry` |
-| Charge-density cutoff | Rydberg | `PseudopotentialSelection.ecutrho_ry` |
-| Convergence threshold | Rydberg | `CalculationHints.conv_thr`, `ConvergenceAdvice.conv_thr` |
-| Mixing beta | dimensionless | `CalculationHints.mixing_beta`, `ConvergenceAdvice.mixing_beta` |
+| Smearing width | Rydberg | `CalculationHints.smearing_width_ry`, advice `["smearing"]["width_ry"]` |
+| Wavefunction cutoff | Rydberg | selection pseudopotential `["ecutwfc_ry"]` |
+| Charge-density cutoff | Rydberg | selection pseudopotential `["ecutrho_ry"]` |
+| Convergence threshold | Rydberg | `CalculationHints.conv_thr`, advice `["convergence"]["conv_thr"]` |
+| Mixing beta | dimensionless | `CalculationHints.mixing_beta`, advice `["convergence"]["mixing_beta"]` |
 
 All current cutoffs, smearing widths, and SCF energy thresholds follow the
 Quantum ESPRESSO convention (Rydberg atomic units), not Hartree. Only Quantum
@@ -37,7 +37,7 @@ This is the same convention as VASP's `KSPACING` tag. It differs from some codes
 | metallic smearing width | 0.01 | Ry | `advice/smearing.py` `METALLIC_SMEARING_WIDTH_RY` |
 | smearing type (metallic) | cold | — | `advice/smearing.py` |
 | smearing type (unknown) | fixed | — | `advice/smearing.py` |
-| pseudo mode | efficiency | — | `CalculationIntent.pseudo_mode` |
+| pseudo accuracy | efficiency | — | `CalculationIntent.pseudo_accuracy` |
 | functional | PBEsol | — | `CalculationIntent.functional` |
 
 ## Heavy-element heuristic
@@ -65,8 +65,8 @@ The heuristic never returns `metal` or `insulator`; only the model does.
 
 SOC is **never enabled automatically**, even when heavy elements are present. Instead:
 
-- `SpinOrbitAdvice.consider` is set to `True` when heavy elements are detected.
-- `SpinOrbitAdvice.enabled` remains `False` unless the operator explicitly sets `CalculationHints(spin_orbit_coupling=True)`.
+- Advice `["spin_orbit"]["consider"]` is set to `True` when heavy elements are detected.
+- Advice `["spin_orbit"]["enabled"]` remains `False` unless the operator explicitly sets `CalculationHints(spin_orbit_coupling=True)`.
 
 SOC changes calculation cost, convergence, and pseudopotential requirements.
 The operator must enable it explicitly. A low-dimensional structure can enable
@@ -81,4 +81,4 @@ that choice.
 | `full` | Fully relativistic (required when SOC is enabled) |
 | `non-relativistic` | No relativistic treatment (rarely used) |
 
-When `SpinOrbitAdvice.enabled` is `True` but `CalculationHints.relativistic_mode` is not set, the Advise stage automatically sets `PseudopotentialAdvice.relativistic_mode` to `"full"` and inherits the SOC decision's `user_hint` provenance.
+When advice `["spin_orbit"]["enabled"]` is `True` but `CalculationHints.relativistic_mode` is not set, the Advise stage automatically sets `["pseudopotential_requirements"]["relativistic"]` to `"full"` and inherits the SOC decision's `user_hint` provenance.

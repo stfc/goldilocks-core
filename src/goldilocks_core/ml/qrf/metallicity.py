@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from pymatgen.core.structure import Structure
 
-from goldilocks_core.contracts import ElectronicCharacter
+from goldilocks_core.types import ElectronicCharacter
 
 
 def load_metallicity_model(checkpoint_path: str) -> object:

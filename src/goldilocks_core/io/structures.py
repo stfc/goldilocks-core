@@ -1,28 +1,137 @@
 from __future__ import annotations
 
 import hashlib
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated, Literal, TypedDict
 
 from pymatgen.core import Structure
 
-from goldilocks_core.contracts.structure import (
-    InlineStructureSource,
-    InMemoryStructureSource,
-    LatticeDocument,
-    PathStructureSource,
-    SpeciesOccupancy,
-    StructureDocument,
-    StructureFormat,
-    StructureInspection,
-    StructureSiteDocument,
-    StructureSource,
-    StructureSourceDocument,
+from goldilocks_core.serialization import Portable, to_portable
+from goldilocks_core.types import JsonDict
+
+Vector3 = tuple[float, float, float]
+Matrix3 = tuple[Vector3, Vector3, Vector3]
+StructureFormat = Literal["cif", "poscar"]
+
+
+class SpeciesOccupancy(TypedDict):
+    symbol: str
+    label: str
+    occupancy: float
+    oxidation_state: float | None
+
+
+class StructureSite(TypedDict):
+    fractional_coordinates: Annotated[list[float], Portable(Vector3)]
+    cartesian_coordinates_angstrom: Annotated[list[float], Portable(Vector3)]
+    species: list[SpeciesOccupancy]
+
+
+class LatticeDocument(TypedDict):
+    vectors_angstrom: Annotated[list[list[float]], Portable(Matrix3)]
+    lengths_angstrom: Annotated[list[float], Portable(Vector3)]
+    angles_degrees: Annotated[list[float], Portable(Vector3)]
+    volume_angstrom3: float
+
+
+class StructureDocument(TypedDict):
+    schema_version: int
+    formula: str
+    reduced_formula: str
+    site_count: int
+    lattice: LatticeDocument
+    periodicity: Annotated[list[bool], Portable(tuple[bool, bool, bool])]
+    sites: list[StructureSite]
+
+
+class StructureSourceDocument(TypedDict):
+    origin: Literal["inline", "path", "generated"]
+    name: str
+    format: str
+    content: str | None
+    sha256: str | None
+    size_bytes: int | None
+
+
+class StructureInspection(TypedDict):
+    source: StructureSourceDocument
+    structure: StructureDocument
+    canonical_cif: str
+    schema_version: int
+
+
+@dataclass(frozen=True, slots=True)
+class InlineStructureSource:
+    name: str
+    content: str
+    format: StructureFormat | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.name, str)
+            or not self.name.strip()
+            or self.name in {".", ".."}
+            or "/" in self.name
+            or "\\" in self.name
+            or any(unicodedata.category(character) == "Cc" for character in self.name)
+        ):
+            raise ValueError("InlineStructureSource.name must be one filename")
+        if not isinstance(self.content, str):
+            raise ValueError("InlineStructureSource.content must be text")
+        if self.format is not None and self.format not in ("cif", "poscar"):
+            raise ValueError(
+                f"Unsupported structure format {self.format!r}; "
+                "expected one of cif, poscar."
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class PathStructureSource:
+    path: str | Path
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.path, str | Path) or not str(self.path).strip():
+            raise ValueError("PathStructureSource.path must be a non-empty path")
+
+
+@dataclass(frozen=True, slots=True)
+class InMemoryStructureSource:
+    structure: Structure
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.structure, Structure):
+            raise ValueError(
+                "InMemoryStructureSource.structure must be a pymatgen Structure"
+            )
+
+
+type StructureSource = (
+    InlineStructureSource | PathStructureSource | InMemoryStructureSource
 )
 
 
-class StructureInputError(ValueError):
-    pass
+@to_portable.register(InlineStructureSource)
+def _inline_structure_source_portable(source: InlineStructureSource) -> JsonDict:
+    return {
+        "kind": "inline",
+        "name": source.name,
+        "content": source.content,
+        "format": source.format,
+    }
+
+
+@to_portable.register(PathStructureSource)
+def _path_structure_source_portable(source: PathStructureSource) -> JsonDict:
+    return {"kind": "path", "path": str(source.path)}
+
+
+@to_portable.register(InMemoryStructureSource)
+def _in_memory_structure_source_portable(
+    source: InMemoryStructureSource,
+) -> JsonDict:
+    return {"kind": "in_memory", "structure": source.structure.as_dict()}
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,24 +143,29 @@ class NormalizedStructure:
 
     @property
     def inspection(self) -> StructureInspection:
-        return StructureInspection(
-            source=self.source,
-            structure=self.canonical_structure,
-            canonical_cif=self.canonical_cif,
-        )
+        return {
+            "source": self.source,
+            "structure": self.canonical_structure,
+            "canonical_cif": self.canonical_cif,
+            "schema_version": 1,
+        }
+
+
+class StructureInputError(ValueError):
+    pass
 
 
 def normalize_structure(source: StructureSource) -> NormalizedStructure:
     if isinstance(source, InMemoryStructureSource):
         structure = source.structure
-        source_document = StructureSourceDocument(
-            origin="generated",
-            name="generated-structure",
-            format="pymatgen",
-            content=None,
-            sha256=None,
-            size_bytes=None,
-        )
+        source_document: StructureSourceDocument = {
+            "origin": "generated",
+            "name": "generated-structure",
+            "format": "pymatgen",
+            "content": None,
+            "sha256": None,
+            "size_bytes": None,
+        }
     else:
         if isinstance(source, InlineStructureSource):
             content, name, format_hint = source.content, source.name, source.format
@@ -63,7 +177,7 @@ def normalize_structure(source: StructureSource) -> NormalizedStructure:
             if not path.is_file():
                 raise StructureInputError(f"Structure path is not a file: {path}")
             try:
-                content = path.read_bytes().decode("utf-8")
+                content = path.read_text(encoding="utf-8")
             except UnicodeDecodeError as error:
                 raise StructureInputError(
                     f"Structure file must contain UTF-8 text: {path}"
@@ -79,23 +193,20 @@ def normalize_structure(source: StructureSource) -> NormalizedStructure:
             raise StructureInputError("Structure content must be non-empty text.")
         resolved_format = _resolve_format(name, content, format_hint)
         try:
-            structure = Structure.from_str(
-                content.replace("\r\n", "\n").replace("\r", "\n"),
-                fmt=resolved_format,
-            )
+            structure = Structure.from_str(content, fmt=resolved_format)
         except (IndexError, KeyError, TypeError, ValueError) as error:
             raise StructureInputError(
                 f"Could not parse {resolved_format.upper()} structure: {error}"
             ) from error
         source_bytes = content.encode("utf-8")
-        source_document = StructureSourceDocument(
-            origin=origin,
-            name=name,
-            format=resolved_format,
-            content=content,
-            sha256=hashlib.sha256(source_bytes).hexdigest(),
-            size_bytes=len(source_bytes),
-        )
+        source_document = {
+            "origin": origin,
+            "name": name,
+            "format": resolved_format,
+            "content": content,
+            "sha256": hashlib.sha256(source_bytes).hexdigest(),
+            "size_bytes": len(source_bytes),
+        }
     return NormalizedStructure(
         structure=structure,
         source=source_document,
@@ -137,42 +248,42 @@ def load_structure(structure: Structure | str | Path) -> Structure:
 
 def structure_document(structure: Structure) -> StructureDocument:
     lattice = structure.lattice
-    sites = tuple(
-        StructureSiteDocument(
-            fractional_coordinates=_vector(site.frac_coords),
-            cartesian_coordinates_angstrom=_vector(site.coords),
-            species=tuple(
-                SpeciesOccupancy(
-                    symbol=species.symbol,
-                    label=str(species),
-                    occupancy=float(occupancy),
-                    oxidation_state=(
+    sites = [
+        {
+            "fractional_coordinates": list(_vector(site.frac_coords)),
+            "cartesian_coordinates_angstrom": list(_vector(site.coords)),
+            "species": [
+                {
+                    "symbol": species.symbol,
+                    "label": str(species),
+                    "occupancy": float(occupancy),
+                    "oxidation_state": (
                         float(species.oxi_state)
                         if getattr(species, "oxi_state", None) is not None
                         else None
                     ),
-                )
+                }
                 for species, occupancy in sorted(
                     site.species.items(), key=lambda item: str(item[0])
                 )
-            ),
-        )
+            ],
+        }
         for site in structure
-    )
-    return StructureDocument(
-        schema_version=1,
-        formula=structure.composition.formula,
-        reduced_formula=structure.composition.reduced_formula,
-        site_count=len(structure),
-        lattice=LatticeDocument(
-            vectors_angstrom=tuple(_vector(row) for row in lattice.matrix),
-            lengths_angstrom=_vector(lattice.abc),
-            angles_degrees=_vector(lattice.angles),
-            volume_angstrom3=float(lattice.volume),
-        ),
-        periodicity=lattice.pbc,
-        sites=sites,
-    )
+    ]
+    return {
+        "schema_version": 1,
+        "formula": structure.composition.formula,
+        "reduced_formula": structure.composition.reduced_formula,
+        "site_count": len(structure),
+        "lattice": {
+            "vectors_angstrom": [list(_vector(row)) for row in lattice.matrix],
+            "lengths_angstrom": list(_vector(lattice.abc)),
+            "angles_degrees": list(_vector(lattice.angles)),
+            "volume_angstrom3": float(lattice.volume),
+        },
+        "periodicity": [True, True, True],
+        "sites": sites,
+    }
 
 
 def _resolve_format(

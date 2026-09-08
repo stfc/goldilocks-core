@@ -2,38 +2,28 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 from pymatgen.core import Structure
 
-from goldilocks_core.advice import ml_kmesh_advisor
-from goldilocks_core.advice.parameters import advise_parameters
-from goldilocks_core.analysis import analyze_structure
-from goldilocks_core.contracts import (
-    CalculationHints,
-    CalculationIntent,
-    ComputeRequest,
-    DftInputData,
-    ElectronicCharacter,
-    GeneratedFiles,
-    KMeshAdvisor,
-    KPointSelection,
-    ModelSpec,
-    ParameterAdvice,
-    PseudoMetadata,
-    PseudopotentialRequirements,
-    Records,
-    SelectionRecord,
-    StructureAnalysisRecord,
-)
+from goldilocks_core.advice.kindex import ml_kmesh_advisor
+from goldilocks_core.advice.parameters import ParameterAdvice, advise_parameters
+from goldilocks_core.analysis import StructureAnalysisRecord, analyze_structure
+from goldilocks_core.calculation import CalculationHints, CalculationIntent
+from goldilocks_core.generation.files import GeneratedFiles
 from goldilocks_core.generation.registry import generate_inputs
-from goldilocks_core.input_data import assemble_dft_input_data
+from goldilocks_core.input_data import DftInputData, assemble_dft_input_data
 from goldilocks_core.io.structures import NormalizedStructure
-from goldilocks_core.kmesh.resolve import resolve_kpoints
+from goldilocks_core.kmesh.resolve import KMeshAdvisor, KPointSelection, resolve_kpoints
+from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.pseudo.source import PseudoSource, source_for_draft
+from goldilocks_core.request import ComputeRequest
 from goldilocks_core.runtime.graph import Preset, Stage, TaskGraph
 from goldilocks_core.runtime.models import Runtime
 from goldilocks_core.runtime.task import GraphHandler
-from goldilocks_core.selection import select_pseudopotentials
+from goldilocks_core.selection import SelectionRecord, select_pseudopotentials
+from goldilocks_core.types import ElectronicCharacter, JsonDict
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,7 +48,7 @@ class ScfContext:
     def resolve_pseudos(
         self,
         structure: Structure,
-        requirements: PseudopotentialRequirements,
+        requirements: JsonDict,
     ) -> tuple[PseudoMetadata, ...]:
         if not self.pseudo_cache:
             self.pseudo_cache.append(self.pseudo_source(structure, requirements))
@@ -100,7 +90,7 @@ SCF_TASK = TaskGraph(
             output=KPointSelection,
             inputs=(Structure,),
             call=lambda structure, *, ctx: resolve_kpoints(
-                structure, ctx.hints.kmesh, ctx.kmesh_advisor
+                structure, ctx.hints, ctx.kmesh_advisor
             ),
             id="resolve_k_points",
             name="Resolve k-points",
@@ -121,8 +111,8 @@ SCF_TASK = TaskGraph(
             inputs=(Structure, ParameterAdvice),
             call=lambda structure, advice, *, ctx: select_pseudopotentials(
                 structure,
-                advice.pseudopotential_requirements,
-                ctx.resolve_pseudos(structure, advice.pseudopotential_requirements),
+                advice["pseudopotential_requirements"],
+                ctx.resolve_pseudos(structure, advice["pseudopotential_requirements"]),
             ),
             id="select_pseudopotentials",
             name="Select pseudopotentials",
@@ -163,8 +153,7 @@ SCF_TASK = TaskGraph(
                     tuple(ctx.pseudo_cache[0]),
                     asset_store=ctx.runtime.asset_store,
                     pseudo_registry_path=ctx.runtime.pseudo_registry_path,
-                    kmesh_config=ctx.runtime.loaded_kmesh_config,
-                    metallicity_config=ctx.runtime.metallicity.loaded_config,
+                    model_registry_path=ctx.runtime.model_registry_path,
                     kmesh_model=ctx.runtime_kmesh_model,
                     uses_default_kmesh_model=ctx.uses_default_kmesh_model,
                     metallicity_model=ctx.runtime_metallicity_model,
@@ -229,31 +218,31 @@ def build_scf_context(
     )
 
 
-def collect_scf_warnings(records: Records) -> tuple[str, ...]:
+def collect_scf_warnings(records: dict[type, Any]) -> tuple[str, ...]:
     groups: list[tuple[str, ...]] = []
     analysis = records.get(StructureAnalysisRecord)
     if analysis is not None:
-        groups.extend((analysis.disorder_warnings, analysis.analysis_warnings))
+        groups.extend((analysis["disorder_warnings"], analysis["analysis_warnings"]))
     advice = records.get(ParameterAdvice)
     if advice is not None:
         groups.append(_advice_warnings(advice))
     k_points = records.get(KPointSelection)
     if k_points is not None:
-        groups.append(k_points.provenance.warnings)
+        groups.append(k_points["provenance"].warnings)
     selection = records.get(SelectionRecord)
     if selection is not None:
-        groups.append(selection.warnings)
+        groups.append(selection["warnings"])
     return _unique_warnings(*groups)
 
 
-def _advice_warnings(advice: ParameterAdvice) -> tuple[str, ...]:
+def _advice_warnings(advice: JsonDict) -> tuple[str, ...]:
     return _unique_warnings(
-        advice.smearing.provenance.warnings,
-        advice.magnetism.provenance.warnings,
-        advice.spin_orbit.provenance.warnings,
-        advice.pseudopotential_requirements.provenance.warnings,
-        advice.convergence.provenance.warnings,
-        advice.vdw.provenance.warnings,
+        advice["smearing"]["provenance"].warnings,
+        advice["magnetism"]["provenance"].warnings,
+        advice["spin_orbit"]["provenance"].warnings,
+        advice["pseudopotential_requirements"]["provenance"].warnings,
+        advice["convergence"]["provenance"].warnings,
+        advice["vdw"]["provenance"].warnings,
     )
 
 

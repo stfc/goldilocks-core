@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TypedDict
 
 from pymatgen.analysis.dimensionality import get_dimensionality_larsen
 from pymatgen.analysis.local_env import CrystalNN
@@ -9,15 +10,39 @@ from pymatgen.core.graphs import StructureGraph
 from pymatgen.core.periodic_table import Element
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
-from goldilocks_core.contracts import (
+from goldilocks_core.types import (
     Dimensionality,
     ElectronicCharacter,
-    StructureAnalysisRecord,
-    SymmetryUnavailable,
 )
 
 HEAVY_ELEMENT_MIN_ROW = 5
 """Lowest periodic-table row treated as heavy for spin-orbit advice."""
+
+
+class StructureAnalysisRecord(TypedDict):
+    """Structure facts, with nullable symmetry and provenance-bearing warnings."""
+
+    formula: str
+    reduced_formula: str
+    site_count: int
+    elements: list[str]
+    contains_transition_metals: bool
+    contains_lanthanides: bool
+    contains_actinides: bool
+    contains_heavy_elements: bool
+    magnetic_elements: list[str]
+    heavy_elements: list[str]
+    disorder_warnings: list[str]
+    disordered_site_count: int
+    space_group_symbol: str | None
+    space_group_number: int | None
+    crystal_system: str | None
+    dimensionality: Dimensionality
+    low_dimensional: bool
+    electronic_character: ElectronicCharacter
+    electronic_character_source: str
+    electronic_character_confidence: float | None
+    analysis_warnings: list[str]
 
 
 class DimensionalityClassificationError(Exception):
@@ -35,7 +60,8 @@ class DimensionalityClassificationError(Exception):
 
 class SymmetryAnalysisError(Exception):
     """Raised when spglib cannot analyze a structure.
-    ``analyze_structure`` catches this and records a ``SymmetryUnavailable``."""
+    ``analyze_structure`` catches this and records ``None`` symmetry
+    fields plus an analysis warning."""
 
     def __init__(self, structure: Structure, /, *, reason: str = "") -> None:
         self.structure = structure
@@ -96,15 +122,16 @@ def analyze_structure(
     dimensionality, low_dimensional, dimensionality_warnings = _analyze_dimensionality(
         structure
     )
+    symmetry_warnings: tuple[str, ...] = ()
     try:
         symmetry = _analyze_symmetry(structure)
     except SymmetryAnalysisError as error:
-        unavailable = SymmetryUnavailable(reason=error.reason)
         symmetry = {
-            "space_group_symbol": unavailable,
-            "space_group_number": unavailable,
-            "crystal_system": unavailable,
+            "space_group_symbol": None,
+            "space_group_number": None,
+            "crystal_system": None,
         }
+        symmetry_warnings = (f"Symmetry analysis failed: {error.reason}.",)
     if metallicity_classifier is None:
         electronic_character = heuristic_metallicity(structure)
         electronic_character_source = "heuristic"
@@ -119,29 +146,33 @@ def analyze_structure(
         electronic_character, source=electronic_character_source
     )
 
-    return StructureAnalysisRecord(
-        formula=structure.composition.formula,
-        reduced_formula=structure.composition.reduced_formula,
-        site_count=len(structure),
-        elements=elements,
-        contains_transition_metals=bool(transition_metals),
-        contains_lanthanides=bool(lanthanides),
-        contains_actinides=bool(actinides),
-        contains_heavy_elements=bool(heavy_elements),
-        magnetic_elements=magnetic_elements,
-        heavy_elements=heavy_elements,
-        disorder_warnings=disorder_warnings,
-        disordered_site_count=len(disorder_warnings),
-        space_group_symbol=symmetry["space_group_symbol"],
-        space_group_number=symmetry["space_group_number"],
-        crystal_system=symmetry["crystal_system"],
-        dimensionality=dimensionality,
-        low_dimensional=low_dimensional,
-        electronic_character=electronic_character,
-        electronic_character_source=electronic_character_source,
-        electronic_character_confidence=electronic_character_confidence,
-        analysis_warnings=(*electronic_warnings, *dimensionality_warnings),
-    )
+    return {
+        "formula": structure.composition.formula,
+        "reduced_formula": structure.composition.reduced_formula,
+        "site_count": len(structure),
+        "elements": list(elements),
+        "contains_transition_metals": bool(transition_metals),
+        "contains_lanthanides": bool(lanthanides),
+        "contains_actinides": bool(actinides),
+        "contains_heavy_elements": bool(heavy_elements),
+        "magnetic_elements": list(magnetic_elements),
+        "heavy_elements": list(heavy_elements),
+        "disorder_warnings": list(disorder_warnings),
+        "disordered_site_count": len(disorder_warnings),
+        "space_group_symbol": symmetry["space_group_symbol"],
+        "space_group_number": symmetry["space_group_number"],
+        "crystal_system": symmetry["crystal_system"],
+        "dimensionality": dimensionality,
+        "low_dimensional": low_dimensional,
+        "electronic_character": electronic_character,
+        "electronic_character_source": electronic_character_source,
+        "electronic_character_confidence": electronic_character_confidence,
+        "analysis_warnings": [
+            *electronic_warnings,
+            *dimensionality_warnings,
+            *symmetry_warnings,
+        ],
+    }
 
 
 def _find_disorder_warnings(structure: Structure) -> tuple[str, ...]:

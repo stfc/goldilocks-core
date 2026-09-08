@@ -6,15 +6,18 @@ import secrets
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response
 
-from goldilocks_core.contracts import Capabilities, DftInputData, StructureInspection
+from goldilocks_core.input_data import DftInputData
 from goldilocks_core.publication import Publisher
 from goldilocks_core.runtime.service import Service
+from goldilocks_core.serialization import to_portable
 from goldilocks_core.server.request import (
     ComputeRequestDocument,
     InspectRequestDocument,
 )
 from goldilocks_core.server.wire import (
+    CapabilitiesDocument,
     ErrorResponseDocument,
+    StructureInspectionDocument,
     prepared_computation_document,
 )
 
@@ -40,20 +43,20 @@ class PreparedMultipartResponse(Response):
 
 
 def install_scientific_routes(app: FastAPI, service: Service) -> None:
-    tasks = service.capabilities().tasks
+    tasks = service.capabilities()["tasks"]
     prepared_document = prepared_computation_document(tasks)
 
-    @app.get("/capabilities", response_model=Capabilities)
+    @app.get("/capabilities", response_model=CapabilitiesDocument)
     def capabilities() -> Response:
-        return JSONResponse(service.capabilities().to_dict())
+        return JSONResponse(to_portable(service.capabilities()))
 
     @app.post(
         "/inspect",
-        response_model=StructureInspection,
+        response_model=StructureInspectionDocument,
         responses={422: {"model": ErrorResponseDocument}},
     )
     def inspect(body: InspectRequestDocument) -> Response:
-        return JSONResponse(service.inspect_structure(body.source).to_dict())
+        return JSONResponse(to_portable(service.inspect_structure(body.source)))
 
     @app.post(
         "/compute",
@@ -64,7 +67,7 @@ def install_scientific_routes(app: FastAPI, service: Service) -> None:
     def compute(body: ComputeRequestDocument) -> Response:
         result = service.compute(body)
         result_payload = json.dumps(
-            result.to_dict(),
+            to_portable(result),
             separators=(",", ":"),
         ).encode("utf-8")
         input_data = result.records.get(DftInputData)

@@ -1,17 +1,13 @@
 # Pipeline and stage behavior
 
-Use one `Service` for repeated work. It owns lazy model state, serializes
-computation, and closes owned resources.
+Use one `Service` for repeated work. It owns lazy model state, executes
+Computations concurrently over that shared state, and closes owned resources.
 
 ```python
-from goldilocks_core import (
-    CalculationDraft,
-    CalculationHints,
-    ComputeRequest,
-    PathStructureSource,
-    PresetSelection,
-    Service,
-)
+from goldilocks_core.calculation import CalculationHints
+from goldilocks_core.io.structures import PathStructureSource
+from goldilocks_core.request import CalculationDraft, ComputeRequest, PresetSelection
+from goldilocks_core.runtime.service import Service
 
 request = ComputeRequest(
     CalculationDraft(
@@ -32,7 +28,7 @@ with Service() as core:
 - `capabilities()` returns tasks, Presets, selectable Records, codes, models,
   pseudopotential sets, and defaults;
 - `inspect_structure(source)` normalizes a Structure Source and returns a
-  canonical `StructureInspection`;
+  canonical inspection dict;
 - `compute(request, output=...)` executes one Preset or Record selection.
 
 The top-level `compute()` convenience uses the same request and output
@@ -47,19 +43,24 @@ contracts. It owns a short-lived Runtime unless the caller supplies one.
 Use `RecordSelection` for a minimal subgraph:
 
 ```python
-from goldilocks_core import RecordSelection
-from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.request import RecordSelection
+from goldilocks_core.runtime.jobs import compute
 
 request = ComputeRequest(
-    draft,
+    request.draft,
     RecordSelection((StructureAnalysisRecord, KPointSelection)),
 )
 result = compute(request)
 ```
 
-Results always use `ComputationResult`. Its `Records` mapping serializes class
-keys as stable IDs: `analysis`, `advice`, `k_points`, `selection`,
-`generated_files`, and `dft_input_data`.
+Results always use `ComputationResult`. Its `records` field is a plain dict:
+record-marker classes are keys and stage documents are dict values. For example,
+`result.records[KPointSelection]["grid"]` reads the mesh. `to_portable(result)`
+serializes record keys as stable IDs: `analysis`, `advice`, `k_points`,
+`selection`, `generated_files`, and `dft_input_data`. Capabilities, Inspection,
+and publication metadata are also dict documents, not attribute-based records.
 
 ## Output targets
 
@@ -72,6 +73,9 @@ Platforms without a native exclusive rename fail without installing output.
 `DirectoryOutput()`
 allocates `goldilocks_out`, then `goldilocks_out_1`, and so on. Automatic output
 leaves a Result without DFT Input Data in memory rather than failing.
+An explicit directory or archive path requires DFT Input Data and otherwise
+raises an error. Successful publication is reported in
+`result.publication["path"]`; memory-only Results have `publication=None`.
 
 DFT Input Data holds the selected file bytes, not deferred Asset references.
 Assembly checks external UPFs and licence files when it reads them.

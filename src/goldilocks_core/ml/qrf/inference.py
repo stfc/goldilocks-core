@@ -6,9 +6,9 @@ from pathlib import Path
 import numpy as np
 from pymatgen.core import Structure
 
-from goldilocks_core.assets import AssetStore
-from goldilocks_core.contracts import StructureFeatureVector
+from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.ml.model_registry import QrfKpointsConfig
+from goldilocks_core.ml.models import StructureFeatureVector
 
 __all__ = [
     "KDistancePrediction",
@@ -89,7 +89,7 @@ def _predict_kdistance_quantiles(
     correction: float = 0.0,
 ) -> tuple[float, float, float]:
     raw = np.asarray(
-        model.predict(np.asarray(features.values, dtype=float).reshape(1, -1)),
+        model.predict(np.asarray(features[0], dtype=float).reshape(1, -1)),
         dtype=float,
     )
     if raw.size != 3:

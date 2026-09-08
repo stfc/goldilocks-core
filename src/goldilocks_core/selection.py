@@ -1,19 +1,85 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Annotated, TypedDict
 
 from pymatgen.core import Structure
 
-from goldilocks_core.contracts import (
-    Provenance,
-    PseudoMetadata,
-    PseudopotentialRequirements,
-    PseudopotentialSelection,
-    SelectionRecord,
-)
+from goldilocks_core.advice.pseudo import PseudopotentialRequirements
+from goldilocks_core.provenance import Provenance
+from goldilocks_core.pseudo.metadata import PseudoMetadata
+from goldilocks_core.serialization import Portable, portable_record
+from goldilocks_core.types import JsonDict, RelativisticTreatment
 
-LANTHANIDES = frozenset("La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu".split())
-ACTINIDES = frozenset("Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr".split())
+
+class PseudopotentialSelection(TypedDict):
+    element: str
+    filename: str | None
+    filepath: Annotated[str | None, Portable()]
+    functional: str | None
+    relativistic: RelativisticTreatment | None
+    ecutwfc_ry: float | None
+    ecutrho_ry: float | None
+    provenance: Provenance
+    warnings: list[str]
+
+
+class SelectionRecord(TypedDict):
+    pseudopotentials: list[PseudopotentialSelection]
+    warnings: list[str]
+
+
+def selection_portable(selection: SelectionRecord) -> JsonDict:
+    """Portable projection of a selection document: converts every value to
+    JSON-able form and drops each pseudopotential's host filepath."""
+    pseudopotentials = [
+        portable_record(item, PseudopotentialSelection)
+        for item in selection["pseudopotentials"]
+    ]
+    return {
+        "pseudopotentials": pseudopotentials,
+        "warnings": list(selection["warnings"]),
+    }
+
+
+LANTHANIDES = frozenset(
+    [
+        "La",
+        "Ce",
+        "Pr",
+        "Nd",
+        "Pm",
+        "Sm",
+        "Eu",
+        "Gd",
+        "Tb",
+        "Dy",
+        "Ho",
+        "Er",
+        "Tm",
+        "Yb",
+        "Lu",
+    ]
+)
+ACTINIDES = frozenset(
+    [
+        "Ac",
+        "Th",
+        "Pa",
+        "U",
+        "Np",
+        "Pu",
+        "Am",
+        "Cm",
+        "Bk",
+        "Cf",
+        "Es",
+        "Fm",
+        "Md",
+        "No",
+        "Lr",
+    ]
+)
 
 _LANTHANIDE_ACTINIDE_REASON = (
     "is a lanthanide/actinide: only SSSP pseudopotentials are used for these "
@@ -32,16 +98,16 @@ def select_pseudopotentials(
     metadata: Sequence[PseudoMetadata],
 ) -> SelectionRecord:
     available = tuple(metadata)
-    selections = tuple(
+    selections = [
         _select_for_element(element.symbol, requirements, available)
         for element in sorted(
             structure.composition.elements, key=lambda item: item.symbol
         )
-    )
-    warnings = tuple(
-        warning for selection in selections for warning in selection.warnings
-    )
-    return SelectionRecord(pseudopotentials=selections, warnings=warnings)
+    ]
+    warnings = [
+        warning for selection in selections for warning in selection["warnings"]
+    ]
+    return {"pseudopotentials": selections, "warnings": warnings}
 
 
 def _select_for_element(
@@ -53,17 +119,17 @@ def _select_for_element(
         item
         for item in metadata
         if item.element == element
-        and item.functional == requirements.functional
+        and item.functional == requirements["functional"]
         and (
-            requirements.pseudo_type is None
-            or item.pseudo_type == requirements.pseudo_type
+            requirements["pseudo_type"] is None
+            or item.pseudo_type == requirements["pseudo_type"]
         )
         and _relativistic_compatible(item, requirements)
     ]
     if element in LANTHANIDES or element in ACTINIDES:
         candidates = [item for item in candidates if item.provider == "sssp"]
     exact_accuracy = [
-        item for item in candidates if item.accuracy == requirements.accuracy
+        item for item in candidates if item.accuracy == requirements["accuracy"]
     ]
     candidates = exact_accuracy or [
         item for item in candidates if item.accuracy is None
@@ -71,36 +137,36 @@ def _select_for_element(
 
     if not candidates:
         warning = _missing_pseudo_warning(element, requirements, metadata)
-        return PseudopotentialSelection(
-            element=element,
-            filename=None,
-            filepath=None,
-            functional=None,
-            relativistic=None,
-            ecutwfc_ry=None,
-            ecutrho_ry=None,
-            provenance=Provenance(
+        return {
+            "element": element,
+            "filename": None,
+            "filepath": None,
+            "functional": None,
+            "relativistic": None,
+            "ecutwfc_ry": None,
+            "ecutrho_ry": None,
+            "provenance": Provenance(
                 source="fallback",
                 reason="No pseudopotential satisfies the scientific requirements.",
                 warnings=(warning,),
             ),
-            warnings=(warning,),
-        )
+            "warnings": [warning],
+        }
 
     selected = min(candidates, key=_candidate_rank)
-    ecutwfc = selected.cutoffs.ecutwfc_ry if selected.cutoffs else None
-    ecutrho = selected.cutoffs.ecutrho_ry if selected.cutoffs else None
+    ecutwfc = selected.cutoffs["ecutwfc_ry"] if selected.cutoffs else None
+    ecutrho = selected.cutoffs["ecutrho_ry"] if selected.cutoffs else None
     warnings = _selection_warnings(element, selected, requirements)
     data_source = selected.table_id or selected.provider or selected.source_identifier
-    return PseudopotentialSelection(
-        element=element,
-        filename=selected.filename,
-        filepath=selected.filepath,
-        functional=selected.functional,
-        relativistic=selected.relativistic,
-        ecutwfc_ry=ecutwfc,
-        ecutrho_ry=ecutrho,
-        provenance=Provenance(
+    return {
+        "element": element,
+        "filename": selected.filename,
+        "filepath": selected.filepath,
+        "functional": selected.functional,
+        "relativistic": selected.relativistic,
+        "ecutwfc_ry": ecutwfc,
+        "ecutrho_ry": ecutrho,
+        "provenance": Provenance(
             source="lookup",
             reason=(
                 "Select the deterministic highest-ranked pseudopotential "
@@ -109,29 +175,26 @@ def _select_for_element(
             data_source=data_source,
             warnings=warnings,
         ),
-        warnings=warnings,
-    )
+        "warnings": list(warnings),
+    }
 
 
 def _relativistic_compatible(
     metadata: PseudoMetadata,
     requirements: PseudopotentialRequirements,
 ) -> bool:
-    # Curated scalar tables may contain NR files; custom NR files do not imply
-    # scalar compatibility, and table classification must not overwrite UPF facts.
-    return metadata.relativistic == requirements.relativistic or (
-        requirements.relativistic == "scalar"
+    return metadata.relativistic == requirements["relativistic"] or (
+        metadata.provider == "sssp"
         and metadata.relativistic == "non-relativistic"
-        and metadata.provider in {"pseudodojo", "sssp"}
-        and metadata.pseudo_info.get("table_relativistic") == "scalar"
+        and requirements["relativistic"] == "scalar"
     )
 
 
 def _candidate_rank(metadata: PseudoMetadata) -> tuple[int, int, str, str, str]:
     complete_cutoffs = (
         metadata.cutoffs is not None
-        and metadata.cutoffs.ecutwfc_ry is not None
-        and metadata.cutoffs.ecutrho_ry is not None
+        and metadata.cutoffs["ecutwfc_ry"] is not None
+        and metadata.cutoffs["ecutrho_ry"] is not None
     )
     return (
         0 if complete_cutoffs else 1,
@@ -148,17 +211,16 @@ def _selection_warnings(
     requirements: PseudopotentialRequirements,
 ) -> tuple[str, ...]:
     warnings = list(selected.warnings)
-    if selected.relativistic != requirements.relativistic:
-        provider = "SSSP" if selected.provider == "sssp" else "PseudoDojo"
+    if selected.relativistic != requirements["relativistic"]:
         warnings.append(
-            f"Selected {provider} pseudopotential for {element} declares "
+            f"Selected SSSP pseudopotential for {element} declares "
             f"{selected.relativistic} treatment within a "
-            f"{requirements.relativistic} table; verify this compatibility."
+            f"{requirements['relativistic']} table; verify this compatibility."
         )
     if selected.accuracy is None:
         warnings.append(
             f"Selected custom pseudopotential for {element} has no registered "
-            f"accuracy tier; requested {requirements.accuracy}."
+            f"accuracy tier; requested {requirements['accuracy']}."
         )
     if selected.frozen_4f_core:
         warnings.append(
@@ -168,9 +230,9 @@ def _selection_warnings(
         )
 
     missing = []
-    if selected.cutoffs is None or selected.cutoffs.ecutwfc_ry is None:
+    if selected.cutoffs is None or selected.cutoffs["ecutwfc_ry"] is None:
         missing.append("ecutwfc_ry")
-    if selected.cutoffs is None or selected.cutoffs.ecutrho_ry is None:
+    if selected.cutoffs is None or selected.cutoffs["ecutrho_ry"] is None:
         missing.append("ecutrho_ry")
     if missing:
         warnings.append(
@@ -183,7 +245,7 @@ def _selection_warnings(
 
 def _missing_pseudo_warning(
     element: str,
-    requirements: PseudopotentialRequirements,
+    requirements: JsonDict,
     metadata: tuple[PseudoMetadata, ...],
 ) -> str:
     message = _missing_pseudo_reason(element, requirements, metadata)
@@ -194,7 +256,7 @@ def _missing_pseudo_warning(
 
 def _missing_pseudo_reason(
     element: str,
-    requirements: PseudopotentialRequirements,
+    requirements: JsonDict,
     metadata: tuple[PseudoMetadata, ...],
 ) -> str:
     candidates = [item for item in metadata if item.element == element]
@@ -202,7 +264,7 @@ def _missing_pseudo_reason(
         return f"No available pseudopotential contains element {element}."
 
     functional = [
-        item for item in candidates if item.functional == requirements.functional
+        item for item in candidates if item.functional == requirements["functional"]
     ]
     if not functional:
         available = ", ".join(
@@ -210,32 +272,32 @@ def _missing_pseudo_reason(
         )
         return (
             f"Available pseudopotentials for {element} do not match functional "
-            f"{requirements.functional}; available: {available}."
+            f"{requirements['functional']}; available: {available}."
         )
 
     relativistic = [
-        item for item in functional if _relativistic_compatible(item, requirements)
+        item for item in functional if item.relativistic == requirements["relativistic"]
     ]
     if not relativistic:
         return (
-            f"No available {requirements.relativistic} "
-            f"{requirements.functional} pseudopotential covers {element}."
+            f"No available {requirements['relativistic']} "
+            f"{requirements['functional']} pseudopotential covers {element}."
         )
 
     typed = [
         item
         for item in relativistic
-        if requirements.pseudo_type is None
-        or item.pseudo_type == requirements.pseudo_type
+        if requirements["pseudo_type"] is None
+        or item.pseudo_type == requirements["pseudo_type"]
     ]
     if not typed:
         return (
             f"No available pseudopotential for {element} matches type "
-            f"{requirements.pseudo_type or 'any'}."
+            f"{requirements['pseudo_type'] or 'any'}."
         )
 
     return (
         f"No available pseudopotential for {element} matches registered "
-        f"accuracy {requirements.accuracy}; custom metadata with unknown accuracy "
+        f"accuracy {requirements['accuracy']}; custom metadata with unknown accuracy "
         "is also absent."
     )

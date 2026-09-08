@@ -18,15 +18,12 @@ from goldilocks_core import (
     compute,
 )
 from goldilocks_core.advice.kdistance import QrfBackend
-from goldilocks_core.contracts import (
-    GeneratedFiles,
-    ParameterAdvice,
-    PseudoCutoffs,
-    PseudoMetadata,
-    StructureAnalysisRecord,
-    StructureFeatureVector,
-)
+from goldilocks_core.advice.parameters import ParameterAdvice
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.generation.files import GeneratedFiles
 from goldilocks_core.ml.model_registry import load_default_qrf_config
+from goldilocks_core.pseudo.metadata import PseudoMetadata
+from goldilocks_core.serialization import to_portable
 
 
 def make_structure() -> Structure:
@@ -44,7 +41,7 @@ def make_metadata() -> PseudoMetadata:
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        cutoffs=PseudoCutoffs(ecutwfc_ry=35, ecutrho_ry=140),
+        cutoffs={"ecutwfc_ry": 35, "ecutrho_ry": 140},
         source_identifier="synthetic/Si.UPF",
         pseudo_info={
             "licence": "CC-BY-4.0",
@@ -70,9 +67,10 @@ def make_request(selection=None, **changes) -> ComputeRequest:
 def test_compute_recommendation_returns_selected_records() -> None:
     result = compute(make_request())
 
-    assert result.records[StructureAnalysisRecord].reduced_formula == "Si"
-    assert result.records[ParameterAdvice].pseudopotential_requirements.functional == (
-        "PBEsol"
+    assert result.records[StructureAnalysisRecord]["reduced_formula"] == "Si"
+    assert (
+        result.records[ParameterAdvice]["pseudopotential_requirements"]["functional"]
+        == "PBEsol"
     )
     assert GeneratedFiles not in result.records
 
@@ -84,7 +82,7 @@ def test_compute_returns_only_explicitly_selected_records() -> None:
 
     result = compute(request)
 
-    assert request.to_dict()["selection"] == {
+    assert to_portable(request)["selection"] == {
         "records": ["analysis", "advice"],
     }
     assert tuple(result.records) == (StructureAnalysisRecord, ParameterAdvice)
@@ -100,7 +98,7 @@ def test_compute_reuses_caller_owned_runtime() -> None:
         second = compute(request, runtime=runtime)
         assert runtime.is_closed is False
 
-    assert first.to_dict() == second.to_dict()
+    assert to_portable(first) == to_portable(second)
     assert runtime.is_closed is True
 
 
@@ -134,9 +132,9 @@ def test_compute_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> None:
     )
     monkeypatch.setattr(
         "goldilocks_core.ml.qrf.features.extract_qrf_features",
-        lambda structure, model, atom_init, settings: StructureFeatureVector(
-            values=np.zeros(483),
-            feature_names=[f"feature_{index}" for index in range(483)],
+        lambda structure, model, atom_init, settings: (
+            np.zeros(483),
+            [f"feature_{index}" for index in range(483)],
         ),
     )
 
@@ -155,7 +153,9 @@ def test_compute_uses_shared_default_qrf_backend(monkeypatch, tmp_path) -> None:
             runtime=runtime,
         )
 
-    assert result.records[StructureAnalysisRecord].electronic_character == "insulator"
+    assert (
+        result.records[StructureAnalysisRecord]["electronic_character"] == "insulator"
+    )
 
 
 def test_compute_rejects_unknown_task() -> None:
@@ -185,5 +185,5 @@ def test_compute_generation_preset_produces_generated_inputs(tmp_path) -> None:
         )
     )
 
-    assert result.records[GeneratedFiles][0].path == "inputs/qe.in"
-    assert "2  2  1  0  0  0" in result.records[GeneratedFiles][0].content
+    assert result.records[GeneratedFiles][0]["path"] == "inputs/qe.in"
+    assert "2  2  1  0  0  0" in result.records[GeneratedFiles][0]["content"]

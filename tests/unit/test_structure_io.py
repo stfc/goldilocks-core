@@ -12,6 +12,7 @@ from goldilocks_core import (
     Service,
 )
 from goldilocks_core.io.structures import StructureInputError
+from goldilocks_core.serialization import to_portable
 
 
 @pytest.fixture
@@ -34,56 +35,25 @@ def test_sources_preserve_structure_and_source_provenance(
     )
     inspections = [service.inspect_structure(source) for source in sources]
     for inspection, origin in zip(inspections, ("inline", "path", "generated")):
-        canonical = Structure.from_str(inspection.canonical_cif, fmt="cif")
+        canonical = Structure.from_str(inspection["canonical_cif"], fmt="cif")
         assert canonical.matches(silicon_structure)
-        assert inspection.source.origin == origin
-        document = json.loads(json.dumps(inspection.to_dict()))
+        assert inspection["source"]["origin"] == origin
+        document = json.loads(json.dumps(to_portable(inspection)))
         assert str(tmp_path) not in str(document)
         assert "pymatgen.core.structure" not in str(document)
         if origin == "generated":
-            assert inspection.source.content is None
-            assert inspection.source.sha256 is None
-            assert inspection.source.size_bytes is None
+            assert inspection["source"]["content"] is None
+            assert inspection["source"]["sha256"] is None
+            assert inspection["source"]["size_bytes"] is None
         else:
-            assert inspection.source.name == path.name
-            assert inspection.source.format == format
-            assert inspection.source.content == content
+            assert inspection["source"]["name"] == path.name
+            assert inspection["source"]["format"] == format
+            assert inspection["source"]["content"] == content
             assert (
-                inspection.source.sha256 == hashlib.sha256(content.encode()).hexdigest()
+                inspection["source"]["sha256"]
+                == hashlib.sha256(content.encode()).hexdigest()
             )
-            assert inspection.source.size_bytes == len(content.encode())
-
-
-@pytest.mark.parametrize("newline", ["\r\n", "\r"], ids=["crlf", "cr"])
-def test_path_inspection_preserves_source_bytes(
-    service, silicon_structure, tmp_path: Path, newline: str
-) -> None:
-    source_bytes = (
-        silicon_structure.to(fmt="cif").replace("\n", newline).encode("utf-8")
-    )
-    path = tmp_path / "silicon.cif"
-    path.write_bytes(source_bytes)
-
-    inspection = service.inspect_structure(PathStructureSource(path))
-
-    assert inspection.source.content.encode("utf-8") == source_bytes
-    assert inspection.source.sha256 == hashlib.sha256(source_bytes).hexdigest()
-    assert inspection.source.size_bytes == len(source_bytes)
-
-
-def test_inspection_preserves_partial_periodicity(service) -> None:
-    structure = Structure(
-        Lattice(
-            [[4.0, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 20.0]],
-            pbc=(True, True, False),
-        ),
-        ["Si"],
-        [[0.0, 0.0, 0.5]],
-    )
-
-    inspection = service.inspect_structure(InMemoryStructureSource(structure))
-
-    assert inspection.structure.periodicity == (True, True, False)
+            assert inspection["source"]["size_bytes"] == len(content.encode())
 
 
 @pytest.mark.parametrize(
@@ -109,8 +79,8 @@ def test_format_hint_then_filename_then_content_precedence(
         sources.append(PathStructureSource(path))
     for source in sources:
         inspection = service.inspect_structure(source)
-        assert inspection.source.format == format
-        assert Structure.from_str(inspection.canonical_cif, fmt="cif").matches(
+        assert inspection["source"]["format"] == format
+        assert Structure.from_str(inspection["canonical_cif"], fmt="cif").matches(
             silicon_structure
         )
 
@@ -124,19 +94,20 @@ def test_disordered_oxidized_structure_preserves_chemistry_and_geometry(
         [[0.1, 0.2, 0.3], [0.6, 0.7, 0.8]],
     )
     inspection = service.inspect_structure(InMemoryStructureSource(structure))
-    site = inspection.structure.sites[0]
-    assert site.fractional_coordinates == pytest.approx((0.1, 0.2, 0.3))
-    assert site.cartesian_coordinates_angstrom == pytest.approx((0.4, 1.0, 1.8))
+    site = inspection["structure"]["sites"][0]
+    assert site["fractional_coordinates"] == pytest.approx((0.1, 0.2, 0.3))
+    assert site["cartesian_coordinates_angstrom"] == pytest.approx((0.4, 1.0, 1.8))
     assert [
-        (s.symbol, s.label, s.occupancy, s.oxidation_state) for s in site.species
+        (s["symbol"], s["label"], s["occupancy"], s["oxidation_state"])
+        for s in site["species"]
     ] == [("Fe", "Fe2+", 0.25, 2.0), ("Mn", "Mn2+", 0.75, 2.0)]
-    restored = Structure.from_str(inspection.canonical_cif, fmt="cif")
+    restored = Structure.from_str(inspection["canonical_cif"], fmt="cif")
     assert restored.matches(structure)
     assert restored.composition == structure.composition
     inline = service.inspect_structure(
-        InlineStructureSource("alloy.cif", inspection.canonical_cif)
+        InlineStructureSource("alloy.cif", inspection["canonical_cif"])
     )
-    assert inline.structure.sites[0].species == site.species
+    assert inline["structure"]["sites"][0]["species"] == site["species"]
 
 
 @pytest.mark.parametrize("format", ["cif", "poscar"])

@@ -6,32 +6,35 @@ Quantum ESPRESSO SCF inputs through the canonical Python interface.
 ## Inspect a structure
 
 ```python
-from goldilocks_core import PathStructureSource, Service
+from goldilocks_core.io.structures import PathStructureSource
+from goldilocks_core.runtime.service import Service
 
 source = PathStructureSource("structure.cif")
 with Service() as core:
     inspection = core.inspect_structure(source)
 
-print(inspection.structure.reduced_formula)
-print(inspection.canonical_cif)
+print(inspection["structure"]["reduced_formula"])
+print(inspection["canonical_cif"])
 ```
 
-`StructureInspection` retains source identity, canonical CIF, lattice, sites,
-species occupancies, formula, and periodicity.
+The inspection is a dict retaining source identity, canonical CIF, lattice,
+sites, species occupancies, formula, and periodicity.
 
 ## Compute a recommendation
+
+Install the default assets before computing recommendations:
+
+```bash
+uv run goldilocks assets install default
+```
 
 Use an explicit grid for a deterministic first run that does not load the
 k-point model:
 
 ```python
-from goldilocks_core import (
-    CalculationDraft,
-    CalculationHints,
-    ComputeRequest,
-    PresetSelection,
-    Service,
-)
+from goldilocks_core.calculation import CalculationHints
+from goldilocks_core.request import CalculationDraft, ComputeRequest, PresetSelection
+from goldilocks_core.serialization import to_portable
 
 request = ComputeRequest(
     CalculationDraft(
@@ -45,8 +48,8 @@ request = ComputeRequest(
 with Service() as core:
     result = core.compute(request)
 
-print(result.records.to_dict()["analysis"]["reduced_formula"])
-print(result.records.to_dict()["k_points"]["grid"])
+print(to_portable(result)["records"]["analysis"]["reduced_formula"])
+print(to_portable(result)["records"]["k_points"]["grid"])
 print(result.warnings)
 ```
 
@@ -58,13 +61,13 @@ pseudopotential selection without generating runnable input data.
 Select the `generate` Preset and a Core output target:
 
 ```python
-from goldilocks_core import DirectoryOutput
+from goldilocks_core.publication import DirectoryOutput
 
 request = ComputeRequest(request.draft, PresetSelection("generate"))
 with Service() as core:
     result = core.compute(request, output=DirectoryOutput("run"))
 
-print(result.publication.path)
+print(result.publication["path"])
 ```
 
 The destination must not already exist. Use `ArchiveOutput("run.zip")` for a
@@ -79,8 +82,9 @@ its root so `pseudo_dir = './pseudo'` resolves correctly.
 ## Select explicit Records
 
 ```python
-from goldilocks_core import RecordSelection
-from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.request import RecordSelection
 
 query = ComputeRequest(
     request.draft,
@@ -100,11 +104,11 @@ with Service() as core:
     first = core.compute(request)
     second = core.compute(query)
 
-print([preset.id for preset in capabilities.tasks[0].presets])
+print([preset["id"] for preset in capabilities["tasks"][0]["presets"]])
 ```
 
-One Service reuses lazy model state and supports concurrent Compute calls. Capabilities
-replaces separate task, code, and model discovery operations.
+One Service reuses lazy model state across concurrent Compute calls.
+Capabilities replaces separate task, code, and model discovery operations.
 
 ## CLI
 

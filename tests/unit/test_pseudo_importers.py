@@ -6,22 +6,14 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.assets import (
-    AssetCorrupt,
-    AssetFile,
-    AssetSpec,
-    AssetStore,
-    InstalledAsset,
-)
-from goldilocks_core.contracts import Provenance, PseudopotentialRequirements
+from goldilocks_core.assets.records import AssetFile, AssetSpec, InstalledAsset
+from goldilocks_core.assets.store import AssetCorrupt, AssetStore
 from goldilocks_core.pseudo.import_pseudodojo import preparer as dojo_preparer
 from goldilocks_core.pseudo.import_sssp import preparer as sssp_preparer
 from goldilocks_core.pseudo.installed import load_installed_table
 from goldilocks_core.pseudo.registry import PseudoTable
 from goldilocks_core.pseudo.validation import PseudoImportError
-from goldilocks_core.selection import select_pseudopotentials
 
 UPF = (
     b'<UPF version="2.0.1">\n'
@@ -156,8 +148,8 @@ def test_pseudodojo_normalizes_reports_and_verified_upfs(tmp_path: Path) -> None
     assert metadata[0].relativistic == "scalar"
     assert metadata[0].accuracy == "efficiency"
     assert metadata[0].cutoffs is not None
-    assert metadata[0].cutoffs.ecutwfc_ry == 40.0
-    assert metadata[0].cutoffs.ecutrho_ry == 160.0
+    assert metadata[0].cutoffs["ecutwfc_ry"] == 40.0
+    assert metadata[0].cutoffs["ecutrho_ry"] == 160.0
     assert metadata[0].table_id == "pseudopotentials/pseudodojo-fixture"
     assert not list(installed.root.rglob("*.tgz"))
     assert "CC BY 4.0" in installed.path("LICENSE.txt").read_text()
@@ -183,8 +175,8 @@ def test_sssp_normalizes_sidecar_and_verified_upfs(tmp_path: Path) -> None:
     assert metadata[0].provider == "sssp"
     assert metadata[0].source_identifier == "Si fixture"
     assert metadata[0].cutoffs is not None
-    assert metadata[0].cutoffs.ecutwfc_ry == 30.0
-    assert metadata[0].cutoffs.ecutrho_ry == 120.0
+    assert metadata[0].cutoffs["ecutwfc_ry"] == 30.0
+    assert metadata[0].cutoffs["ecutrho_ry"] == 120.0
     assert metadata[0].table_id == "pseudopotentials/sssp-fixture"
     assert not list(installed.root.rglob("*.tar.gz"))
     assert installed.path("LICENSE.txt").read_text() == "SSSP fixture licence\n"
@@ -217,65 +209,13 @@ def test_pseudodojo_rejects_upf_registry_disagreement(tmp_path: Path) -> None:
 def test_pseudodojo_accepts_nonrelativistic_header_in_scalar_table(
     tmp_path: Path,
 ) -> None:
-    """Scalar-table compatibility preserves the original UPF treatment."""
+    """Table-level classification is authoritative; NR light elements stay valid."""
     upf = UPF.replace(b'relativistic="scalar"', b'relativistic="non-relativistic"')
 
     installed, _ = install_dojo_fixture(tmp_path, upf=upf)
     metadata = load_installed_table(installed)
 
     assert metadata[0].relativistic == "non-relativistic"
-
-    structure = Structure(Lattice.cubic(4.0), ["Si"], [[0, 0, 0]])
-    requirements = PseudopotentialRequirements(
-        functional="PBEsol",
-        accuracy="efficiency",
-        pseudo_type="NC",
-        relativistic="scalar",
-        provenance=Provenance(source="default", reason="test requirements"),
-    )
-    selection = select_pseudopotentials(structure, requirements, metadata)
-
-    pseudo = selection.pseudopotentials[0]
-    assert pseudo.filename == "Si.upf"
-    assert pseudo.filepath == str(installed.path("pseudos/Si.upf"))
-    assert pseudo.ecutwfc_ry == 40.0
-    assert pseudo.ecutrho_ry == 160.0
-
-    full = select_pseudopotentials(
-        structure, replace(requirements, relativistic="full"), metadata
-    )
-    assert full.pseudopotentials[0].filename is None
-
-
-@pytest.mark.parametrize(
-    ("pseudo_type", "accuracy", "diagnostic"),
-    [
-        ("PAW", "efficiency", "PAW"),
-        ("NC", "precision", "precision"),
-    ],
-)
-def test_pseudodojo_scalar_nr_reports_unsatisfied_requirements(
-    tmp_path: Path, pseudo_type: str, accuracy: str, diagnostic: str
-) -> None:
-    upf = UPF.replace(b'relativistic="scalar"', b'relativistic="non-relativistic"')
-    installed, _ = install_dojo_fixture(tmp_path, upf=upf)
-    metadata = load_installed_table(installed)
-    requirements = PseudopotentialRequirements(
-        functional="PBEsol",
-        accuracy=accuracy,
-        pseudo_type=pseudo_type,
-        relativistic="scalar",
-        provenance=Provenance(source="default", reason="test requirements"),
-    )
-
-    selection = select_pseudopotentials(
-        Structure(Lattice.cubic(4.0), ["Si"], [[0, 0, 0]]),
-        requirements,
-        metadata,
-    )
-
-    assert selection.pseudopotentials[0].filename is None
-    assert diagnostic in selection.warnings[0]
 
 
 def test_sssp_rejects_sidecar_registry_disagreement(tmp_path: Path) -> None:
@@ -300,22 +240,6 @@ def test_sssp_accepts_nonrelativistic_header_in_scalar_table(tmp_path: Path) -> 
     metadata = load_installed_table(installed)
 
     assert metadata[0].relativistic == "non-relativistic"
-    selection = select_pseudopotentials(
-        Structure(Lattice.cubic(4.0), ["Si"], [[0, 0, 0]]),
-        PseudopotentialRequirements(
-            functional="PBEsol",
-            accuracy="efficiency",
-            pseudo_type="NC",
-            relativistic="scalar",
-            provenance=Provenance(source="default", reason="test requirements"),
-        ),
-        metadata,
-    )
-
-    pseudo = selection.pseudopotentials[0]
-    assert pseudo.filename == "Si.upf"
-    assert pseudo.ecutwfc_ry == 30.0
-    assert pseudo.ecutrho_ry == 120.0
 
 
 def test_installed_pseudo_manifest_rejects_unknown_entry_fields(

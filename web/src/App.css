@@ -1,0 +1,87 @@
+.workbench-grid {
+  display: grid;
+  min-height: 100dvh;
+  grid-template-columns:
+    minmax(22rem, var(--controls-width, 34%))
+    0.75rem minmax(32rem, 1fr);
+  align-items: start;
+}
+
+.workbench-grid--loading {
+  grid-template-columns: 1fr;
+}
+
+.structure-stage {
+  position: sticky;
+  top: 0;
+  min-width: 0;
+  height: 100dvh;
+  min-height: 34rem;
+  overflow: hidden;
+  background: var(--mantine-color-body);
+}
+
+.stage-navigation {
+  position: absolute;
+  z-index: 7;
+  top: 1rem;
+  right: 1rem;
+}
+
+.pane-resizer {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  min-height: 34rem;
+  border-inline: 1px solid var(--mantine-color-default-border);
+  background: var(--mantine-color-body);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.pane-resizer::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 3.5rem;
+  background: var(--mantine-color-dimmed);
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.pane-resizer:hover::after,
+.pane-resizer:focus-visible::after {
+  background: var(--mantine-primary-color-filled);
+}
+
+@media (max-width: 57rem) {
+  .workbench-grid {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .pane-resizer {
+    display: none;
+  }
+
+  #calculation-panel,
+  .structure-stage,
+  #recommendation-panel {
+    width: 100%;
+  }
+
+  .structure-stage {
+    position: relative;
+    height: 38rem;
+    min-height: 38rem;
+  }
+}
+
+@media (max-width: 47.5rem) {
+  .structure-stage {
+    height: 31rem;
+    min-height: 31rem;
+  }
+}

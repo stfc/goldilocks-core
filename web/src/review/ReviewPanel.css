@@ -1,0 +1,21 @@
+.code-resizer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 0.75rem;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.code-resizer::after {
+  width: 3.5rem;
+  height: 2px;
+  content: "";
+  background: var(--mantine-color-dimmed);
+}
+
+.code-resizer:hover::after,
+.code-resizer:focus-visible::after {
+  height: 3px;
+  background: var(--mantine-primary-color-filled);
+}

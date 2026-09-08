@@ -235,6 +235,18 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
         "--model-version",
         help="Model version recorded in metadata when --model is used.",
     )
+    parser.add_argument(
+        "--model-licence",
+        help="Licence identifier for the local model (required for publication).",
+    )
+    parser.add_argument(
+        "--model-licence-file",
+        help="UTF-8 licence text file for the local model (required for publication).",
+    )
+    parser.add_argument(
+        "--model-citation",
+        help="Citation for the local model (required for publication).",
+    )
     parser.add_argument("--k-spacing", type=float)
     parser.add_argument(
         "--k-grid",
@@ -377,6 +389,14 @@ def _serve(args: argparse.Namespace) -> None:
 def _model_spec_from_args(args: argparse.Namespace) -> ModelSpec | None:
     if args.model is None:
         return None
+    licence_text = None
+    if args.model_licence_file is not None:
+        try:
+            licence_text = (
+                Path(args.model_licence_file).expanduser().read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeError) as error:
+            raise ValueError(f"Cannot read --model-licence-file: {error}") from error
     return ModelSpec(
         name=args.model_name or "cli-kmesh-model",
         version=args.model_version or "unknown",
@@ -385,6 +405,9 @@ def _model_spec_from_args(args: argparse.Namespace) -> ModelSpec | None:
         feature_set="cslr",
         source="local",
         location=args.model,
+        licence=args.model_licence,
+        licence_text=licence_text,
+        citation=args.model_citation,
     )
 
 
@@ -394,6 +417,9 @@ def _validate_backend_options(args: argparse.Namespace) -> None:
         for option, value in (
             ("--model-name", args.model_name),
             ("--model-version", args.model_version),
+            ("--model-licence", args.model_licence),
+            ("--model-licence-file", args.model_licence_file),
+            ("--model-citation", args.model_citation),
         )
         if value is not None
     ]

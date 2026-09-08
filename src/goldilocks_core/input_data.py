@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib.metadata import version
 from pathlib import Path
 
@@ -25,7 +25,7 @@ from goldilocks_core.contracts import (
 )
 from goldilocks_core.contracts.types import JsonDict
 from goldilocks_core.io.structures import NormalizedStructure
-from goldilocks_core.ml.model_registry import load_default_qrf_config
+from goldilocks_core.ml.model_registry import QrfKpointsConfig
 from goldilocks_core.pseudo.registry import load_tables
 
 
@@ -42,7 +42,8 @@ def assemble_dft_input_data(
     *,
     asset_store: AssetStore,
     pseudo_registry_path: PathLike | None,
-    model_registry_path: PathLike | None,
+    kmesh_config: QrfKpointsConfig | None,
+    metallicity_config: QrfKpointsConfig | None,
     kmesh_model: ModelSpec | None,
     uses_default_kmesh_model: bool,
     metallicity_model: ModelSpec | None,
@@ -105,7 +106,8 @@ def assemble_dft_input_data(
         analysis,
         k_points,
         asset_store=asset_store,
-        registry_path=model_registry_path,
+        kmesh_config=kmesh_config,
+        metallicity_config=metallicity_config,
         custom_kmesh_model=kmesh_model,
         uses_default_kmesh_model=uses_default_kmesh_model,
         custom_metallicity_model=metallicity_model,
@@ -159,7 +161,8 @@ def _runtime_material(
     k_points: KPointSelection,
     *,
     asset_store: AssetStore,
-    registry_path: PathLike | None,
+    kmesh_config: QrfKpointsConfig | None,
+    metallicity_config: QrfKpointsConfig | None,
     custom_kmesh_model: ModelSpec | None,
     uses_default_kmesh_model: bool,
     custom_metallicity_model: ModelSpec | None,
@@ -168,7 +171,8 @@ def _runtime_material(
     materials = _used_model_material(
         analysis,
         k_points,
-        registry_path=registry_path,
+        kmesh_config=kmesh_config,
+        metallicity_config=metallicity_config,
         custom_kmesh_model=custom_kmesh_model,
         uses_default_kmesh_model=uses_default_kmesh_model,
         custom_metallicity_model=custom_metallicity_model,
@@ -203,6 +207,13 @@ def _runtime_material(
 
         citations.append(model.citation)
         installed = asset_store.resolve_spec(material.asset)
+        identity = RuntimeAssetIdentity(
+            id=installed.id,
+            version=installed.version,
+            preparation_fingerprint=installed.preparation_fingerprint,
+        )
+        if identity in identities:
+            continue
         licence = next(file for file in material.asset.files if file.role == "licence")
         suffix = Path(licence.path).suffix or ".txt"
         licence_name = material.asset.id.replace("/", "_")
@@ -213,13 +224,7 @@ def _runtime_material(
                 _read_installed_content(installed, licence.path),
             )
         )
-        identities.append(
-            RuntimeAssetIdentity(
-                id=installed.id,
-                version=installed.version,
-                preparation_fingerprint=installed.preparation_fingerprint,
-            )
-        )
+        identities.append(identity)
     return (
         artifacts,
         RuntimeIdentity(
@@ -235,74 +240,81 @@ def _used_model_material(
     analysis: StructureAnalysisRecord,
     k_points: KPointSelection,
     *,
-    registry_path: PathLike | None,
+    kmesh_config: QrfKpointsConfig | None,
+    metallicity_config: QrfKpointsConfig | None,
     custom_kmesh_model: ModelSpec | None,
     uses_default_kmesh_model: bool,
     custom_metallicity_model: ModelSpec | None,
     uses_default_metallicity_model: bool,
 ) -> tuple[_ModelMaterial, ...]:
-    kpoints_uses_model = k_points.provenance.source == "model"
-    analysis_uses_model = analysis.electronic_character_source == "model"
-    if not kpoints_uses_model and not analysis_uses_model:
-        return ()
-
-    default_kmesh_used = (
-        kpoints_uses_model and custom_kmesh_model is None and uses_default_kmesh_model
-    )
-    needs_metallicity = analysis_uses_model or default_kmesh_used
-    needs_registry = default_kmesh_used or (
-        needs_metallicity and uses_default_metallicity_model
-    )
-    config = load_default_qrf_config(registry_path) if needs_registry else None
     materials: list[_ModelMaterial] = []
-    if kpoints_uses_model:
+    if k_points.provenance.source == "model":
         if custom_kmesh_model is not None:
             materials.append(
                 _ModelMaterial(
-                    custom_kmesh_model,
-                    None,
-                    "licences/custom-kmesh-model.txt",
+                    custom_kmesh_model, None, "licences/custom-kmesh-model.txt"
                 )
             )
-        elif uses_default_kmesh_model:
+        elif uses_default_kmesh_model and kmesh_config is not None:
             materials.append(
                 _ModelMaterial(
-                    config.model,
-                    config.model_asset,
+                    kmesh_config.model,
+                    kmesh_config.model_asset,
                     "licences/k-point-model.txt",
+                )
+            )
+            # QRF uses its own classifier resources for feature extraction.
+            materials.append(
+                _metallicity_material(
+                    kmesh_config,
+                    custom_metallicity_model,
+                    uses_default_metallicity_model,
                 )
             )
         else:
             raise ValueError(
-                "Custom KMeshService produced a model result without identity; "
+                "KMeshService produced a model result without loaded identity; "
                 "supply a CalculationDraft.kmesh_model with explicit licence and "
                 "citation material"
             )
 
-    if needs_metallicity:
-        if uses_default_metallicity_model:
-            materials.append(
-                _ModelMaterial(
-                    config.metallicity_model,
-                    config.metallicity_asset,
-                    "licences/metallicity-model.txt",
+    if analysis.electronic_character_source == "model":
+        material = _metallicity_material(
+            metallicity_config,
+            custom_metallicity_model,
+            uses_default_metallicity_model,
+        )
+        if material not in materials:
+            if material.asset is None and any(
+                item.licence_path == material.licence_path for item in materials
+            ):
+                material = replace(
+                    material, licence_path="licences/analysis-metallicity-model.txt"
                 )
-            )
-        elif custom_metallicity_model is not None:
-            materials.append(
-                _ModelMaterial(
-                    custom_metallicity_model,
-                    None,
-                    "licences/custom-metallicity-model.txt",
-                )
-            )
-        else:
-            raise ValueError(
-                "Configured metallicity checkpoint produced a model result without "
-                "identity; supply Runtime(metallicity_model=ModelSpec(...)) with "
-                "explicit licence and citation material"
-            )
+            materials.append(material)
     return tuple(materials)
+
+
+def _metallicity_material(
+    config: QrfKpointsConfig | None,
+    custom_model: ModelSpec | None,
+    uses_default: bool,
+) -> _ModelMaterial:
+    if uses_default and config is not None:
+        return _ModelMaterial(
+            config.metallicity_model,
+            config.metallicity_asset,
+            "licences/metallicity-model.txt",
+        )
+    if not uses_default and custom_model is not None:
+        return _ModelMaterial(
+            custom_model, None, "licences/custom-metallicity-model.txt"
+        )
+    raise ValueError(
+        "Metallicity classifier produced a model result without loaded identity; "
+        "supply Runtime(metallicity_model=ModelSpec(...)) with explicit licence "
+        "and citation material"
+    )
 
 
 def _published_model_identity(model: ModelSpec) -> JsonDict:

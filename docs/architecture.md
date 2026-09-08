@@ -55,7 +55,11 @@ class, and callers can invoke any stage function directly.
 `ComputeRequest` carries a `CalculationDraft` and exactly one
 `PresetSelection` or `RecordSelection`. `Service.compute` dispatches it through
 a process-owned `Runtime`. Execution state is request-local; shared models
-synchronize their first lazy load. `recommend` and `generate` are DAG Preset IDs only.
+synchronize their first lazy load. Publication uses the registry identity and legal
+references cached with each loaded model, rather than re-reading a changed registry.
+The QRF feature classifier and the standalone metallicity classifier each retain
+their own snapshot; unused models are not loaded for publication.
+`recommend` and `generate` are DAG Preset IDs only.
 
 ```python
 request = ComputeRequest(

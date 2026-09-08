@@ -14,6 +14,7 @@ from goldilocks_core.contracts import (
     ModelSpec,
     PathLike,
 )
+from goldilocks_core.ml.model_registry import QrfKpointsConfig
 
 
 class MetallicityModel:
@@ -86,6 +87,11 @@ class MetallicityModel:
         )
         return character, "model", confidence
 
+    @property
+    def loaded_config(self) -> QrfKpointsConfig | None:
+        """Registry snapshot belonging to the loaded classifier."""
+        return self._config if self._model is not None else None
+
     def reset(self) -> None:
         with self._load_lock:
             self._model = None
@@ -148,6 +154,12 @@ class Runtime:
     @property
     def uses_default_kmesh_model(self) -> bool:
         return self._uses_default_kmesh_model
+
+    @property
+    def loaded_kmesh_config(self) -> QrfKpointsConfig | None:
+        if self._uses_default_kmesh_model and isinstance(self._backend, QrfBackend):
+            return self._backend.loaded_config
+        return None
 
     @property
     def metallicity_model_spec(self) -> ModelSpec | None:

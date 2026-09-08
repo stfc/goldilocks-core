@@ -1,8 +1,9 @@
 # Workbench
 
 Upload a CIF or POSCAR, choose settings, and generate Quantum ESPRESSO inputs in
-your browser. Review the recommendations, then download the input bundle.
-Run Quantum ESPRESSO from the extracted archive root with `pw.x -in inputs/qe.in`.
+your browser. Review the recommendations, then download the input bundle. The
+[quickstart](../docs/quickstart.md#4-run-quantum-espresso) explains how to run
+the extracted calculation.
 
 ## Run locally
 
@@ -39,7 +40,8 @@ docker run --rm --publish 127.0.0.1:8000:8000 goldilocks-workbench
 ```
 
 Open **http://127.0.0.1:8000**. The image includes the frontend and runtime
-assets. The anonymous HTTP server is intended for trusted networks.
+assets. See [HTTP security](../docs/cli.md#http-security) before exposing it
+beyond localhost.
 
 ## Development
 

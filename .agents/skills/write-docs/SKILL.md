@@ -45,8 +45,7 @@ Primary docs:
    - Optional `[http]` and `[mcp]` transports expose the same three scientific
      operations over one process-owned Service.
    - One publisher creates complete Ready-to-run Output directories and ZIPs.
-   - Stage Records, Capabilities, Inspection, and publication metadata are dict
-     documents; import names directly from their defining modules.
+   - Workbench is a stateless browser client of ordinary Core HTTP.
    - DFT execution, AiiDA, authentication, sessions, and saved Workspaces are
      out of scope.
 
@@ -64,7 +63,7 @@ Primary docs:
 
    ```text
    calculation.py, request.py, result.py
-                        -> operator boundary contracts and dict Record results
+                        -> operator boundary contracts and stable Record IDs
    runtime/graph.py      -> type-keyed DAG execution
    runtime/dispatch.py   -> Calculation Task registry and Compute dispatch
    runtime/models.py     -> model lifecycle
@@ -77,6 +76,7 @@ Primary docs:
    server/request.py     -> shared transport deserializer
    server/http*.py       -> optional HTTP adapter
    server/mcp.py         -> optional local stdio MCP adapter
+   web/                  -> browser Workspace and generated HTTP types
    analysis.py           -> structure facts
    advice/               -> provenance-backed recommendations
    kmesh/                -> k-point resolution

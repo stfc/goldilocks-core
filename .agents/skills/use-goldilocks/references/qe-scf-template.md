@@ -66,11 +66,15 @@ warnings            -> result.warnings
 
 ```python
 from pymatgen.core.periodic_table import Element
-from goldilocks_core.io.structures import PathStructureSource
-from goldilocks_core.kmesh.resolve import KPointSelection
-from goldilocks_core.request import CalculationDraft, ComputeRequest, PresetSelection
-from goldilocks_core.runtime.service import Service
-from goldilocks_core.selection import SelectionRecord
+from goldilocks_core import (
+    CalculationDraft,
+    ComputeRequest,
+    KPointSelection,
+    PathStructureSource,
+    PresetSelection,
+    SelectionRecord,
+    Service,
+)
 
 request = ComputeRequest(
     CalculationDraft(
@@ -87,11 +91,8 @@ pseudo_by_element = {
     pseudo["element"]: pseudo for pseudo in selection["pseudopotentials"]
 }
 elements = tuple(sorted(pseudo_by_element))
-for pseudo in pseudo_by_element.values():
-    if any(pseudo[key] is None for key in ("filename", "ecutwfc_ry", "ecutrho_ry")):
-        raise ValueError("Selected pseudopotential is incomplete")
-ecutwfc = max(pseudo["ecutwfc_ry"] for pseudo in pseudo_by_element.values())
-ecutrho = max(pseudo["ecutrho_ry"] for pseudo in pseudo_by_element.values())
+ecutwfc = max(pseudo["ecutwfc_ry"] or 0.0 for pseudo in pseudo_by_element.values())
+ecutrho = max(pseudo["ecutrho_ry"] or 0.0 for pseudo in pseudo_by_element.values())
 k_points = result.records[KPointSelection]
 grid = k_points["grid"]
 shift = k_points["shift"]

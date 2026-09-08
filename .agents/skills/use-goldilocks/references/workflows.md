@@ -5,8 +5,7 @@ Use these canonical patterns before reading implementation files.
 ## Inspect a Structure Source
 
 ```python
-from goldilocks_core.io.structures import PathStructureSource
-from goldilocks_core.runtime.service import Service
+from goldilocks_core import PathStructureSource, Service
 
 with Service() as core:
     inspection = core.inspect_structure(PathStructureSource("structure.cif"))
@@ -18,8 +17,14 @@ print(inspection["canonical_cif"])
 ## Compute a Preset
 
 ```python
-from goldilocks_core.calculation import CalculationHints
-from goldilocks_core.request import CalculationDraft, ComputeRequest, PresetSelection
+from goldilocks_core import (
+    CalculationDraft,
+    CalculationHints,
+    ComputeRequest,
+    PathStructureSource,
+    PresetSelection,
+    Service,
+)
 from goldilocks_core.serialization import to_portable
 
 request = ComputeRequest(
@@ -43,12 +48,16 @@ print(result.warnings)
 `PresetSelection("generate")` also returns `generated_files` and complete
 `dft_input_data`.
 
+The Python `result.records` mapping uses Record types as keys and dictionary
+values. `to_portable(result)["records"]` uses stable string Record IDs.
+
 ## Publish Ready-to-run Output
 
 ```python
-from goldilocks_core.publication import DirectoryOutput
+from goldilocks_core import DirectoryOutput
 
 request = ComputeRequest(request.draft, PresetSelection("generate"))
+
 with Service() as core:
     result = core.compute(request, output=DirectoryOutput("run-dir"))
 
@@ -71,10 +80,13 @@ uv run goldilocks compute structure.cif --preset generate --pseudo-table pseudod
 ## Select Records
 
 ```python
-from goldilocks_core.analysis import StructureAnalysisRecord
-from goldilocks_core.kmesh.resolve import KPointSelection
-from goldilocks_core.request import ComputeRequest, RecordSelection
-from goldilocks_core.runtime.jobs import compute
+from goldilocks_core import (
+    ComputeRequest,
+    KPointSelection,
+    RecordSelection,
+    StructureAnalysisRecord,
+    compute,
+)
 
 query = ComputeRequest(
     request.draft,
@@ -104,7 +116,7 @@ cutoffs or redistribution terms.
 ## Use a local k-point model
 
 ```python
-from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core import ModelSpec
 
 model = ModelSpec(
     name="local-kmesh-model",
@@ -128,7 +140,9 @@ request = ComputeRequest(
 )
 ```
 
-Publishable model-backed Results require licence and citation identity.
+For a local model used during generation, supply its real licence identifier,
+full licence text, and citation in `licence`, `licence_text`, and `citation`.
+Replace the illustrative metadata above with the model's actual terms.
 
 ## Optional transports
 

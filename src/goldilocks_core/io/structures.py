@@ -8,6 +8,7 @@ from typing import Annotated, Literal, TypedDict
 
 from pymatgen.core import Structure
 
+from goldilocks_core.failures import ExpectedFailure
 from goldilocks_core.serialization import Portable, to_portable
 from goldilocks_core.types import JsonDict
 
@@ -151,8 +152,12 @@ class NormalizedStructure:
         }
 
 
-class StructureInputError(ValueError):
-    pass
+class StructureInputError(ExpectedFailure, ValueError):
+    kind = "invalid_structure"
+
+
+class StructureFileNotFound(ExpectedFailure, FileNotFoundError):
+    kind = "invalid_structure"
 
 
 def normalize_structure(source: StructureSource) -> NormalizedStructure:
@@ -173,7 +178,7 @@ def normalize_structure(source: StructureSource) -> NormalizedStructure:
         elif isinstance(source, PathStructureSource):
             path = Path(source.path)
             if not path.exists():
-                raise FileNotFoundError(f"Structure file not found: {path}")
+                raise StructureFileNotFound(f"Structure file not found: {path}")
             if not path.is_file():
                 raise StructureInputError(f"Structure path is not a file: {path}")
             try:

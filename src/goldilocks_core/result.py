@@ -1,14 +1,27 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
-from goldilocks_core.input_data import input_data_portable
-from goldilocks_core.publication import Publication
+from goldilocks_core.failures import ExpectedFailure
+from goldilocks_core.input_data import DftInputData, input_data_portable
+from goldilocks_core.publication import (
+    DirectoryOutput,
+    OutputTarget,
+    Publication,
+    Publisher,
+)
 from goldilocks_core.request import CalculationDraft, ComputationSelection
 from goldilocks_core.selection import SelectionRecord, selection_portable
 from goldilocks_core.serialization import to_jsonable, to_portable
 from goldilocks_core.types import JsonDict
+
+
+class PublicationUnavailable(ExpectedFailure, ValueError):
+    """The selected record set cannot satisfy an explicit publication request."""
+
+    kind = "publication_unavailable"
+    category = "local"
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,10 +43,38 @@ class ComputationResult:
     publication: Publication | None = None
     schema_version: Literal[1] = field(default=1, init=False)
 
+    def publish(self, output: OutputTarget) -> ComputationResult:
+        """Publish only the immutable material captured in this computation."""
+        input_data = self.records.get(DftInputData)
+        if input_data is None:
+            if isinstance(output, DirectoryOutput) and output.path is None:
+                return self
+            raise PublicationUnavailable(
+                "The Computation Result does not contain DFT Input Data to publish"
+            )
+        return replace(self, publication=Publisher().publish(input_data, output))
+
+    def prepare(self, *, archive: bool = False) -> PreparedComputation:
+        """Prepare portable records and an optional archive from the same snapshot."""
+        input_data = self.records.get(DftInputData)
+        archive_bytes = (
+            Publisher().archive_bytes(input_data)
+            if archive and input_data is not None
+            else None
+        )
+        return PreparedComputation(to_portable(self), archive_bytes)
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedComputation:
+    """Portable records and the optional archive of those exact computed inputs."""
+
+    result: JsonDict
+    archive: bytes | None = None
+
 
 @to_portable.register(ComputationResult)
 def _computation_result_portable(result: ComputationResult) -> JsonDict:
-    from goldilocks_core.input_data import DftInputData
     from goldilocks_core.runtime.registry import record_type_id
 
     records = {}

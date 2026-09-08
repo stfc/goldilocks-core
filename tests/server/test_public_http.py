@@ -584,17 +584,11 @@ def _multipart_parts(response) -> dict[str, tuple[str, str | None, bytes]]:
     }
 
 
-class _CountingService:
+class _CountingService(Service):
     def __init__(self, service: Service) -> None:
+        super().__init__(service.runtime)
         self._service = service
-        self.runtime = service.runtime
         self.compute_calls = 0
-
-    def capabilities(self):
-        return self._service.capabilities()
-
-    def inspect_structure(self, source):
-        return self._service.inspect_structure(source)
 
     def compute(self, request, *, output=None):
         self.compute_calls += 1

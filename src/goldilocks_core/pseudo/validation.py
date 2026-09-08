@@ -3,11 +3,13 @@ from __future__ import annotations
 import math
 from numbers import Real
 
+from goldilocks_core.failures import ExpectedFailure
 from goldilocks_core.functionals import normalize_functional_label
 
 
-class PseudoImportError(ValueError):
-    pass
+class PseudoImportError(ExpectedFailure, ValueError):
+    kind = "pseudo_import_error"
+    category = "local"
 
 
 class AmbiguousCutoffMetadata(PseudoImportError):

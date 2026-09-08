@@ -32,9 +32,8 @@ from goldilocks_core.runtime.dispatch import (
     UnknownTask,
 )
 from goldilocks_core.runtime.graph import UnknownPreset
-from goldilocks_core.runtime.jobs import compute
 from goldilocks_core.runtime.models import KMeshService, Runtime
-from goldilocks_core.runtime.service import Service
+from goldilocks_core.runtime.service import Service, compute
 from goldilocks_core.selection import SelectionRecord
 
 __all__ = [

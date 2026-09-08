@@ -10,6 +10,7 @@ from pymatgen.core.graphs import StructureGraph
 from pymatgen.core.periodic_table import Element
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
+from goldilocks_core.failures import ExpectedFailure
 from goldilocks_core.types import (
     Dimensionality,
     ElectronicCharacter,
@@ -45,10 +46,12 @@ class StructureAnalysisRecord(TypedDict):
     analysis_warnings: list[str]
 
 
-class DimensionalityClassificationError(Exception):
+class DimensionalityClassificationError(ExpectedFailure):
     """Raised when CrystalNN/Larsen fails on an ordered structure.
     Disordered structures get a conservative "unknown" default instead.
     The real fix is a goldilocks-side classifier (see #133)."""
+
+    kind = "dimensionality_error"
 
     def __init__(self, structure: Structure, /) -> None:
         self.structure = structure

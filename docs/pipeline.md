@@ -46,7 +46,7 @@ Use `RecordSelection` for a minimal subgraph:
 from goldilocks_core.analysis import StructureAnalysisRecord
 from goldilocks_core.kmesh.resolve import KPointSelection
 from goldilocks_core.request import RecordSelection
-from goldilocks_core.runtime.jobs import compute
+from goldilocks_core.runtime.service import compute
 
 request = ComputeRequest(
     request.draft,

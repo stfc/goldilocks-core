@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from goldilocks_core.examples.structures import structure
 
 
@@ -95,6 +97,21 @@ def test_cli_inspect_rejects_an_invalid_structure_without_a_traceback(
     completed = _run_cli("inspect", str(broken), "--json")
 
     assert completed.returncode == 2
+    assert "Traceback" not in completed.stderr
+
+
+@pytest.mark.parametrize(
+    "arguments", [("inspect",), ("compute", "--outputs", "analysis", "--no-out")]
+)
+def test_cli_missing_structure_reports_an_operator_error(
+    tmp_path: Path, arguments: tuple[str, ...]
+) -> None:
+    missing = tmp_path / "missing.cif"
+
+    completed = _run_cli(*arguments, str(missing), "--json")
+
+    assert completed.returncode == 2
+    assert str(missing) in completed.stderr
     assert "Traceback" not in completed.stderr
 
 

@@ -29,7 +29,7 @@ resolution, input rendering, and publication touch the filesystem.
 | `provenance.py`, `types.py`, `validation.py` | Shared provenance record, shared type vocabulary, and operator-input validators. |
 | `calculation.py` | `CalculationIntent` and `CalculationHints` with validating constructors. |
 | `request.py` | Native drafts, requests, selections, local request construction, and request-scoped resource binding. |
-| `result.py` | `ComputationResult`; its `records` field is a plain type-keyed dict. |
+| `result.py` | `ComputationResult`, publication, and preparation of portable output with its exact optional archive. |
 | `serialization.py` | `to_jsonable` (complete form) and `to_portable` (publication/CLI projection). |
 | `runtime/graph.py` | Stage-agnostic, type-keyed DAG executor (`TaskGraph`/`Stage`/`Preset`/`execute`) and its task-description documents. |
 | `runtime/scf.py` | The SCF stage graph, Presets, and warning collection; no resource cache or registry configuration. |
@@ -37,8 +37,7 @@ resolution, input rendering, and publication touch the filesystem.
 | `runtime/dispatch.py` | `Dispatcher` and `GraphHandler`: registration, context construction, and execution by `intent.task`. |
 | `runtime/registry.py` | Stable record-ID registry and output-type resolution shared by transports. |
 | `runtime/capabilities.py` | The `capabilities` document assembly (tasks, models, pseudopotential sets, defaults). |
-| `runtime/jobs.py` | Short-lived `compute` convenience entry point. |
-| `runtime/service.py` | `Service`: process-owned lifecycle, locking, Capabilities, Structure Inspection, Compute, and publication. |
+| `runtime/service.py` | Native and document operations, resource ownership, explicit acquisition retries, and expected-failure classification. |
 | `io/structures.py` | One Structure Source normalization path for Inspection and Compute. |
 | `analysis.py` | The `StructureAnalysisRecord` shape and structure-fact analysis. |
 | `advice/parameters.py` | Coupled scientific parameter policy and its domain-owned shapes; scalar decisions are private. |
@@ -50,9 +49,8 @@ resolution, input rendering, and publication touch the filesystem.
 | `input_data.py` | Combines completed scientific records and verified resource material into DFT Input Data. |
 | `publication.py` | Publishes assembled bytes as directories or ZIPs; validates output paths. |
 | `failures.py` | Expected-failure protocol with domain categories and safe public descriptions; no transport dependencies. |
-| `server/request.py` | Strict HTTP/MCP validation directly into native Core requests. |
-| `server/wire.py` | Mechanically derived Core response schemas. |
-| `server/http.py`, `server/http_contract.py` | Optional HTTP lifecycle, errors, and scientific route adapter. |
+| `server/documents.py` | Strict native request conversion and mechanically derived portable response schemas. |
+| `server/http.py` | Optional HTTP lifecycle, routes, multipart encoding, and protocol-level errors. |
 | `server/mcp.py` | Optional local stdio MCP adapter. |
 
 Stages communicate through ordinary dictionaries described by domain-owned
@@ -90,7 +88,7 @@ Handlers supply context and collect factual warnings.
 ## Transport adapters
 
 Python, CLI, HTTP, and MCP expose Capabilities, Structure Inspection, and
-Compute. `server/request.py` converts strict transport shapes into Core
+Compute. `server/documents.py` converts strict transport shapes into Core
 Records; Core constructors validate domain values once. Responses serialize
 Core record documents through the portable projection; the selection and
 input-data documents carry explicit portable projections that strip
@@ -110,6 +108,12 @@ Pseudopotential Set ID, but never structure paths, pseudopotential roots or
 metadata payloads, model locations, or publication paths. Python and CLI own
 trusted local filesystem controls. HTTP and MCP remain optional imports.
 OpenAPI is exported from the application as the transport contract.
+
+Adapters use the shared document operations rather than inspect native scientific
+record types or maintain separate exception inventories. Native operations retain
+their original exceptions. Expected failures carry a domain category and a safe
+public description; the document interface classifies them once. Unexpected
+execution defects propagate.
 
 ## Runtime assets
 
@@ -198,7 +202,7 @@ boundaries, concurrency safety, or the task extension model.
   `ModelSpec`) gets validating constructors; internal stage currency is
   plain dictionaries described by domain-owned shapes, trusted by construction.
   `Portable` annotations declare exclusions and serialized field shapes.
-  Serializers and `server/wire.py` share these declarations; generated OpenAPI
+  Serializers and `server/documents.py` share these declarations; generated OpenAPI
   and TypeScript are build products, not checked-in copies of the contract.
 - `Service` executes Computations concurrently over one process-owned
   `Runtime`. Model backends synchronize resource acquisition, not inference;
@@ -213,9 +217,9 @@ boundaries, concurrency safety, or the task extension model.
 - Two lazy-import patterns are deliberate: heavy ML dependencies (torch,
   matminer, dscribe) load at first model use, and optional transport extras
   import inside their serve paths with `ImportError` guidance.
-- `server/request.py` rejects unknown fields, bad types, and remote paths while
+- `server/documents.py` rejects unknown fields, bad types, and remote paths while
   constructing native Core inputs. Handlers serialize trusted Records directly.
-- `DimensionalityClassificationError` is an `Exception`, not a
-  `ValueError`, so HTTP maps it explicitly to 422.
+- Named domain failures preserve their native exception identities and implement
+  `ExpectedFailure`; HTTP/MCP do not import an inventory of scientific exceptions.
 - MCP maps only known stage errors to `ToolError`; internal defects
   remain unhandled.

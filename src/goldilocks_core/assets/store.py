@@ -19,13 +19,17 @@ from goldilocks_core.assets.records import (
     InstalledAsset,
     InstalledFile,
 )
+from goldilocks_core.failures import ExpectedFailure
 
 ASSET_ROOT_ENV = "GOLDILOCKS_ASSET_ROOT"
 _MANIFEST_SCHEMA_VERSION = 2
 _MANIFEST = "manifest.json"
 
 
-class AssetNotInstalled(FileNotFoundError):
+class AssetNotInstalled(ExpectedFailure, FileNotFoundError):
+    kind = "asset_not_installed"
+    category = "dependency"
+
     def __init__(
         self,
         reference: AssetReference,
@@ -41,9 +45,28 @@ class AssetNotInstalled(FileNotFoundError):
             f"run 'goldilocks assets install {reference.id}'"
         )
 
+    def public_error(self) -> dict[str, object]:
+        return {
+            "kind": self.kind,
+            "message": (
+                f"Runtime asset {self.reference.id}@{self.reference.version} "
+                f"{self.reason}."
+            ),
+            "asset_id": self.reference.id,
+            "version": self.reference.version,
+            "reason": self.reason,
+        }
 
-class AssetCorrupt(ValueError):
-    pass
+
+class AssetCorrupt(ExpectedFailure, ValueError):
+    kind = "asset_corrupt"
+    category = "dependency"
+
+    def public_error(self) -> dict[str, object]:
+        return {
+            "kind": self.kind,
+            "message": "A required runtime asset failed integrity verification.",
+        }
 
 
 class AssetStore:

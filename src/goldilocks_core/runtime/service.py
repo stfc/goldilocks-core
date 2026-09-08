@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from pathlib import Path
+from typing import Any, Literal
 
-from goldilocks_core.input_data import DftInputData
+from goldilocks_core.assets.runtime import install as install_assets
+from goldilocks_core.assets.store import AssetNotInstalled
+from goldilocks_core.failures import ExpectedFailure
 from goldilocks_core.io.structures import (
+    PathStructureSource,
+    StructureInputError,
     StructureInspection,
     StructureSource,
     normalize_structure,
@@ -12,15 +17,45 @@ from goldilocks_core.publication import (
     ArchiveOutput,
     DirectoryOutput,
     OutputTarget,
-    Publisher,
 )
 from goldilocks_core.request import ComputeRequest
-from goldilocks_core.result import ComputationResult
+from goldilocks_core.result import (
+    ComputationResult,
+    PreparedComputation,
+    PublicationUnavailable,
+)
 from goldilocks_core.runtime.capabilities import Capabilities, build_capabilities
 from goldilocks_core.runtime.dispatch import Dispatcher, GraphHandler
 from goldilocks_core.runtime.models import Runtime
+from goldilocks_core.serialization import to_portable
 
-__all__ = ["Service"]
+
+class OperationFailure(Exception):
+    """An expected operation failure, with its stable remote-safe error document.
+
+    Native operations preserve their exceptions. Document operations classify
+    only named failures; programming errors are never converted into bad input.
+    ``http_status=None`` means the failure has no public HTTP mapping.
+    """
+
+    def __init__(self, error: ExpectedFailure | FileExistsError) -> None:
+        super().__init__(str(error))
+        if isinstance(error, ExpectedFailure):
+            self.http_status = {
+                "input": 422,
+                "dependency": 424,
+                "local": None,
+            }[error.category]
+            self.error = error.public_error()
+        else:
+            self.http_status = None
+            self.error = {"kind": "output_exists", "message": str(error)}
+
+    @classmethod
+    def classify(cls, error: Exception) -> OperationFailure | None:
+        return (
+            cls(error) if isinstance(error, ExpectedFailure | FileExistsError) else None
+        )
 
 
 class Service:
@@ -59,25 +94,77 @@ class Service:
             raise ValueError("output must be a DirectoryOutput, ArchiveOutput, or None")
         self._ensure_open()
         result = self._dispatcher.compute(request)
-        if output is None:
-            return result
-        input_data = result.records.get(DftInputData)
-        if input_data is None:
-            if isinstance(output, DirectoryOutput) and output.path is None:
-                return result
-            raise ValueError(
-                "The Computation Result does not contain DFT Input Data to publish"
+        return result if output is None else result.publish(output)
+
+    def compute_document(
+        self,
+        request: ComputeRequest,
+        *,
+        publication: Literal["memory", "auto", "directory", "archive"] = "memory",
+        path: str | Path | None = None,
+        prepare_archive: bool = False,
+        fetch_missing: bool = False,
+    ) -> PreparedComputation:
+        """Execute and prepare trusted portable output without transport policy.
+
+        Publication destinations and asset installation are local-only controls;
+        remote adapters never expose them in their request documents. Retries
+        and their attempt ledger belong to this call, not the shared runtime.
+        """
+        if publication not in {"memory", "auto", "directory", "archive"}:
+            raise ValueError(f"Unknown publication mode: {publication!r}")
+        if (publication in {"directory", "archive"}) != (path is not None):
+            raise ValueError("Only explicit directory/archive publication takes a path")
+        try:
+            target = (
+                ArchiveOutput(path)
+                if publication == "archive"
+                else DirectoryOutput(path)
+                if publication in {"auto", "directory"}
+                else None
             )
-        publication = Publisher().publish(input_data, output)
-        return replace(result, publication=publication)
+        except ValueError as error:
+            raise OperationFailure(PublicationUnavailable(str(error))) from error
+        attempted: set[tuple[str, str]] = set()
+        try:
+            while True:
+                try:
+                    result = self.compute(request, output=target)
+                    break
+                except AssetNotInstalled as error:
+                    key = (error.reference.id, error.reference.version)
+                    if not fetch_missing or key in attempted:
+                        raise
+                    attempted.add(key)
+                    install_assets(error.reference.id, store=self._runtime.asset_store)
+            return result.prepare(archive=prepare_archive)
+        except (ExpectedFailure, FileExistsError) as error:
+            raise OperationFailure(error) from error
 
     def capabilities(self) -> Capabilities:
         self._ensure_open()
         return build_capabilities(self._dispatcher, self._runtime)
 
+    def capabilities_document(self) -> dict[str, Any]:
+        try:
+            return to_portable(self.capabilities())
+        except (ExpectedFailure, FileExistsError) as error:
+            raise OperationFailure(error) from error
+
     def inspect_structure(self, source: StructureSource) -> StructureInspection:
         self._ensure_open()
         return normalize_structure(source).inspection
+
+    def inspect_document(self, source: StructureSource | str | Path) -> dict[str, Any]:
+        if isinstance(source, str | Path):
+            try:
+                source = PathStructureSource(source)
+            except ValueError as error:
+                raise OperationFailure(StructureInputError(str(error))) from error
+        try:
+            return to_portable(self.inspect_structure(source))
+        except (ExpectedFailure, FileExistsError) as error:
+            raise OperationFailure(error) from error
 
     def close(self) -> None:
         if not self._closed and self._owns_runtime:
@@ -93,3 +180,14 @@ class Service:
 
     def __exit__(self, *exc: object) -> None:
         self.close()
+
+
+def compute(
+    request: ComputeRequest,
+    *,
+    runtime: Runtime | None = None,
+    output: OutputTarget | None = None,
+) -> ComputationResult:
+    """Run one native job, closing only resources created for this call."""
+    with Service(runtime) as service:
+        return service.compute(request, output=output)

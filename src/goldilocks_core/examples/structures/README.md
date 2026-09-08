@@ -20,15 +20,12 @@ uv run goldilocks compute "$(uv run goldilocks examples path)/Si.cif" --preset r
 From Python:
 
 ```python
-from goldilocks_core import (
-    CalculationDraft,
-    ComputeRequest,
-    PathStructureSource,
-    PresetSelection,
-    Service,
-)
-from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
-from goldilocks_core.examples import structure
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.examples.structures import structure
+from goldilocks_core.io.structures import PathStructureSource
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.request import CalculationDraft, ComputeRequest, PresetSelection
+from goldilocks_core.runtime.service import Service
 
 request = ComputeRequest(
     draft=CalculationDraft(structure=PathStructureSource(structure("Si.cif"))),
@@ -37,8 +34,8 @@ request = ComputeRequest(
 with Service() as core:
     result = core.compute(request)
 
-print(result.records[StructureAnalysisRecord].reduced_formula)
-print(result.records[KPointSelection].grid)
+print(result.records[StructureAnalysisRecord]["reduced_formula"])
+print(result.records[KPointSelection]["grid"])
 ```
 
 ## Available structures
@@ -57,7 +54,7 @@ results.
 The `structure()` function returns the full path to an installed example:
 
 ```python
-from goldilocks_core.examples import structure
+from goldilocks_core.examples.structures import structure
 
 silicon_path = structure("Si.cif")
 ```

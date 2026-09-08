@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FutureTimeoutError
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from threading import Barrier, Event
+from typing import Any
 
 import pytest
 from pymatgen.core import Lattice, Structure
@@ -16,12 +16,9 @@ from goldilocks_core import (
     Runtime,
     Service,
 )
-from goldilocks_core.contracts import (
-    KPointSelection,
-    Provenance,
-    PseudoCutoffs,
-    PseudoMetadata,
-)
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.provenance import Provenance
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.runtime.dispatch import Dispatcher
 
 
@@ -43,7 +40,7 @@ def make_request(*, k_grid=(2, 2, 1)) -> ComputeRequest:
                     pseudo_type="NC",
                     functional="PBEsol",
                     relativistic="scalar",
-                    cutoffs=PseudoCutoffs(ecutwfc_ry=35, ecutrho_ry=140),
+                    cutoffs={"ecutwfc_ry": 35, "ecutrho_ry": 140},
                     source_identifier="synthetic/Si.UPF",
                 ),
             ),
@@ -58,7 +55,7 @@ def test_service_lifecycle_preserves_runtime_ownership(owned) -> None:
     runtime = service.runtime
     request = make_request()
     with service:
-        assert service.compute(request).records[KPointSelection].grid == (2, 2, 1)
+        assert service.compute(request).records[KPointSelection]["grid"] == [2, 2, 1]
     service.close()
     assert service.is_closed
     assert runtime.is_closed is owned
@@ -71,11 +68,11 @@ def test_service_lifecycle_preserves_runtime_ownership(owned) -> None:
             operation()
     if not owned:
         with Service(runtime) as replacement:
-            assert replacement.compute(request).records[KPointSelection].grid == (
+            assert replacement.compute(request).records[KPointSelection]["grid"] == [
                 2,
                 2,
                 1,
-            )
+            ]
     runtime.close()
 
 
@@ -84,15 +81,15 @@ def test_computations_and_discovery_are_not_serialized() -> None:
     release = Event()
 
     class BlockingBackend:
-        def __call__(self, structure: Structure) -> KPointSelection:
+        def __call__(self, structure: Structure) -> dict[str, Any]:
             entered.wait(timeout=2)
             assert release.wait(timeout=2)
-            return KPointSelection(
-                grid=(2, 2, 2),
-                shift=(0, 0, 0),
-                mesh_type="monkhorst-pack",
-                provenance=Provenance(source="model", reason="test"),
-            )
+            return {
+                "grid": [2, 2, 2],
+                "shift": [0, 0, 0],
+                "mesh_type": "monkhorst-pack",
+                "provenance": Provenance(source="model", reason="test"),
+            }
 
         def close(self) -> None:
             pass
@@ -108,20 +105,26 @@ def test_computations_and_discovery_are_not_serialized() -> None:
                 entered.wait(timeout=2)
                 capabilities = pool.submit(service.capabilities)
                 assert (
-                    capabilities.result(timeout=0.5).tasks[0].id == "scf_single_point"
+                    capabilities.result(timeout=0.5)["tasks"][0]["id"]
+                    == "scf_single_point"
                 )
                 inspection = pool.submit(
                     service.inspect_structure, request.draft.structure
                 )
-                assert inspection.result(timeout=0.5).structure.reduced_formula == "Si"
+                assert (
+                    inspection.result(timeout=0.5)["structure"]["reduced_formula"]
+                    == "Si"
+                )
             finally:
                 release.set()
             for computation in computations:
-                assert computation.result(timeout=2).records[KPointSelection].grid == (
+                assert computation.result(timeout=2).records[KPointSelection][
+                    "grid"
+                ] == [
                     2,
                     2,
                     2,
-                )
+                ]
 
 
 def test_concurrent_first_computations_wait_for_default_task_registration(
@@ -155,8 +158,8 @@ def test_concurrent_first_computations_wait_for_default_task_registration(
         finally:
             release_registration.set()
         for computation in (first, second):
-            assert computation.result(timeout=2).records[KPointSelection].grid == (
+            assert computation.result(timeout=2).records[KPointSelection]["grid"] == [
                 2,
                 2,
                 1,
-            )
+            ]

@@ -5,8 +5,8 @@ import re
 from pathlib import Path
 from typing import Any
 
-from goldilocks_core.contracts import PseudoMetadata
 from goldilocks_core.functionals import normalize_functional_label
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 
 
 def _clean_string(value: object) -> str | None:

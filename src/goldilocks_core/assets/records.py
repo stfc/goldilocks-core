@@ -121,6 +121,20 @@ class InstalledAsset:
             )
         return self.root / relative_path
 
+    def read_bytes(self, relative_path: str) -> bytes:
+        """Read content bound to this installation's verified inventory."""
+        file = next(item for item in self.files if item.path == relative_path)
+        payload = self.path(relative_path).read_bytes()
+        if (
+            len(payload) != file.size
+            or hashlib.sha256(payload).hexdigest() != file.sha256
+        ):
+            raise ValueError(
+                f"Installed content {self.id}@{self.version}/{relative_path} "
+                "differs from its verified inventory"
+            )
+        return payload
+
 
 @dataclass(frozen=True, slots=True)
 class AssetReference:

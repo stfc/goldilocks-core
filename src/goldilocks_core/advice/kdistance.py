@@ -4,16 +4,17 @@ from threading import Lock
 
 from pymatgen.core import Structure
 
-from goldilocks_core.assets import AssetStore
-from goldilocks_core.contracts import (
-    KPointSelection,
-    PathLike,
-    Provenance,
-)
+from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.kmesh.math import k_distance_to_mesh
-from goldilocks_core.ml.model_registry import QrfKpointsConfig, load_default_qrf_config
-from goldilocks_core.ml.qrf import predict_kdistance_with_resources
-from goldilocks_core.ml.qrf.inference import QrfResources, load_qrf_resources
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.ml.models import QrfKpointsConfig, load_default_qrf_config
+from goldilocks_core.ml.qrf.inference import (
+    QrfResources,
+    load_qrf_resources,
+    predict_kdistance_with_resources,
+)
+from goldilocks_core.provenance import Provenance
+from goldilocks_core.types import PathLike
 
 
 def kdistance_to_selection(
@@ -26,11 +27,11 @@ def kdistance_to_selection(
     confidence: float,
     mesh_type: str = "monkhorst-pack",
 ) -> KPointSelection:
-    return KPointSelection(
-        grid=k_distance_to_mesh(structure, median),
-        shift=(0, 0, 0),
-        mesh_type=mesh_type,
-        provenance=Provenance(
+    return {
+        "grid": list(k_distance_to_mesh(structure, median)),
+        "shift": [0, 0, 0],
+        "mesh_type": mesh_type,
+        "provenance": Provenance(
             source="model",
             reason=(
                 f"ML-predicted k-point distance {median:.4f} Å⁻¹ "
@@ -39,7 +40,7 @@ def kdistance_to_selection(
             data_source=data_source,
             confidence=confidence,
         ),
-    )
+    }
 
 
 class QrfBackend:

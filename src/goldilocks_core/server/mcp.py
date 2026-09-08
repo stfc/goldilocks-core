@@ -4,16 +4,9 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Any
 
-from goldilocks_core.analysis import DimensionalityClassificationError
-from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled
-from goldilocks_core.contracts import ComputeRequest, DirectoryOutput
-from goldilocks_core.generation import GenerationError
-from goldilocks_core.io.structures import StructureInputError
-from goldilocks_core.pseudo.source import PseudoTableMismatch
-from goldilocks_core.pseudo.validation import PseudoImportError
-from goldilocks_core.runtime import UnavailableRecord, UnknownPreset, UnknownTask
-from goldilocks_core.runtime.service import Service
-from goldilocks_core.server.request import (
+from goldilocks_core.request import ComputeRequest
+from goldilocks_core.runtime.service import OperationFailure, Service
+from goldilocks_core.server.documents import (
     DraftDocument,
     InlineStructureDocument,
     MemoryOutputDocument,
@@ -30,20 +23,6 @@ except ImportError as error:
     ) from error
 
 __all__ = ["create_server", "serve"]
-
-_KNOWN_TOOL_ERRORS = (
-    AssetCorrupt,
-    AssetNotInstalled,
-    DimensionalityClassificationError,
-    FileExistsError,
-    GenerationError,
-    PseudoImportError,
-    PseudoTableMismatch,
-    StructureInputError,
-    UnavailableRecord,
-    UnknownPreset,
-    UnknownTask,
-)
 
 
 class _StrictMCPServer(MCPServer):
@@ -97,18 +76,19 @@ def create_server(
         description="Describe Core tasks, presets, records, codes, and assets."
     )
     async def capabilities() -> dict[str, Any]:
-        record = await asyncio.to_thread(state.capabilities)
-        return record.to_dict()
+        try:
+            return await asyncio.to_thread(state.capabilities_document)
+        except OperationFailure as error:
+            raise ToolError(str(error)) from error
 
     @server.tool(description="Normalize and inspect an inline structure source.")
     async def inspect_structure(
         source: InlineStructureDocument,
     ) -> dict[str, Any]:
         try:
-            result = await asyncio.to_thread(state.inspect_structure, source)
-        except StructureInputError as error:
+            return await asyncio.to_thread(state.inspect_document, source)
+        except OperationFailure as error:
             raise ToolError(str(error)) from error
-        return result.to_dict()
 
     @server.tool(
         description=(
@@ -122,15 +102,14 @@ def create_server(
         output: MemoryOutputDocument | None = None,
     ) -> dict[str, Any]:
         try:
-            result = await asyncio.to_thread(
-                state.compute,
+            prepared = await asyncio.to_thread(
+                state.compute_document,
                 ComputeRequest(draft, selection),
-                output=DirectoryOutput() if output is None else None,
+                publication="auto" if output is None else "memory",
             )
-
-        except _KNOWN_TOOL_ERRORS as error:
+        except OperationFailure as error:
             raise ToolError(str(error)) from error
-        return result.to_dict()
+        return prepared.result
 
     return server
 

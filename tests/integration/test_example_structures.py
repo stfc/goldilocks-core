@@ -10,12 +10,14 @@ from goldilocks_core import (
     PresetSelection,
     compute,
 )
-from goldilocks_core.contracts import (
-    KPointSelection,
-    ParameterAdvice,
-    StructureAnalysisRecord,
+from goldilocks_core.advice.parameters import ParameterAdvice
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.examples.structures import (
+    available_structures,
+    structure,
+    structures_path,
 )
-from goldilocks_core.examples import available_structures, structure, structures_path
+from goldilocks_core.kmesh.resolve import KPointSelection
 
 
 def _recommend(name: str):
@@ -47,8 +49,8 @@ def test_structure_rejects_an_unknown_name() -> None:
 def test_every_bundled_structure_runs_through_the_pipeline(name: str) -> None:
     result = _recommend(name)
 
-    assert result.records[StructureAnalysisRecord].reduced_formula
-    assert result.records[KPointSelection].grid == (4, 4, 4)
+    assert result.records[StructureAnalysisRecord]["reduced_formula"]
+    assert result.records[KPointSelection]["grid"] == [4, 4, 4]
 
 
 def test_bundled_structures_exercise_distinct_advice_branches() -> None:
@@ -58,17 +60,17 @@ def test_bundled_structures_exercise_distinct_advice_branches() -> None:
 
     silicon_analysis = silicon.records[StructureAnalysisRecord]
     silicon_advice = silicon.records[ParameterAdvice]
-    assert silicon_advice.magnetism.spin_polarized is False
-    assert silicon_advice.spin_orbit.consider is False
-    assert silicon_analysis.heavy_elements == ()
+    assert silicon_advice["magnetism"]["spin_polarized"] is False
+    assert silicon_advice["spin_orbit"]["consider"] is False
+    assert silicon_analysis["heavy_elements"] == []
 
     iron_analysis = iron.records[StructureAnalysisRecord]
     iron_advice = iron.records[ParameterAdvice]
-    assert iron_analysis.electronic_character == "likely_metal"
-    assert iron_advice.magnetism.spin_polarized is True
-    assert iron_advice.smearing.smearing_type == "cold"
+    assert iron_analysis["electronic_character"] == "likely_metal"
+    assert iron_advice["magnetism"]["spin_polarized"] is True
+    assert iron_advice["smearing"]["smearing_type"] == "cold"
 
     platinum_analysis = platinum.records[StructureAnalysisRecord]
     platinum_advice = platinum.records[ParameterAdvice]
-    assert platinum_analysis.heavy_elements == ("Pt",)
-    assert platinum_advice.spin_orbit.consider is True
+    assert platinum_analysis["heavy_elements"] == ["Pt"]
+    assert platinum_advice["spin_orbit"]["consider"] is True

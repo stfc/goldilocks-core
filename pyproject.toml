@@ -73,16 +73,13 @@ skip_covered = true
 [tool.mutmut]
 source_paths = ["src/goldilocks_core"]
 only_mutate = [
-    "src/goldilocks_core/advice/convergence.py",
-    "src/goldilocks_core/advice/magnetism.py",
-    "src/goldilocks_core/advice/pseudo.py",
-    "src/goldilocks_core/advice/smearing.py",
-    "src/goldilocks_core/advice/soc.py",
-    "src/goldilocks_core/advice/vdw.py",
+    "src/goldilocks_core/advice/parameters.py",
     "src/goldilocks_core/functionals.py",
     "src/goldilocks_core/generation/registry.py",
     "src/goldilocks_core/generation/qe/scf.py",
     "src/goldilocks_core/kmesh/math.py",
+    "src/goldilocks_core/runtime/dispatch.py",
+    "src/goldilocks_core/runtime/graph.py",
     "src/goldilocks_core/selection.py",
 ]
 mutate_only_covered_lines = false
@@ -94,6 +91,12 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"goldilocks_core.contracts".msg = "the contracts package was dissolved; import from the domain module that defines the name"
+
 [tool.setuptools.package-data]
 goldilocks_core = [
     "ml/registry.toml",
@@ -102,3 +105,6 @@ goldilocks_core = [
     "examples/structures/README.md",
 ]
 
+
+[tool.ruff.lint.isort]
+combine-as-imports = true

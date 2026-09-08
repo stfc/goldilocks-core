@@ -8,12 +8,15 @@ from email.parser import BytesParser
 from email.policy import default
 from pathlib import Path
 from threading import Event, Lock
+from typing import Any
 
 import pytest
 
-from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled, AssetReference
-from goldilocks_core.contracts import KPointSelection, Provenance
-from goldilocks_core.runtime import Runtime, Service
+from goldilocks_core.assets.records import AssetReference
+from goldilocks_core.assets.store import AssetCorrupt, AssetNotInstalled
+from goldilocks_core.provenance import Provenance
+from goldilocks_core.runtime.models import Runtime
+from goldilocks_core.runtime.service import Service
 from goldilocks_core.server.http import create_app
 
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
@@ -581,17 +584,11 @@ def _multipart_parts(response) -> dict[str, tuple[str, str | None, bytes]]:
     }
 
 
-class _CountingService:
+class _CountingService(Service):
     def __init__(self, service: Service) -> None:
+        super().__init__(service.runtime)
         self._service = service
-        self.runtime = service.runtime
         self.compute_calls = 0
-
-    def capabilities(self):
-        return self._service.capabilities()
-
-    def inspect_structure(self, source):
-        return self._service.inspect_structure(source)
 
     def compute(self, request, *, output=None):
         self.compute_calls += 1
@@ -612,7 +609,7 @@ class _BlockingKmeshBackend:
         self.all_entered = Event()
         self.release = Event()
 
-    def __call__(self, structure) -> KPointSelection:
+    def __call__(self, structure) -> dict[str, Any]:
         del structure
         with self._lock:
             self._calls += 1
@@ -620,12 +617,12 @@ class _BlockingKmeshBackend:
                 self.all_entered.set()
         if not self.release.wait(timeout=2):
             raise RuntimeError("test did not release computation")
-        return KPointSelection(
-            grid=(3, 3, 3),
-            shift=(0, 0, 0),
-            mesh_type="monkhorst-pack",
-            provenance=Provenance(source="model", reason="test"),
-        )
+        return {
+            "grid": [3, 3, 3],
+            "shift": [0, 0, 0],
+            "mesh_type": "monkhorst-pack",
+            "provenance": Provenance(source="model", reason="test"),
+        }
 
     def close(self) -> None:
         pass

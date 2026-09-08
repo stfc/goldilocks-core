@@ -14,20 +14,14 @@ the server's environment; request bodies never name server paths or loadable
 artifacts.
 """
 
-from __future__ import annotations
-
+import json
 import os
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from goldilocks_core.analysis import DimensionalityClassificationError
-from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled
-from goldilocks_core.generation import GenerationError
-from goldilocks_core.io.structures import StructureInputError
-from goldilocks_core.pseudo.source import PseudoTableMismatch
-from goldilocks_core.runtime import UnavailableRecord, UnknownPreset, UnknownTask
-from goldilocks_core.runtime.service import Service
+from goldilocks_core.runtime.service import OperationFailure, Service
 from goldilocks_core.server.readiness import AssetReadiness
 
 __all__ = ["create_app", "serve"]
@@ -59,13 +53,19 @@ def create_app(
     static_root: str | Path | None = None,
 ) -> Any:
     try:
-        from fastapi import FastAPI, Request
-        from fastapi.exceptions import RequestValidationError
-        from fastapi.responses import JSONResponse
+        from fastapi import FastAPI
+        from fastapi.responses import JSONResponse, Response
         from fastapi.staticfiles import StaticFiles
     except ImportError as error:
         raise ImportError(_MISSING_HTTP_EXTRA) from error
-    from goldilocks_core.server.http_contract import install_scientific_routes
+    from goldilocks_core.server.documents import (
+        CapabilitiesDocument,
+        ComputeRequestDocument,
+        ErrorResponseDocument,
+        InspectRequestDocument,
+        StructureInspectionDocument,
+        prepared_computation_document,
+    )
 
     owns_service = service is None
     state = service if service is not None else Service()
@@ -77,8 +77,7 @@ def create_app(
     workbench_static_root = _workbench_static_root(static_root)
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        del app
+    async def lifespan(_app: FastAPI):
         try:
             yield
         finally:
@@ -88,13 +87,67 @@ def create_app(
     app = FastAPI(title="goldilocks-core", lifespan=lifespan)
     app.state.goldilocks = state
     app.state.asset_readiness = readiness
-    install_scientific_routes(app, state)
+    error_responses = {
+        status: {"model": ErrorResponseDocument, "content": {"application/json": {}}}
+        for status in (422, 424)
+    }
+    prepared_document = prepared_computation_document(state.capabilities()["tasks"])
+
+    @app.get("/capabilities", response_model=CapabilitiesDocument)
+    def capabilities() -> Response:
+        return JSONResponse(state.capabilities_document())
+
+    @app.post(
+        "/inspect",
+        response_model=StructureInspectionDocument,
+        responses={422: {"model": ErrorResponseDocument}},
+    )
+    def inspect(body: InspectRequestDocument) -> Response:
+        return JSONResponse(state.inspect_document(body.source))
+
+    @app.post(
+        "/compute",
+        response_model=prepared_document,
+        response_class=Response,
+        responses={
+            200: {
+                "description": "Computation Result and its exact optional archive.",
+                "content": {
+                    "multipart/form-data": {
+                        "schema": {"$ref": "#/components/schemas/PreparedComputation"}
+                    }
+                },
+            },
+            **error_responses,
+        },
+    )
+    def compute(body: ComputeRequestDocument) -> Response:
+        prepared = state.compute_document(body, prepare_archive=True)
+        result = json.dumps(prepared.result, separators=(",", ":")).encode("utf-8")
+        payload, media_type = _prepared_multipart(result, prepared.archive)
+        return Response(payload, media_type=media_type)
+
+    _operational_routes(app, readiness)
+
+    if workbench_static_root is not None:
+        app.mount(
+            "/",
+            StaticFiles(directory=workbench_static_root, html=True),
+            name="workbench-static",
+        )
+
+    return app
+
+
+def _operational_routes(app: Any, readiness: AssetReadiness) -> None:
+    from fastapi import Request
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
 
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(
-        request: Request, error: RequestValidationError
+        _request: Request, error: RequestValidationError
     ) -> JSONResponse:
-        del request
         validation_errors = [
             {
                 "path": ".".join(str(part) for part in item["loc"]),
@@ -115,117 +168,15 @@ def create_app(
             },
         )
 
-    @app.exception_handler(UnknownTask)
-    async def unknown_task_handler(
-        request: Request, error: UnknownTask
+    @app.exception_handler(OperationFailure)
+    async def operation_failure_handler(
+        _request: Request, error: OperationFailure
     ) -> JSONResponse:
-        del request
+        if error.http_status is None:
+            raise error.__cause__ or error
         return JSONResponse(
-            status_code=422,
-            content={"error": {"kind": "invalid_task", "message": str(error)}},
-        )
-
-    @app.exception_handler(UnknownPreset)
-    async def unknown_preset_handler(
-        request: Request, error: UnknownPreset
-    ) -> JSONResponse:
-        del request
-        return JSONResponse(
-            status_code=422,
-            content={"error": {"kind": "invalid_preset", "message": str(error)}},
-        )
-
-    @app.exception_handler(UnavailableRecord)
-    async def unavailable_record_handler(
-        request: Request, error: UnavailableRecord
-    ) -> JSONResponse:
-        del request
-        return JSONResponse(
-            status_code=422,
-            content={"error": {"kind": "invalid_record", "message": str(error)}},
-        )
-
-    @app.exception_handler(StructureInputError)
-    async def structure_input_handler(
-        request: Request, error: StructureInputError
-    ) -> JSONResponse:
-        del request
-        return JSONResponse(
-            status_code=422,
-            content={"error": {"kind": "invalid_structure", "message": str(error)}},
-        )
-
-    @app.exception_handler(GenerationError)
-    async def generation_error_handler(
-        request: Request, error: GenerationError
-    ) -> JSONResponse:
-        del request
-        return JSONResponse(
-            status_code=422,
-            content={"error": {"kind": "generation_error", "message": str(error)}},
-        )
-
-    @app.exception_handler(DimensionalityClassificationError)
-    async def dimensionality_error_handler(
-        request: Request, error: DimensionalityClassificationError
-    ) -> JSONResponse:
-        del request
-        return JSONResponse(
-            status_code=422,
-            content={"error": {"kind": "dimensionality_error", "message": str(error)}},
-        )
-
-    @app.exception_handler(AssetNotInstalled)
-    async def asset_not_installed_handler(
-        request: Request, error: AssetNotInstalled
-    ) -> JSONResponse:
-        del request
-        return JSONResponse(
-            status_code=424,
-            content={
-                "error": {
-                    "kind": "asset_not_installed",
-                    "message": (
-                        f"Runtime asset {error.reference.id}@{error.reference.version} "
-                        f"{error.reason}."
-                    ),
-                    "asset_id": error.reference.id,
-                    "version": error.reference.version,
-                    "reason": error.reason,
-                }
-            },
-        )
-
-    @app.exception_handler(AssetCorrupt)
-    async def asset_corrupt_handler(
-        request: Request, error: AssetCorrupt
-    ) -> JSONResponse:
-        del request, error
-        return JSONResponse(
-            status_code=424,
-            content={
-                "error": {
-                    "kind": "asset_corrupt",
-                    "message": (
-                        "A required runtime asset failed integrity verification."
-                    ),
-                }
-            },
-        )
-
-    @app.exception_handler(PseudoTableMismatch)
-    async def pseudo_table_mismatch_handler(
-        request: Request, error: PseudoTableMismatch
-    ) -> JSONResponse:
-        del request
-        return JSONResponse(
-            status_code=422,
-            content={
-                "error": {
-                    "kind": "pseudo_table_mismatch",
-                    "message": str(error),
-                }
-            },
+            status_code=error.http_status,
+            content={"error": error.error},
         )
 
     @app.get("/health")
@@ -257,15 +208,6 @@ def create_app(
             },
         )
 
-    if workbench_static_root is not None:
-        app.mount(
-            "/",
-            StaticFiles(directory=workbench_static_root, html=True),
-            name="workbench-static",
-        )
-
-    return app
-
 
 def serve(
     *,
@@ -283,4 +225,55 @@ def serve(
         ),
         host=host,
         port=port,
+    )
+
+
+def _prepared_multipart(result: bytes, archive: bytes | None) -> tuple[bytes, str]:
+    payloads = (result,) if archive is None else (result, archive)
+    while True:
+        boundary = f"goldilocks-{secrets.token_hex(24)}"
+        marker = boundary.encode("ascii")
+        if all(marker not in payload for payload in payloads):
+            break
+
+    parts = [
+        _multipart_part(
+            boundary,
+            name="result",
+            filename="result.json",
+            media_type="application/json",
+            content=result,
+        )
+    ]
+    if archive is not None:
+        parts.append(
+            _multipart_part(
+                boundary,
+                name="archive",
+                filename="goldilocks-inputs.zip",
+                media_type="application/zip",
+                content=archive,
+            )
+        )
+    parts.append(f"--{boundary}--\r\n".encode("ascii"))
+    return b"".join(parts), f'multipart/form-data; boundary="{boundary}"'
+
+
+def _multipart_part(
+    boundary: str,
+    *,
+    name: str,
+    filename: str,
+    media_type: str,
+    content: bytes,
+) -> bytes:
+    return (
+        (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'
+            f"Content-Type: {media_type}\r\n"
+            "\r\n"
+        ).encode("ascii")
+        + content
+        + b"\r\n"
     )

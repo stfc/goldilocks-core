@@ -8,8 +8,7 @@ import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.advice.kdistance import QrfBackend
-from goldilocks_core.contracts import StructureFeatureVector
-from goldilocks_core.ml.model_registry import load_default_qrf_config
+from goldilocks_core.ml.models import StructureFeatureVector, load_default_qrf_config
 from goldilocks_core.ml.qrf.inference import _predict_kdistance_quantiles
 
 
@@ -22,7 +21,7 @@ class FakeQRF:
 
 
 def make_features() -> StructureFeatureVector:
-    return StructureFeatureVector(np.zeros(4), ["a", "b", "c", "d"])
+    return (np.zeros(4), ["a", "b", "c", "d"])
 
 
 def make_structure() -> Structure:
@@ -48,8 +47,9 @@ def patch_inference(monkeypatch, *, model=None) -> None:
     )
     monkeypatch.setattr(
         "goldilocks_core.ml.qrf.features.extract_qrf_features",
-        lambda structure, model, atom_init, settings: StructureFeatureVector(
-            np.zeros(483), [f"feature_{index}" for index in range(483)]
+        lambda structure, model, atom_init, settings: (
+            np.zeros(483),
+            [f"feature_{index}" for index in range(483)],
         ),
     )
 
@@ -110,13 +110,13 @@ def test_qrf_backend_lazy_loading_reuse_reset_and_close(monkeypatch) -> None:
     first = backend(make_structure())
     assert backend(make_structure()) == first
     assert len(models) == len(configs) == 1
-    assert first.provenance.source == "model"
-    assert first.provenance.data_source == (
+    assert first["provenance"].source == "model"
+    assert first["provenance"].data_source == (
         f"{config.model.name}@{config.model.revision or config.model.version}"
     )
-    assert first.provenance.confidence == config.confidence
+    assert first["provenance"].confidence == config.confidence
     backend.reset()
-    assert backend(make_structure()).grid != first.grid
+    assert backend(make_structure())["grid"] != first["grid"]
     assert len(models) == 2
     assert len(configs) == 1
     backend.close()

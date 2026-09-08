@@ -1,0 +1,157 @@
+from __future__ import annotations
+
+import re
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from pathlib import PurePosixPath, PureWindowsPath
+from typing import Annotated, TypedDict
+
+from goldilocks_core.functionals import normalize_functional_label
+from goldilocks_core.serialization import Portable, portable_record, to_portable
+from goldilocks_core.types import (
+    JsonDict,
+    PseudoAccuracy,
+    PseudoType,
+    RelativisticTreatment,
+)
+from goldilocks_core.validation import (
+    validate_finite_positive,
+    validate_optional_nonempty_str,
+    validate_relativistic_mode,
+)
+
+
+class PseudoCutoffs(TypedDict):
+    ecutwfc_ry: float | None
+    ecutrho_ry: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class PseudoMetadata:
+    filepath: Annotated[str, Portable()]
+    filename: str
+    header_format: str
+    provider: str | None = None
+    accuracy: PseudoAccuracy | None = None
+    element: str | None = None
+    pseudo_type: PseudoType | None = None
+    functional: str | None = None
+    relativistic: RelativisticTreatment | None = None
+    z_valence: float | None = None
+    table_id: str | None = None
+    cutoffs: PseudoCutoffs | None = None
+    source_identifier: str | None = None
+    content_sha256: str | None = None
+    content_size_bytes: int | None = None
+    frozen_4f_core: bool = False
+    pseudo_info: Annotated[JsonDict, Portable()] = field(default_factory=dict)
+    warnings: tuple[str, ...] = ()
+
+    def _validate_identity(self) -> None:
+        for field_name in ("filepath", "filename", "header_format"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"PseudoMetadata.{field_name} must be a non-empty string; "
+                    f"got {value!r}"
+                )
+        if (
+            self.filename in {".", ".."}
+            or "/" in self.filename
+            or "\\" in self.filename
+        ):
+            raise ValueError("PseudoMetadata.filename must be one filename")
+        for field_name in ("provider", "element", "source_identifier", "table_id"):
+            validate_optional_nonempty_str(
+                getattr(self, field_name), f"PseudoMetadata.{field_name}"
+            )
+        if self.source_identifier is not None and (
+            PurePosixPath(self.source_identifier).is_absolute()
+            or PureWindowsPath(self.source_identifier).is_absolute()
+            or self.source_identifier.startswith("~")
+        ):
+            raise ValueError(
+                "PseudoMetadata.source_identifier must be a portable source identity, "
+                "not a host path"
+            )
+        if (self.content_sha256 is None) != (self.content_size_bytes is None):
+            raise ValueError(
+                "PseudoMetadata content_sha256 and content_size_bytes must both be "
+                "present or both be None"
+            )
+        if (
+            self.content_sha256 is not None
+            and re.fullmatch(r"[0-9a-f]{64}", self.content_sha256) is None
+        ):
+            raise ValueError(
+                "PseudoMetadata.content_sha256 must be a lowercase SHA-256 digest"
+            )
+        if self.content_size_bytes is not None and (
+            isinstance(self.content_size_bytes, bool)
+            or not isinstance(self.content_size_bytes, int)
+            or self.content_size_bytes < 0
+        ):
+            raise ValueError(
+                "PseudoMetadata.content_size_bytes must be a non-negative integer"
+            )
+
+    def __post_init__(self) -> None:
+        self._validate_identity()
+        for field_name, allowed, description in (
+            (
+                "accuracy",
+                {None, "efficiency", "precision"},
+                "'efficiency', 'precision', or None",
+            ),
+            ("pseudo_type", {None, "NC", "USPP", "PAW"}, "NC, USPP, PAW, or None"),
+        ):
+            value = getattr(self, field_name)
+            if value not in allowed:
+                raise ValueError(
+                    f"PseudoMetadata.{field_name} must be {description}; got {value!r}"
+                )
+        validate_relativistic_mode(self.relativistic, "PseudoMetadata.relativistic")
+        functional = normalize_functional_label(self.functional)
+        object.__setattr__(self, "functional", functional)
+        self._normalize_numerics()
+        for field_name, expected, description in (
+            ("frozen_4f_core", bool, "a boolean"),
+            ("pseudo_info", dict, "a dictionary"),
+        ):
+            if not isinstance(getattr(self, field_name), expected):
+                raise ValueError(f"PseudoMetadata.{field_name} must be {description}")
+        object.__setattr__(self, "pseudo_info", dict(self.pseudo_info))
+        object.__setattr__(self, "warnings", tuple(self.warnings))
+        if any(
+            not isinstance(warning, str) or not warning for warning in self.warnings
+        ):
+            raise ValueError("PseudoMetadata.warnings must contain non-empty strings")
+
+    def _normalize_numerics(self) -> None:
+        if self.z_valence is not None:
+            validate_finite_positive(self.z_valence, "PseudoMetadata.z_valence")
+            object.__setattr__(self, "z_valence", float(self.z_valence))
+        if self.cutoffs is not None:
+            if not isinstance(self.cutoffs, Mapping):
+                raise ValueError("PseudoMetadata.cutoffs must be a mapping or None")
+            unknown = set(self.cutoffs) - {"ecutwfc_ry", "ecutrho_ry"}
+            if unknown:
+                raise ValueError(
+                    "PseudoMetadata.cutoffs accepts only ecutwfc_ry and "
+                    f"ecutrho_ry; got {sorted(unknown)!r}"
+                )
+            normalized = {}
+            for field_name in ("ecutwfc_ry", "ecutrho_ry"):
+                value = self.cutoffs.get(field_name)
+                if value is not None:
+                    validate_finite_positive(
+                        value, f"PseudoMetadata.cutoffs.{field_name}"
+                    )
+                    value = float(value)
+                normalized[field_name] = value
+            object.__setattr__(self, "cutoffs", normalized)
+
+
+@to_portable.register(PseudoMetadata)
+def _pseudo_metadata_portable(metadata: PseudoMetadata) -> JsonDict:
+    return portable_record(metadata, PseudoMetadata)

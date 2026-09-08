@@ -5,34 +5,16 @@ import json
 import sys
 from pathlib import Path
 
-from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled, AssetStore
-from goldilocks_core.assets.runtime import install as install_assets
-from goldilocks_core.assets.runtime import statuses as asset_statuses
-from goldilocks_core.assets.runtime import verify as verify_assets
-from goldilocks_core.contracts import (
-    ArchiveOutput,
-    CalculationDraft,
-    CalculationHints,
-    CalculationIntent,
-    ComputationResult,
-    ComputeRequest,
-    DftInputData,
-    DirectoryOutput,
-    GeneratedFiles,
-    KPointSelection,
-    ModelSpec,
-    OutputTarget,
-    ParameterAdvice,
-    PathStructureSource,
-    PresetSelection,
-    RecordSelection,
-    SelectionRecord,
-    resolve_output_types,
+from goldilocks_core.assets.runtime import (
+    install as install_assets,
+    statuses as asset_statuses,
+    verify as verify_assets,
 )
-from goldilocks_core.examples import structures_path
-from goldilocks_core.generation import available_codes, available_tasks
-from goldilocks_core.io.structures import StructureInputError
-from goldilocks_core.runtime import Runtime, Service, compute
+from goldilocks_core.assets.store import AssetStore
+from goldilocks_core.examples.structures import structures_path
+from goldilocks_core.generation.registry import available_codes, available_tasks
+from goldilocks_core.request import ComputeRequest
+from goldilocks_core.runtime.service import OperationFailure, Service
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -114,34 +96,6 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    if args.command == "capabilities":
-        with Service() as service:
-            capabilities = service.capabilities()
-        if args.json:
-            print(json.dumps(capabilities.to_dict(), indent=2, sort_keys=True))
-        else:
-            print(f"Goldilocks Core {capabilities.core_version}")
-            for task in capabilities.tasks:
-                presets = ", ".join(preset.id for preset in task.presets)
-                print(f"{task.id}: {presets}")
-        return
-    if args.command == "inspect":
-        try:
-            with Service() as service:
-                inspection = service.inspect_structure(
-                    PathStructureSource(args.structure)
-                )
-        except (StructureInputError, ValueError) as error:
-            parser.print_usage(sys.stderr)
-            print(f"{parser.prog}: error: {error}", file=sys.stderr)
-            raise SystemExit(2) from error
-        if args.json:
-            print(json.dumps(inspection.to_dict(), indent=2, sort_keys=True))
-        else:
-            print(f"structure: {inspection.source.name}")
-            print(f"formula: {inspection.structure.reduced_formula}")
-            print(f"sites: {inspection.structure.site_count}")
-        return
     if args.command == "examples":
         print(structures_path())
         return
@@ -152,39 +106,61 @@ def main() -> None:
         _assets(args, parser)
         return
 
-    store = AssetStore()
-    attempted: set[tuple[str, str]] = set()
     try:
-        _validate_backend_options(args)
-        request = _request_from_args(args)
-        target = _output_from_args(args)
-        while True:
-            try:
-                with Runtime(asset_store=store) as runtime:
-                    output = compute(request, runtime=runtime, output=target)
-                break
-            except AssetNotInstalled as error:
-                key = (error.reference.id, error.reference.version)
-                if not args.fetch_missing or key in attempted:
-                    raise
-                attempted.add(key)
-                install_assets(error.reference.id, store=store)
-    except (
-        AssetCorrupt,
-        AssetNotInstalled,
-        FileExistsError,
-        KeyError,
-        ValueError,
-    ) as error:
+        if args.command in ("capabilities", "inspect"):
+            _describe(args)
+            return
+        try:
+            _validate_backend_options(args)
+            request = _request_from_args(args)
+        except (KeyError, ValueError) as error:
+            parser.print_usage(sys.stderr)
+            print(f"{parser.prog}: error: {error}", file=sys.stderr)
+            raise SystemExit(2) from error
+        with Service() as service:
+            output = service.compute_document(
+                request,
+                publication=(
+                    "memory"
+                    if args.no_out
+                    else "directory"
+                    if args.out is not None
+                    else "archive"
+                    if args.archive is not None
+                    else "auto"
+                ),
+                path=args.out if args.out is not None else args.archive,
+                fetch_missing=args.fetch_missing,
+            ).result
+    except OperationFailure as error:
         parser.print_usage(sys.stderr)
         print(f"{parser.prog}: error: {error}", file=sys.stderr)
         raise SystemExit(2) from error
 
     if args.json:
-        print(json.dumps(output.to_dict(), indent=2, sort_keys=True))
+        print(json.dumps(output, indent=2, sort_keys=True))
         return
 
     _print_human_summary(output)
+
+
+def _describe(args: argparse.Namespace) -> None:
+    with Service() as service:
+        if args.command == "capabilities":
+            output = service.capabilities_document()
+        else:
+            output = service.inspect_document(args.structure)
+    if args.json:
+        print(json.dumps(output, indent=2, sort_keys=True))
+    elif args.command == "capabilities":
+        print(f"Goldilocks Core {output['core_version']}")
+        for task in output["tasks"]:
+            presets = ", ".join(preset["id"] for preset in task["presets"])
+            print(f"{task['id']}: {presets}")
+    else:
+        print(f"structure: {output['source']['name']}")
+        print(f"formula: {output['structure']['reduced_formula']}")
+        print(f"sites: {output['structure']['site_count']}")
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
@@ -289,63 +265,53 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def _request_from_args(args: argparse.Namespace) -> ComputeRequest:
-    intent = CalculationIntent(
-        code=args.code,
-        task=args.task,
-        functional=args.functional,
-        pseudo_accuracy=args.pseudo_accuracy,
+    records = None
+    if args.outputs is not None:
+        records = [name.strip() for name in args.outputs.split(",")]
+        if any(not name for name in records):
+            raise ValueError("--outputs must contain comma-separated record type ids")
+    licence_text = None
+    if args.model_licence_file is not None:
+        try:
+            licence_text = (
+                Path(args.model_licence_file).expanduser().read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeError) as error:
+            raise ValueError(f"Cannot read --model-licence-file: {error}") from error
+    return ComputeRequest.from_local(
+        args.structure,
+        preset=args.preset,
+        records=records,
+        intent={
+            "code": args.code,
+            "task": args.task,
+            "functional": args.functional,
+            "pseudo_accuracy": args.pseudo_accuracy,
+        },
+        hints={
+            "k_spacing": args.k_spacing,
+            "k_grid": tuple(args.k_grid) if args.k_grid else None,
+            "smearing_type": args.smearing_type,
+            "smearing_width_ry": args.smearing_width_ry,
+            "spin_polarized": _parse_optional_bool(args.spin_polarized),
+            "spin_orbit_coupling": _parse_optional_bool(args.spin_orbit_coupling),
+            "pseudo_type": args.pseudo_type,
+            "relativistic_mode": args.relativistic_mode,
+            "conv_thr": args.conv_thr,
+            "mixing_beta": args.mixing_beta,
+            "electron_maxstep": args.electron_maxstep,
+            "use_vdw": _parse_optional_bool(args.use_vdw),
+            "vdw_method": args.vdw_method,
+        },
+        pseudo_root=args.pseudo_root,
+        pseudo_table=args.pseudo_table,
+        model=args.model,
+        model_name=args.model_name,
+        model_version=args.model_version,
+        model_licence=args.model_licence,
+        model_licence_text=licence_text,
+        model_citation=args.model_citation,
     )
-    hints = CalculationHints(
-        k_spacing=args.k_spacing,
-        k_grid=tuple(args.k_grid) if args.k_grid else None,
-        smearing_type=args.smearing_type,
-        smearing_width_ry=args.smearing_width_ry,
-        spin_polarized=_parse_optional_bool(args.spin_polarized),
-        spin_orbit_coupling=_parse_optional_bool(args.spin_orbit_coupling),
-        pseudo_type=args.pseudo_type,
-        relativistic_mode=args.relativistic_mode,
-        conv_thr=args.conv_thr,
-        mixing_beta=args.mixing_beta,
-        electron_maxstep=args.electron_maxstep,
-        use_vdw=_parse_optional_bool(args.use_vdw),
-        vdw_method=args.vdw_method,
-    )
-    pseudo_root = str(Path(args.pseudo_root).expanduser()) if args.pseudo_root else None
-    kmesh_model = _model_spec_from_args(args)
-
-    selection = (
-        PresetSelection(args.preset)
-        if args.preset is not None
-        else RecordSelection(_parse_outputs(args.outputs))
-    )
-    return ComputeRequest(
-        draft=CalculationDraft(
-            structure=PathStructureSource(args.structure),
-            intent=intent,
-            hints=hints,
-            pseudo_root=pseudo_root,
-            pseudo_table=args.pseudo_table,
-            kmesh_model=kmesh_model,
-        ),
-        selection=selection,
-    )
-
-
-def _output_from_args(args: argparse.Namespace) -> OutputTarget | None:
-    if args.no_out:
-        return None
-    if args.out is not None:
-        return DirectoryOutput(args.out)
-    if args.archive is not None:
-        return ArchiveOutput(args.archive)
-    return DirectoryOutput()
-
-
-def _parse_outputs(value: str) -> tuple[type, ...]:
-    names = [name.strip() for name in value.split(",")]
-    if any(not name for name in names):
-        raise ValueError("--outputs must contain comma-separated record type ids")
-    return resolve_output_types(names)
 
 
 def _assets(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
@@ -364,7 +330,12 @@ def _assets(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
         installed = verify_assets(args.name, store=store)
         for asset in installed:
             print(f"{asset.id}@{asset.version}: verified")
-    except (AssetCorrupt, AssetNotInstalled, KeyError, ValueError) as error:
+    except Exception as error:
+        if (
+            not isinstance(error, KeyError | ValueError)
+            and OperationFailure.classify(error) is None
+        ):
+            raise
         parser.print_usage(sys.stderr)
         print(f"{parser.prog}: error: {error}", file=sys.stderr)
         raise SystemExit(2) from error
@@ -384,31 +355,6 @@ def _serve(args: argparse.Namespace) -> None:
     from goldilocks_core.server.mcp import serve
 
     serve()
-
-
-def _model_spec_from_args(args: argparse.Namespace) -> ModelSpec | None:
-    if args.model is None:
-        return None
-    licence_text = None
-    if args.model_licence_file is not None:
-        try:
-            licence_text = (
-                Path(args.model_licence_file).expanduser().read_text(encoding="utf-8")
-            )
-        except (OSError, UnicodeError) as error:
-            raise ValueError(f"Cannot read --model-licence-file: {error}") from error
-    return ModelSpec(
-        name=args.model_name or "cli-kmesh-model",
-        version=args.model_version or "unknown",
-        model_type="random_forest",
-        target="k_index",
-        feature_set="cslr",
-        source="local",
-        location=args.model,
-        licence=args.model_licence,
-        licence_text=licence_text,
-        citation=args.model_citation,
-    )
 
 
 def _validate_backend_options(args: argparse.Namespace) -> None:
@@ -435,68 +381,71 @@ def _parse_optional_bool(value: str | None) -> bool | None:
     return value == "true"
 
 
-def _print_human_summary(result: ComputationResult) -> None:
-    structure = result.draft.structure
-    print(f"structure: {structure.source.name}")
-    print(f"formula: {structure.structure.reduced_formula}")
-    print(f"code: {result.draft.intent.code}")
-    print(f"task: {result.draft.intent.task}")
-    advice = result.records.get(ParameterAdvice)
+def _print_human_summary(result: dict) -> None:
+    structure = result["draft"]["structure"]
+    print(f"structure: {structure['source']['name']}")
+    print(f"formula: {structure['structure']['reduced_formula']}")
+    print(f"code: {result['draft']['intent']['code']}")
+    print(f"task: {result['draft']['intent']['task']}")
+    advice = result["records"].get("advice")
     if advice is not None:
-        smearing = advice.smearing.smearing_type or "none"
-        if advice.smearing.width_ry is not None:
-            smearing = f"{smearing}@{advice.smearing.width_ry:g} Ry"
-        pseudo_type = advice.pseudopotential_requirements.pseudo_type or "any"
-        soc = (
-            "on"
-            if advice.spin_orbit.enabled
-            else "consider"
-            if advice.spin_orbit.consider
-            else "off"
-        )
-        print(
-            "advice: "
-            f"smearing={smearing}; "
-            f"spin={'on' if advice.magnetism.spin_polarized else 'off'}; "
-            f"SOC={soc}; "
-            "pseudo="
-            f"{advice.pseudopotential_requirements.functional}/"
-            f"{advice.pseudopotential_requirements.accuracy}/"
-            f"{pseudo_type}/"
-            f"{advice.pseudopotential_requirements.relativistic}; "
-            f"vdW={'on' if advice.vdw.use_vdw else 'off'}"
-        )
-    k_points = result.records.get(KPointSelection)
+        _print_advice(advice)
+    k_points = result["records"].get("k_points")
     if k_points is not None:
-        grid = k_points.grid
+        grid = k_points["grid"]
         print(f"k-grid: {grid[0]} {grid[1]} {grid[2]}")
-    selection = result.records.get(SelectionRecord)
+    selection = result["records"].get("selection")
     if selection is not None:
         selected = ", ".join(
-            f"{pseudo.element}={pseudo.filename or 'unresolved'}"
-            for pseudo in selection.pseudopotentials
+            f"{pseudo['element']}={pseudo['filename'] or 'unresolved'}"
+            for pseudo in selection["pseudopotentials"]
         )
         print(f"selection: {selected or 'no pseudopotentials'}")
-    input_data = result.records.get(DftInputData)
+    input_data = result["records"].get("dft_input_data")
     if input_data is not None:
         print(
-            f"dft input data: {len(input_data.artifacts)} artifacts, "
-            f"{len(input_data.citations)} citations"
+            f"dft input data: {len(input_data['artifacts'])} artifacts, "
+            f"{len(input_data['citations'])} citations"
         )
-        pseudo_set = input_data.pseudopotential_set
-        version = f"@{pseudo_set.version}" if pseudo_set.version is not None else ""
-        print(f"pseudopotential set: {pseudo_set.id}{version}")
-    generated_files = result.records.get(GeneratedFiles, ())
+        pseudo_set = input_data["pseudopotential_set"]
+        version = (
+            f"@{pseudo_set['version']}" if pseudo_set["version"] is not None else ""
+        )
+        print(f"pseudopotential set: {pseudo_set['id']}{version}")
+    generated_files = result["records"].get("generated_files", ())
     if generated_files:
         print("generated files:")
         for generated_file in generated_files:
-            print(f"  {generated_file.path}")
-    if result.publication is not None:
-        print(f"published {result.publication.kind}: {result.publication.path}")
-    if result.warnings:
+            print(f"  {generated_file['path']}")
+    if result["publication"] is not None:
+        publication = result["publication"]
+        print(f"published {publication['kind']}: {publication['path']}")
+    if result["warnings"]:
         print("warnings:")
-        for warning in result.warnings:
+        for warning in result["warnings"]:
             print(f"  - {warning}")
+
+
+def _print_advice(advice: dict) -> None:
+    smearing = advice["smearing"]["smearing_type"] or "none"
+    if advice["smearing"]["width_ry"] is not None:
+        smearing = f"{smearing}@{advice['smearing']['width_ry']:g} Ry"
+    pseudo = advice["pseudopotential_requirements"]
+    soc = (
+        "on"
+        if advice["spin_orbit"]["enabled"]
+        else "consider"
+        if advice["spin_orbit"]["consider"]
+        else "off"
+    )
+    print(
+        f"advice: smearing={smearing}; "
+        f"spin={'on' if advice['magnetism']['spin_polarized'] else 'off'}; "
+        f"SOC={soc}; "
+        f"pseudo={pseudo['functional']}/{pseudo['accuracy']}/"
+        f"{pseudo['pseudo_type'] or 'any'}/{pseudo['relativistic']}; "
+        f"vdW={'on' if advice['vdw']['use_vdw'] else 'off'}"
+    )
 
 
 if __name__ == "__main__":

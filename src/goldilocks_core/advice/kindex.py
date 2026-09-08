@@ -4,26 +4,23 @@ import math
 
 from pymatgen.core import Structure
 
-from goldilocks_core.contracts import (
-    KMeshAdvisor,
-    KMeshEntry,
-    KPointSelection,
-    ModelSpec,
-    Provenance,
-)
 from goldilocks_core.kmesh.math import (
     build_kmesh_entries,
     generate_candidate_k_distances,
 )
-from goldilocks_core.ml.kindex import predict_kindex
+from goldilocks_core.kmesh.resolve import KMeshAdvisor, KPointSelection
+from goldilocks_core.ml.kindex.inference import predict_kindex
+from goldilocks_core.ml.models import ModelSpec
+from goldilocks_core.provenance import Provenance
+from goldilocks_core.types import KPointGrid
 
 
 def _select_kmesh_entry(
-    entries: list[KMeshEntry],
+    entries: list[tuple[int, KPointGrid]],
     predicted_k_index: float,
-) -> KMeshEntry:
+) -> tuple[int, KPointGrid]:
     target_index = max(0, math.ceil(predicted_k_index))
-    max_k_index = entries[-1].k_index
+    max_k_index = entries[-1][0]
     target_index = min(target_index, max_k_index)
 
     return entries[target_index]
@@ -46,13 +43,13 @@ def advise_kpoints(
     entries = build_kmesh_entries(structure, candidate_distances)
     selected_entry = _select_kmesh_entry(entries, predicted_k_index)
 
-    return KPointSelection(
-        mesh_type="monkhorst-pack",
-        grid=selected_entry.mesh,
-        shift=(0, 0, 0),
-        provenance=Provenance(
+    return {
+        "mesh_type": "monkhorst-pack",
+        "grid": list(selected_entry[1]),
+        "shift": [0, 0, 0],
+        "provenance": Provenance(
             source="model",
             reason="Select nearest k-mesh entry from predicted k-index.",
             data_source=spec.name,
         ),
-    )
+    }

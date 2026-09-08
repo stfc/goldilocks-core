@@ -10,16 +10,44 @@ import shutil
 import sys
 import tempfile
 import unicodedata
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Literal, TypedDict
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
-from goldilocks_core.contracts import (
-    DftInputData,
-    DirectoryOutput,
-    InputArtifact,
-    OutputTarget,
-    Publication,
-)
+from goldilocks_core.generation.files import InputArtifact
+from goldilocks_core.input_data import DftInputData
+
+
+class Publication(TypedDict):
+    kind: Literal["directory", "archive"]
+    path: str
+    files: list[str]
+
+
+@dataclass(frozen=True, slots=True)
+class DirectoryOutput:
+    path: str | Path | None = None
+
+    def __post_init__(self) -> None:
+        if self.path is not None:
+            _validate_destination(self.path)
+
+
+@dataclass(frozen=True, slots=True)
+class ArchiveOutput:
+    path: str | Path
+
+    def __post_init__(self) -> None:
+        _validate_destination(self.path)
+
+
+type OutputTarget = DirectoryOutput | ArchiveOutput
+
+
+def _validate_destination(path: str | Path) -> None:
+    if not isinstance(path, str | Path) or not str(path).strip():
+        raise ValueError("output destination must be a non-empty path")
 
 
 class Publisher:
@@ -31,8 +59,8 @@ class Publisher:
 
     def files(self, input_data: DftInputData) -> tuple[InputArtifact, ...]:
         files: dict[str, tuple[bytes, str]] = {}
-        for artifact in input_data.artifacts:
-            _add(files, artifact.path, artifact.content, artifact.role)
+        for artifact in input_data["artifacts"]:
+            _add(files, artifact["path"], artifact["content"], artifact["role"])
 
         _add(
             files,
@@ -43,7 +71,7 @@ class Publisher:
         _add(files, "README.md", _readme(input_data).encode("utf-8"), "readme")
         manifest = {
             "schema_version": 1,
-            **input_data.manifest,
+            **input_data["manifest"],
             "files": {
                 path: {
                     "role": role,
@@ -60,7 +88,7 @@ class Publisher:
             "manifest",
         )
         return tuple(
-            InputArtifact(path=path, role=role, content=content)
+            {"path": path, "role": role, "content": content}
             for path, (content, role) in sorted(files.items())
         )
 
@@ -126,16 +154,17 @@ class Publisher:
 
 def _write_directory_path(root: Path, files: tuple[InputArtifact, ...]) -> None:
     for file in files:
-        output = root.joinpath(*PurePosixPath(file.path).parts)
+        output = root.joinpath(*PurePosixPath(file["path"]).parts)
         output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         with output.open("xb") as stream:
-            stream.write(file.content)
+            stream.write(file["content"])
 
 
 def _rename_no_replace(source: Path, destination: Path) -> None:
     if os.name == "nt":
         os.rename(source, destination)
         return
+
     libc = ctypes.CDLL(None, use_errno=True)
     source_bytes, destination_bytes = os.fsencode(source), os.fsencode(destination)
     try:
@@ -171,24 +200,24 @@ def _archive_bytes(files: tuple[InputArtifact, ...]) -> bytes:
     output = io.BytesIO()
     with ZipFile(output, "w") as archive:
         for file in files:
-            info = ZipInfo(file.path, date_time=(1980, 1, 1, 0, 0, 0))
+            info = ZipInfo(file["path"], date_time=(1980, 1, 1, 0, 0, 0))
             info.compress_type = ZIP_DEFLATED
             info.create_system = 3
             info.external_attr = 0o100644 << 16
-            archive.writestr(info, file.content, compresslevel=9)
+            archive.writestr(info, file["content"], compresslevel=9)
     return output.getvalue()
 
 
 def _publication(
-    kind: str,
+    kind: Literal["directory", "archive"],
     target: Path,
     files: tuple[InputArtifact, ...],
 ) -> Publication:
-    return Publication(
-        kind=kind,
-        path=str(target.resolve()),
-        files=tuple(file.path for file in files),
-    )
+    return {
+        "kind": kind,
+        "path": str(target.resolve()),
+        "files": [file["path"] for file in files],
+    }
 
 
 def _add(
@@ -216,7 +245,7 @@ def _validate_publication_path(path: str) -> None:
 
 
 def _citations(input_data: DftInputData) -> str:
-    entries = "".join(f"- {citation}\n" for citation in input_data.citations)
+    entries = "".join(f"- {citation}\n" for citation in input_data["citations"])
     return (
         "# Citations\n\n"
         "Goldilocks records complete provenance in `goldilocks.json`. Cite the "
@@ -227,9 +256,9 @@ def _citations(input_data: DftInputData) -> str:
 
 def _readme(input_data: DftInputData) -> str:
     source_path = next(
-        artifact.path
-        for artifact in input_data.artifacts
-        if artifact.role == "structure_source"
+        artifact["path"]
+        for artifact in input_data["artifacts"]
+        if artifact["role"] == "structure_source"
     )
     return (
         "# Goldilocks DFT Input Data\n\n"

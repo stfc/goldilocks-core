@@ -22,46 +22,60 @@ resolution, input rendering, and publication touch the filesystem.
 | Module | Responsibility |
 | --- | --- |
 | `assets/` | Immutable asset records, profiles, download integrity, transactional installation, and verification. |
-| `ml/model_registry.py` | Complete model runtime configuration and model asset declarations. |
+| `ml/models.py` | Model identities, registry loading, feature settings, and asset declarations. |
 | `pseudo/registry.py`, `pseudo/import_*` | Complete pseudopotential table declarations and provider-specific normalization. |
-| `pseudo/source.py` | One source-resolution interface for request metadata, operator roots, and installed tables. |
-| `contracts/` | Data records and serialization shared between stages. |
-| `runtime/graph.py` | Stage-agnostic, type-keyed DAG executor (`TaskGraph`/`Stage`/`Preset`/`execute`). |
-| `runtime/task.py` | `GraphHandler`: a task graph, context builder, and factual warning collector. |
-| `runtime/scf.py` | The SCF Calculation Task, stage graph, Presets, context, and warning collection. |
-| `runtime/models.py` | `Runtime`: kmesh/metallicity model lifecycle (load/reset/close), exposed as read-only services. |
-| `runtime/dispatch.py` | `Dispatcher`: task registry and dispatch by `intent.task` through `GraphHandler`s. |
-| `runtime/jobs.py` | Short-lived `compute` convenience entry point. |
-| `runtime/service.py` | `Service`: process-owned lifecycle, locking, Capabilities, Structure Inspection, Compute, and publication. |
+| `pseudo/metadata.py` | The pseudopotential metadata record and its cutoffs. |
+| `pseudo/source.py` | Request-local pseudo resolution, selection, and deferred verified publication material. |
+| `provenance.py`, `types.py`, `validation.py` | Shared provenance record, shared type vocabulary, and operator-input validators. |
+| `calculation.py` | `CalculationIntent` and `CalculationHints` with validating constructors. |
+| `request.py` | Native drafts, requests, selections, local request construction, and request-scoped resource binding. |
+| `result.py` | `ComputationResult`, publication, and preparation of portable output with its exact optional archive. |
+| `serialization.py` | `to_jsonable` (complete form) and `to_portable` (publication/CLI projection). |
+| `runtime/graph.py` | Stage-agnostic, type-keyed DAG executor (`TaskGraph`/`Stage`/`Preset`/`execute`) and its task-description documents. |
+| `runtime/scf.py` | The SCF stage graph, Presets, and warning collection; no resource cache or registry configuration. |
+| `runtime/models.py` | Shared model lifecycle and request-local model choice, identity, and legal-material snapshots. |
+| `runtime/dispatch.py` | `Dispatcher` and `GraphHandler`: registration, context construction, and execution by `intent.task`. |
+| `runtime/registry.py` | Stable record-ID registry and output-type resolution shared by transports. |
+| `runtime/capabilities.py` | The `capabilities` document assembly (tasks, models, pseudopotential sets, defaults). |
+| `runtime/service.py` | Native and document operations, resource ownership, explicit acquisition retries, and expected-failure classification. |
 | `io/structures.py` | One Structure Source normalization path for Inspection and Compute. |
-| `analysis.py` | Structure facts. |
-| `advice/` | Scientific and numerical recommendations. |
+| `analysis.py` | The `StructureAnalysisRecord` shape and structure-fact analysis. |
+| `advice/parameters.py` | Coupled scientific parameter policy and its domain-owned shapes; scalar decisions are private. |
+| `advice/kdistance.py`, `advice/kindex.py` | Substantive model-backed k-point advisors. |
 | `kmesh/` | K-point resolution and mesh mathematics. |
-| `selection.py` | Pseudopotentials and cutoffs. |
+| `selection.py` | Pseudopotential selection, its domain shape, and portable projection. |
 | `generation/` | Calculation-specific file generation. |
-| `input_data.py` | Reads external files into complete DFT Input Data; trusts internal Records. |
+| `generation/files.py` | Generated text and snapshotted binary artifact contracts. |
+| `input_data.py` | Combines completed scientific records and verified resource material into DFT Input Data. |
 | `publication.py` | Publishes assembled bytes as directories or ZIPs; validates output paths. |
-| `server/request.py` | Strict HTTP/MCP validation directly into native Core requests. |
-| `server/wire.py` | Mechanically derived Core response schemas. |
-| `server/http.py`, `server/http_contract.py` | Optional HTTP lifecycle, errors, and scientific route adapter. |
+| `failures.py` | Expected-failure protocol with domain categories and safe public descriptions; no transport dependencies. |
+| `server/documents.py` | Strict native request conversion and mechanically derived portable response schemas. |
+| `server/http.py` | Optional HTTP lifecycle, routes, multipart encoding, and protocol-level errors. |
 | `server/mcp.py` | Optional local stdio MCP adapter. |
-| `server/readiness.py` | Cached asset readiness for the Workbench profile. |
 
-Stages communicate through dataclasses. They do not need to inherit from a Core
-class, and callers can invoke any stage function directly.
+Stages communicate through ordinary dictionaries described by domain-owned
+`TypedDict` shapes. These types and named tuple aliases key the request-local
+record map. Callers can invoke stages directly; operator-facing constructors
+remain validating dataclasses.
 
 ## Standard workflow
 
 `ComputeRequest` carries a `CalculationDraft` and exactly one
-`PresetSelection` or `RecordSelection`. `Service.compute` dispatches it through
-a process-owned `Runtime`. Execution state is request-local; shared models
-synchronize their first lazy load. Publication uses the registry identity and legal
-references cached with each loaded model, rather than re-reading a changed registry.
-The QRF feature classifier and the standalone metallicity classifier each retain
-their own snapshot; unused models are not loaded for publication.
+`PresetSelection` or `RecordSelection`. `Service.compute` dispatches it
+concurrently over a process-owned `Runtime`; shared model backends
+synchronize only their first lazy load, so model state is safe to reuse.
+Publication in `runtime/models.py` uses the identity and legal references cached
+with each loaded model, rather than re-reading a changed registry. The QRF feature
+classifier and the standalone metallicity classifier retain separate snapshots;
+unused models are not loaded for publication.
 `recommend` and `generate` are DAG Preset IDs only.
 
 ```python
+from goldilocks_core.io.structures import PathStructureSource
+from goldilocks_core.publication import DirectoryOutput
+from goldilocks_core.request import CalculationDraft, ComputeRequest, PresetSelection
+from goldilocks_core.runtime.service import Service
+
 request = ComputeRequest(
     CalculationDraft(PathStructureSource("Fe.cif")),
     PresetSelection("generate"),
@@ -78,9 +92,11 @@ Handlers supply context and collect factual warnings.
 ## Transport adapters
 
 Python, CLI, HTTP, and MCP expose Capabilities, Structure Inspection, and
-Compute. `server/request.py` converts strict transport shapes into Core
-contracts; Core constructors validate domain values once. Responses serialize
-Core contracts mechanically.
+Compute. `server/documents.py` converts strict transport shapes into Core
+Records; Core constructors validate domain values once. Responses serialize
+Core record documents through the portable projection; the selection and
+input-data documents carry explicit portable projections that strip
+generated artifact content and host file paths.
 
 HTTP accepts inline structures and stable Pseudopotential Set IDs. Compute
 returns one multipart response containing the canonical `ComputationResult`
@@ -95,8 +111,13 @@ publication or memory output. HTTP and MCP may carry a stable registered
 Pseudopotential Set ID, but never structure paths, pseudopotential roots or
 metadata payloads, model locations, or publication paths. Python and CLI own
 trusted local filesystem controls. HTTP and MCP remain optional imports.
-OpenAPI is exported from the application. Committed TypeScript declarations
-are generated from that document for HTTP clients.
+OpenAPI is exported from the application as the transport contract.
+
+Adapters use the shared document operations rather than inspect native scientific
+record types or maintain separate exception inventories. Native operations retain
+their original exceptions. Expected failures carry a domain category and a safe
+public description; the document interface classifies them once. Unexpected
+execution defects propagate.
 
 ## Runtime assets
 
@@ -111,11 +132,12 @@ domain registry -> download -> verify sources -> prepare -> inventory
 Each domain owns its complete declarations and interpretation. `AssetStore`
 owns only acquisition, integrity, locking, installed manifests, and path
 resolution. PseudoDojo and SSSP preparers convert different upstream layouts
-to the same installed table manifest. `PseudoSource` owns source
-precedence, verifies exact installed table identities against scientific
-requirements, and returns metadata through one narrow interface. Select has no
-registry or filesystem knowledge. Model loaders likewise receive verified
-local paths and perform no network access.
+to the same installed table manifest. `PseudoResolution` owns source precedence,
+compatibility, exact selected metadata, and deferred byte snapshots. Selection-only
+computations do not materialize publication content. Model resolution binds the
+request's advisor and captures identity and legal material only for models used.
+Input assembly receives these completed values, not registry paths, default-model
+flags, or another module's cache. Model loaders perform no network access.
 
 The canonical store is external to the package. Its root is
 `$GOLDILOCKS_ASSET_ROOT` when set, otherwise
@@ -134,17 +156,18 @@ and licensing model.
 
 ## Boundaries
 
-Validate where data enters or causes side effects:
+Validate where data enters or causes side effects — types validate the
+operator boundary, dicts flow inside:
 
 - request records validate operator controls and external pseudopotential
   metadata;
-- source adapters validate provider data before producing internal records;
+- source adapters validate provider data before producing internal documents;
 - generators reject unsupported or incomplete inputs before rendering;
 - publication writes atomically to new destinations and confines logical paths.
 
-Intermediate records remain ordinary Python data. Custom stage authors are
-responsible for returning coherent records; Core does not defensively re-check
-every possible malformed internal object.
+Intermediate stage currency is plain dict documents trusted by construction.
+Custom stage authors are responsible for returning coherent documents; Core
+does not defensively re-check every possible malformed internal object.
 
 Scientific choices belong in Analyze, Advise, Kmesh, and Select. Select
 resolves the configured source and chooses a concrete pseudopotential per
@@ -153,8 +176,8 @@ Generate maps completed choices to calculation syntax. Optional publication
 writes complete DFT Input Data but does not run calculations.
 
 Runner/AiiDA workflows, schedulers, authentication, and completed-output
-analysis are outside this repository. Browser state does not enter Core Records.
-HTTP and MCP do not add queues, persistence, sessions, or pod management.
+analysis are outside this repository. HTTP and MCP do not add queues,
+persistence, sessions, or pod management.
 
 ## Engineering invariants
 
@@ -164,6 +187,27 @@ boundaries, concurrency safety, or the task extension model.
 - The SCF handler registers lazily on first dispatch so importing
   `runtime.dispatch` does not pull in stage implementations or their
   `ml.*` dependencies. Explicit registration wins over the default.
+- Code inside the package and the tests import from the module that
+  defines a name — for example
+  `from goldilocks_core.kmesh.resolve import resolve_kpoints` — not from
+  a package `__init__`. Only library users import from `goldilocks_core`
+  itself. This keeps each import cheap: it loads the module you asked
+  for, not the whole package.
+- Serialization has one policy and two serializers: `to_jsonable` is the
+  complete form for tests and internals; `to_portable` is the portable
+  projection for publication and CLI output, omitting artifact content,
+  host-local pseudopotential paths, and licence text. Serialize the complete
+  `ComputationResult` to retain stable Record IDs; serializing its raw dict
+  alone does not apply those record-specific projections. CLI Results retain
+  the operator's source and publication paths.
+- Types validate the operator boundary; dicts flow inside. Operator input
+  (`CalculationHints`, `CalculationIntent`, drafts, requests, selections,
+  structure sources, output targets, `PseudoMetadata`, `Provenance`,
+  `ModelSpec`) gets validating constructors; internal stage currency is
+  plain dictionaries described by domain-owned shapes, trusted by construction.
+  `Portable` annotations declare exclusions and serialized field shapes.
+  Serializers and `server/documents.py` share these declarations; generated OpenAPI
+  and TypeScript are build products, not checked-in copies of the contract.
 - `Service` executes Computations concurrently over one process-owned
   `Runtime`. Model backends synchronize resource acquisition, not inference;
   `Dispatcher` synchronizes lazy default-task registration. Model configuration
@@ -174,9 +218,23 @@ boundaries, concurrency safety, or the task extension model.
   context and stage graph; they do not edit the generic executor.
 - Importing `goldilocks_core` never imports FastAPI or the MCP SDK.
   The `[http]` and `[mcp]` extras are lazy boundaries.
-- `server/request.py` rejects unknown fields, bad types, and remote paths while
+- Two lazy-import patterns are deliberate: heavy ML dependencies (torch,
+  matminer, dscribe) load at first model use, and optional transport extras
+  import inside their serve paths with `ImportError` guidance.
+- `server/documents.py` rejects unknown fields, bad types, and remote paths while
   constructing native Core inputs. Handlers serialize trusted Records directly.
-- `DimensionalityClassificationError` is an `Exception`, not a
-  `ValueError`, so HTTP maps it explicitly to 422.
+- Named domain failures preserve their native exception identities and implement
+  `ExpectedFailure`; HTTP/MCP do not import an inventory of scientific exceptions.
 - MCP maps only known stage errors to `ToolError`; internal defects
   remain unhandled.
+- `scripts/check_complexity.py` enforces AST import ceilings across all
+  production owners, including new modules. It counts local and type-only imports,
+  resolves re-exports, and counts members accessed through module aliases.
+  The global ceiling is 12 project origin modules and 24 imported symbols, with
+  stricter limits for the adapters, assembly, and SCF. Pure package export files
+  are transparent to consumer counts; executable package modules are checked.
+  Import limits are a backstop, not a substitute for coherent ownership: moving
+  coordination into another oversized module is not a valid reduction.
+  The same gate runs Ruff's McCabe check with a maximum cyclomatic complexity of
+  10 per production function, ignoring `noqa` suppressions. Reduce decision logic
+  and duplication rather than extracting branches into shallow helper fleets.

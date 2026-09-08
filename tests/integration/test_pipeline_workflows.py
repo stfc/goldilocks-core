@@ -16,13 +16,11 @@ from goldilocks_core import (
     PresetSelection,
     compute,
 )
-from goldilocks_core.contracts import (
-    GeneratedFiles,
-    KPointSelection,
-    PseudoMetadata,
-    SelectionRecord,
-    StructureAnalysisRecord,
-)
+from goldilocks_core.analysis import StructureAnalysisRecord
+from goldilocks_core.generation.files import GeneratedFiles
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.pseudo.metadata import PseudoMetadata
+from goldilocks_core.selection import SelectionRecord
 
 
 def test_generate_crosses_every_in_memory_stage_with_real_backends(
@@ -58,13 +56,14 @@ def test_generate_crosses_every_in_memory_stage_with_real_backends(
         )
     )
 
-    assert result.records[StructureAnalysisRecord].elements == ("Cl", "Na")
-    assert result.records[KPointSelection].grid == (4, 4, 4)
+    assert result.records[StructureAnalysisRecord]["elements"] == ["Cl", "Na"]
+    assert result.records[KPointSelection]["grid"] == [4, 4, 4]
     assert {
-        pseudo.element for pseudo in result.records[SelectionRecord].pseudopotentials
+        pseudo["element"]
+        for pseudo in result.records[SelectionRecord]["pseudopotentials"]
     } == {"Na", "Cl"}
 
-    qe_input = result.records[GeneratedFiles][0].content
+    qe_input = result.records[GeneratedFiles][0]["content"]
     assert "  nat = 2" in qe_input
     assert "  ntyp = 2" in qe_input
     assert "  ecutwfc = 45" in qe_input
@@ -113,9 +112,9 @@ def test_structure_file_to_publication_preserves_inputs_and_provenance(
     generated_path = destination / "inputs" / "qe.in"
     manifest = json.loads((destination / "goldilocks.json").read_text())
 
-    assert generated_path.read_bytes() == result.records[GeneratedFiles][
-        0
-    ].content.encode("utf-8")
+    assert generated_path.read_bytes() == result.records[GeneratedFiles][0][
+        "content"
+    ].encode("utf-8")
     assert manifest["records"]["generated_files"][0] == {
         "path": "inputs/qe.in",
         "role": "input",
@@ -123,4 +122,4 @@ def test_structure_file_to_publication_preserves_inputs_and_provenance(
     assert manifest["records"]["k_points"]["grid"] == [3, 5, 7]
     assert manifest["records"]["k_points"]["provenance"]["source"] == "user_hint"
     assert result.publication is not None
-    assert result.publication.path == str(destination.resolve())
+    assert result.publication["path"] == str(destination.resolve())

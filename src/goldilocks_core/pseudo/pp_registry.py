@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 
-from goldilocks_core.contracts import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
 from goldilocks_core.pseudo.validation import (
     AmbiguousCutoffMetadata,
@@ -22,13 +22,13 @@ _PUBLICATION_SIDECAR = "goldilocks-pseudopotentials.json"
 class _DiscoveredCutoffs:
     provider: str
     source_identifier: str | None
-    cutoffs: PseudoCutoffs
+    cutoffs: dict[str, float | None]
 
 
 def load_pseudo_metadata(root: str | Path) -> list[PseudoMetadata]:
     root = Path(root).resolve()
     if not root.is_dir():
-        raise ValueError(f"pseudopotential root is not a directory: {root}")
+        raise PseudoImportError(f"pseudopotential root is not a directory: {root}")
     upf_files = sorted(
         path
         for path in root.rglob("*")
@@ -64,6 +64,13 @@ def load_pseudo_metadata(root: str | Path) -> list[PseudoMetadata]:
     return metadata
 
 
+def _read_sidecar(sidecar: Path, label: str) -> object:
+    try:
+        return json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise PseudoImportError(f"invalid {label} sidecar {sidecar}") from error
+
+
 def _load_publication_metadata(root: Path) -> dict[str, str]:
     sidecar = root / _PUBLICATION_SIDECAR
     if not sidecar.exists():
@@ -72,12 +79,7 @@ def _load_publication_metadata(root: Path) -> dict[str, str]:
         raise PseudoImportError(
             f"pseudopotential publication sidecar must be a regular file: {sidecar}"
         )
-    try:
-        document = json.loads(sidecar.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise PseudoImportError(
-            f"invalid pseudopotential publication sidecar {sidecar}"
-        ) from error
+    document = _read_sidecar(sidecar, "pseudopotential publication")
     required = {
         "schema_version",
         "licence",
@@ -106,7 +108,6 @@ def _load_publication_metadata(root: Path) -> dict[str, str]:
         "\\" in relative
         or candidate.is_absolute()
         or any(part in {"", ".", ".."} for part in relative.split("/"))
-        or candidate.as_posix() != relative
     ):
         raise PseudoImportError(
             f"pseudopotential publication licence_file must be contained: {sidecar}"
@@ -160,10 +161,7 @@ def _load_dojo_sidecar(
     upf: Path,
     metadata: PseudoMetadata,
 ) -> _DiscoveredCutoffs:
-    try:
-        report = json.loads(sidecar.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise PseudoImportError(f"invalid PseudoDojo sidecar {sidecar}") from error
+    report = _read_sidecar(sidecar, "PseudoDojo")
     if not isinstance(report, dict):
         raise PseudoImportError(f"PseudoDojo sidecar must be an object: {sidecar}")
     if report.get("md5_upf") != _md5(upf):
@@ -198,9 +196,7 @@ def _load_dojo_sidecar(
     return _DiscoveredCutoffs(
         provider="pseudodojo",
         source_identifier=sidecar.name,
-        cutoffs=PseudoCutoffs(
-            ecutwfc_ry=high,
-        ),
+        cutoffs={"ecutwfc_ry": high, "ecutrho_ry": None},
     )
 
 
@@ -210,8 +206,8 @@ def _load_sssp_sidecar(
     metadata: PseudoMetadata,
 ) -> _DiscoveredCutoffs | None:
     try:
-        document = json.loads(sidecar.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
+        document = _read_sidecar(sidecar, "SSSP")
+    except PseudoImportError:
         return None
     if not isinstance(document, dict) or metadata.element is None:
         return None
@@ -235,16 +231,16 @@ def _load_sssp_sidecar(
     return _DiscoveredCutoffs(
         provider="sssp",
         source_identifier=entry.get("pseudopotential"),
-        cutoffs=PseudoCutoffs(
-            ecutwfc_ry=finite_positive_cutoff(
+        cutoffs={
+            "ecutwfc_ry": finite_positive_cutoff(
                 entry.get("ecutwfc_ry", entry.get("cutoff_wfc")),
                 f"{sidecar.name} cutoff_wfc",
             ),
-            ecutrho_ry=finite_positive_cutoff(
+            "ecutrho_ry": finite_positive_cutoff(
                 entry.get("ecutrho_ry", entry.get("cutoff_rho")),
                 f"{sidecar.name} cutoff_rho",
             ),
-        ),
+        },
     )
 
 

@@ -19,13 +19,17 @@ from goldilocks_core.assets.records import (
     InstalledAsset,
     InstalledFile,
 )
+from goldilocks_core.failures import ExpectedFailure
 
 ASSET_ROOT_ENV = "GOLDILOCKS_ASSET_ROOT"
 _MANIFEST_SCHEMA_VERSION = 2
 _MANIFEST = "manifest.json"
 
 
-class AssetNotInstalled(FileNotFoundError):
+class AssetNotInstalled(ExpectedFailure, FileNotFoundError):
+    kind = "asset_not_installed"
+    category = "dependency"
+
     def __init__(
         self,
         reference: AssetReference,
@@ -41,9 +45,28 @@ class AssetNotInstalled(FileNotFoundError):
             f"run 'goldilocks assets install {reference.id}'"
         )
 
+    def public_error(self) -> dict[str, object]:
+        return {
+            "kind": self.kind,
+            "message": (
+                f"Runtime asset {self.reference.id}@{self.reference.version} "
+                f"{self.reason}."
+            ),
+            "asset_id": self.reference.id,
+            "version": self.reference.version,
+            "reason": self.reason,
+        }
 
-class AssetCorrupt(ValueError):
-    pass
+
+class AssetCorrupt(ExpectedFailure, ValueError):
+    kind = "asset_corrupt"
+    category = "dependency"
+
+    def public_error(self) -> dict[str, object]:
+        return {
+            "kind": self.kind,
+            "message": "A required runtime asset failed integrity verification.",
+        }
 
 
 class AssetStore:
@@ -116,24 +139,17 @@ class AssetStore:
     ) -> InstalledAsset:
         reference = AssetReference(asset_id, version)
         root = self._asset_path(asset_id, version)
-        if root.is_symlink() or (root.exists() and not root.is_dir()):
-            raise AssetCorrupt(
-                f"asset destination is not a directory for {asset_id}@{version}: {root}"
-            )
-        if not root.exists():
-            raise AssetNotInstalled(reference, self.root)
-
         manifest_path = root / _MANIFEST
-        if manifest_path.is_symlink():
-            raise AssetCorrupt(f"installed manifest is a symlink: {manifest_path}")
-        if not manifest_path.exists():
-            raise AssetNotInstalled(
-                reference, self.root, reason="has no complete manifest"
-            )
-        if not manifest_path.is_file():
-            raise AssetCorrupt(
-                f"installed manifest is not a regular file: {manifest_path}"
-            )
+        for path, required_type, reason in (
+            (root, Path.is_dir, "is not installed"),
+            (manifest_path, Path.is_file, "has no complete manifest"),
+        ):
+            if path.is_symlink():
+                raise AssetCorrupt(f"installed asset contains a symlink: {path}")
+            if not path.exists():
+                raise AssetNotInstalled(reference, self.root, reason=reason)
+            if not required_type(path):
+                raise AssetCorrupt(f"installed asset path has the wrong type: {path}")
 
         installed_fingerprint, files = _read_manifest(manifest_path, reference)
         if (
@@ -144,18 +160,10 @@ class AssetStore:
                 f"installed preparation differs for {asset_id}@{version}"
             )
         expected_paths = {file.path for file in files}
-        actual_paths: set[str] = set()
-        for path in root.rglob("*"):
-            relative = path.relative_to(root).as_posix()
-            if path.is_symlink():
-                raise AssetCorrupt(f"installed asset contains a symlink: {path}")
-            if path.is_file():
-                if relative != _MANIFEST:
-                    actual_paths.add(relative)
-            elif not path.is_dir():
-                raise AssetCorrupt(
-                    f"installed asset contains a non-regular path: {path}"
-                )
+        actual_paths = {
+            path.relative_to(root).as_posix() for path in _asset_files(root)
+        }
+        actual_paths.discard(_MANIFEST)
         if actual_paths != expected_paths:
             raise AssetCorrupt(
                 f"installed file set differs from manifest for {asset_id}@{version}"
@@ -244,23 +252,27 @@ def _copy_sources(spec: AssetSpec) -> AssetPreparer:
     return prepare
 
 
-def _inventory(root: Path) -> tuple[InstalledFile, ...]:
-    files: list[InstalledFile] = []
+def _asset_files(root: Path) -> Iterator[Path]:
+    """Walk regular asset files, rejecting links and special filesystem entries."""
     for path in sorted(root.rglob("*")):
         if path.is_symlink():
-            raise ValueError(f"asset preparation produced a symlink: {path}")
+            raise AssetCorrupt(f"installed asset contains a symlink: {path}")
         if path.is_file():
-            if path.name != _MANIFEST:
-                files.append(
-                    InstalledFile(
-                        path=path.relative_to(root).as_posix(),
-                        sha256=_sha256(path),
-                        size=path.stat().st_size,
-                    )
-                )
+            yield path
         elif not path.is_dir():
-            raise ValueError(f"asset preparation produced a non-regular path: {path}")
-    return tuple(files)
+            raise AssetCorrupt(f"installed asset contains a non-regular path: {path}")
+
+
+def _inventory(root: Path) -> tuple[InstalledFile, ...]:
+    return tuple(
+        InstalledFile(
+            path=path.relative_to(root).as_posix(),
+            sha256=_sha256(path),
+            size=path.stat().st_size,
+        )
+        for path in _asset_files(root)
+        if path.name != _MANIFEST
+    )
 
 
 def _write_manifest(

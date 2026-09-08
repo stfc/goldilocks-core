@@ -4,7 +4,7 @@ import math
 
 from pymatgen.core import Structure
 
-from goldilocks_core.contracts import KMeshEntry
+from goldilocks_core.types import KPointGrid
 
 
 def k_distance_to_mesh(
@@ -65,7 +65,7 @@ def generate_candidate_k_distances(
 def build_kmesh_entries(
     structure: Structure,
     candidate_distances: list[float],
-) -> list[KMeshEntry]:
+) -> list[tuple[int, KPointGrid]]:
     """Build the ordered k-mesh ladder for ``structure``.
 
     ``k_index`` is 0-based: rung 0 is the Γ-only ``(1, 1, 1)`` mesh, which the
@@ -76,7 +76,7 @@ def build_kmesh_entries(
     k-point on at least one axis, never skip a reachable mesh, and never name the
     same mesh twice."""
     meshes = _complete_meshes(structure, candidate_distances)
-    return [KMeshEntry(k_index=index, mesh=mesh) for index, mesh in enumerate(meshes)]
+    return list(enumerate(meshes))
 
 
 def _complete_meshes(

@@ -1,26 +1,20 @@
 from dataclasses import replace
-from typing import get_args
+from typing import Any, get_args
 
 import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.advice import advise_parameters
+from goldilocks_core.advice.parameters import ParameterAdvice, advise_parameters
 from goldilocks_core.analysis import analyze_structure
-from goldilocks_core.contracts import (
-    CalculationHints,
-    CalculationIntent,
-    KPointSelection,
-    ParameterAdvice,
-    Provenance,
-    PseudoCutoffs,
-    PseudoMetadata,
-    SmearingType,
-    VdwMethod,
-)
-from goldilocks_core.generation import GenerationError, generate_inputs
+from goldilocks_core.calculation import CalculationHints, CalculationIntent
+from goldilocks_core.generation.errors import GenerationError
 from goldilocks_core.generation.qe.scf import _QE_SMEARING, _QE_VDW_CORR
-from goldilocks_core.kmesh import resolve_kpoints
+from goldilocks_core.generation.registry import generate_inputs
+from goldilocks_core.kmesh.resolve import resolve_kpoints
+from goldilocks_core.provenance import Provenance
+from goldilocks_core.pseudo.metadata import PseudoMetadata
 from goldilocks_core.selection import select_pseudopotentials
+from goldilocks_core.types import SmearingType, VdwMethod
 
 
 def make_structure() -> Structure:
@@ -51,21 +45,18 @@ def make_metadata() -> PseudoMetadata:
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        cutoffs=PseudoCutoffs(
-            ecutwfc_ry=35,
-            ecutrho_ry=140,
-        ),
+        cutoffs={"ecutwfc_ry": 35, "ecutrho_ry": 140},
         source_identifier="synthetic/Si.UPF",
     )
 
 
-def _stub_backend(structure: Structure) -> KPointSelection:
-    return KPointSelection(
-        grid=(4, 4, 4),
-        shift=(0, 0, 0),
-        mesh_type="monkhorst-pack",
-        provenance=Provenance(source="model", reason="stub"),
-    )
+def _stub_backend(structure: Structure) -> dict[str, Any]:
+    return {
+        "grid": [4, 4, 4],
+        "shift": [0, 0, 0],
+        "mesh_type": "monkhorst-pack",
+        "provenance": Provenance(source="model", reason="stub"),
+    }
 
 
 def select_from_advice(
@@ -75,9 +66,9 @@ def select_from_advice(
     hints: CalculationHints,
     metadata_list: list[PseudoMetadata],
 ):
-    k_points = resolve_kpoints(structure, hints.kmesh, _stub_backend)
+    k_points = resolve_kpoints(structure, hints, _stub_backend)
     selection = select_pseudopotentials(
-        structure, advice.pseudopotential_requirements, metadata_list
+        structure, advice["pseudopotential_requirements"], metadata_list
     )
     return selection, k_points
 
@@ -110,8 +101,8 @@ def test_generate_inputs_writes_qe_values_from_advice_and_selection() -> None:
     )
 
     assert len(files) == 1
-    assert files[0].path == "inputs/qe.in"
-    content = files[0].content
+    assert files[0]["path"] == "inputs/qe.in"
+    content = files[0]["content"]
     assert "ecutwfc = 35" in content
     assert "ecutrho = 140" in content
     assert "smearing = 'cold'" in content
@@ -133,8 +124,14 @@ def test_generate_inputs_rejects_selected_functional_disagreement() -> None:
         hints=hints,
         metadata_list=[make_metadata()],
     )
-    selected = replace(selection.pseudopotentials[0], functional="PBE")
-    mismatched = replace(selection, pseudopotentials=(selected,))
+    selected = {
+        **selection["pseudopotentials"][0],
+        "functional": "PBE",
+    }
+    mismatched = {
+        **selection,
+        "pseudopotentials": [selected],
+    }
 
     with pytest.raises(GenerationError, match="functional mismatch for Si"):
         generate_inputs(
@@ -157,12 +154,12 @@ def test_generate_inputs_writes_each_k_points_component_in_order(shift) -> None:
         hints=hints,
         metadata_list=[make_metadata()],
     )
-    k_points = KPointSelection(
-        grid=(2, 3, 4),
-        shift=shift,
-        mesh_type="monkhorst-pack",
-        provenance=Provenance(source="user_hint", reason="distinct components"),
-    )
+    k_points = {
+        "grid": [2, 3, 4],
+        "shift": list(shift),
+        "mesh_type": "monkhorst-pack",
+        "provenance": Provenance(source="user_hint", reason="distinct components"),
+    }
 
     files = generate_inputs(
         structure,
@@ -172,7 +169,7 @@ def test_generate_inputs_writes_each_k_points_component_in_order(shift) -> None:
         k_points=k_points,
     )
 
-    assert f"  2  3  4  {shift[0]}  {shift[1]}  {shift[2]}" in files[0].content
+    assert f"  2  3  4  {shift[0]}  {shift[1]}  {shift[2]}" in files[0]["content"]
 
 
 def test_generate_inputs_uses_noncollinear_soc_without_nspin() -> None:
@@ -194,7 +191,7 @@ def test_generate_inputs_uses_noncollinear_soc_without_nspin() -> None:
 
     files = generate_inputs(structure, advice_context(), advice, selection, k_points)
 
-    content = files[0].content
+    content = files[0]["content"]
     assert "noncolin = .true." in content
     assert "lspinorb = .true." in content
     assert "nspin = 2" not in content
@@ -221,7 +218,7 @@ def test_generate_inputs_writes_vdw_corr_when_enabled() -> None:
 
     content = generate_inputs(structure, advice_context(), advice, selection, k_points)[
         0
-    ].content
+    ]["content"]
 
     # D3BJ is the default method: QE uses grimme-d3 with BJ damping (version 4).
     assert "vdw_corr = 'grimme-d3'" in content
@@ -243,7 +240,7 @@ def test_generate_inputs_writes_d3_zero_damping_version() -> None:
 
     content = generate_inputs(structure, advice_context(), advice, selection, k_points)[
         0
-    ].content
+    ]["content"]
 
     assert "vdw_corr = 'grimme-d3'" in content
     assert "dftd3_version = 3" in content
@@ -274,7 +271,7 @@ def test_generate_inputs_writes_non_d3_vdw_methods(
 
     content = generate_inputs(structure, advice_context(), advice, selection, k_points)[
         0
-    ].content
+    ]["content"]
 
     assert f"vdw_corr = '{qe_vdw_corr}'" in content
     assert "dftd3_version" not in content
@@ -293,7 +290,7 @@ def test_generate_inputs_omits_vdw_corr_by_default() -> None:
 
     content = generate_inputs(structure, advice_context(), advice, selection, k_points)[
         0
-    ].content
+    ]["content"]
 
     assert "vdw_corr" not in content
 
@@ -311,7 +308,7 @@ def test_generate_inputs_produces_full_expected_qe_input() -> None:
 
     content = generate_inputs(structure, advice_context(), advice, selection, k_points)[
         0
-    ].content
+    ]["content"]
 
     expected = r"""&CONTROL
   calculation = 'scf'
@@ -398,14 +395,17 @@ def test_generate_inputs_rejects_unsafe_pseudopotential_filename() -> None:
         hints=hints,
         metadata_list=[make_metadata()],
     )
-    pseudo = replace(selection.pseudopotentials[0], filename="Si.UPF\n/")
+    pseudo = {
+        **selection["pseudopotentials"][0],
+        "filename": "Si.UPF\n/",
+    }
 
     with pytest.raises(ValueError, match="Unsafe pseudopotential filename"):
         generate_inputs(
             structure,
             advice_context(),
             advice,
-            replace(selection, pseudopotentials=(pseudo,)),
+            {**selection, "pseudopotentials": [pseudo]},
             k_points=k_points,
         )
 
@@ -439,7 +439,7 @@ def test_generate_inputs_writes_smearing_lines(
 
     content = generate_inputs(structure, advice_context(), advice, selection, k_points)[
         0
-    ].content
+    ]["content"]
 
     assert "  occupations = 'smearing'" in content
     assert f"  smearing = '{qe_smearing}'" in content
@@ -463,7 +463,7 @@ def test_generate_inputs_writes_nspin_2_when_spin_polarized() -> None:
 
     content = generate_inputs(structure, advice_context(), advice, selection, k_points)[
         0
-    ].content
+    ]["content"]
 
     assert "  nspin = 2" in content
     assert "noncolin" not in content
@@ -491,7 +491,7 @@ def test_generate_inputs_system_block_orders_smearing_spin_vdw() -> None:
 
     content = generate_inputs(structure, advice_context(), advice, selection, k_points)[
         0
-    ].content
+    ]["content"]
 
     system = content.split("&SYSTEM")[1].split("/")[0]
     assert system == (
@@ -507,14 +507,14 @@ def test_generate_inputs_rejects_unsupported_smearing_method() -> None:
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
-    advice = replace(
-        advice,
-        smearing=replace(
-            advice.smearing,
-            smearing_type="bogus",
-            width_ry=0.02,
-        ),
-    )
+    advice = {
+        **advice,
+        "smearing": {
+            **advice["smearing"],
+            "smearing_type": "bogus",
+            "width_ry": 0.02,
+        },
+    }
     selection, k_points = select_from_advice(
         structure,
         advice,
@@ -530,14 +530,14 @@ def test_generate_inputs_rejects_missing_smearing_width() -> None:
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
-    advice = replace(
-        advice,
-        smearing=replace(
-            advice.smearing,
-            smearing_type="gaussian",
-            width_ry=None,
-        ),
-    )
+    advice = {
+        **advice,
+        "smearing": {
+            **advice["smearing"],
+            "smearing_type": "gaussian",
+            "width_ry": None,
+        },
+    }
     selection, k_points = select_from_advice(
         structure,
         advice,
@@ -555,10 +555,10 @@ def test_generate_inputs_rejects_unsupported_vdw_method() -> None:
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
-    advice = replace(
-        advice,
-        vdw=replace(advice.vdw, use_vdw=True, method="bogus"),
-    )
+    advice = {
+        **advice,
+        "vdw": {**advice["vdw"], "use_vdw": True, "method": "bogus"},
+    }
     selection, k_points = select_from_advice(
         structure,
         advice,
@@ -576,10 +576,10 @@ def test_generate_inputs_rejects_disabled_vdw_with_method() -> None:
     structure = make_structure()
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
-    advice = replace(
-        advice,
-        vdw=replace(advice.vdw, use_vdw=False, method="d3"),
-    )
+    advice = {
+        **advice,
+        "vdw": {**advice["vdw"], "use_vdw": False, "method": "d3"},
+    }
     selection, k_points = select_from_advice(
         structure,
         advice,
@@ -618,14 +618,14 @@ def test_generate_inputs_rejects_incomplete_pseudopotential_selection() -> None:
     hints = CalculationHints(k_grid=(2, 2, 2), pseudo_type="NC")
     advice = advise_parameters(analyze_structure(structure), hints=hints)
     selection = select_pseudopotentials(
-        structure, advice.pseudopotential_requirements, ()
+        structure, advice["pseudopotential_requirements"], ()
     )
-    k_points = KPointSelection(
-        grid=(2, 2, 2),
-        shift=(0, 0, 0),
-        mesh_type="monkhorst-pack",
-        provenance=Provenance(source="model", reason="stub"),
-    )
+    k_points = {
+        "grid": [2, 2, 2],
+        "shift": [0, 0, 0],
+        "mesh_type": "monkhorst-pack",
+        "provenance": Provenance(source="model", reason="stub"),
+    }
 
     with pytest.raises(
         ValueError,
@@ -648,6 +648,6 @@ def test_write_qe_scf_returns_single_input_file_record() -> None:
     files = generate_inputs(structure, advice_context(), advice, selection, k_points)
 
     assert len(files) == 1
-    assert files[0].path == "inputs/qe.in"
-    assert files[0].role == "input"
-    assert files[0].content.endswith("\n")
+    assert files[0]["path"] == "inputs/qe.in"
+    assert files[0]["role"] == "input"
+    assert files[0]["content"].endswith("\n")

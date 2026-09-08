@@ -15,18 +15,15 @@ from pathlib import Path
 import pytest
 from pymatgen.core import Lattice, Structure
 
-from goldilocks_core.assets import AssetFile, AssetStore
-from goldilocks_core.contracts import (
-    CalculationDraft,
-    CalculationHints,
-    InMemoryStructureSource,
-    Provenance,
-    PseudoMetadata,
-    PseudopotentialRequirements,
-)
+from goldilocks_core.assets.records import AssetFile
+from goldilocks_core.assets.store import AssetStore
+from goldilocks_core.calculation import CalculationHints
+from goldilocks_core.io.structures import InMemoryStructureSource
+from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.installed import load_installed_table, write_table_manifest
 from goldilocks_core.pseudo.registry import PseudoTable, default_table, load_tables
-from goldilocks_core.pseudo.source import source_for_draft
+from goldilocks_core.pseudo.source import PseudoResolution
+from goldilocks_core.request import CalculationDraft
 
 pytestmark = pytest.mark.integration
 
@@ -105,20 +102,21 @@ def test_default_table_serves_a_fresh_install(tmp_path: Path) -> None:
         structure=InMemoryStructureSource(structure),
         hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
     )
-    requirements = PseudopotentialRequirements(
-        functional=table.functional,
-        accuracy=table.accuracy,
-        pseudo_type=None,
-        relativistic=table.relativistic,
-        provenance=Provenance(
+    requirements = {
+        "functional": table.functional,
+        "accuracy": table.accuracy,
+        "pseudo_type": None,
+        "relativistic": table.relativistic,
+        "provenance": Provenance(
             source="default",
             reason="no explicit pseudopotential source in the request",
             data_source="shipped default table",
         ),
-    )
+    }
+    resolver = PseudoResolution(table_id=draft.pseudo_table, store=store)
+    selection = resolver.select(structure, requirements)
 
-    resolver = source_for_draft(draft, store=store)
-    metadata: tuple[PseudoMetadata, ...] = resolver(structure, requirements)
-
-    assert {item.element for item in metadata} >= {"Si"}
-    assert metadata[0].table_id == table.asset.id
+    selected = selection["pseudopotentials"]
+    assert {item["element"] for item in selected} == {"Si"}
+    assert selected[0]["filename"] == "Si.upf"
+    assert selected[0]["provenance"].data_source == table.asset.id

@@ -5,8 +5,15 @@ from pathlib import Path
 import pytest
 
 from goldilocks_core import Service
-from goldilocks_core.contracts.registry import RECORD_TYPE_IDS
-from goldilocks_core.runtime import GraphHandler, Preset, Runtime, Stage, TaskGraph
+from goldilocks_core.runtime.dispatch import GraphHandler
+from goldilocks_core.runtime.graph import (
+    Preset,
+    Stage,
+    TaskGraph,
+)
+from goldilocks_core.runtime.models import Runtime
+from goldilocks_core.runtime.registry import RECORD_TYPE_IDS
+from goldilocks_core.serialization import to_portable
 
 
 @pytest.fixture
@@ -19,7 +26,7 @@ def isolated_record_registry():
 
 def test_service_capabilities_discovers_portable_scientific_choices() -> None:
     with Service() as service:
-        document = service.capabilities().to_dict()
+        document = to_portable(service.capabilities())
 
     task = next(task for task in document["tasks"] if task["id"] == "scf_single_point")
     assert {preset["id"] for preset in task["presets"]} == {"recommend", "generate"}
@@ -104,21 +111,21 @@ def test_registered_future_task_appears_without_a_new_service_method(
     with Service(task_handlers=(handler,)) as service:
         capabilities = service.capabilities()
 
-    tasks = {task.id: task for task in capabilities.tasks}
+    tasks = {task["id"]: task for task in capabilities["tasks"]}
     assert tuple(tasks) == ("future_task", "scf_single_point")
-    assert tasks["future_task"].revision == "7"
-    assert tasks["future_task"].presets[0].output_record_ids == ("future_record",)
-    assert tasks["future_task"].selectable_record_ids == ("future_record",)
-    for catalog in (capabilities.models, capabilities.pseudopotential_sets):
-        ids = [item.id for item in catalog]
+    assert tasks["future_task"]["revision"] == "7"
+    assert tasks["future_task"]["presets"][0]["output_record_ids"] == ["future_record"]
+    assert tasks["future_task"]["selectable_record_ids"] == ["future_record"]
+    for catalog in (capabilities["models"], capabilities["pseudopotential_sets"]):
+        ids = [item["id"] for item in catalog]
         assert ids == sorted(ids)
 
 
 def test_capabilities_only_advertise_elements_allowed_by_selection_policy() -> None:
     with Service() as service:
         tables = {
-            table.id: set(table.supported_elements)
-            for table in service.capabilities().pseudopotential_sets
+            table["id"]: set(table["supported_elements"])
+            for table in service.capabilities()["pseudopotential_sets"]
         }
 
     assert tables["pseudodojo-pbe-lanthanides-sr"] == set()

@@ -10,9 +10,9 @@ from typing import Any
 
 from pymatgen.core import Element
 
-from goldilocks_core.assets import AssetFile, AssetSpec
-from goldilocks_core.contracts import PathLike, PseudoAccuracy, RelativisticTreatment
+from goldilocks_core.assets.records import AssetFile, AssetSpec
 from goldilocks_core.functionals import normalize_functional_label
+from goldilocks_core.types import PathLike, PseudoAccuracy, RelativisticTreatment
 
 PSEUDO_REGISTRY_ENV = "GOLDILOCKS_PSEUDO_REGISTRY"
 _REGISTRY_RESOURCE = "registry.toml"
@@ -120,6 +120,42 @@ def table_asset_specs(path: PathLike | None = None) -> tuple[AssetSpec, ...]:
     return tuple(table.asset for table in load_tables(path).values())
 
 
+def _table_payload(
+    table_id: str, entry: dict[str, Any]
+) -> tuple[tuple[str, ...], AssetSpec]:
+    raw_elements = entry["elements"]
+    if (
+        not isinstance(raw_elements, list)
+        or not raw_elements
+        or any(not isinstance(element, str) for element in raw_elements)
+    ):
+        raise ValueError("elements must be a non-empty string list")
+    elements = tuple(raw_elements)
+    if len(elements) != len(set(elements)):
+        raise ValueError("elements must be unique")
+    invalid = [element for element in elements if not Element.is_valid_symbol(element)]
+    if invalid:
+        raise ValueError("invalid element symbols: " + ", ".join(sorted(invalid)))
+    raw_files = entry["files"]
+    if not isinstance(raw_files, list) or not raw_files:
+        raise ValueError("files must be a non-empty array")
+    files = tuple(AssetFile(**raw_file) for raw_file in raw_files)
+    required_roles = {
+        "pseudodojo": {"pseudopotentials", "metadata"},
+        "sssp": {"pseudopotentials", "metadata", "licence"},
+    }[entry["provider"]]
+    if not required_roles.issubset(file.role for file in files):
+        raise ValueError(
+            f"files must declare roles: {', '.join(sorted(required_roles))}"
+        )
+    return elements, AssetSpec(
+        f"pseudopotentials/{table_id}",
+        entry["version"],
+        files,
+        preparation_revision=_PREPARATION_REVISIONS[entry["provider"]],
+    )
+
+
 def _parse_table(table_id: str, entry: Any) -> PseudoTable:
     if not isinstance(table_id, str) or not isinstance(entry, dict):
         raise InvalidPseudoRegistry(
@@ -136,56 +172,28 @@ def _parse_table(table_id: str, entry: Any) -> PseudoTable:
             f"missing: {missing_names}; extra: {extra_names}"
         )
     try:
-        provider = _required_string(entry, "provider")
-        if provider not in _PROVIDERS:
-            raise ValueError(f"unsupported provider {provider!r}")
-        upstream_table = _required_string(entry, "upstream_table")
-        version = _required_string(entry, "version")
-        functional = normalize_functional_label(_required_string(entry, "functional"))
-        if functional is None:
-            raise ValueError("functional cannot be empty")
-        relativistic_raw = _required_string(entry, "relativistic")
-        try:
-            relativistic = _RELATIVISTIC[relativistic_raw]
-        except KeyError as error:
-            raise ValueError(
-                f"unsupported relativistic treatment {relativistic_raw!r}"
-            ) from error
-        accuracy = _required_string(entry, "accuracy")
-        if accuracy not in {"efficiency", "precision"}:
-            raise ValueError(f"unsupported accuracy {accuracy!r}")
-        licence = _required_string(entry, "licence")
-        citation = _required_string(entry, "citation")
-
-        raw_elements = entry["elements"]
-        if (
-            not isinstance(raw_elements, list)
-            or not raw_elements
-            or any(not isinstance(element, str) for element in raw_elements)
+        entry = dict(entry)
+        for field in (
+            "provider",
+            "upstream_table",
+            "version",
+            "functional",
+            "relativistic",
+            "accuracy",
+            "licence",
+            "citation",
         ):
-            raise ValueError("elements must be a non-empty string list")
-        elements = tuple(raw_elements)
-        if len(elements) != len(set(elements)):
-            raise ValueError("elements must be unique")
-        invalid_elements = [
-            element for element in elements if not Element.is_valid_symbol(element)
-        ]
-        if invalid_elements:
-            raise ValueError(
-                "invalid element symbols: " + ", ".join(sorted(invalid_elements))
-            )
-
-        raw_files = entry["files"]
-        if not isinstance(raw_files, list) or not raw_files:
-            raise ValueError("files must be a non-empty array")
-        files = tuple(AssetFile(**raw_file) for raw_file in raw_files)
-        roles = {file.role for file in files}
-        required_roles = {"pseudopotentials", "metadata"}
-        if provider == "sssp":
-            required_roles.add("licence")
-        if not required_roles.issubset(roles):
-            names = ", ".join(sorted(required_roles))
-            raise ValueError(f"files must declare roles: {names}")
+            entry[field] = _required_string(entry, field)
+        for field, allowed, label in (
+            ("provider", _PROVIDERS, "provider"),
+            ("relativistic", _RELATIVISTIC, "relativistic treatment"),
+            ("accuracy", {"efficiency", "precision"}, "accuracy"),
+        ):
+            if entry[field] not in allowed:
+                raise ValueError(f"unsupported {label} {entry[field]!r}")
+        entry["functional"] = normalize_functional_label(entry["functional"])
+        entry["relativistic"] = _RELATIVISTIC[entry["relativistic"]]
+        elements, asset = _table_payload(table_id, entry)
 
         default = entry.get("default", False)
         if not isinstance(default, bool):
@@ -198,25 +206,24 @@ def _parse_table(table_id: str, entry: Any) -> PseudoTable:
             or dual <= 0
         ):
             raise ValueError("charge_density_dual must be finite and positive")
-        if provider == "pseudodojo" and dual is None:
+        if entry["provider"] == "pseudodojo" and dual is None:
             raise ValueError("PseudoDojo tables require charge_density_dual")
 
-        asset = AssetSpec(
-            f"pseudopotentials/{table_id}",
-            version,
-            files,
-            preparation_revision=_PREPARATION_REVISIONS[provider],
-        )
         return PseudoTable(
             id=table_id,
-            provider=provider,
-            upstream_table=upstream_table,
-            version=version,
-            functional=functional,
-            relativistic=relativistic,
-            accuracy=accuracy,
-            licence=licence,
-            citation=citation,
+            **{
+                field: entry[field]
+                for field in (
+                    "provider",
+                    "upstream_table",
+                    "version",
+                    "functional",
+                    "relativistic",
+                    "accuracy",
+                    "licence",
+                    "citation",
+                )
+            },
             elements=elements,
             asset=asset,
             charge_density_dual=float(dual) if dual is not None else None,

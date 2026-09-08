@@ -24,19 +24,16 @@ from goldilocks_core import (
     Runtime,
     Service,
 )
-from goldilocks_core.assets import AssetStore
-from goldilocks_core.contracts import (
-    DftInputData,
-    KPointSelection,
-    ModelSpec,
-    PseudoCutoffs,
-    StructureFeatureVector,
-)
-from goldilocks_core.ml.model_registry import load_default_qrf_config
+from goldilocks_core.assets.store import AssetStore
+from goldilocks_core.input_data import DftInputData, input_data_portable
+from goldilocks_core.kmesh.resolve import KPointSelection
+from goldilocks_core.ml.models import ModelSpec, load_default_qrf_config
 from goldilocks_core.pseudo.installed import write_table_manifest
 from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
 from goldilocks_core.pseudo.registry import load_tables
 from goldilocks_core.publication import Publisher
+from goldilocks_core.serialization import to_portable
+from goldilocks_core.types import JsonDict
 
 
 def test_service_publication_preserves_scientific_content_and_zip_parity(
@@ -56,7 +53,7 @@ def test_service_publication_preserves_scientific_content_and_zip_parity(
 
     input_data = result.records[DftInputData]
     publisher = Publisher()
-    files = {item.path: item.content for item in publisher.files(input_data)}
+    files = {item["path"]: item["content"] for item in publisher.files(input_data)}
     assert set(files) == {
         "source/original.cif",
         "structure/canonical.cif",
@@ -88,8 +85,8 @@ def test_service_publication_preserves_scientific_content_and_zip_parity(
         for path in directory.rglob("*")
         if path.is_file()
     } == files
-    assert result.publication.path == str(directory.resolve())
-    assert result.publication.files == tuple(sorted(files))
+    assert result.publication["path"] == str(directory.resolve())
+    assert set(result.publication["files"]) == set(files)
     publisher.publish(input_data, ArchiveOutput(archive_path))
     archive_bytes = publisher.archive_bytes(input_data)
     assert (
@@ -106,9 +103,9 @@ def test_service_publication_preserves_scientific_content_and_zip_parity(
     assert not (tmp_path / "recommendation").exists()
     assert all(
         set(artifact) == {"path", "role"}
-        for artifact in input_data.to_dict()["artifacts"]
+        for artifact in input_data_portable(input_data)["artifacts"]
     )
-    serialized = json.dumps(input_data.to_dict())
+    serialized = json.dumps(input_data_portable(input_data))
     for private in (
         str(tmp_path),
         "filepath",
@@ -167,11 +164,13 @@ def test_selected_pseudo_binds_to_one_exact_same_element_candidate(
         result = service.compute(request)
 
     input_data = result.records[DftInputData]
-    contents = {artifact.role: artifact.content for artifact in input_data.artifacts}
+    contents = {
+        artifact["role"]: artifact["content"] for artifact in input_data["artifacts"]
+    }
     assert contents["pseudopotential"] == Path(candidates[0].filepath).read_bytes()
     assert contents["licence"] == b"a-source legal terms\n"
-    assert input_data.pseudopotential_set.licence == "a-source-licence"
-    assert input_data.citations == ("a-source citation",)
+    assert input_data["pseudopotential_set"]["licence"] == "a-source-licence"
+    assert input_data["citations"] == ("a-source citation",)
 
 
 def test_pseudo_root_publication_uses_explicit_legal_sidecar(tmp_path: Path) -> None:
@@ -224,15 +223,15 @@ def test_pseudo_root_publication_uses_explicit_legal_sidecar(tmp_path: Path) -> 
             service.compute(request)
 
     input_data = result.records[DftInputData]
-    files = {item.path: item.content for item in Publisher().files(input_data)}
-    assert input_data.pseudopotential_set.licence == "Operator-Licence-1.0"
-    assert input_data.citations == (citation,)
+    files = {item["path"]: item["content"] for item in Publisher().files(input_data)}
+    assert input_data["pseudopotential_set"]["licence"] == "Operator-Licence-1.0"
+    assert input_data["citations"] == (citation,)
     assert files["pseudo/Si.custom.UPF"] == upf.read_bytes()
     assert (
         files["licences/explicit-local-pseudopotentials.txt"] == licence_text.encode()
     )
     assert citation.encode() in files["CITATIONS.md"]
-    serialized_result = json.dumps(result.to_dict())
+    serialized_result = json.dumps(to_portable(result))
     assert str(tmp_path) not in serialized_result
     assert licence_text not in serialized_result
     assert "operator-library/Si.custom.UPF" in serialized_result
@@ -258,8 +257,8 @@ def test_automatic_directory_allocation_uses_occupancy_and_is_concurrency_safe(
             )
         )
 
-    assert Path(first.path).name == "goldilocks_out_3"
-    assert {Path(item.path).name for item in publications} == {
+    assert Path(first["path"]).name == "goldilocks_out_3"
+    assert {Path(item["path"]).name for item in publications} == {
         *(f"goldilocks_out_{index}" for index in range(4, 12))
     }
     assert (tmp_path / "goldilocks_out").read_text() == "occupied"
@@ -275,8 +274,8 @@ def test_write_failure_leaves_no_partial_destination(
     destination = tmp_path / "failed"
 
     def fail_after_partial_write(root: Path, files) -> None:
-        (root / files[0].path).parent.mkdir(parents=True, exist_ok=True)
-        (root / files[0].path).write_bytes(files[0].content)
+        (root / files[0]["path"]).parent.mkdir(parents=True, exist_ok=True)
+        (root / files[0]["path"]).write_bytes(files[0]["content"])
         assert not destination.exists()
         raise OSError("disk full")
 
@@ -311,7 +310,7 @@ def test_install_preserves_a_raced_destination(
     assert not list(tmp_path.glob(".raced.*"))
 
 
-def _explicit_input_data(tmp_path: Path) -> DftInputData:
+def _explicit_input_data(tmp_path: Path) -> JsonDict:
     with Service() as service:
         result = service.compute(_explicit_request(tmp_path))
     assert result.publication is None
@@ -339,7 +338,7 @@ def _explicit_request(tmp_path: Path, pseudo_name: str = "Si.UPF") -> ComputeReq
                     filename="Si.UPF",
                     provider="fixture",
                     accuracy="efficiency",
-                    cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
+                    cutoffs={"ecutwfc_ry": 30, "ecutrho_ry": 120},
                     source_identifier="fixture/Si.UPF",
                     pseudo_info={
                         "licence": "CC-BY-4.0",
@@ -425,16 +424,23 @@ files = [
     (installed_root / "pseudos/Si.UPF").write_bytes(b"changed after compute")
     (installed_root / "LICENSE.txt").unlink()
     store.root.rename(tmp_path / "offline-assets")
-    assert input_data.pseudopotential_set.id == "fixture-table"
+    assert input_data["pseudopotential_set"]["id"] == "fixture-table"
     assert (
-        input_data.pseudopotential_set.policy["preparation_fingerprint"]
+        input_data["pseudopotential_set"]["policy"]["preparation_fingerprint"]
         == table.asset.preparation_fingerprint
     )
-    files = {item.path: item.content for item in Publisher().files(input_data)}
+    files = {item["path"]: item["content"] for item in Publisher().files(input_data)}
+    destination = tmp_path / "snapshot"
+    Publisher().publish(input_data, DirectoryOutput(destination))
+    assert {
+        path.relative_to(destination).as_posix(): path.read_bytes()
+        for path in destination.rglob("*")
+        if path.is_file()
+    } == files
     assert files["pseudo/Si.UPF"] == pseudo_bytes
     assert files["licences/fixture-table.txt"] == b"Installed exact licence\n"
-    assert input_data.citations == ("Installed fixture citation.",)
-    assert str(store.root) not in str(input_data.to_dict())
+    assert input_data["citations"] == ("Installed fixture citation.",)
+    assert str(store.root) not in str(input_data_portable(input_data))
 
 
 def _stub_metallicity(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -488,9 +494,7 @@ def test_only_used_model_identities_licences_and_citations_are_published(
     )
     monkeypatch.setattr(
         "goldilocks_core.ml.qrf.features.extract_qrf_features",
-        lambda structure, model, atom_init, settings: StructureFeatureVector(
-            np.zeros(1), ["fixture"]
-        ),
+        lambda structure, model, atom_init, settings: (np.zeros(1), ["fixture"]),
     )
     request = _explicit_request(tmp_path, "model-Si.UPF")
     if not hinted:
@@ -515,7 +519,8 @@ def test_only_used_model_identities_licences_and_citations_are_published(
     )
 
     input_data = result.records[DftInputData]
-    files = {item.path: item.content for item in Publisher().files(input_data)}
+    store.root.rename(tmp_path / "offline-model-assets")
+    files = {item["path"]: item["content"] for item in Publisher().files(input_data)}
     manifest = json.loads(files["goldilocks.json"])
     models = (
         (config.metallicity_model,)
@@ -537,12 +542,12 @@ def test_only_used_model_identities_licences_and_citations_are_published(
     assert {
         path: files[path] for path in files if path.startswith("licences/models_")
     } == expected_licences
-    assert set(input_data.citations) == {
+    assert set(input_data["citations"]) == {
         "Fixture pseudopotential citation.",
         *(model.citation for model in models),
     }
-    assert len(input_data.citations) == len(set(input_data.citations))
-    assert str(store.root) not in json.dumps(input_data.to_dict())
+    assert len(input_data["citations"]) == len(set(input_data["citations"]))
+    assert str(store.root) not in json.dumps(input_data_portable(input_data))
 
 
 def test_staggered_model_loads_publish_both_classifier_snapshots(
@@ -574,9 +579,7 @@ def test_staggered_model_loads_publish_both_classifier_snapshots(
     )
     monkeypatch.setattr(
         "goldilocks_core.ml.qrf.features.extract_qrf_features",
-        lambda structure, model, atom_init, settings: StructureFeatureVector(
-            np.zeros(1), ["fixture"]
-        ),
+        lambda structure, model, atom_init, settings: (np.zeros(1), ["fixture"]),
     )
     request = _explicit_request(tmp_path)
     with Runtime(asset_store=store, registry_path=registry) as runtime:
@@ -598,10 +601,9 @@ def test_staggered_model_loads_publish_both_classifier_snapshots(
                 )
             )
 
-    files = {
-        item.path: item.content
-        for item in Publisher().files(result.records[DftInputData])
-    }
+    published = Publisher().files(result.records[DftInputData])
+    files = {item["path"]: item["content"] for item in published}
+    assert len(files) == len(published)
     manifest = json.loads(files["goldilocks.json"])
     assert {model["name"] for model in manifest["runtime"]["models"]} == {
         config.model.name,
@@ -612,6 +614,7 @@ def test_staggered_model_loads_publish_both_classifier_snapshots(
         config.model_asset.id,
         config.metallicity_asset.id,
     }
+    assert len(manifest["runtime"]["assets"]) == 2
 
 
 @pytest.mark.parametrize("missing_legal", [False, True])
@@ -673,18 +676,19 @@ def test_custom_model_revisions_and_legal_material(
             input_data = service.compute(request).records[DftInputData]
 
     assert {
-        (model["target"], model["revision"]) for model in input_data.runtime.models
+        (model["target"], model["revision"])
+        for model in input_data["runtime"]["models"]
     } == {("k_index", "kmesh-revision"), ("metallicity", "metallicity-revision")}
-    assert set(input_data.citations) == {
+    assert set(input_data["citations"]) == {
         "Fixture pseudopotential citation.",
         "K-mesh model citation.",
         "Metallicity model citation.",
     }
-    files = {item.path: item.content for item in Publisher().files(input_data)}
+    files = {item["path"]: item["content"] for item in Publisher().files(input_data)}
     assert files["licences/custom-kmesh-model.txt"] == b"Operator model terms.\n"
     assert files["licences/custom-metallicity-model.txt"] == b"Operator model terms.\n"
-    assert input_data.runtime.assets == ()
-    serialized = json.dumps(input_data.to_dict())
+    assert not input_data["runtime"]["assets"]
+    serialized = json.dumps(input_data_portable(input_data))
     assert str(tmp_path) not in serialized
     assert "Operator model terms." not in serialized
 

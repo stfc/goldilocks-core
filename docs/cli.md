@@ -89,7 +89,8 @@ text, and citation; it never supplies a default licence.
 uv run goldilocks compute Si.cif --preset generate --model model.joblib --model-name my-kmesh --model-version 1 --model-licence LicenseRef-Operator --model-licence-file MODEL-LICENSE.txt --model-citation "Operator model, version 1." --pseudo-root ./pseudos --out ./ready
 ```
 
-In Python, supply the same legal material with
+In Python, pass `model_licence`, `model_licence_text`, and `model_citation` to
+`ComputeRequest.from_local(...)`, or supply
 `ModelSpec(..., licence="LicenseRef-Operator", licence_text=Path("MODEL-LICENSE.txt").read_text(encoding="utf-8"), citation="Operator model, version 1.")`
 as `CalculationDraft.kmesh_model`. These are trusted local configuration controls,
 not remote request options. Explicit `--k-grid` or `--k-spacing` bypasses model

@@ -2,19 +2,38 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypedDict
 
-from goldilocks_core.contracts import (
-    CalculationTaskCapability,
-    PresetCapability,
-    Records,
-    StageCapability,
-    record_type_id,
-)
+from goldilocks_core.failures import ExpectedFailure
+from goldilocks_core.runtime.registry import record_type_id
 
 
-class UnknownPreset(ValueError):
-    pass
+class StageCapability(TypedDict):
+    id: str
+    name: str
+    description: str
+    input_record_ids: list[str]
+    output_record_id: str
+
+
+class PresetCapability(TypedDict):
+    id: str
+    name: str
+    output_record_ids: list[str]
+
+
+class CalculationTaskCapability(TypedDict):
+    id: str
+    revision: str
+    name: str
+    description: str
+    stages: list[StageCapability]
+    presets: list[PresetCapability]
+    selectable_record_ids: list[str]
+
+
+class UnknownPreset(ExpectedFailure, ValueError):
+    kind = "invalid_preset"
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,43 +99,41 @@ class TaskGraph:
 
 def describe_task(task: TaskGraph) -> CalculationTaskCapability:
     """Serializes a TaskGraph to string-keyed IDs. Same input as execute()."""
-    stages = tuple(
-        StageCapability(
-            id=stage.id,
-            name=stage.name,
-            description=stage.description,
-            input_record_ids=tuple(task.record_id(item) for item in stage.inputs),
-            output_record_id=task.record_id(stage.output),
-        )
-        for stage in task.stages
-    )
-    presets = tuple(
-        PresetCapability(
-            id=preset.name,
-            name=preset.name,
-            output_record_ids=tuple(
-                task.record_id(output) for output in preset.outputs
-            ),
-        )
-        for preset in task.presets
-    )
-    return CalculationTaskCapability(
-        id=task.task,
-        revision=task.revision,
-        name=task.name,
-        description=task.description,
-        stages=stages,
-        presets=presets,
-        selectable_record_ids=tuple(
+    return {
+        "id": task.task,
+        "revision": task.revision,
+        "name": task.name,
+        "description": task.description,
+        "stages": [
+            {
+                "id": stage.id,
+                "name": stage.name,
+                "description": stage.description,
+                "input_record_ids": [task.record_id(item) for item in stage.inputs],
+                "output_record_id": task.record_id(stage.output),
+            }
+            for stage in task.stages
+        ],
+        "presets": [
+            {
+                "id": preset.name,
+                "name": preset.name,
+                "output_record_ids": [
+                    task.record_id(output) for output in preset.outputs
+                ],
+            }
+            for preset in task.presets
+        ],
+        "selectable_record_ids": [
             task.record_id(output) for output in task.selectable_outputs
-        ),
-    )
+        ],
+    }
 
 
 @dataclass(frozen=True, slots=True)
 class GraphExecution:
-    records: Records
-    produced: Records
+    records: dict[type, Any]
+    produced: dict[type, Any]
 
 
 def execute_graph(
@@ -157,8 +174,8 @@ def execute_graph(
         memo[stage.output] = stage.call(*arguments, ctx=context)
 
     return GraphExecution(
-        records=Records({output_type: memo[output_type] for output_type in outputs}),
-        produced=Records(memo),
+        records={output_type: memo[output_type] for output_type in outputs},
+        produced=memo,
     )
 
 
@@ -166,5 +183,5 @@ def execute(
     task: TaskGraph,
     outputs: tuple[type, ...],
     context: Any,
-) -> Records:
+) -> dict[type, Any]:
     return execute_graph(task, outputs, context).records

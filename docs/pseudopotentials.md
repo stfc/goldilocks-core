@@ -75,15 +75,11 @@ Python requests carry the ID; Core verifies and loads its installed manifest
 only when Select is required:
 
 ```python
-from goldilocks_core import (
-    CalculationDraft,
-    CalculationHints,
-    ComputeRequest,
-    DirectoryOutput,
-    PathStructureSource,
-    PresetSelection,
-    Service,
-)
+from goldilocks_core.calculation import CalculationHints
+from goldilocks_core.io.structures import PathStructureSource
+from goldilocks_core.publication import DirectoryOutput
+from goldilocks_core.request import CalculationDraft, ComputeRequest, PresetSelection
+from goldilocks_core.runtime.service import Service
 
 request = ComputeRequest(
     CalculationDraft(
@@ -150,6 +146,13 @@ uv run goldilocks assets verify pseudodojo-pbesol-efficiency-fr
 
 The state is `installed`, `missing`, or `corrupt`. Run `assets install` again
 to replace a corrupt table transactionally.
+
+Verification checks the installed file inventory and the preparation fingerprint
+against the registered declaration. The fingerprint binds the asset ID, version,
+source declarations, and preparation revision; matching filenames alone do not
+establish a compatible installation. Older schema-1 asset manifests must be
+reinstalled with `goldilocks assets install default` (and any additional tables
+you use).
 
 ## Use your own UPF files
 
@@ -243,8 +246,8 @@ before you redistribute an SSSP table.
 Asset installation stores licence material as `LICENSE.txt` beside each
 normalized table. PseudoDojo installations receive the table's CC BY 4.0
 notice; SSSP installations preserve the upstream record's complete mixed-family
-licence file. Workbench calculation archives include that installed licence
-material with the selected UPFs.
+licence file. Core publications include that installed licence material with
+the selected UPFs.
 
 Upstream sources:
 

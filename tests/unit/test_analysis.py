@@ -6,7 +6,7 @@ from goldilocks_core.analysis import (
     DimensionalityClassificationError,
     analyze_structure,
 )
-from goldilocks_core.contracts import SymmetryUnavailable
+from goldilocks_core.serialization import to_portable
 
 
 def test_analyze_structure_reports_composition_and_element_facts() -> None:
@@ -18,17 +18,21 @@ def test_analyze_structure_reports_composition_and_element_facts() -> None:
 
     analysis = analyze_structure(structure)
 
-    assert analysis.reduced_formula == "FeI"
-    assert analysis.site_count == 2
-    assert analysis.elements == ("Fe", "I")
-    assert analysis.contains_transition_metals is True
-    assert analysis.contains_heavy_elements is True
-    assert analysis.magnetic_elements == ("Fe",)
-    assert analysis.heavy_elements == ("I",)
-    assert analysis.space_group_number is not None
-    assert analysis.crystal_system is not None
-    assert analysis.electronic_character == "unknown"
-    assert analysis.analysis_warnings
+    assert analysis["reduced_formula"] == "FeI"
+    assert analysis["site_count"] == 2
+    assert analysis["elements"] == ["Fe", "I"]
+    assert analysis["contains_transition_metals"] is True
+    assert analysis["contains_heavy_elements"] is True
+    assert analysis["magnetic_elements"] == [
+        "Fe",
+    ]
+    assert analysis["heavy_elements"] == [
+        "I",
+    ]
+    assert analysis["space_group_number"] is not None
+    assert analysis["crystal_system"] is not None
+    assert analysis["electronic_character"] == "unknown"
+    assert analysis["analysis_warnings"]
 
 
 def test_analyze_structure_reports_partial_occupancy_warnings() -> None:
@@ -40,11 +44,11 @@ def test_analyze_structure_reports_partial_occupancy_warnings() -> None:
 
     analysis = analyze_structure(structure)
 
-    assert analysis.disorder_warnings
-    assert analysis.disordered_site_count == 1
-    assert "partial occupancies" in analysis.disorder_warnings[0]
-    assert analysis.dimensionality == "unknown"
-    assert analysis.low_dimensional is False
+    assert analysis["disorder_warnings"]
+    assert analysis["disordered_site_count"] == 1
+    assert "partial occupancies" in analysis["disorder_warnings"][0]
+    assert analysis["dimensionality"] == "unknown"
+    assert analysis["low_dimensional"] is False
 
 
 def test_analyze_structure_marks_all_metal_compositions_as_likely_metal() -> None:
@@ -56,8 +60,8 @@ def test_analyze_structure_marks_all_metal_compositions_as_likely_metal() -> Non
 
     analysis = analyze_structure(structure)
 
-    assert analysis.electronic_character == "likely_metal"
-    assert "likely" in analysis.analysis_warnings[0]
+    assert analysis["electronic_character"] == "likely_metal"
+    assert "likely" in analysis["analysis_warnings"][0]
 
 
 def test_analyze_structure_raises_when_crystal_nn_fails(monkeypatch) -> None:
@@ -95,7 +99,6 @@ def test_analyze_structure_raises_when_larsen_fails(monkeypatch) -> None:
 def test_analyze_structure_records_symmetry_unavailable_when_spglib_fails(
     monkeypatch,
 ) -> None:
-
     def fail_spglib(_structure: Structure) -> None:
         raise TypeError("spglib cannot handle this structure")
 
@@ -108,15 +111,20 @@ def test_analyze_structure_records_symmetry_unavailable_when_spglib_fails(
 
     analysis = analyze_structure(structure)
 
-    assert analysis.dimensionality == "3d"
-    assert isinstance(analysis.crystal_system, SymmetryUnavailable)
-    assert isinstance(analysis.space_group_symbol, SymmetryUnavailable)
-    assert isinstance(analysis.space_group_number, SymmetryUnavailable)
-    assert analysis.crystal_system.reason
+    assert analysis["dimensionality"] == "3d"
+    assert analysis["crystal_system"] is None
+    assert analysis["space_group_symbol"] is None
+    assert analysis["space_group_number"] is None
+    assert analysis["analysis_warnings"][-1] == (
+        "Symmetry analysis failed: spglib cannot handle this structure."
+    )
 
-    # SymmetryUnavailable must round-trip through the manifest serializer.
-    serialized = analysis.to_dict()
-    assert serialized["crystal_system"] == {"reason": analysis.crystal_system.reason}
+    # The failed determination must round-trip through the manifest serializer.
+    serialized = to_portable(analysis)
+    assert serialized["crystal_system"] is None
+    assert serialized["analysis_warnings"][-1] == (
+        "Symmetry analysis failed: spglib cannot handle this structure."
+    )
 
 
 def test_analyze_structure_propagates_unexpected_dimensionality_assertion(
@@ -146,8 +154,8 @@ def test_analyze_structure_reports_3d_bulk_without_vacuum() -> None:
 
     analysis = analyze_structure(structure)
 
-    assert analysis.dimensionality == "3d"
-    assert analysis.low_dimensional is False
+    assert analysis["dimensionality"] == "3d"
+    assert analysis["low_dimensional"] is False
 
 
 def test_analyze_structure_reports_2d_slab_with_vacuum() -> None:
@@ -159,8 +167,8 @@ def test_analyze_structure_reports_2d_slab_with_vacuum() -> None:
 
     analysis = analyze_structure(structure)
 
-    assert analysis.dimensionality == "2d"
-    assert analysis.low_dimensional is True
+    assert analysis["dimensionality"] == "2d"
+    assert analysis["low_dimensional"] is True
 
 
 def test_analyze_structure_reports_molecule_with_vacuum() -> None:
@@ -172,5 +180,5 @@ def test_analyze_structure_reports_molecule_with_vacuum() -> None:
 
     analysis = analyze_structure(structure)
 
-    assert analysis.dimensionality == "molecule"
-    assert analysis.low_dimensional is True
+    assert analysis["dimensionality"] == "molecule"
+    assert analysis["low_dimensional"] is True

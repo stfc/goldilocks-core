@@ -36,7 +36,7 @@ def write_qe_scf(
 ) -> tuple[GeneratedFile, ...]:
     return (
         GeneratedFile(
-            path="qe.in",
+            path="inputs/qe.in",
             content=_render_qe_scf(structure, intent, advice, selection, k_points),
         ),
     )

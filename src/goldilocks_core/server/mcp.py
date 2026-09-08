@@ -6,7 +6,7 @@ from typing import Any
 
 from goldilocks_core.analysis import DimensionalityClassificationError
 from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled
-from goldilocks_core.contracts import ComputeRequest
+from goldilocks_core.contracts import ComputeRequest, DirectoryOutput
 from goldilocks_core.generation import GenerationError
 from goldilocks_core.io.structures import StructureInputError
 from goldilocks_core.pseudo.source import PseudoTableMismatch
@@ -16,6 +16,7 @@ from goldilocks_core.runtime.service import Service
 from goldilocks_core.server.request import (
     DraftDocument,
     InlineStructureDocument,
+    MemoryOutputDocument,
     SelectionDocument,
 )
 
@@ -110,16 +111,23 @@ def create_server(
         return result.to_dict()
 
     @server.tool(
-        description=("Compute one named preset or selected record ids in memory.")
+        description=(
+            "Compute one named preset or selected record ids. Omitted output "
+            "automatically publishes complete DFT Input Data."
+        )
     )
     async def compute(
         draft: DraftDocument,
         selection: SelectionDocument,
+        output: MemoryOutputDocument | None = None,
     ) -> dict[str, Any]:
         try:
             result = await asyncio.to_thread(
-                state.compute, ComputeRequest(draft, selection)
+                state.compute,
+                ComputeRequest(draft, selection),
+                output=DirectoryOutput() if output is None else None,
             )
+
         except _KNOWN_TOOL_ERRORS as error:
             raise ToolError(str(error)) from error
         return result.to_dict()

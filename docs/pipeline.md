@@ -42,7 +42,7 @@ contracts. It owns a short-lived Runtime unless the caller supplies one.
 
 `PresetSelection("recommend")` requests `analysis`, `advice`, `k_points`, and
 `selection`. `PresetSelection("generate")` additionally requests
-`generated_files`.
+`generated_files` and `dft_input_data`.
 
 Use `RecordSelection` for a minimal subgraph:
 
@@ -59,19 +59,48 @@ result = compute(request)
 
 Results always use `ComputationResult`. Its `Records` mapping serializes class
 keys as stable IDs: `analysis`, `advice`, `k_points`, `selection`,
-and `generated_files`.
+`generated_files`, and `dft_input_data`.
 
 ## Output targets
 
-`output=None` keeps the canonical Result in memory. `DirectoryOutput(path)`
-writes generated inputs and `manifest.json` to a new directory and refuses an
-existing destination. Directory output requires the complete `generate`
-record set; a partial Record selection remains available in memory.
+`output=None` keeps the canonical Result in memory. `DirectoryOutput(path)` and
+`ArchiveOutput(path)` atomically publish complete DFT Input Data and refuse an
+existing destination. The Publisher writes into private staging, then installs
+the completed output with a native no-replace rename. The destination parent
+must be operator-controlled; hostile changes to private staging are out of scope.
+Platforms without a native exclusive rename fail without installing output.
+`DirectoryOutput()`
+allocates `goldilocks_out`, then `goldilocks_out_1`, and so on. Automatic output
+leaves a Result without DFT Input Data in memory rather than failing.
 
-For Quantum ESPRESSO the bundle contains `qe.in` and a manifest recording
-analysis, advice, k-points, pseudopotential selection, file paths, and warnings.
-It does not copy pseudopotentials or run the target code. Supply the selected
-UPFs under the input's `pseudo_dir` before running the calculation.
+DFT Input Data holds the selected file bytes, not deferred Asset references.
+Assembly checks external UPFs and licence files when it reads them.
+Publication uses that snapshot without reopening the files or the Asset Store.
+Changing or removing source files after Compute does not change its output.
+JSON lists artifact paths and roles but excludes their contents.
+
+Runtime provenance records model identities and Asset preparation fingerprints,
+not full model-file inventories. Internal Records and generated content are
+trusted; file hashes are calculated once when the Publisher builds the manifest.
+
+Directory and ZIP publication use the same extracted layout:
+
+```text
+source/
+structure/
+inputs/
+pseudo/
+licences/
+CITATIONS.md
+README.md
+goldilocks.json
+```
+
+The output contains the original source when available, canonical CIF,
+generated inputs, exact pseudopotentials, licence material, citations,
+and provenance. `goldilocks.json` records each payload's size and SHA-256 hash.
+These hashes detect corruption; they do not establish authenticity.
+Publication never runs the target code.
 
 ## Stage graph
 
@@ -82,6 +111,7 @@ Load -> Analyze -> Advise
 Load -> Kmesh
 Load + Advice -> Select
 Load + Advice + Select + Kmesh -> Generate
+Analysis + Advice + Kmesh + Select + Generate -> DFT Input Data
 ```
 
 - Core normalizes the Structure Source before executing the graph; **Load**
@@ -91,6 +121,7 @@ Load + Advice + Select + Kmesh -> Generate
 - **Kmesh** resolves an operator hint or model result.
 - **Select** resolves and selects concrete pseudopotentials.
 - **Generate** renders target-code syntax.
+- **DFT Input Data** binds every runnable artifact and its provenance.
 
 The executor resolves dependencies from selected Record types. New tasks
 register one `GraphHandler`; the generic Runtime and executor remain
@@ -100,7 +131,8 @@ stage-agnostic.
 
 An explicit `k_grid` wins over `k_spacing`; both bypass model loading. Without
 a hint, the configured QRF backend loads lazily. A request-specific
-`ModelSpec` selects a local k-index model.
+`ModelSpec` selects a local k-index model. Publishable custom-model results must
+provide licence text and citation identity; Core does not invent attribution.
 
 ## Pseudopotential sources
 

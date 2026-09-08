@@ -2,21 +2,19 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from goldilocks_core.bundle import write_bundle_directory
 from goldilocks_core.contracts import (
+    ArchiveOutput,
     Capabilities,
     ComputationResult,
     ComputeRequest,
+    DftInputData,
     DirectoryOutput,
-    GeneratedFiles,
-    KPointSelection,
-    ParameterAdvice,
-    SelectionRecord,
-    StructureAnalysisRecord,
+    OutputTarget,
     StructureInspection,
     StructureSource,
 )
 from goldilocks_core.io.structures import normalize_structure
+from goldilocks_core.publication import Publisher
 from goldilocks_core.runtime.capabilities import build_capabilities
 from goldilocks_core.runtime.dispatch import Dispatcher
 from goldilocks_core.runtime.models import Runtime
@@ -53,26 +51,25 @@ class Service:
         self,
         request: ComputeRequest,
         *,
-        output: DirectoryOutput | None = None,
+        output: OutputTarget | None = None,
     ) -> ComputationResult:
-        if output is not None and not isinstance(output, DirectoryOutput):
-            raise ValueError("output must be a DirectoryOutput or None")
+        if output is not None and not isinstance(
+            output, DirectoryOutput | ArchiveOutput
+        ):
+            raise ValueError("output must be a DirectoryOutput, ArchiveOutput, or None")
         self._ensure_open()
         result = self._dispatcher.compute(request)
         if output is None:
             return result
-        required = {
-            StructureAnalysisRecord,
-            ParameterAdvice,
-            KPointSelection,
-            SelectionRecord,
-            GeneratedFiles,
-        }
-        if not required.issubset(result.records):
+        input_data = result.records.get(DftInputData)
+        if input_data is None:
+            if isinstance(output, DirectoryOutput) and output.path is None:
+                return result
             raise ValueError(
-                "Directory output requires the complete generate record set"
+                "The Computation Result does not contain DFT Input Data to publish"
             )
-        return replace(result, bundle=write_bundle_directory(result, output.path))
+        publication = Publisher().publish(input_data, output)
+        return replace(result, publication=publication)
 
     def capabilities(self) -> Capabilities:
         self._ensure_open()

@@ -9,13 +9,16 @@ from typing import Any, Literal, TypeAliasType, get_args, get_origin, get_type_h
 from pydantic import BaseModel, ConfigDict, JsonValue, create_model
 
 from goldilocks_core.contracts import (
-    BundleRecord,
     CalculationHints,
     CalculationIntent,
     CalculationTaskCapability,
+    InputArtifact,
     ModelSpec,
     PseudoMetadata,
     PseudopotentialSelection,
+    Publication,
+    RuntimeAssetIdentity,
+    RuntimeIdentity,
     StructureInspection,
 )
 from goldilocks_core.contracts.registry import record_types_by_id
@@ -105,6 +108,23 @@ SerializedPseudopotentialDocument = _serialized_model(
 )
 _SERIALIZED_MODELS[PseudopotentialSelection] = SerializedPseudopotentialDocument
 
+SerializedInputArtifactDocument = _serialized_model(
+    InputArtifact,
+    name="SerializedInputArtifact",
+    exclude=frozenset({"content"}),
+)
+_SERIALIZED_MODELS[InputArtifact] = SerializedInputArtifactDocument
+SerializedRuntimeAssetDocument = _serialized_model(
+    RuntimeAssetIdentity,
+    name="SerializedRuntimeAsset",
+)
+_SERIALIZED_MODELS[RuntimeAssetIdentity] = SerializedRuntimeAssetDocument
+SerializedRuntimeDocument = _serialized_model(
+    RuntimeIdentity,
+    name="SerializedRuntime",
+    overrides={"models": list[SerializedModelDocument]},
+)
+_SERIALIZED_MODELS[RuntimeIdentity] = SerializedRuntimeDocument
 
 LocalPseudoRootDocument = create_model(
     "LocalPseudoRoot",
@@ -158,7 +178,7 @@ def computation_result_document(
         selection=(SelectionDocument, ...),
         records=(records_document, ...),
         warnings=(list[str], ...),
-        bundle=(_serialized_annotation(BundleRecord) | None, ...),
+        publication=(_serialized_annotation(Publication) | None, ...),
     )
 
 
@@ -169,6 +189,7 @@ def prepared_computation_document(
         "PreparedComputation",
         __config__=_STRICT,
         result=(computation_result_document(tasks), ...),
+        archive=(bytes | None, None),
     )
 
 

@@ -9,8 +9,9 @@ imports FastAPI.
 
 Scientific endpoints accept inline Structure Sources, intent, hints, a
 registered pseudopotential-table ID, and a Preset or Record selection.
-Pseudopotential contents and models are resolved from the server's environment;
-request bodies never name server paths or loadable artifacts.
+Pseudopotential contents, models, and publication locations are resolved from
+the server's environment; request bodies never name server paths or loadable
+artifacts.
 """
 
 from __future__ import annotations

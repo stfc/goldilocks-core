@@ -6,7 +6,8 @@ import secrets
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response
 
-from goldilocks_core.contracts import Capabilities, StructureInspection
+from goldilocks_core.contracts import Capabilities, DftInputData, StructureInspection
+from goldilocks_core.publication import Publisher
 from goldilocks_core.runtime.service import Service
 from goldilocks_core.server.request import (
     ComputeRequestDocument,
@@ -25,7 +26,7 @@ _ERROR_RESPONSES = {
     for status in (422, 424)
 }
 _PREPARED_RESPONSE = {
-    "description": "One reviewed Computation Result.",
+    "description": "One reviewed Computation Result and its exact optional archive.",
     "content": {
         "multipart/form-data": {
             "schema": {"$ref": "#/components/schemas/PreparedComputation"}
@@ -66,14 +67,19 @@ def install_scientific_routes(app: FastAPI, service: Service) -> None:
             result.to_dict(),
             separators=(",", ":"),
         ).encode("utf-8")
-        return _prepared_response(result_payload)
+        input_data = result.records.get(DftInputData)
+        archive = (
+            Publisher().archive_bytes(input_data) if input_data is not None else None
+        )
+        return _prepared_response(result_payload, archive)
 
 
-def _prepared_response(result: bytes) -> Response:
+def _prepared_response(result: bytes, archive: bytes | None) -> Response:
+    payloads = (result,) if archive is None else (result, archive)
     while True:
         boundary = f"goldilocks-{secrets.token_hex(24)}"
         marker = boundary.encode("ascii")
-        if marker not in result:
+        if all(marker not in payload for payload in payloads):
             break
 
     parts = [
@@ -85,6 +91,16 @@ def _prepared_response(result: bytes) -> Response:
             content=result,
         )
     ]
+    if archive is not None:
+        parts.append(
+            _multipart_part(
+                boundary,
+                name="archive",
+                filename="goldilocks-inputs.zip",
+                media_type="application/zip",
+                content=archive,
+            )
+        )
     parts.append(f"--{boundary}--\r\n".encode("ascii"))
     return PreparedMultipartResponse(
         b"".join(parts),

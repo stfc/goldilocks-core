@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import io
 import json
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from email.parser import BytesParser
 from email.policy import default
@@ -82,7 +84,7 @@ def test_http_compute_returns_one_reviewed_result_without_an_unrequested_archive
     assert result["schema_version"] == 1
     assert result["selection"] == {"records": ["k_points"]}
     assert result["records"]["k_points"]["grid"] == [3, 3, 3]
-    assert result["bundle"] is None
+    assert result["publication"] is None
 
 
 def test_http_selects_and_returns_custom_registered_records(
@@ -121,6 +123,50 @@ def test_http_selects_and_returns_custom_registered_records(
     assert (
         "reduced_formula" in schema["components"]["schemas"][analysis_ref]["properties"]
     )
+
+
+def test_http_returns_the_exact_archive_with_its_reviewed_result(
+    publishable_service,
+    sample_structure_text: str,
+    tmp_path,
+) -> None:
+    service = _CountingService(publishable_service)
+    with TestClient(create_app(service)) as client:
+        response = client.post(
+            "/compute",
+            json={
+                "draft": {
+                    "structure": {
+                        "name": "Si.cif",
+                        "content": sample_structure_text,
+                        "format": "cif",
+                    },
+                    "hints": {"k_grid": [3, 3, 3]},
+                    "pseudo_table": "fixture-table",
+                },
+                "selection": {"preset": "generate"},
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    assert service.compute_calls == 1
+    parts = _multipart_parts(response)
+    assert set(parts) == {"result", "archive"}
+    assert parts["archive"][:2] == (
+        "application/zip",
+        "goldilocks-inputs.zip",
+    )
+    reviewed = json.loads(parts["result"][2])
+    assert reviewed["draft"]["pseudo_table"] == "fixture-table"
+    assert reviewed["draft"]["pseudo_root"] is None
+    assert reviewed["draft"]["pseudo_metadata"] is None
+    assert reviewed["draft"]["kmesh_model"] is None
+    with zipfile.ZipFile(io.BytesIO(parts["archive"][2])) as archive:
+        assert "inputs/qe.in" in archive.namelist()
+        manifest = json.loads(archive.read("goldilocks.json"))
+    assert manifest["records"]["k_points"] == reviewed["records"]["k_points"]
+    assert not list(tmp_path.rglob("goldilocks-inputs.zip"))
+    assert not list(tmp_path.rglob("goldilocks_out"))
 
 
 def test_http_runs_concurrent_computations(
@@ -426,7 +472,7 @@ def test_http_sanitizes_corrupt_asset_failures(
     assert secret not in response.text
 
 
-def test_openapi_describes_canonical_json_contracts(test_service) -> None:
+def test_openapi_describes_canonical_json_and_archive_contracts(test_service) -> None:
     with TestClient(create_app(test_service)) as client:
         schema = client.get("/openapi.json").json()
 
@@ -484,6 +530,10 @@ def test_openapi_describes_canonical_json_contracts(test_service) -> None:
     prepared = resolve(
         compute["responses"]["200"]["content"]["multipart/form-data"]["schema"]
     )["properties"]
+    assert prepared["archive"]["anyOf"][0] == {
+        "type": "string",
+        "contentMediaType": "application/octet-stream",
+    }
     result = resolve(prepared["result"])["properties"]
     selection = resolve(result["selection"])
     assert {tuple(resolve(item)["properties"]) for item in selection["anyOf"]} == {
@@ -498,6 +548,7 @@ def test_openapi_describes_canonical_json_contracts(test_service) -> None:
         "k_points",
         "selection",
         "generated_files",
+        "dft_input_data",
     }
     assert "reduced_formula" in resolve(records["properties"]["analysis"])["properties"]
     chosen = resolve(records["properties"]["selection"])["properties"]
@@ -528,6 +579,23 @@ def _multipart_parts(response) -> dict[str, tuple[str, str | None, bytes]]:
         )
         for part in message.iter_parts()
     }
+
+
+class _CountingService:
+    def __init__(self, service: Service) -> None:
+        self._service = service
+        self.runtime = service.runtime
+        self.compute_calls = 0
+
+    def capabilities(self):
+        return self._service.capabilities()
+
+    def inspect_structure(self, source):
+        return self._service.inspect_structure(source)
+
+    def compute(self, request, *, output=None):
+        self.compute_calls += 1
+        return self._service.compute(request, output=output)
 
 
 class _DefectiveService(Service):

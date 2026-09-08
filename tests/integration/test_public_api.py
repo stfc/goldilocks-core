@@ -3,19 +3,30 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
+    ArchiveOutput,
     CalculationDraft,
     CalculationHints,
+    Capabilities,
+    ComputationResult,
     ComputeRequest,
+    DftInputData,
     DirectoryOutput,
+    GeneratedFile,
     GeneratedFiles,
+    InlineStructureSource,
     InMemoryStructureSource,
+    OutputTarget,
+    PathStructureSource,
     PresetSelection,
+    Publication,
+    Records,
     RecordSelection,
     Service,
+    StructureInspection,
+    StructureSource,
     compute,
 )
 from goldilocks_core.contracts import (
@@ -71,6 +82,42 @@ def _request(selection, pseudo_root: Path = Path("/pseudo")) -> ComputeRequest:
     )
 
 
+def test_root_interface_exposes_three_operations_and_their_contracts() -> None:
+    assert Service.capabilities.__annotations__["return"] == "Capabilities"
+    assert Service.inspect_structure.__annotations__["return"] == (
+        "StructureInspection"
+    )
+    assert Service.compute.__annotations__["return"] == "ComputationResult"
+    assert Capabilities is not None
+    assert StructureInspection is not None
+    assert ComputationResult is not None
+    assert StructureSource is not None
+    assert OutputTarget is not None
+    assert not any(
+        hasattr(Service, name)
+        for name in (
+            "recommend",
+            "generate",
+            "describe_tasks",
+            "describe_codes",
+            "describe_models",
+        )
+    )
+    assert {
+        InlineStructureSource,
+        PathStructureSource,
+        InMemoryStructureSource,
+        ComputeRequest,
+        DirectoryOutput,
+        ArchiveOutput,
+        DftInputData,
+        GeneratedFile,
+        GeneratedFiles,
+        Publication,
+        Records,
+    }
+
+
 def test_root_import_does_not_require_optional_transports() -> None:
     script = """
 import builtins
@@ -122,7 +169,7 @@ def test_generation_preset_runs_pipeline_through_generated_files(
 ) -> None:
     result = compute(_request(PresetSelection("generate"), tmp_path))
 
-    assert result.records[GeneratedFiles][0].path == "qe.in"
+    assert result.records[GeneratedFiles][0].path == "inputs/qe.in"
     assert "3  3  3  0  0  0" in result.records[GeneratedFiles][0].content
 
 
@@ -133,20 +180,6 @@ def test_explicit_record_selection_returns_one_generic_result() -> None:
 
     assert tuple(result.records) == (StructureAnalysisRecord, ParameterAdvice)
     assert result.to_dict()["selection"] == {"records": ["analysis", "advice"]}
-
-
-def test_directory_output_rejects_partial_results_before_creating_paths(
-    tmp_path,
-) -> None:
-    destination = tmp_path / "new-parent" / "run"
-
-    with pytest.raises(ValueError, match="complete generate record set"):
-        compute(
-            _request(RecordSelection((StructureAnalysisRecord,))),
-            output=DirectoryOutput(destination),
-        )
-
-    assert not destination.parent.exists()
 
 
 def test_computation_result_serializes_stable_record_ids() -> None:

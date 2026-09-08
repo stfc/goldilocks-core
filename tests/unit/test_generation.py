@@ -110,7 +110,7 @@ def test_generate_inputs_writes_qe_values_from_advice_and_selection() -> None:
     )
 
     assert len(files) == 1
-    assert files[0].path == "qe.in"
+    assert files[0].path == "inputs/qe.in"
     content = files[0].content
     assert "ecutwfc = 35" in content
     assert "ecutrho = 140" in content
@@ -648,6 +648,6 @@ def test_write_qe_scf_returns_single_input_file_record() -> None:
     files = generate_inputs(structure, advice_context(), advice, selection, k_points)
 
     assert len(files) == 1
-    assert files[0].path == "qe.in"
+    assert files[0].path == "inputs/qe.in"
     assert files[0].role == "input"
     assert files[0].content.endswith("\n")

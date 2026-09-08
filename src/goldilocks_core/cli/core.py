@@ -10,15 +10,18 @@ from goldilocks_core.assets.runtime import install as install_assets
 from goldilocks_core.assets.runtime import statuses as asset_statuses
 from goldilocks_core.assets.runtime import verify as verify_assets
 from goldilocks_core.contracts import (
+    ArchiveOutput,
     CalculationDraft,
     CalculationHints,
     CalculationIntent,
     ComputationResult,
     ComputeRequest,
+    DftInputData,
     DirectoryOutput,
     GeneratedFiles,
     KPointSelection,
     ModelSpec,
+    OutputTarget,
     ParameterAdvice,
     PathStructureSource,
     PresetSelection,
@@ -56,7 +59,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--outputs", help="Comma-separated record type ids to compute."
     )
     output = compute.add_mutually_exclusive_group()
-    output.add_argument("--out", help="Write generated inputs and their manifest.")
+    output.add_argument("--out", help="Publish a ready-to-run directory.")
+    output.add_argument("--archive", help="Publish a ready-to-run ZIP archive.")
     output.add_argument(
         "--no-out", action="store_true", help="Return memory-only structured output."
     )
@@ -231,6 +235,18 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
         "--model-version",
         help="Model version recorded in metadata when --model is used.",
     )
+    parser.add_argument(
+        "--model-licence",
+        help="Licence identifier for the local model (required for publication).",
+    )
+    parser.add_argument(
+        "--model-licence-file",
+        help="UTF-8 licence text file for the local model (required for publication).",
+    )
+    parser.add_argument(
+        "--model-citation",
+        help="Citation for the local model (required for publication).",
+    )
     parser.add_argument("--k-spacing", type=float)
     parser.add_argument(
         "--k-grid",
@@ -315,10 +331,14 @@ def _request_from_args(args: argparse.Namespace) -> ComputeRequest:
     )
 
 
-def _output_from_args(args: argparse.Namespace) -> DirectoryOutput | None:
+def _output_from_args(args: argparse.Namespace) -> OutputTarget | None:
+    if args.no_out:
+        return None
     if args.out is not None:
         return DirectoryOutput(args.out)
-    return None
+    if args.archive is not None:
+        return ArchiveOutput(args.archive)
+    return DirectoryOutput()
 
 
 def _parse_outputs(value: str) -> tuple[type, ...]:
@@ -369,6 +389,14 @@ def _serve(args: argparse.Namespace) -> None:
 def _model_spec_from_args(args: argparse.Namespace) -> ModelSpec | None:
     if args.model is None:
         return None
+    licence_text = None
+    if args.model_licence_file is not None:
+        try:
+            licence_text = (
+                Path(args.model_licence_file).expanduser().read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeError) as error:
+            raise ValueError(f"Cannot read --model-licence-file: {error}") from error
     return ModelSpec(
         name=args.model_name or "cli-kmesh-model",
         version=args.model_version or "unknown",
@@ -377,6 +405,9 @@ def _model_spec_from_args(args: argparse.Namespace) -> ModelSpec | None:
         feature_set="cslr",
         source="local",
         location=args.model,
+        licence=args.model_licence,
+        licence_text=licence_text,
+        citation=args.model_citation,
     )
 
 
@@ -386,6 +417,9 @@ def _validate_backend_options(args: argparse.Namespace) -> None:
         for option, value in (
             ("--model-name", args.model_name),
             ("--model-version", args.model_version),
+            ("--model-licence", args.model_licence),
+            ("--model-licence-file", args.model_licence_file),
+            ("--model-citation", args.model_citation),
         )
         if value is not None
     ]
@@ -443,13 +477,22 @@ def _print_human_summary(result: ComputationResult) -> None:
             for pseudo in selection.pseudopotentials
         )
         print(f"selection: {selected or 'no pseudopotentials'}")
+    input_data = result.records.get(DftInputData)
+    if input_data is not None:
+        print(
+            f"dft input data: {len(input_data.artifacts)} artifacts, "
+            f"{len(input_data.citations)} citations"
+        )
+        pseudo_set = input_data.pseudopotential_set
+        version = f"@{pseudo_set.version}" if pseudo_set.version is not None else ""
+        print(f"pseudopotential set: {pseudo_set.id}{version}")
     generated_files = result.records.get(GeneratedFiles, ())
     if generated_files:
         print("generated files:")
         for generated_file in generated_files:
             print(f"  {generated_file.path}")
-    if result.bundle is not None:
-        print(f"bundle: {result.bundle.path}")
+    if result.publication is not None:
+        print(f"published {result.publication.kind}: {result.publication.path}")
     if result.warnings:
         print("warnings:")
         for warning in result.warnings:

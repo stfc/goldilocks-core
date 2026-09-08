@@ -42,15 +42,16 @@ Preset IDs only; there are no `recommend` or `generate` commands.
 
 Choose at most one output option:
 
-- `--out DIRECTORY` writes a generated-input bundle to a new directory;
+- `--out DIRECTORY` publishes a new ready-to-run directory;
+- `--archive FILE.zip` publishes a new ready-to-run archive;
 - `--no-out` keeps the Result in memory;
-- omission also keeps the Result in memory.
+- omission automatically publishes a directory only when the Result contains
+  complete DFT Input Data.
 
-Directory output requires the complete `generate` record set. Core never
-overwrites an existing destination. `--json` prints the canonical
-`ComputationResult`, including bundle metadata. Human output reports the
+Core never overwrites an existing destination. `--json` prints the canonical
+`ComputationResult`, including publication metadata. Human output reports the
 structure, formula when available, target code, task, important selected
-Records, warnings, and bundle path.
+Records, warnings, and publication kind and absolute path.
 
 ## Scientific controls
 
@@ -78,8 +79,21 @@ Records, warnings, and bundle path.
 | `--electron-maxstep` | None | `CalculationHints.electron_maxstep` |
 
 `--model`, `--model-name`, and `--model-version` select and identify a local
-k-index model. `--model-name` and `--model-version` require `--model`. Explicit
-`--k-grid` or `--k-spacing` bypasses model inference.
+k-index model. For `generate`, also supply `--model-licence` (licence identifier),
+`--model-licence-file` (a UTF-8 file containing the full licence text), and
+`--model-citation` (citation text). All five metadata options require `--model`.
+Core refuses to publish a used local model without non-empty licence, licence
+text, and citation; it never supplies a default licence.
+
+```bash
+uv run goldilocks compute Si.cif --preset generate --model model.joblib --model-name my-kmesh --model-version 1 --model-licence LicenseRef-Operator --model-licence-file MODEL-LICENSE.txt --model-citation "Operator model, version 1." --pseudo-root ./pseudos --out ./ready
+```
+
+In Python, supply the same legal material with
+`ModelSpec(..., licence="LicenseRef-Operator", licence_text=Path("MODEL-LICENSE.txt").read_text(encoding="utf-8"), citation="Operator model, version 1.")`
+as `CalculationDraft.kmesh_model`. These are trusted local configuration controls,
+not remote request options. Explicit `--k-grid` or `--k-spacing` bypasses model
+inference, so an unused model does not require publication material.
 
 `--fetch-missing` installs only an exact missing asset reported by Core, then
 retries. It does not replace corrupt assets.
@@ -116,12 +130,14 @@ uv run goldilocks serve mcp
 HTTP exposes `GET /capabilities`, `POST /inspect`, `POST /compute`,
 `GET /health`, and `GET /ready`. HTTP accepts inline structure content and an
 optional registered pseudopotential table ID. Compute returns one multipart
-response with canonical Result JSON, including any generated input contents.
+response with canonical JSON and the exact optional unstored ZIP produced by
+that execution.
 
 Local stdio MCP exposes exactly `capabilities`, `inspect_structure`, and
 `compute`. MCP also accepts inline structure content and an optional registered
-table ID. Compute returns the Result in memory without writing an output
-directory.
+table ID. Omitted Compute output automatically publishes complete DFT Input
+Data to a server-chosen directory; explicit `memory` output suppresses
+publication.
 
 HTTP and MCP do not accept structure paths, pseudopotential roots or metadata
 payloads, model locations, or publication paths. Use Python or CLI for trusted

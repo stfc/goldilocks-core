@@ -6,6 +6,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from goldilocks_core.cli.core import main
 from goldilocks_core.examples import structure
 
 
@@ -121,7 +124,7 @@ def test_cli_compute_preset_returns_canonical_memory_result(tmp_path: Path) -> N
     assert result["selection"] == {"preset": "recommend"}
     assert result["draft"]["structure"]["structure"]["reduced_formula"] == "Si"
     assert result["records"]["k_points"]["grid"] == [3, 3, 3]
-    assert result["bundle"] is None
+    assert result["publication"] is None
 
 
 def _generate_arguments(pseudo_root: Path) -> tuple[str, ...]:
@@ -160,7 +163,7 @@ def test_cli_omitted_output_keeps_non_publishable_results_in_memory(
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert json.loads(completed.stdout)["bundle"] is None
+    assert json.loads(completed.stdout)["publication"] is None
     assert not (tmp_path / "goldilocks_out").exists()
 
 
@@ -172,9 +175,166 @@ def test_cli_compute_publishes_an_explicit_directory(tmp_path: Path) -> None:
 
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
-    assert result["bundle"]["path"] == str(destination)
-    assert (destination / "qe.in").is_file()
-    assert (destination / "manifest.json").is_file()
+    assert result["publication"]["kind"] == "directory"
+    assert result["publication"]["path"] == str(destination)
+    assert (destination / "inputs" / "qe.in").is_file()
+    assert (destination / "goldilocks.json").is_file()
+
+
+@pytest.mark.parametrize("legal_material", ["complete", "absent", "blank"])
+def test_cli_local_model_publication_requires_explicit_legal_material(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    legal_material: str,
+) -> None:
+    pseudo_root = _pseudo_root(tmp_path / "pseudos")
+    destination = tmp_path / "ready"
+    monkeypatch.setenv("GOLDILOCKS_ASSET_ROOT", str(tmp_path / "empty-assets"))
+    monkeypatch.setattr(
+        "goldilocks_core.advice.kindex.predict_kindex",
+        lambda structure, spec: 1.0,
+    )
+    arguments = [
+        "goldilocks",
+        "compute",
+        str(structure("Si.cif")),
+        "--preset",
+        "generate",
+        "--pseudo-root",
+        str(pseudo_root),
+        "--model",
+        str(tmp_path / "operator.joblib"),
+        "--model-name",
+        "operator-kmesh",
+        "--model-version",
+        "2026",
+        "--out",
+        str(destination),
+        "--json",
+    ]
+    if legal_material != "absent":
+        licence_file = tmp_path / "MODEL-LICENSE.txt"
+        licence_file.write_text(
+            "Operator redistribution terms.\n"
+            if legal_material == "complete"
+            else " \n",
+            encoding="utf-8",
+        )
+        arguments.extend(
+            [
+                "--model-licence",
+                "LicenseRef-Operator",
+                "--model-licence-file",
+                str(licence_file),
+                "--model-citation",
+                "Operator k-mesh model (2026).",
+            ]
+        )
+    monkeypatch.setattr(sys, "argv", arguments)
+    if legal_material != "complete":
+        with pytest.raises(SystemExit) as error:
+            main()
+        assert error.value.code == 2
+        assert not destination.exists()
+        return
+
+    main()
+    result = json.loads(capsys.readouterr().out)
+    assert result["publication"]["path"] == str(destination)
+    manifest = json.loads((destination / "goldilocks.json").read_text())
+    assert (
+        manifest["records"]["k_points"]["provenance"]["data_source"] == "operator-kmesh"
+    )
+    assert [
+        (model["name"], model["version"], model["licence"])
+        for model in manifest["runtime"]["models"]
+    ] == [("operator-kmesh", "2026", "LicenseRef-Operator")]
+    assert (
+        destination / "licences" / "custom-kmesh-model.txt"
+    ).read_text() == "Operator redistribution terms.\n"
+    assert "Operator k-mesh model (2026)." in (destination / "CITATIONS.md").read_text()
+
+
+@pytest.mark.parametrize(
+    "option", ["--model-licence", "--model-licence-file", "--model-citation"]
+)
+def test_cli_rejects_model_legal_options_without_a_model(
+    option: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "goldilocks",
+            "compute",
+            str(structure("Si.cif")),
+            "--preset",
+            "generate",
+            option,
+            "operator-metadata",
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 2
+    assert "--model" in capsys.readouterr().err
+
+
+def test_cli_human_compute_summary_reports_science_and_publication(
+    tmp_path: Path,
+) -> None:
+    pseudo_root = _pseudo_root(tmp_path / "pseudos")
+    destination = tmp_path / "ready"
+    arguments = tuple(
+        argument
+        for argument in _generate_arguments(pseudo_root)
+        if argument != "--json"
+    )
+
+    completed = _run_cli(*arguments, "--out", str(destination))
+
+    assert completed.returncode == 0, completed.stderr
+    assert "structure: Si.cif" in completed.stdout
+    assert "formula: Si" in completed.stdout
+    assert "code: quantum_espresso" in completed.stdout
+    assert "task: scf_single_point" in completed.stdout
+    assert "k-grid: 3 3 3" in completed.stdout
+    assert "selection: Si=Si.UPF" in completed.stdout
+    assert "dft input data:" in completed.stdout
+    assert "pseudopotential set:" in completed.stdout
+    assert f"published directory: {destination}" in completed.stdout
+
+
+def test_cli_compute_publishes_an_explicit_archive(tmp_path: Path) -> None:
+    pseudo_root = _pseudo_root(tmp_path / "pseudos")
+    destination = tmp_path / "ready.zip"
+
+    completed = _run_cli(
+        *_generate_arguments(pseudo_root), "--archive", str(destination)
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["publication"]["kind"] == "archive"
+    assert result["publication"]["path"] == str(destination)
+    assert destination.read_bytes().startswith(b"PK")
+
+
+def test_cli_compute_automatically_publishes_complete_input_data(
+    tmp_path: Path,
+) -> None:
+    pseudo_root = _pseudo_root(tmp_path / "pseudos")
+
+    completed = _run_cli(*_generate_arguments(pseudo_root), cwd=tmp_path)
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["publication"]["kind"] == "directory"
+    assert result["publication"]["path"] == str(tmp_path / "goldilocks_out")
+    assert (tmp_path / "goldilocks_out" / "goldilocks.json").is_file()
 
 
 def test_cli_human_advice_summary_uses_the_normalized_draft_formula() -> None:
@@ -242,8 +402,11 @@ def test_cli_rejects_multiple_selection_and_output_variants() -> None:
         "analysis",
         "--out",
         "run",
-        "--no-out",
+        "--archive",
+        "run.zip",
     )
 
     assert selection.returncode == 2
+    assert "not allowed with argument" in selection.stderr
     assert output.returncode == 2
+    assert "not allowed with argument" in output.stderr

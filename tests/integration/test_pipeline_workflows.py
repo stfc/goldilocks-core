@@ -74,7 +74,7 @@ def test_generate_crosses_every_in_memory_stage_with_real_backends(
     assert "4  4  4  0  0  0" in qe_input
 
 
-def test_structure_file_to_bundle_preserves_inputs_and_provenance(
+def test_structure_file_to_publication_preserves_inputs_and_provenance(
     tmp_path,
     sodium_chloride_structure: Structure,
     pseudo_metadata_factory: Callable[..., PseudoMetadata],
@@ -110,17 +110,17 @@ def test_structure_file_to_bundle_preserves_inputs_and_provenance(
         output=DirectoryOutput(destination),
     )
 
-    generated_path = destination / "qe.in"
-    manifest = json.loads((destination / "manifest.json").read_text())
+    generated_path = destination / "inputs" / "qe.in"
+    manifest = json.loads((destination / "goldilocks.json").read_text())
 
     assert generated_path.read_bytes() == result.records[GeneratedFiles][
         0
     ].content.encode("utf-8")
-    assert manifest["generated_files"][0] == {
-        "path": "qe.in",
+    assert manifest["records"]["generated_files"][0] == {
+        "path": "inputs/qe.in",
         "role": "input",
     }
-    assert manifest["k_points"]["grid"] == [3, 5, 7]
-    assert manifest["k_points"]["provenance"]["source"] == "user_hint"
-    assert result.bundle is not None
-    assert result.bundle.path == str(destination.resolve())
+    assert manifest["records"]["k_points"]["grid"] == [3, 5, 7]
+    assert manifest["records"]["k_points"]["provenance"]["source"] == "user_hint"
+    assert result.publication is not None
+    assert result.publication.path == str(destination.resolve())

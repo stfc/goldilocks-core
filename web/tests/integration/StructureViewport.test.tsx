@@ -4,6 +4,7 @@ import {
   render as renderComponent,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import type { ReactElement } from "react";
 import userEvent from "@testing-library/user-event";
@@ -30,6 +31,7 @@ describe("StructureViewport", () => {
     const dispose = vi.fn();
     const createViewer: StructureViewerFactory = vi.fn(() => ({
       show,
+      refreshTheme: vi.fn(),
       dispose,
     }));
     const { rerender, unmount } = render(
@@ -71,7 +73,7 @@ describe("StructureViewport", () => {
 
     unmount();
     await act(async () => {
-      resolveViewer({ show, dispose });
+      resolveViewer({ show, refreshTheme: vi.fn(), dispose });
       await Promise.resolve();
     });
 
@@ -88,7 +90,7 @@ describe("StructureViewport", () => {
       .mockImplementationOnce(() => {
         throw new Error("WebGL unavailable");
       })
-      .mockReturnValue({ show, dispose });
+      .mockReturnValue({ show, refreshTheme: vi.fn(), dispose });
     render(
       <StructureViewport inspection={inspection} createViewer={createViewer} />,
     );
@@ -103,5 +105,124 @@ describe("StructureViewport", () => {
     expect(createViewer).toHaveBeenCalledTimes(2);
     expect(show).toHaveBeenCalledWith("data_Si");
     expect(fallback).not.toBeVisible();
+  });
+
+  it("exposes canonical mixed and partial occupancies before computation", async () => {
+    const user = userEvent.setup();
+    const createViewer: StructureViewerFactory = () => ({
+      show: vi.fn(),
+      refreshTheme: vi.fn(),
+      dispose: vi.fn(),
+    });
+    render(
+      <StructureViewport
+        inspection={{
+          ...inspection,
+          structure: {
+            ...inspection.structure,
+            site_count: 2,
+            sites: [
+              {
+                fractional_coordinates: [0.123456789, 0, 0],
+                cartesian_coordinates_angstrom: [0.493827156, 0, 0],
+                species: [
+                  {
+                    symbol: "Fe",
+                    label: "Fe2+",
+                    occupancy: 0.25,
+                    oxidation_state: 2,
+                  },
+                  {
+                    symbol: "Mn",
+                    label: "Mn2+",
+                    occupancy: 0.75,
+                    oxidation_state: 2,
+                  },
+                ],
+              },
+              {
+                fractional_coordinates: [0.5, 0.5, 0.5],
+                cartesian_coordinates_angstrom: [2, 2, 2],
+                species: [
+                  {
+                    symbol: "O",
+                    label: "O2-",
+                    occupancy: 0.6,
+                    oxidation_state: -2,
+                  },
+                ],
+              },
+            ],
+          },
+        }}
+        createViewer={createViewer}
+      />,
+    );
+    expect(screen.getByRole("note")).toHaveTextContent(/approximation/);
+    await user.click(
+      screen.getByRole("button", {
+        name: "Inspect canonical sites and occupancies",
+      }),
+    );
+    const details = screen.getByRole("dialog", {
+      name: "Canonical sites and occupancies",
+    });
+    const mixedSite = within(details).getByRole("region", { name: "Site 1" });
+    expect(mixedSite).toHaveTextContent("0.123456789, 0, 0");
+    expect(
+      within(mixedSite).getByRole("row", { name: "Fe2+ Fe 0.25" }),
+    ).toBeVisible();
+    expect(
+      within(mixedSite).getByRole("row", { name: "Mn2+ Mn 0.75" }),
+    ).toBeVisible();
+    const partialSite = within(details).getByRole("region", { name: "Site 2" });
+    expect(
+      within(partialSite).getByRole("row", { name: "O2- O 0.6" }),
+    ).toBeVisible();
+  });
+
+  it("discloses a single partially occupied species without requiring mixed species", () => {
+    render(
+      <StructureViewport
+        inspection={{
+          ...inspection,
+          structure: {
+            ...inspection.structure,
+            sites: inspection.structure.sites.map((site) => ({
+              ...site,
+              species: site.species.map((species) => ({
+                ...species,
+                occupancy: 0.5,
+              })),
+            })),
+          },
+        }}
+        createViewer={() => ({
+          show: vi.fn(),
+          refreshTheme: vi.fn(),
+          dispose: vi.fn(),
+        })}
+      />,
+    );
+    expect(screen.getByRole("note")).toHaveTextContent(/partial occupancy/);
+  });
+
+  it("does not describe a fully occupied ordered structure as approximate", () => {
+    render(
+      <StructureViewport
+        inspection={inspection}
+        createViewer={() => ({
+          show: vi.fn(),
+          refreshTheme: vi.fn(),
+          dispose: vi.fn(),
+        })}
+      />,
+    );
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Inspect canonical sites and occupancies",
+      }),
+    ).toBeVisible();
   });
 });

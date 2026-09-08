@@ -196,6 +196,31 @@ describe("Goldilocks Workbench", () => {
     ).toBeInTheDocument();
   });
 
+  it("preserves the inspected viewport when switching theme", async () => {
+    const user = userEvent.setup();
+    const core = new CoreStub(Promise.resolve(capabilities));
+    core.inspectionResults = [Promise.resolve(inspection)];
+    const workspace = createWorkspace(core);
+    const { container } = render(
+      <WorkspaceProvider workspace={workspace}>
+        <App />
+      </WorkspaceProvider>,
+    );
+    await screen.findByRole("button", {
+      name: "Choose a CIF or POSCAR structure",
+    });
+    await user.upload(structureInput(container), structureFile());
+    const viewport = await screen.findByLabelText("Crystal structure viewer");
+    await user.click(
+      screen.getByRole("button", { name: "Switch to dark mode" }),
+    );
+    expect(screen.getByLabelText("Crystal structure viewer")).toBe(viewport);
+    await user.click(
+      screen.getByRole("button", { name: "Switch to light mode" }),
+    );
+    expect(screen.getByLabelText("Crystal structure viewer")).toBe(viewport);
+  });
+
   it("resizes the calculation panel from the keyboard", async () => {
     const user = userEvent.setup();
     const workspace = createWorkspace(

@@ -118,7 +118,7 @@ function Workbench() {
                 }
               />
             ) : (
-              <StructureViewport key={theme} inspection={snapshot.inspection} />
+              <StructureViewport inspection={snapshot.inspection} />
             )}
             {snapshot.reviewed === null ? null : (
               <Button

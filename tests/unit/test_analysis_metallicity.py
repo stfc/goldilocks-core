@@ -17,9 +17,9 @@ def test_default_heuristic_marks_all_metal_as_likely_metal() -> None:
     assert analysis.electronic_character == "likely_metal"
     assert analysis.electronic_character_source == "heuristic"
     assert analysis.electronic_character_confidence is None
-    assert any(
-        "treat metallicity as likely" in warning
-        for warning in analysis.analysis_warnings
+    assert analysis.analysis_warnings == (
+        "All elements are metallic; metallicity is likely but not confirmed "
+        "by electronic-structure data.",
     )
 
 
@@ -35,7 +35,9 @@ def test_default_heuristic_marks_non_metal_as_unknown() -> None:
     assert analysis.electronic_character == "unknown"
     assert analysis.electronic_character_source == "heuristic"
     assert analysis.electronic_character_confidence is None
-    assert any("verify smearing" in warning for warning in analysis.analysis_warnings)
+    assert analysis.analysis_warnings == (
+        "Electronic character could not be inferred from structure facts alone.",
+    )
 
 
 def test_analyze_structure_uses_runtime_metallicity_classifier() -> None:

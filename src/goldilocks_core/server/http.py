@@ -23,13 +23,12 @@ from typing import Any
 
 from goldilocks_core.analysis import DimensionalityClassificationError
 from goldilocks_core.assets import AssetCorrupt, AssetNotInstalled
-from goldilocks_core.contracts import QueryRequest
 from goldilocks_core.generation import GenerationError
 from goldilocks_core.io.structures import StructureInputError
 from goldilocks_core.pseudo.source import PseudoTableMismatch
 from goldilocks_core.runtime import UnknownTask
 from goldilocks_core.runtime.service import Service
-from goldilocks_core.server.request import RequestError, from_dict
+from goldilocks_core.server.request import RequestError, from_dict, result_to_dict
 
 __all__ = ["create_app", "serve"]
 
@@ -188,17 +187,17 @@ def create_app(service: Service | None = None) -> Any:
     @app.get("/tasks")
     def tasks() -> dict[str, Any]:
         """List every registered Core task with stable stage and record ids."""
-        return {"tasks": [task.to_dict() for task in state.describe_tasks()]}
+        return {"tasks": [task.to_dict() for task in state.capabilities().tasks]}
 
     @app.get("/codes")
     def codes() -> dict[str, Any]:
         """List target DFT codes with registered input writers."""
-        return {"codes": list(state.describe_codes())}
+        return {"codes": list(state.capabilities().target_codes)}
 
     @app.get("/models")
     def models() -> dict[str, Any]:
         """List available k-mesh models known to the runtime."""
-        return {"models": state.describe_models()}
+        return {"models": state.runtime.describe_models()}
 
     @app.post("/recommend")
     def recommend(body: dict[str, Any]) -> dict[str, Any]:
@@ -235,9 +234,7 @@ def _execute(endpoint: str, body: dict[str, Any], service: Service) -> dict[str,
         raw["mode"] = endpoint
 
     request = from_dict(raw)
-    if isinstance(request, QueryRequest):
-        return service.compute(request).to_dict()
-    return service.run_preset(request).to_dict()
+    return result_to_dict(service.compute(request))
 
 
 def serve(*, host: str = "127.0.0.1", port: int = 8000) -> None:

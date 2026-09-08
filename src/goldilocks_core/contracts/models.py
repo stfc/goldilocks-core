@@ -30,3 +30,16 @@ class ModelSpec:
     licence: str | None = None
     licence_text: str | None = None
     citation: str | None = None
+
+    def to_dict(self) -> JsonDict:
+        return {
+            "name": self.name,
+            "version": self.version,
+            "model_type": self.model_type,
+            "target": self.target,
+            "feature_set": self.feature_set,
+            "source": self.source,
+            "revision": self.revision,
+            "licence": self.licence,
+            "citation": self.citation,
+        }

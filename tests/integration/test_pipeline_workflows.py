@@ -2,39 +2,69 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from pathlib import Path
 
 from pymatgen.core import Structure
 
-from goldilocks_core import CalculationHints, PresetRequest, run_core_job
-from goldilocks_core.contracts import PseudoMetadata
+from goldilocks_core import (
+    CalculationDraft,
+    CalculationHints,
+    ComputeRequest,
+    DirectoryOutput,
+    InMemoryStructureSource,
+    PathStructureSource,
+    PresetSelection,
+    compute,
+)
+from goldilocks_core.contracts import (
+    GeneratedFiles,
+    KPointSelection,
+    PseudoMetadata,
+    SelectionRecord,
+    StructureAnalysisRecord,
+)
 
 
 def test_generate_crosses_every_in_memory_stage_with_real_backends(
     sodium_chloride_structure: Structure,
     pseudo_metadata_factory: Callable[..., PseudoMetadata],
+    tmp_path: Path,
 ) -> None:
-    pseudos = [
-        pseudo_metadata_factory("Na", ecutwfc_ry=35.0, ecutrho_ry=140.0),
-        pseudo_metadata_factory("Cl", ecutwfc_ry=45.0, ecutrho_ry=180.0),
-    ]
+    pseudos = (
+        pseudo_metadata_factory(
+            "Na",
+            ecutwfc_ry=35.0,
+            ecutrho_ry=140.0,
+            root=tmp_path,
+            materialize=True,
+        ),
+        pseudo_metadata_factory(
+            "Cl",
+            ecutwfc_ry=45.0,
+            ecutrho_ry=180.0,
+            root=tmp_path,
+            materialize=True,
+        ),
+    )
 
-    result = run_core_job(
-        PresetRequest(
-            structure=sodium_chloride_structure,
-            mode="generate",
-            hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
-            pseudo_metadata=tuple(pseudos),
+    result = compute(
+        ComputeRequest(
+            draft=CalculationDraft(
+                structure=InMemoryStructureSource(sodium_chloride_structure),
+                hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
+                pseudo_metadata=pseudos,
+            ),
+            selection=PresetSelection("generate"),
         )
     )
 
-    assert result.analysis.elements == ("Cl", "Na")
-    assert result.k_points.grid == (4, 4, 4)
-    assert {pseudo.element for pseudo in result.selection.pseudopotentials} == {
-        "Na",
-        "Cl",
-    }
+    assert result.records[StructureAnalysisRecord].elements == ("Cl", "Na")
+    assert result.records[KPointSelection].grid == (4, 4, 4)
+    assert {
+        pseudo.element for pseudo in result.records[SelectionRecord].pseudopotentials
+    } == {"Na", "Cl"}
 
-    qe_input = result.generated_files[0].content
+    qe_input = result.records[GeneratedFiles][0].content
     assert "  nat = 2" in qe_input
     assert "  ntyp = 2" in qe_input
     assert "  ecutwfc = 45" in qe_input
@@ -44,41 +74,53 @@ def test_generate_crosses_every_in_memory_stage_with_real_backends(
     assert "4  4  4  0  0  0" in qe_input
 
 
-def test_structure_file_to_bundle_preserves_generated_files_and_provenance(
+def test_structure_file_to_bundle_preserves_inputs_and_provenance(
     tmp_path,
     sodium_chloride_structure: Structure,
     pseudo_metadata_factory: Callable[..., PseudoMetadata],
 ) -> None:
     structure_path = tmp_path / "NaCl.cif"
     sodium_chloride_structure.to(filename=structure_path)
-    output_dir = tmp_path / "bundle"
-    pseudos = [
-        pseudo_metadata_factory("Na", ecutwfc_ry=35.0, ecutrho_ry=140.0),
-        pseudo_metadata_factory("Cl", ecutwfc_ry=45.0, ecutrho_ry=180.0),
-    ]
-
-    result = run_core_job(
-        PresetRequest(
-            structure=structure_path,
-            hints=CalculationHints(k_grid=(3, 5, 7), pseudo_type="NC"),
-            pseudo_metadata=tuple(pseudos),
-            mode="generate",
-            output_dir=str(output_dir),
-        )
+    destination = tmp_path / "published"
+    pseudos = (
+        pseudo_metadata_factory(
+            "Na",
+            ecutwfc_ry=35.0,
+            ecutrho_ry=140.0,
+            root=tmp_path,
+            materialize=True,
+        ),
+        pseudo_metadata_factory(
+            "Cl",
+            ecutwfc_ry=45.0,
+            ecutrho_ry=180.0,
+            root=tmp_path,
+            materialize=True,
+        ),
+    )
+    result = compute(
+        ComputeRequest(
+            draft=CalculationDraft(
+                structure=PathStructureSource(structure_path),
+                hints=CalculationHints(k_grid=(3, 5, 7), pseudo_type="NC"),
+                pseudo_metadata=pseudos,
+            ),
+            selection=PresetSelection("generate"),
+        ),
+        output=DirectoryOutput(destination),
     )
 
-    assert result.bundle is not None
+    generated_path = destination / "qe.in"
+    manifest = json.loads((destination / "manifest.json").read_text())
 
-    generated_path = output_dir / "inputs" / "qe.in"
-    generated_bytes = generated_path.read_bytes()
-    manifest = json.loads((output_dir / "manifest.json").read_text())
-    file_record = manifest["generated_files"][0]
-
-    assert generated_bytes == result.generated_files[0].content.encode("utf-8")
-    assert file_record == {
-        "path": "inputs/qe.in",
+    assert generated_path.read_bytes() == result.records[GeneratedFiles][
+        0
+    ].content.encode("utf-8")
+    assert manifest["generated_files"][0] == {
+        "path": "qe.in",
         "role": "input",
     }
-    assert manifest == result.bundle.manifest
     assert manifest["k_points"]["grid"] == [3, 5, 7]
     assert manifest["k_points"]["provenance"]["source"] == "user_hint"
+    assert result.bundle is not None
+    assert result.bundle.path == str(destination.resolve())

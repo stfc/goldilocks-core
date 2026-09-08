@@ -1,12 +1,8 @@
 """Shared request deserialization for HTTP and MCP transports.
 
-One :func:`from_dict` parser is used by both transports: it turns a JSON-like
-mapping into a validated :class:`~goldilocks_core.contracts.PresetRequest`
-(when no ``outputs`` are named) or
-:class:`~goldilocks_core.contracts.QueryRequest` (when ``outputs`` names a
-record subset). Unknown keys and bad types are rejected with named-field
-:class:`RequestError` messages; stage ``ValueError``\\ s are not caught here and
-surface to the transport's error handler.
+The existing flat transport request is converted to a typed ComputeRequest.
+Unknown keys and bad types are rejected with named-field RequestError messages.
+Responses retain the preset and record-query document shapes.
 
 The parser accepts only the calculation itself: an inline Structure Source,
 the calculation intent, scientist hints, and (for queries) the requested
@@ -25,15 +21,18 @@ from typing import Any
 from pymatgen.core import Structure
 
 from goldilocks_core.contracts import (
+    CalculationDraft,
     CalculationHints,
     CalculationIntent,
-    JobMode,
-    PresetRequest,
-    QueryRequest,
+    ComputationResult,
+    ComputeRequest,
+    InMemoryStructureSource,
+    PresetSelection,
+    RecordSelection,
     resolve_output_types,
 )
 
-__all__ = ["RequestError", "from_dict"]
+__all__ = ["RequestError", "from_dict", "result_to_dict"]
 
 _ALLOWED_TOP_LEVEL = frozenset(
     {
@@ -66,12 +65,8 @@ class RequestError(ValueError):
     """A malformed transport request."""
 
 
-def from_dict(data: Mapping[str, Any]) -> PresetRequest | QueryRequest:
-    """Parse a JSON-like mapping into a validated Core job request.
-
-    Returns a :class:`QueryRequest` when ``outputs`` names record types, and a
-    :class:`PresetRequest` (selected by ``mode``) otherwise.
-    """
+def from_dict(data: Mapping[str, Any]) -> ComputeRequest:
+    """Parse an existing transport request into the Core computation model."""
     if not isinstance(data, Mapping):
         raise RequestError("Request body must be a JSON object.")
     _reject_unknown(data, _ALLOWED_TOP_LEVEL, "request")
@@ -85,19 +80,30 @@ def from_dict(data: Mapping[str, Any]) -> PresetRequest | QueryRequest:
     intent = _parse_intent(data.get("intent"))
     hints = _parse_hints(data.get("hints"))
 
-    if outputs is not None:
-        return QueryRequest(
-            structure=structure,
-            outputs=outputs,
+    return ComputeRequest(
+        draft=CalculationDraft(
+            structure=InMemoryStructureSource(structure),
             intent=intent,
             hints=hints,
-        )
-    return PresetRequest(
-        structure=structure,
-        intent=intent,
-        hints=hints,
-        mode=mode,
+        ),
+        selection=(
+            RecordSelection(outputs) if outputs is not None else PresetSelection(mode)
+        ),
     )
+
+
+def result_to_dict(result: ComputationResult) -> dict[str, Any]:
+    """Render the existing preset or record-query response document."""
+    records = result.records.to_dict()
+    if isinstance(result.selection, RecordSelection):
+        return records
+    return {
+        **records,
+        "intent": result.draft.intent.to_dict(),
+        "generated_files": records.get("generated_files", []),
+        "warnings": list(result.warnings),
+        "bundle": result.bundle.to_dict() if result.bundle is not None else None,
+    }
 
 
 def _reject_unknown(
@@ -208,12 +214,12 @@ def _parse_hint(name: str, value: Any) -> Any:
     return value
 
 
-def _parse_mode(value: Any) -> JobMode:
+def _parse_mode(value: Any) -> str:
     if value is None:
         return "recommend"
     if not isinstance(value, str) or value not in {"recommend", "generate"}:
         raise RequestError("Field 'mode' must be 'recommend' or 'generate'.")
-    return value  # type: ignore[return-value]
+    return value
 
 
 def _parse_outputs(value: Any) -> tuple[type, ...] | None:

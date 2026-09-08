@@ -5,11 +5,16 @@ from dataclasses import dataclass
 from typing import Any
 
 from goldilocks_core.contracts import (
-    JsonDict,
+    CalculationTaskCapability,
+    PresetCapability,
     Records,
+    StageCapability,
     record_type_id,
-    to_jsonable,
 )
+
+
+class UnknownPreset(ValueError):
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,73 +42,65 @@ class TaskGraph:
     description: str = ""
     revision: str = "1"
     selectable_outputs: tuple[type, ...] = ()
+    record_ids: tuple[tuple[type, str], ...] = ()
+
+    def __post_init__(self) -> None:
+        produced: set[type] = set()
+        for stage in self.stages:
+            if stage.output in produced:
+                raise ValueError(
+                    "TaskGraph must define exactly one producer for each Record type; "
+                    f"multiple stages produce {stage.output.__name__}"
+                )
+            produced.add(stage.output)
+
+        ids = tuple(record_id for _, record_id in self.record_ids)
+        if any(
+            not isinstance(record_id, str) or not record_id.strip() for record_id in ids
+        ):
+            raise ValueError("TaskGraph record ids must be non-empty strings")
+        if len(ids) != len(set(ids)):
+            raise ValueError("TaskGraph record ids must be unique")
+
+    def record_id(self, record_type: type) -> str:
+        for candidate, identifier in reversed(self.record_ids):
+            if candidate is record_type:
+                return identifier
+        return record_type_id(record_type)
 
     def preset(self, name: str) -> Preset:
         for preset in self.presets:
             if preset.name == name:
                 return preset
-        raise KeyError(name)
+        available = ", ".join(sorted(item.name for item in self.presets)) or "none"
+        raise UnknownPreset(
+            f"Unknown preset {name!r} for task {self.task!r}. Available: {available}"
+        )
 
 
-@dataclass(frozen=True, slots=True)
-class StageInfo:
-    id: str
-    name: str
-    description: str
-    input_record_ids: tuple[str, ...]
-    output_record_id: str
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
-
-
-@dataclass(frozen=True, slots=True)
-class PresetInfo:
-    id: str
-    name: str
-    output_record_ids: tuple[str, ...]
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
-
-
-@dataclass(frozen=True, slots=True)
-class GraphInfo:
-    id: str
-    revision: str
-    name: str
-    description: str
-    stages: tuple[StageInfo, ...]
-    presets: tuple[PresetInfo, ...]
-    selectable_record_ids: tuple[str, ...]
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
-
-
-def describe_task(task: TaskGraph) -> GraphInfo:
+def describe_task(task: TaskGraph) -> CalculationTaskCapability:
     """Serializes a TaskGraph to string-keyed IDs. Same input as execute()."""
     stages = tuple(
-        StageInfo(
+        StageCapability(
             id=stage.id,
             name=stage.name,
             description=stage.description,
-            input_record_ids=tuple(record_type_id(item) for item in stage.inputs),
-            output_record_id=record_type_id(stage.output),
+            input_record_ids=tuple(task.record_id(item) for item in stage.inputs),
+            output_record_id=task.record_id(stage.output),
         )
         for stage in task.stages
     )
     presets = tuple(
-        PresetInfo(
+        PresetCapability(
             id=preset.name,
             name=preset.name,
             output_record_ids=tuple(
-                record_type_id(output) for output in preset.outputs
+                task.record_id(output) for output in preset.outputs
             ),
         )
         for preset in task.presets
     )
-    return GraphInfo(
+    return CalculationTaskCapability(
         id=task.task,
         revision=task.revision,
         name=task.name,
@@ -111,16 +108,22 @@ def describe_task(task: TaskGraph) -> GraphInfo:
         stages=stages,
         presets=presets,
         selectable_record_ids=tuple(
-            record_type_id(output) for output in task.selectable_outputs
+            task.record_id(output) for output in task.selectable_outputs
         ),
     )
 
 
-def execute(
+@dataclass(frozen=True, slots=True)
+class GraphExecution:
+    records: Records
+    produced: Records
+
+
+def execute_graph(
     task: TaskGraph,
     outputs: tuple[type, ...],
     context: Any,
-) -> Records:
+) -> GraphExecution:
     producers = {stage.output: stage for stage in task.stages}
     ordered: list[Stage] = []
     visiting: set[type] = set()
@@ -153,4 +156,15 @@ def execute(
         arguments = tuple(memo[input_type] for input_type in stage.inputs)
         memo[stage.output] = stage.call(*arguments, ctx=context)
 
-    return Records({output_type: memo[output_type] for output_type in outputs})
+    return GraphExecution(
+        records=Records({output_type: memo[output_type] for output_type in outputs}),
+        produced=Records(memo),
+    )
+
+
+def execute(
+    task: TaskGraph,
+    outputs: tuple[type, ...],
+    context: Any,
+) -> Records:
+    return execute_graph(task, outputs, context).records

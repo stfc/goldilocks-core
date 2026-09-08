@@ -84,7 +84,7 @@ def test_generate_returns_generated_files_without_bundle(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["generated_files"][0]["path"] == "inputs/qe.in"
+    assert data["generated_files"][0]["path"] == "qe.in"
     assert data["bundle"] is None
 
 
@@ -147,7 +147,7 @@ def test_asset_corrupt_maps_to_424(test_service, request_body, monkeypatch) -> N
         del service, request
         raise AssetCorrupt("installed pseudopotential manifest is invalid")
 
-    monkeypatch.setattr(type(test_service), "run_preset", raise_corrupt)
+    monkeypatch.setattr(type(test_service), "compute", raise_corrupt)
 
     with TestClient(create_app(test_service)) as client:
         response = client.post("/recommend", json=request_body)
@@ -169,7 +169,7 @@ def test_asset_not_installed_maps_to_424(
         del service, request
         raise AssetNotInstalled(reference, tmp_path / "assets")
 
-    monkeypatch.setattr(type(test_service), "run_preset", raise_missing)
+    monkeypatch.setattr(type(test_service), "compute", raise_missing)
 
     with TestClient(create_app(test_service)) as client:
         response = client.post("/recommend", json=request_body)
@@ -190,7 +190,7 @@ def test_pseudo_table_mismatch_maps_to_422(
         del service, request
         raise PseudoTableMismatch("table cannot satisfy the request")
 
-    monkeypatch.setattr(type(test_service), "run_preset", raise_mismatch)
+    monkeypatch.setattr(type(test_service), "compute", raise_mismatch)
 
     with TestClient(create_app(test_service)) as client:
         response = client.post("/recommend", json=request_body)
@@ -209,7 +209,7 @@ def test_unexpected_value_error_remains_a_500(
         del service, request
         raise ValueError("unexpected internal defect")
 
-    monkeypatch.setattr(type(test_service), "run_preset", raise_unexpected)
+    monkeypatch.setattr(type(test_service), "compute", raise_unexpected)
 
     with TestClient(create_app(test_service), raise_server_exceptions=False) as client:
         response = client.post("/recommend", json=request_body)

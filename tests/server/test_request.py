@@ -1,65 +1,10 @@
 from __future__ import annotations
 
 import pytest
-from pymatgen.core import Structure
 
-from goldilocks_core.contracts import (
-    ParameterAdvice,
-    PresetRequest,
-    QueryRequest,
-    StructureAnalysisRecord,
-)
+from goldilocks_core.contracts import StructureAnalysisRecord
 from goldilocks_core.examples import structure
 from goldilocks_core.server.request import RequestError, from_dict
-
-
-def test_from_dict_parses_complete_preset_request(
-    sample_structure_text: str,
-) -> None:
-    """Parse structure, intent, hints, and mode into a preset request."""
-    request = from_dict(
-        {
-            "structure": sample_structure_text,
-            "intent": {"functional": "PBEsol", "pseudo_accuracy": "efficiency"},
-            "hints": {"k_grid": [3, 3, 3], "use_vdw": False},
-            "mode": "generate",
-        }
-    )
-
-    assert isinstance(request, PresetRequest)
-    assert isinstance(request.structure, Structure)
-    assert request.structure.reduced_formula == "Si"
-    assert request.intent.functional == "PBEsol"
-    assert request.hints.k_grid == (3, 3, 3)
-    assert request.mode == "generate"
-    assert request.pseudo_metadata is None
-    assert request.pseudo_root is None
-    assert request.pseudo_table is None
-    assert request.kmesh_model is None
-
-
-def test_from_dict_defers_pseudo_source_resolution(
-    sample_structure_text: str,
-) -> None:
-    """Leave pseudopotential resolution to the server's runtime."""
-    request = from_dict({"structure": sample_structure_text})
-
-    assert request.pseudo_metadata is None
-    assert request.pseudo_root is None
-    assert request.pseudo_table is None
-
-
-def test_from_dict_resolves_output_record_names(sample_structure_text: str) -> None:
-    """Resolve query output names through the shared contract catalogue."""
-    request = from_dict(
-        {
-            "structure": sample_structure_text,
-            "outputs": ["analysis", "advice"],
-        }
-    )
-
-    assert isinstance(request, QueryRequest)
-    assert request.outputs == (StructureAnalysisRecord, ParameterAdvice)
 
 
 def test_from_dict_rejects_unknown_keys(sample_structure_text: str) -> None:
@@ -91,17 +36,9 @@ def test_from_dict_rejects_path_form_structure(tmp_path) -> None:
         from_dict({"structure": structure_path})
 
 
-def test_from_dict_parses_inline_structure_string(sample_structure_text: str) -> None:
-    """Parse a multi-line CIF passed directly as a string."""
-    request = from_dict({"structure": sample_structure_text, "outputs": ["analysis"]})
-
-    assert isinstance(request, QueryRequest)
-    assert isinstance(request.structure, Structure)
-    assert request.structure.reduced_formula == "Si"
-
-
 def test_from_dict_parses_inline_structure_content_object(
     sample_structure_text: str,
+    test_service,
 ) -> None:
     """Parse an inline structure content object with an explicit format."""
     request = from_dict(
@@ -111,9 +48,8 @@ def test_from_dict_parses_inline_structure_content_object(
         }
     )
 
-    assert isinstance(request, QueryRequest)
-    assert isinstance(request.structure, Structure)
-    assert request.structure.reduced_formula == "Si"
+    result = test_service.compute(request)
+    assert result.records[StructureAnalysisRecord].reduced_formula == "Si"
 
 
 @pytest.mark.parametrize(
@@ -158,27 +94,3 @@ def test_from_dict_rejects_empty_outputs(sample_structure_text: str) -> None:
     """Reject an empty outputs list."""
     with pytest.raises(RequestError, match="at least one record type id"):
         from_dict({"structure": sample_structure_text, "outputs": []})
-
-
-def test_request_to_dict_round_trips_pymatgen_structure(
-    sample_structure_path: str,
-) -> None:
-    """Deserialize the pymatgen structure form emitted by request to_dict."""
-    structure_obj = Structure.from_file(sample_structure_path)
-    requests = (
-        PresetRequest(structure=structure_obj),
-        QueryRequest(structure=structure_obj, outputs=(StructureAnalysisRecord,)),
-    )
-    transport_keys = {"structure", "intent", "hints", "mode", "outputs"}
-
-    for request in requests:
-        body = {
-            key: value
-            for key, value in request.to_dict().items()
-            if key in transport_keys
-        }
-        parsed = from_dict(body)
-
-        assert type(parsed) is type(request)
-        assert isinstance(parsed.structure, Structure)
-        assert parsed.structure == structure_obj

@@ -1,24 +1,45 @@
+import hashlib
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
+    CalculationDraft,
     CalculationHints,
-    PresetRequest,
-    run_core_job,
+    ComputeRequest,
+    DirectoryOutput,
+    GeneratedFiles,
+    InMemoryStructureSource,
+    PresetSelection,
+    RecordSelection,
+    Service,
+    compute,
 )
-from goldilocks_core.contracts import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.contracts import (
+    KPointSelection,
+    ParameterAdvice,
+    PseudoCutoffs,
+    PseudoMetadata,
+    SelectionRecord,
+    StructureAnalysisRecord,
+)
 
 
 def _make_si_structure() -> Structure:
-    return Structure(
-        lattice=Lattice.cubic(4.0),
-        species=["Si"],
-        coords=[[0.0, 0.0, 0.0]],
-    )
+    return Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
 
 
-def _make_si_metadata() -> PseudoMetadata:
+def _make_si_metadata(root: Path = Path("/pseudo")) -> PseudoMetadata:
+    path = root / "Si.UPF"
+    content = b"<UPF version='2.0.1'>Si fixture</UPF>\n"
+    materialized = root != Path("/pseudo")
+    if materialized:
+        path.write_bytes(content)
     return PseudoMetadata(
-        filepath="/pseudo/Si.UPF",
+        filepath=str(path),
         filename="Si.UPF",
         header_format="attr",
         provider="sssp",
@@ -27,77 +48,121 @@ def _make_si_metadata() -> PseudoMetadata:
         pseudo_type="NC",
         functional="PBEsol",
         relativistic="scalar",
-        cutoffs=PseudoCutoffs(
-            ecutwfc_ry=30,
-            ecutrho_ry=120,
-        ),
+        cutoffs=PseudoCutoffs(ecutwfc_ry=30, ecutrho_ry=120),
         source_identifier="synthetic/Si.UPF",
+        content_sha256=(hashlib.sha256(content).hexdigest() if materialized else None),
+        content_size_bytes=len(content) if materialized else None,
+        pseudo_info={
+            "licence": "CC-BY-4.0",
+            "licence_text": "Synthetic fixture licence\n",
+            "citation": "Synthetic fixture pseudopotential.",
+        },
     )
 
 
-def test_recommend_runs_staged_core_pipeline() -> None:
-    result = run_core_job(
-        PresetRequest(
-            structure=_make_si_structure(),
-            hints=CalculationHints(k_grid=(3, 3, 3)),
-            pseudo_metadata=(_make_si_metadata(),),
-        )
-    )
-
-    assert result.analysis.reduced_formula == "Si"
-    assert result.k_points.grid == (3, 3, 3)
-    assert result.selection.pseudopotentials[0].filename == "Si.UPF"
-
-
-def test_generate_runs_pipeline_through_generated_files() -> None:
-    result = run_core_job(
-        PresetRequest(
-            structure=_make_si_structure(),
-            mode="generate",
+def _request(selection, pseudo_root: Path = Path("/pseudo")) -> ComputeRequest:
+    return ComputeRequest(
+        draft=CalculationDraft(
+            structure=InMemoryStructureSource(_make_si_structure()),
             hints=CalculationHints(k_grid=(3, 3, 3), pseudo_type="NC"),
-            pseudo_metadata=(_make_si_metadata(),),
+            pseudo_metadata=(_make_si_metadata(pseudo_root),),
+        ),
+        selection=selection,
+    )
+
+
+def test_root_import_does_not_require_optional_transports() -> None:
+    script = """
+import builtins
+original = builtins.__import__
+def guarded(name, *args, **kwargs):
+    if name.split('.')[0] in {'fastapi', 'mcp'}:
+        raise ImportError(f'blocked optional import: {name}')
+    return original(name, *args, **kwargs)
+builtins.__import__ = guarded
+import goldilocks_core
+assert goldilocks_core.Service
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_service_capabilities_and_inspection_share_the_root_interface() -> None:
+    source = InMemoryStructureSource(_make_si_structure())
+
+    with Service() as core:
+        capabilities = core.capabilities()
+        inspection = core.inspect_structure(source)
+
+    assert capabilities.tasks[0].id == "scf_single_point"
+    assert {preset.id for preset in capabilities.tasks[0].presets} == {
+        "recommend",
+        "generate",
+    }
+    assert inspection.structure.reduced_formula == "Si"
+
+
+def test_recommendation_preset_runs_staged_core_pipeline() -> None:
+    result = compute(_request(PresetSelection("recommend")))
+
+    assert result.records[StructureAnalysisRecord].reduced_formula == "Si"
+    assert result.records[KPointSelection].grid == (3, 3, 3)
+    assert result.records[SelectionRecord].pseudopotentials[0].filename == "Si.UPF"
+    assert GeneratedFiles not in result.records
+
+
+def test_generation_preset_runs_pipeline_through_generated_files(
+    tmp_path: Path,
+) -> None:
+    result = compute(_request(PresetSelection("generate"), tmp_path))
+
+    assert result.records[GeneratedFiles][0].path == "qe.in"
+    assert "3  3  3  0  0  0" in result.records[GeneratedFiles][0].content
+
+
+def test_explicit_record_selection_returns_one_generic_result() -> None:
+    result = compute(
+        _request(RecordSelection((StructureAnalysisRecord, ParameterAdvice)))
+    )
+
+    assert tuple(result.records) == (StructureAnalysisRecord, ParameterAdvice)
+    assert result.to_dict()["selection"] == {"records": ["analysis", "advice"]}
+
+
+def test_directory_output_rejects_partial_results_before_creating_paths(
+    tmp_path,
+) -> None:
+    destination = tmp_path / "new-parent" / "run"
+
+    with pytest.raises(ValueError, match="complete generate record set"):
+        compute(
+            _request(RecordSelection((StructureAnalysisRecord,))),
+            output=DirectoryOutput(destination),
+        )
+
+    assert not destination.parent.exists()
+
+
+def test_computation_result_serializes_stable_record_ids() -> None:
+    iodine = Structure(Lattice.cubic(4.0), ["I"], [[0.0, 0.0, 0.0]])
+    result = compute(
+        ComputeRequest(
+            draft=CalculationDraft(
+                structure=InMemoryStructureSource(iodine),
+                hints=CalculationHints(k_grid=(8, 8, 8)),
+                pseudo_metadata=(),
+            ),
+            selection=PresetSelection("recommend"),
         )
     )
+    document = result.to_dict()
 
-    assert result.generated_files[0].path == "inputs/qe.in"
-    assert "3  3  3  0  0  0" in result.generated_files[0].content
-
-
-def test_run_core_job_generate_with_output_dir_writes_bundle(tmp_path) -> None:
-    output_dir = tmp_path / "bundle"
-    result = run_core_job(
-        PresetRequest(
-            structure=_make_si_structure(),
-            hints=CalculationHints(k_grid=(3, 3, 3), pseudo_type="NC"),
-            pseudo_metadata=(_make_si_metadata(),),
-            mode="generate",
-            output_dir=str(output_dir),
-        )
-    )
-
-    assert result.bundle is not None
-    assert result.bundle.path == str(output_dir)
-    assert (output_dir / "manifest.json").exists()
-    assert (output_dir / "inputs" / "qe.in").exists()
-
-
-def test_core_result_serializes_to_manifest_style_dict() -> None:
-    structure = Structure(
-        lattice=Lattice.cubic(4.0),
-        species=["I"],
-        coords=[[0.0, 0.0, 0.0]],
-    )
-
-    result = run_core_job(
-        PresetRequest(
-            structure=structure,
-            hints=CalculationHints(k_grid=(8, 8, 8)),
-            pseudo_metadata=(),
-        )
-    )
-    manifest = result.to_dict()
-
-    assert manifest["analysis"]["heavy_elements"] == ["I"]
-    assert manifest["advice"]["spin_orbit"]["consider"] is True
-    assert manifest["k_points"]["grid"] == [8, 8, 8]
-    assert "contains_heavy_elements" not in manifest
+    assert document["records"]["analysis"]["heavy_elements"] == ["I"]
+    assert document["records"]["advice"]["spin_orbit"]["consider"] is True
+    assert document["records"]["k_points"]["grid"] == [8, 8, 8]

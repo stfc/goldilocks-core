@@ -102,27 +102,24 @@ def test_mcp_rejects_type_coercion_in_hints(test_service, request_body) -> None:
 
 
 class _SlowPresetService:
-    """Service stub whose preset runs are long enough to outlast a tick."""
+    """Delay a real computation long enough to outlast a discovery request."""
 
-    def __init__(self, delay: float) -> None:
+    def __init__(self, service, delay: float) -> None:
+        self._service = service
         self._delay = delay
 
-    def run_preset(self, request):
+    def compute(self, request):
         time.sleep(self._delay)
-
-        class _Result:
-            def to_dict(self) -> dict:
-                return {}
-
-        return _Result()
+        return self._service.compute(request)
 
 
 def test_mcp_list_tools_stays_responsive_during_slow_compute(
+    test_service,
     sample_structure_text: str,
 ) -> None:
     """Answer discovery while a recommendation runs in a worker thread."""
-    server = create_server(_SlowPresetService(delay=0.8))
-    body = {"structure": sample_structure_text}
+    server = create_server(_SlowPresetService(test_service, delay=0.8))
+    body = {"structure": sample_structure_text, "hints": {"k_grid": [3, 3, 3]}}
 
     async def scenario() -> float:
         pending = asyncio.create_task(server.call_tool("recommend", body))
@@ -143,7 +140,7 @@ def test_mcp_generate_returns_core_result_and_files(test_service, request_body) 
 
     data = _call(server, "generate", request_body)
 
-    assert data["generated_files"][0]["path"] == "inputs/qe.in"
+    assert data["generated_files"][0]["path"] == "qe.in"
     assert data["bundle"] is None
 
 

@@ -1,239 +1,142 @@
 # Tutorial
 
-Goldilocks Core turns a periodic structure into provenance-backed DFT parameter
-recommendations and Quantum ESPRESSO SCF input files.
+This tutorial inspects a structure, computes recommendations, and publishes
+Quantum ESPRESSO SCF inputs through the canonical Python interface.
 
-## Run an installed example
-
-Install the default runtime assets, then use an explicit k-point hint for a
-deterministic first run that bypasses the k-point model:
+## Inspect a structure
 
 ```python
-from goldilocks_core import CalculationHints, Service, PresetRequest
-from goldilocks_core.examples import structure
+from goldilocks_core import PathStructureSource, Service
 
-request = PresetRequest(
-    structure=structure("Si.cif"),
-    hints=CalculationHints(k_grid=(4, 4, 4)),
+source = PathStructureSource("structure.cif")
+with Service() as core:
+    inspection = core.inspect_structure(source)
+
+print(inspection.structure.reduced_formula)
+print(inspection.canonical_cif)
+```
+
+`StructureInspection` retains source identity, canonical CIF, lattice, sites,
+species occupancies, formula, and periodicity.
+
+## Compute a recommendation
+
+Use an explicit grid for a deterministic first run that does not load the
+k-point model:
+
+```python
+from goldilocks_core import (
+    CalculationDraft,
+    CalculationHints,
+    ComputeRequest,
+    PresetSelection,
+    Service,
+)
+
+request = ComputeRequest(
+    CalculationDraft(
+        source,
+        hints=CalculationHints(k_grid=(4, 4, 4)),
+        pseudo_table="pseudodojo-pbesol-efficiency-sr",
+    ),
+    PresetSelection("recommend"),
 )
 
 with Service() as core:
-    result = core.recommend(request)
+    result = core.compute(request)
 
-print(result.analysis.reduced_formula)
-print(result.k_points.grid)
-print(result.k_points.provenance)
+print(result.records.to_dict()["analysis"]["reduced_formula"])
+print(result.records.to_dict()["k_points"]["grid"])
 print(result.warnings)
 ```
 
-`recommend` runs Load, Analyze, Advise, Kmesh, and Select. The
-result contains analysis, advice, a concrete k-point selection,
-pseudopotential selection, and aggregated warnings. This request resolves the
-installed default pseudopotential table.
+`recommend` is a Preset ID. It requests analysis, advice, k-points, and
+pseudopotential selection without generating runnable input data.
 
-## Supply operator hints
+## Generate an input bundle
 
-Hints override only the fields they name:
+Select the `generate` Preset and a Core output target:
 
 ```python
-from goldilocks_core import CalculationHints, Service, PresetRequest
+from goldilocks_core import DirectoryOutput
 
-request = PresetRequest(
-    structure="structure.cif",
-    hints=CalculationHints(
-        k_grid=(4, 4, 4),
-        spin_polarized=True,
-        spin_orbit_coupling=False,
-        use_vdw=False,
-        pseudo_type="NC",
-        conv_thr=1.0e-8,
-    ),
-)
-
+request = ComputeRequest(request.draft, PresetSelection("generate"))
 with Service() as core:
-    result = core.recommend(request)
-
-print(result.advice.magnetism.provenance.source)  # user_hint
-print(result.k_points.grid)                       # (4, 4, 4)
-```
-
-Every recommendation retains its source and reason. Unspecified values remain
-eligible for structure-derived advice or the configured model.
-
-## Supply an operator-managed pseudopotential source
-
-Selection consumes validated metadata records, not raw UPF contents. To use a
-directory outside the asset store, point the request at it:
-
-```python
-from goldilocks_core import CalculationHints, Service, PresetRequest
-
-request = PresetRequest(
-    structure="structure.cif",
-    hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
-    pseudo_root="pseudos",
-)
-
-with Service() as core:
-    result = core.recommend(request)
-
-for pseudo in result.selection.pseudopotentials:
-    print(pseudo.element, pseudo.filename, pseudo.ecutwfc_ry, pseudo.ecutrho_ry)
-```
-
-Recommendation requires one scientifically compatible pseudopotential with
-complete cutoffs for every structure element. Missing or inconsistent metadata
-raises an explicit selection error; Core does not create fallback selections.
-
-## Generate input files
-
-```python
-from goldilocks_core import CalculationHints, Service, PresetRequest
-
-request = PresetRequest(
-    structure="structure.cif",
-    hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
-    pseudo_table="pseudodojo-pbesol-efficiency-sr",
-)
-
-with Service() as core:
-    result = core.generate(request)
-
-qe_input = result.generated_files[0]
-print(qe_input.path)     # inputs/qe.in
-print(qe_input.content)
-```
-
-To publish the generated files, pass a new output directory:
-
-```python
-with Service() as core:
-    result = core.generate(request, output_dir="run")
+    result = core.compute(request, output=DirectoryOutput("run"))
 
 print(result.bundle.path)
-print(result.bundle.manifest)
-# run/manifest.json and run/inputs/qe.in now exist
 ```
 
-Publication refuses an existing destination and confines every generated path
-inside the new directory.
+The destination must not already exist. Omit the output target or use `None`
+for memory-only structured output.
 
-## Query selected records
+The bundle contains `qe.in` and `manifest.json` with scientific choices and
+provenance. It does not copy pseudopotentials. Supply the selected UPFs under
+`pseudo/` so the generated input's `pseudo_dir = './pseudo'` resolves correctly.
 
-A `QueryRequest` names the Python record types needed by the caller. The DAG
-runs only their prerequisites:
+## Select explicit Records
 
 ```python
-from goldilocks_core import CalculationHints, Service, QueryRequest
+from goldilocks_core import RecordSelection
 from goldilocks_core.contracts import KPointSelection, StructureAnalysisRecord
 
-request = QueryRequest(
-    structure="structure.cif",
-    outputs=(StructureAnalysisRecord, KPointSelection),
-    hints=CalculationHints(k_grid=(4, 4, 4)),
+query = ComputeRequest(
+    request.draft,
+    RecordSelection((StructureAnalysisRecord, KPointSelection)),
 )
-
 with Service() as core:
-    records = core.compute(request)
-
-print(records[StructureAnalysisRecord].crystal_system)
-print(records[KPointSelection].grid)
+    result = core.compute(query)
 ```
 
-Transport and CLI queries use the stable IDs `analysis`, `advice`, `k_points`,
-`selection`, and `generated_files` instead of Python class names.
+Only dependencies required by the selected Records execute.
 
-## Reuse model state
-
-Keep one service alive across requests. It lazily loads configured models,
-serializes dispatch over shared state, and releases owned resources on close:
+## Reuse Runtime state
 
 ```python
-from goldilocks_core import Service, PresetRequest
-
 with Service() as core:
-    first = core.recommend(PresetRequest(structure="Si.cif"))
-    second = core.recommend(PresetRequest(structure="Ge.cif"))
-    print(core.describe_tasks())
-    print(core.describe_codes())
-    print(core.describe_models())
+    capabilities = core.capabilities()
+    first = core.compute(request)
+    second = core.compute(query)
+
+print([preset.id for preset in capabilities.tasks[0].presets])
 ```
 
-For one call, use the convenience functions:
+One Service reuses lazy model state and supports concurrent Compute calls. Capabilities
+replaces separate task, code, and model discovery operations.
 
-```python
-from goldilocks_core import PresetRequest, QueryRequest, query_records, run_core_job
-from goldilocks_core.contracts import StructureAnalysisRecord
-
-result = run_core_job(PresetRequest(structure="Si.cif", mode="recommend"))
-records = query_records(
-    QueryRequest(structure="Si.cif", outputs=(StructureAnalysisRecord,))
-)
-```
-
-## Select a local k-point model
-
-```python
-from goldilocks_core import Service, PresetRequest
-from goldilocks_core.contracts import ModelSpec
-
-spec = ModelSpec(
-    name="local-kmesh",
-    version="1",
-    model_type="random_forest",
-    target="k_index",
-    feature_set="cslr",
-    source="local",
-    location="model.joblib",
-)
-
-with Service() as core:
-    result = core.recommend(
-        PresetRequest(structure="structure.cif", kmesh_model=spec)
-    )
-
-print(result.k_points.grid)
-```
-
-An explicit `k_grid` or `k_spacing` still wins and bypasses model inference.
-Only load joblib artifacts from trusted sources.
-
-## Serialize a request
-
-Both request types produce JSON-safe dictionaries. The shared transport parser
-accepts the same representation, including a `pymatgen.Structure`:
-
-```python
-import json
-from pymatgen.core import Structure
-from goldilocks_core import PresetRequest
-
-request = PresetRequest(structure=Structure.from_file("structure.cif"))
-body = request.to_dict()
-print(json.dumps(body))
-```
-
-HTTP accepts that body at `POST /recommend` or `POST /generate`; the endpoint
-selects the preset, so a conflicting `mode` is rejected. `POST /compute`
-requires a non-empty `outputs` list. Request errors use a stable
-`{"error": {"kind": ..., "message": ...}}` envelope.
-
-## CLI and optional transports
+## CLI
 
 ```bash
 uv run goldilocks recommend structure.cif --k-grid 4 4 4 --json
 uv run goldilocks generate structure.cif --pseudo-root pseudos --k-grid 4 4 4 --out run --json
-uv run goldilocks compute structure.cif --outputs analysis,k_points --k-grid 4 4 4
 ```
 
-Install and run the optional servers with:
+## HTTP
 
-```bash
-uv sync --all-extras
-uv run goldilocks serve http --host 127.0.0.1 --port 8000
-uv run goldilocks serve mcp
+HTTP Structure Sources are explicit inline content:
+
+```json
+{
+  "structure": {
+    "content": "data_Si ...",
+    "format": "cif"
+  },
+  "hints": {"k_grid": [4, 4, 4]}
+}
 ```
 
-The HTTP server exposes operation and discovery endpoints. The MCP stdio server
-exposes the same operations and discovery as six typed tools. Both keep one
-`Service` alive for the server process.
+Send this body to `POST /generate`. The JSON response contains the selected
+scientific Records and generated input contents. Use `POST /recommend` for
+recommendations, or add `"outputs": ["analysis"]` and call `POST /compute`
+for a Record query. The server stores no output.
+
+## MCP
+
+Local stdio MCP exposes `recommend`, `generate`, `compute`, `list_tasks`,
+`list_codes`, and `list_models`. Scientific tools accept the same flat structure,
+intent, and hints as HTTP; `compute` also requires an `outputs` list.
+Results remain in memory without an output directory.
+
+MCP does not accept structure paths, pseudopotential roots, model locations, or
+publication paths. Use the CLI or Python interface for trusted local filesystem
+configuration.

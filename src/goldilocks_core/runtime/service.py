@@ -1,30 +1,44 @@
 from __future__ import annotations
 
-import threading
+from dataclasses import replace
 
+from goldilocks_core.bundle import write_bundle_directory
 from goldilocks_core.contracts import (
-    CodeName,
-    PresetRequest,
-    QueryRequest,
-    Records,
-    Result,
+    Capabilities,
+    ComputationResult,
+    ComputeRequest,
+    DirectoryOutput,
+    GeneratedFiles,
+    KPointSelection,
+    ParameterAdvice,
+    SelectionRecord,
+    StructureAnalysisRecord,
+    StructureInspection,
+    StructureSource,
 )
-from goldilocks_core.generation.registry import available_codes
+from goldilocks_core.io.structures import normalize_structure
+from goldilocks_core.runtime.capabilities import build_capabilities
 from goldilocks_core.runtime.dispatch import Dispatcher
-from goldilocks_core.runtime.graph import GraphInfo
 from goldilocks_core.runtime.models import Runtime
+from goldilocks_core.runtime.task import GraphHandler
 
 __all__ = ["Service"]
 
 
 class Service:
-    __slots__ = ("_runtime", "_dispatcher", "_lock", "_owns_runtime", "_closed")
+    __slots__ = ("_runtime", "_dispatcher", "_owns_runtime", "_closed")
 
-    def __init__(self, runtime: Runtime | None = None) -> None:
+    def __init__(
+        self,
+        runtime: Runtime | None = None,
+        *,
+        task_handlers: tuple[GraphHandler, ...] = (),
+    ) -> None:
         self._owns_runtime = runtime is None
         self._runtime = runtime if runtime is not None else Runtime()
         self._dispatcher = Dispatcher(self._runtime)
-        self._lock = threading.RLock()
+        for handler in task_handlers:
+            self._dispatcher.register(handler)
         self._closed = False
 
     @property
@@ -35,48 +49,41 @@ class Service:
     def is_closed(self) -> bool:
         return self._closed
 
-    def recommend(self, request: PresetRequest) -> Result:
-        with self._lock:
-            self._ensure_open()
-            return self._dispatcher.recommend(request)
-
-    def generate(
+    def compute(
         self,
-        request: PresetRequest,
+        request: ComputeRequest,
         *,
-        output_dir: str | None = None,
-    ) -> Result:
-        with self._lock:
-            self._ensure_open()
-            return self._dispatcher.generate(request, output_dir=output_dir)
-
-    def compute(self, request: QueryRequest) -> Records:
-        with self._lock:
-            self._ensure_open()
-            return self._dispatcher.compute(request)
-
-    def run_preset(self, request: PresetRequest) -> Result:
-        with self._lock:
-            self._ensure_open()
-            return self._dispatcher.run_preset(request)
-
-    def describe_tasks(self) -> tuple[GraphInfo, ...]:
-        with self._lock:
-            self._ensure_open()
-            return self._dispatcher.describe_tasks()
-
-    def describe_codes(self) -> tuple[CodeName, ...]:
+        output: DirectoryOutput | None = None,
+    ) -> ComputationResult:
+        if output is not None and not isinstance(output, DirectoryOutput):
+            raise ValueError("output must be a DirectoryOutput or None")
         self._ensure_open()
-        return available_codes()
+        result = self._dispatcher.compute(request)
+        if output is None:
+            return result
+        required = {
+            StructureAnalysisRecord,
+            ParameterAdvice,
+            KPointSelection,
+            SelectionRecord,
+            GeneratedFiles,
+        }
+        if not required.issubset(result.records):
+            raise ValueError(
+                "Directory output requires the complete generate record set"
+            )
+        return replace(result, bundle=write_bundle_directory(result, output.path))
 
-    def describe_models(self) -> list[dict[str, str | None]]:
+    def capabilities(self) -> Capabilities:
         self._ensure_open()
-        return self._runtime.describe_models()
+        return build_capabilities(self._dispatcher, self._runtime)
+
+    def inspect_structure(self, source: StructureSource) -> StructureInspection:
+        self._ensure_open()
+        return normalize_structure(source).inspection
 
     def close(self) -> None:
-        if self._closed:
-            return
-        if self._owns_runtime:
+        if not self._closed and self._owns_runtime:
             self._runtime.close()
         self._closed = True
 

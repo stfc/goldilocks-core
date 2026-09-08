@@ -37,41 +37,46 @@ Primary docs:
 
    Required distinctions:
 
-   - `Service` implements reusable recommend/generate/compute operations
-     plus task/code/model discovery.
-   - `run_core_job(PresetRequest)` and `query_records(QueryRequest)` are
-     short-lived Python conveniences.
-   - The unified `goldilocks` CLI implements `recommend`, `generate`, `compute`,
-     `serve`, `examples`, and explicit `assets` lifecycle commands.
-   - Optional `[http]` and `[mcp]` transports are implemented over one service.
-   - Generate can publish a bundle directory; there is no bundle operation.
-   - Runner, AiiDA, frontend, auth, and workspace concerns are out of scope.
+   - `Service` implements Capabilities, Structure Inspection, and Compute.
+   - `compute(ComputeRequest)` is the short-lived Python convenience.
+   - Python selects recommendation and generation through Preset IDs.
+   - The existing CLI implements `recommend`, `generate`, `compute`, `serve`,
+     `examples`, and explicit `assets` lifecycle commands.
+   - Optional `[http]` and `[mcp]` transports retain preset/query interfaces
+     over one process-owned Service.
+   - Directory output writes generated inputs and their manifest.
+   - DFT execution, AiiDA, authentication, sessions, and saved Workspaces are
+     out of scope.
 
 3. Keep stage language consistent.
 
    ```text
-   Load -> Analyze -> Advise -> Select
+   Load -> Analyze -> Advise
    Load -> Kmesh
+   Load + Advice -> Select
    Load + Advice + Select + Kmesh -> Generate
    ```
 
 4. Keep package ownership consistent.
 
    ```text
-   contracts/          -> boundary dataclasses and stable record IDs
-   runtime/graph.py    -> type-keyed DAG execution
-   runtime/dispatch.py -> task registry and preset/query dispatch
-   runtime/core.py     -> model lifecycle
-   runtime/service.py  -> reusable operations, locking, and discovery
-   runtime/jobs.py     -> short-lived convenience entry points
-   server/request.py   -> canonical transport deserializer
-   server/http.py      -> optional HTTP adapter
-   server/mcp.py       -> optional MCP adapter
-   analysis.py         -> structure facts
-   advice/             -> provenance-backed recommendations
-   kmesh/              -> k-point resolution
-   selection.py        -> concrete pseudopotential choices
-   generation/         -> target-code rendering
+   contracts/            -> domain values, boundary contracts, stable Record IDs
+   runtime/graph.py      -> type-keyed DAG execution
+   runtime/dispatch.py   -> Calculation Task registry and Compute dispatch
+   runtime/models.py     -> model lifecycle
+   runtime/service.py    -> reusable operations and generated-input bundles
+   runtime/jobs.py       -> short-lived Compute convenience
+   io/structures.py      -> Structure Source normalization and Inspection
+   runtime/capabilities.py -> coherent catalog snapshot
+   bundle.py             -> generated-input directory and manifest
+   server/request.py     -> shared transport deserializer
+   server/http*.py       -> optional HTTP adapter
+   server/mcp.py         -> optional local stdio MCP adapter
+   analysis.py           -> structure facts
+   advice/               -> provenance-backed recommendations
+   kmesh/                -> k-point resolution
+   selection.py          -> concrete pseudopotential choices
+   generation/           -> target-code rendering
    ```
 
 5. Validate Mermaid diagrams before embedding.

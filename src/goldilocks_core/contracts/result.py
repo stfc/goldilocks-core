@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
-from goldilocks_core.contracts.advice import ParameterAdvice
-from goldilocks_core.contracts.analysis import StructureAnalysisRecord
-from goldilocks_core.contracts.hints import CalculationIntent
-from goldilocks_core.contracts.kpoints import KPointSelection
-from goldilocks_core.contracts.selection import SelectionRecord
 from goldilocks_core.contracts.serial import to_jsonable
 from goldilocks_core.contracts.types import JsonDict
+
+if TYPE_CHECKING:
+    from goldilocks_core.contracts.requests import (
+        CalculationDraft,
+        ComputationSelection,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,15 +25,6 @@ class GeneratedFile:
 
 
 type GeneratedFiles = tuple[GeneratedFile, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class BundleRecord:
-    path: str
-    manifest: JsonDict
-
-    def to_dict(self) -> JsonDict:
-        return to_jsonable(self)
 
 
 class Records(Mapping[type, Any]):
@@ -53,32 +45,52 @@ class Records(Mapping[type, Any]):
     def to_dict(self) -> JsonDict:
         from goldilocks_core.contracts.registry import record_type_id
 
-        return to_jsonable(
-            {
-                record_type_id(record_type): record
-                for record_type, record in self._records.items()
-            }
-        )
+        return {
+            record_type_id(record_type): (
+                record.to_dict() if hasattr(record, "to_dict") else to_jsonable(record)
+            )
+            for record_type, record in self._records.items()
+        }
 
 
 @dataclass(frozen=True, slots=True)
-class Result:
-    """Complete record set from one Core job.
+class BundleRecord:
+    """Location and manifest of a generated-input directory."""
 
-    ``generated_files`` is empty for recommend jobs and populated for
-    generate jobs; ``bundle`` is set only when a generate job requested an
-    ``output_dir``. ``warnings`` aggregates every stage's warnings and is
-    the authoritative place to check for incomplete or degraded results.
-    """
-
-    intent: CalculationIntent
-    analysis: StructureAnalysisRecord
-    advice: ParameterAdvice
-    k_points: KPointSelection
-    selection: SelectionRecord
-    generated_files: GeneratedFiles = ()
-    warnings: tuple[str, ...] = ()
-    bundle: BundleRecord | None = None
+    path: str
+    manifest: JsonDict
 
     def to_dict(self) -> JsonDict:
         return to_jsonable(self)
+
+
+@dataclass(frozen=True, slots=True)
+class ComputationResult:
+    """Complete record set from one Compute call.
+
+    ``records`` holds every computed record for the requested selection;
+    ``warnings`` aggregates every stage's warnings and is the authoritative
+    place to check for incomplete or degraded results. ``bundle`` is set
+    only when a local caller requests a generated-input directory.
+    """
+
+    draft: CalculationDraft
+    task: str
+    task_revision: str
+    selection: ComputationSelection
+    records: Records
+    warnings: tuple[str, ...] = ()
+    bundle: BundleRecord | None = None
+    schema_version: int = field(default=1, init=False)
+
+    def to_dict(self) -> JsonDict:
+        return {
+            "schema_version": self.schema_version,
+            "draft": self.draft.to_dict(),
+            "task": self.task,
+            "task_revision": self.task_revision,
+            "selection": self.selection.to_dict(),
+            "records": self.records.to_dict(),
+            "warnings": list(self.warnings),
+            "bundle": to_jsonable(self.bundle),
+        }

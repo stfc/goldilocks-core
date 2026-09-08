@@ -8,7 +8,8 @@ It provides:
 - advice for k-points, smearing, magnetism, SOC, convergence, vdW, and pseudopotentials;
 - a default Quantile Random Forest k-point model;
 - deterministic pseudopotential selection and QE input generation;
-- Python, CLI, HTTP, and MCP entry points over one process-owned service.
+- Python, CLI, HTTP, and local stdio MCP entry points over one process-owned
+  service.
 
 ## Install
 
@@ -26,37 +27,40 @@ uv sync --group dev
 
 ## Python API
 
-`Service` is the main Python interface. Use `recommend()` to inspect a
-complete recommendation, `generate()` to create input files, and `compute()` to
-request selected records.
+`Service` is the reusable Python interface. It exposes Capabilities, Structure
+Inspection, and Compute. `recommend` and `generate` are preset IDs, not
+operations.
 
 ```python
-from goldilocks_core import CalculationHints, Service, PresetRequest
+from goldilocks_core import (
+    CalculationDraft,
+    CalculationHints,
+    ComputeRequest,
+    DirectoryOutput,
+    PathStructureSource,
+    PresetSelection,
+    Service,
+)
 
-request = PresetRequest(
-    structure="path/to/structure.cif",
-    hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
-    pseudo_table="pseudodojo-pbesol-efficiency-sr",
+request = ComputeRequest(
+    draft=CalculationDraft(
+        structure=PathStructureSource("path/to/structure.cif"),
+        hints=CalculationHints(k_grid=(4, 4, 4), pseudo_type="NC"),
+        pseudo_table="pseudodojo-pbesol-efficiency-sr",
+    ),
+    selection=PresetSelection("generate"),
 )
 
 with Service() as core:
-    result = core.generate(request)
-
-for generated_file in result.generated_files:
-    print(generated_file.path)
-    print(generated_file.content)
+    capabilities = core.capabilities()
+    inspection = core.inspect_structure(request.draft.structure)
+    result = core.compute(request, output=DirectoryOutput("run"))
 ```
 
-The public operations are:
-
-- `Service.recommend(PresetRequest(...))` returns a complete recommendation.
-- `Service.generate(PresetRequest(...), output_dir=...)` also creates input
-  files and can write them to a new directory.
-- `Service.compute(QueryRequest(...))` returns only the requested records.
-
-`recommend` and `generate` also exist as CLI commands and as HTTP and MCP
-operations. They are not top-level Python functions. For a single Python call,
-use `run_core_job(PresetRequest(...))`.
+Use `RecordSelection` instead of `PresetSelection` to request specific Records.
+Pass `DirectoryOutput(path)` with a complete `generate` selection to write a
+generated-input bundle, or `None` for memory-only output. The top-level
+`compute()` convenience uses the same Compute contract.
 
 See the [tutorial](docs/tutorial.md) and
 [pipeline reference](docs/pipeline.md) for complete examples.
@@ -68,16 +72,16 @@ Install the default runtime assets once:
 ```bash
 uv run goldilocks assets install default
 uv run goldilocks assets verify default
+uv run goldilocks assets install pseudodojo-pbesol-efficiency-sr
 ```
-
-Run a recommendation or create input files. Requests use the installed default
-pseudopotential table unless `--pseudo-table` or `--pseudo-root` selects another
-source:
+Query Records or run a recommendation or generation command. Without an explicit
+pseudopotential source, Core chooses a compatible registered table. Use
+`--pseudo-table` or `--pseudo-root` to override that choice:
 
 ```bash
-uv run goldilocks recommend structure.cif --json
-uv run goldilocks generate structure.cif --pseudo-table sssp-pbesol-efficiency-sr --out run/ --json
+uv run goldilocks recommend structure.cif --k-grid 4 4 4 --json
 uv run goldilocks compute structure.cif --outputs analysis,k_points --k-grid 4 4 4
+uv run goldilocks generate structure.cif --pseudo-table sssp-pbesol-efficiency-sr --out run --json
 ```
 
 The default asset store is `$XDG_DATA_HOME/goldilocks/assets`, or
@@ -88,7 +92,7 @@ The default asset store is `$XDG_DATA_HOME/goldilocks/assets`, or
 Example structures are installed with the package:
 
 ```bash
-uv run goldilocks recommend "$(uv run goldilocks examples path)/Si.cif" --json
+uv run goldilocks compute "$(uv run goldilocks examples path)/Si.cif" --outputs analysis
 ```
 
 HTTP and MCP are optional:
@@ -100,8 +104,21 @@ uv run goldilocks serve mcp
 ```
 
 HTTP publishes `/recommend`, `/generate`, `/compute`, `/tasks`, `/codes`,
-`/models`, and `/health`. MCP publishes the same three operations and three
-discovery calls as tools over stdio.
+`/models`, and `/health`. MCP exposes `recommend`, `generate`, `compute`,
+`list_tasks`, `list_codes`, and `list_models` as local stdio tools.
+
+Both transports accept flat requests containing inline structure content,
+intent, and hints. They resolve pseudopotentials and models on the server,
+return JSON, and never create output directories. Python and CLI retain
+trusted local filesystem controls.
+
+## Generated-input bundles
+
+`DirectoryOutput(path)` writes generated inputs and `manifest.json` into a new
+directory. For Quantum ESPRESSO the generated input is `qe.in`.
+
+The bundle does not copy pseudopotentials or run calculations. Supply the
+selected UPFs under the input's `pseudo_dir` before running Quantum ESPRESSO.
 
 ## Documentation
 
@@ -120,6 +137,8 @@ uv run pytest -m integration
 uv run pytest -m physics
 uv run pytest --cov --cov-report=term-missing
 uv run mutmut run --max-children 4
+uv build --no-sources
+uv run python scripts/validate_distribution.py dist
 uv run pre-commit run --all-files
 ```
 

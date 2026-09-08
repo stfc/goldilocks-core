@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from pathlib import Path
 
@@ -7,6 +8,11 @@ import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.contracts import PseudoCutoffs, PseudoMetadata
+
+
+@pytest.fixture(autouse=True)
+def isolated_default_asset_root(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("GOLDILOCKS_ASSET_ROOT", str(tmp_path / "default-assets"))
 
 
 @pytest.fixture
@@ -36,8 +42,13 @@ def pseudo_metadata_factory() -> Callable[..., PseudoMetadata]:
         relativistic: str = "scalar",
         accuracy: str | None = "efficiency",
         root: Path = Path("/pseudo"),
+        materialize: bool = False,
     ) -> PseudoMetadata:
         filename = f"{element}.UPF"
+        content = f"<UPF version='2.0.1'>{element} fixture</UPF>\n".encode()
+        if materialize:
+            root.mkdir(parents=True, exist_ok=True)
+            (root / filename).write_bytes(content)
         return PseudoMetadata(
             filepath=str(root / filename),
             filename=filename,
@@ -53,6 +64,15 @@ def pseudo_metadata_factory() -> Callable[..., PseudoMetadata]:
                 ecutrho_ry=ecutrho_ry,
             ),
             source_identifier=f"synthetic/{filename}",
+            content_sha256=(
+                hashlib.sha256(content).hexdigest() if materialize else None
+            ),
+            content_size_bytes=len(content) if materialize else None,
+            pseudo_info={
+                "licence": "CC-BY-4.0",
+                "licence_text": "Synthetic test pseudopotential licence\n",
+                "citation": "Synthetic test pseudopotentials.",
+            },
         )
 
     return make_metadata

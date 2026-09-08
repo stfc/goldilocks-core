@@ -35,7 +35,7 @@ def installed_pseudos(
 ) -> None:
     """Resolve the server's installed pseudo source without a real store."""
     monkeypatch.setattr(
-        "goldilocks_core.runtime.scf.source_for_request",
+        "goldilocks_core.runtime.scf.source_for_draft",
         lambda request, *, store, registry_path: (
             lambda structure, requirements: installed_pseudo_metadata
         ),

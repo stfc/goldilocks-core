@@ -1,114 +1,162 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
+from threading import Barrier, Event
+
 import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core import (
+    CalculationDraft,
     CalculationHints,
-    PresetRequest,
-    Result,
+    ComputeRequest,
+    InMemoryStructureSource,
+    PresetSelection,
     Runtime,
     Service,
 )
-from goldilocks_core.contracts import PseudoCutoffs, PseudoMetadata
+from goldilocks_core.contracts import (
+    KPointSelection,
+    Provenance,
+    PseudoCutoffs,
+    PseudoMetadata,
+)
+from goldilocks_core.runtime.dispatch import Dispatcher
 
 
-def make_structure() -> Structure:
-    return Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
-
-
-def make_metadata() -> PseudoMetadata:
-    return PseudoMetadata(
-        filepath="/pseudo/Si.UPF",
-        filename="Si.UPF",
-        header_format="attr",
-        provider="sssp",
-        accuracy="efficiency",
-        element="Si",
-        pseudo_type="NC",
-        functional="PBEsol",
-        relativistic="scalar",
-        cutoffs=PseudoCutoffs(
-            ecutwfc_ry=35,
-            ecutrho_ry=140,
+def make_request(*, k_grid=(2, 2, 1)) -> ComputeRequest:
+    return ComputeRequest(
+        draft=CalculationDraft(
+            structure=InMemoryStructureSource(
+                Structure(Lattice.cubic(4.0), ["Si"], [[0.0, 0.0, 0.0]])
+            ),
+            hints=CalculationHints(k_grid=k_grid, pseudo_type="NC"),
+            pseudo_metadata=(
+                PseudoMetadata(
+                    filepath="/pseudo/Si.UPF",
+                    filename="Si.UPF",
+                    header_format="attr",
+                    provider="sssp",
+                    accuracy="efficiency",
+                    element="Si",
+                    pseudo_type="NC",
+                    functional="PBEsol",
+                    relativistic="scalar",
+                    cutoffs=PseudoCutoffs(ecutwfc_ry=35, ecutrho_ry=140),
+                    source_identifier="synthetic/Si.UPF",
+                ),
+            ),
         ),
-        source_identifier="synthetic/Si.UPF",
+        selection=PresetSelection("recommend"),
     )
 
 
-def make_request() -> PresetRequest:
-    return PresetRequest(
-        structure=make_structure(),
-        hints=CalculationHints(k_grid=(2, 2, 1), pseudo_type="NC"),
-        pseudo_metadata=(make_metadata(),),
-    )
-
-
-def test_default_service_owns_and_closes_runtime() -> None:
-    service = Service()
-    assert not service.is_closed
-    assert not service.runtime.is_closed
-
+@pytest.mark.parametrize("owned", (True, False))
+def test_service_lifecycle_preserves_runtime_ownership(owned) -> None:
+    service = Service(None if owned else Runtime())
+    runtime = service.runtime
+    request = make_request()
+    with service:
+        assert service.compute(request).records[KPointSelection].grid == (2, 2, 1)
     service.close()
     assert service.is_closed
-    assert service.runtime.is_closed
-
-    service.close()  # idempotent
-
-
-def test_caller_owned_runtime_is_not_closed_by_service() -> None:
-    with Runtime() as runtime:
-        service = Service(runtime)
-        assert not service.is_closed
-        assert not runtime.is_closed
-
-        service.close()
-        assert service.is_closed
-        assert not runtime.is_closed
-
-
-def test_dispatch_after_close_raises() -> None:
-    service = Service()
-    service.close()
-    with pytest.raises(RuntimeError, match="Service is closed."):
-        service.recommend(make_request())
+    assert runtime.is_closed is owned
+    for operation in (
+        lambda: service.compute(request),
+        service.capabilities,
+        lambda: service.inspect_structure(request.draft.structure),
+    ):
+        with pytest.raises(RuntimeError):
+            operation()
+    if not owned:
+        with Service(runtime) as replacement:
+            assert replacement.compute(request).records[KPointSelection].grid == (
+                2,
+                2,
+                1,
+            )
+    runtime.close()
 
 
-def test_discovery_after_close_raises() -> None:
-    service = Service()
-    service.close()
-    with pytest.raises(RuntimeError, match="Service is closed."):
-        service.describe_tasks()
+def test_computations_and_discovery_are_not_serialized() -> None:
+    entered = Barrier(3)
+    release = Event()
+
+    class BlockingBackend:
+        def __call__(self, structure: Structure) -> KPointSelection:
+            entered.wait(timeout=2)
+            assert release.wait(timeout=2)
+            return KPointSelection(
+                grid=(2, 2, 2),
+                shift=(0, 0, 0),
+                mesh_type="monkhorst-pack",
+                provenance=Provenance(source="model", reason="test"),
+            )
+
+        def close(self) -> None:
+            pass
+
+    request = make_request(k_grid=None)
+    with (
+        Runtime(kmesh_service=BlockingBackend()) as runtime,
+        Service(runtime) as service,
+    ):
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            computations = [pool.submit(service.compute, request) for _ in range(2)]
+            try:
+                entered.wait(timeout=2)
+                capabilities = pool.submit(service.capabilities)
+                assert (
+                    capabilities.result(timeout=0.5).tasks[0].id == "scf_single_point"
+                )
+                inspection = pool.submit(
+                    service.inspect_structure, request.draft.structure
+                )
+                assert inspection.result(timeout=0.5).structure.reduced_formula == "Si"
+            finally:
+                release.set()
+            for computation in computations:
+                assert computation.result(timeout=2).records[KPointSelection].grid == (
+                    2,
+                    2,
+                    2,
+                )
 
 
-def test_describe_tasks_returns_the_scf_task() -> None:
-    service = Service()
-    try:
-        tasks = service.describe_tasks()
-        assert len(tasks) == 1
-        assert tasks[0].id == "scf_single_point"
-        assert tasks[0].name == "Single-point SCF"
-    finally:
-        service.close()
+def test_concurrent_first_computations_wait_for_default_task_registration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registration_started = Event()
+    release_registration = Event()
+    second_started = Event()
+    original_register = Dispatcher.register
 
+    def blocking_register(dispatcher: Dispatcher, handler) -> None:
+        registration_started.set()
+        assert release_registration.wait(timeout=2)
+        original_register(dispatcher, handler)
 
-def test_describe_codes_and_models() -> None:
-    service = Service()
-    try:
-        assert "quantum_espresso" in service.describe_codes()
-        models = service.describe_models()
-        assert len(models) == 2
-        targets = {model["target"] for model in models}
-        assert targets == {"k_distance", "metallicity"}
-    finally:
-        service.close()
-
-
-def test_one_service_reused_across_dispatches() -> None:
+    monkeypatch.setattr(Dispatcher, "register", blocking_register)
     request = make_request()
-    with Service() as service:
-        first = service.recommend(request)
-        second = service.recommend(request)
+    with Service() as service, ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(service.compute, request)
+        try:
+            assert registration_started.wait(timeout=2)
 
-    assert isinstance(first, Result)
-    assert first.k_points == second.k_points
+            def run_second():
+                second_started.set()
+                return service.compute(request)
+
+            second = pool.submit(run_second)
+            assert second_started.wait(timeout=2)
+            with pytest.raises(FutureTimeoutError):
+                second.result(timeout=0.1)
+        finally:
+            release_registration.set()
+        for computation in (first, second):
+            assert computation.result(timeout=2).records[KPointSelection].grid == (
+                2,
+                2,
+                1,
+            )

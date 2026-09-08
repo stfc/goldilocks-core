@@ -181,6 +181,9 @@ class ComputeRequest:
         model: str | None = None,
         model_name: str | None = None,
         model_version: str | None = None,
+        model_licence: str | None = None,
+        model_licence_text: str | None = None,
+        model_citation: str | None = None,
     ) -> ComputeRequest:
         """Construct a local job using native validation and registered record IDs.
 
@@ -190,8 +193,17 @@ class ComputeRequest:
         """
         if (preset is None) == (records is None):
             raise ValueError("Supply exactly one of preset or records")
-        if model is None and (model_name is not None or model_version is not None):
-            raise ValueError("Model name and version require a local model")
+        if model is None and any(
+            value is not None
+            for value in (
+                model_name,
+                model_version,
+                model_licence,
+                model_licence_text,
+                model_citation,
+            )
+        ):
+            raise ValueError("Model identity and legal metadata require a local model")
         return cls(
             CalculationDraft(
                 structure=PathStructureSource(structure),
@@ -212,6 +224,9 @@ class ComputeRequest:
                         feature_set="cslr",
                         source="local",
                         location=model,
+                        licence=model_licence,
+                        licence_text=model_licence_text,
+                        citation=model_citation,
                     )
                     if model is not None
                     else None

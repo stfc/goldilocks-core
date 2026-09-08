@@ -56,6 +56,41 @@ def test_sources_preserve_structure_and_source_provenance(
             assert inspection["source"]["size_bytes"] == len(content.encode())
 
 
+@pytest.mark.parametrize("newline", ["\r\n", "\r"], ids=["crlf", "cr"])
+def test_path_inspection_preserves_source_bytes(
+    service, silicon_structure, tmp_path: Path, newline: str
+) -> None:
+    source_bytes = (
+        silicon_structure.to(fmt="cif").replace("\n", newline).encode("utf-8")
+    )
+    path = tmp_path / "silicon.cif"
+    path.write_bytes(source_bytes)
+
+    inspection = service.inspect_structure(PathStructureSource(path))
+
+    assert inspection["source"]["content"].encode("utf-8") == source_bytes
+    assert inspection["source"]["sha256"] == hashlib.sha256(source_bytes).hexdigest()
+    assert inspection["source"]["size_bytes"] == len(source_bytes)
+    assert Structure.from_str(inspection["canonical_cif"], fmt="cif").matches(
+        silicon_structure
+    )
+
+
+def test_inspection_preserves_partial_periodicity(service) -> None:
+    structure = Structure(
+        Lattice(
+            [[4.0, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 20.0]],
+            pbc=(True, True, False),
+        ),
+        ["Si"],
+        [[0.0, 0.0, 0.5]],
+    )
+
+    inspection = service.inspect_structure(InMemoryStructureSource(structure))
+
+    assert inspection["structure"]["periodicity"] == [True, True, False]
+
+
 @pytest.mark.parametrize(
     ("name", "format_hint", "format"),
     [

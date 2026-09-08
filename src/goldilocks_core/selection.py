@@ -183,10 +183,13 @@ def _relativistic_compatible(
     metadata: PseudoMetadata,
     requirements: PseudopotentialRequirements,
 ) -> bool:
+    # Curated scalar tables may contain NR files; custom NR files do not imply
+    # scalar compatibility, and table classification must not overwrite UPF facts.
     return metadata.relativistic == requirements["relativistic"] or (
-        metadata.provider == "sssp"
+        requirements["relativistic"] == "scalar"
         and metadata.relativistic == "non-relativistic"
-        and requirements["relativistic"] == "scalar"
+        and metadata.provider in {"pseudodojo", "sssp"}
+        and metadata.pseudo_info.get("table_relativistic") == "scalar"
     )
 
 
@@ -212,8 +215,9 @@ def _selection_warnings(
 ) -> tuple[str, ...]:
     warnings = list(selected.warnings)
     if selected.relativistic != requirements["relativistic"]:
+        provider = "SSSP" if selected.provider == "sssp" else "PseudoDojo"
         warnings.append(
-            f"Selected SSSP pseudopotential for {element} declares "
+            f"Selected {provider} pseudopotential for {element} declares "
             f"{selected.relativistic} treatment within a "
             f"{requirements['relativistic']} table; verify this compatibility."
         )
@@ -245,7 +249,7 @@ def _selection_warnings(
 
 def _missing_pseudo_warning(
     element: str,
-    requirements: JsonDict,
+    requirements: PseudopotentialRequirements,
     metadata: tuple[PseudoMetadata, ...],
 ) -> str:
     message = _missing_pseudo_reason(element, requirements, metadata)
@@ -256,7 +260,7 @@ def _missing_pseudo_warning(
 
 def _missing_pseudo_reason(
     element: str,
-    requirements: JsonDict,
+    requirements: PseudopotentialRequirements,
     metadata: tuple[PseudoMetadata, ...],
 ) -> str:
     candidates = [item for item in metadata if item.element == element]
@@ -276,7 +280,7 @@ def _missing_pseudo_reason(
         )
 
     relativistic = [
-        item for item in functional if item.relativistic == requirements["relativistic"]
+        item for item in functional if _relativistic_compatible(item, requirements)
     ]
     if not relativistic:
         return (

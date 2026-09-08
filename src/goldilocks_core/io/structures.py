@@ -182,7 +182,7 @@ def normalize_structure(source: StructureSource) -> NormalizedStructure:
             if not path.is_file():
                 raise StructureInputError(f"Structure path is not a file: {path}")
             try:
-                content = path.read_text(encoding="utf-8")
+                content = path.read_bytes().decode("utf-8")
             except UnicodeDecodeError as error:
                 raise StructureInputError(
                     f"Structure file must contain UTF-8 text: {path}"
@@ -198,7 +198,10 @@ def normalize_structure(source: StructureSource) -> NormalizedStructure:
             raise StructureInputError("Structure content must be non-empty text.")
         resolved_format = _resolve_format(name, content, format_hint)
         try:
-            structure = Structure.from_str(content, fmt=resolved_format)
+            structure = Structure.from_str(
+                content.replace("\r\n", "\n").replace("\r", "\n"),
+                fmt=resolved_format,
+            )
         except (IndexError, KeyError, TypeError, ValueError) as error:
             raise StructureInputError(
                 f"Could not parse {resolved_format.upper()} structure: {error}"
@@ -286,7 +289,7 @@ def structure_document(structure: Structure) -> StructureDocument:
             "angles_degrees": list(_vector(lattice.angles)),
             "volume_angstrom3": float(lattice.volume),
         },
-        "periodicity": [True, True, True],
+        "periodicity": list(lattice.pbc),
         "sites": sites,
     }
 

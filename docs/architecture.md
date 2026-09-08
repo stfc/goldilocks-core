@@ -64,6 +64,10 @@ remain validating dataclasses.
 `PresetSelection` or `RecordSelection`. `Service.compute` dispatches it
 concurrently over a process-owned `Runtime`; shared model backends
 synchronize only their first lazy load, so model state is safe to reuse.
+Publication in `runtime/models.py` uses the identity and legal references cached
+with each loaded model, rather than re-reading a changed registry. The QRF feature
+classifier and the standalone metallicity classifier retain separate snapshots;
+unused models are not loaded for publication.
 `recommend` and `generate` are DAG Preset IDs only.
 
 ```python

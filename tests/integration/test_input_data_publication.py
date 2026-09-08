@@ -6,8 +6,10 @@ import json
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from importlib import resources
 from pathlib import Path
 
+import numpy as np
 import pytest
 from pymatgen.core import Lattice, Structure
 
@@ -24,8 +26,8 @@ from goldilocks_core import (
 )
 from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.input_data import DftInputData, input_data_portable
+from goldilocks_core.kmesh.resolve import KPointSelection
 from goldilocks_core.ml.models import ModelSpec, load_default_qrf_config
-from goldilocks_core.provenance import Provenance
 from goldilocks_core.pseudo.installed import write_table_manifest
 from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
 from goldilocks_core.pseudo.registry import load_tables
@@ -443,8 +445,12 @@ files = [
 
 def _stub_metallicity(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "goldilocks_core.runtime.models.MetallicityModel.__call__",
-        lambda self, structure: ("insulator", "model", 0.9),
+        "goldilocks_core.ml.qrf.metallicity.load_metallicity_model",
+        lambda path: object(),
+    )
+    monkeypatch.setattr(
+        "goldilocks_core.ml.qrf.metallicity.classify_metallicity",
+        lambda structure, model, atom_init, **settings: ("insulator", 0.9),
     )
 
 
@@ -455,10 +461,17 @@ def test_only_used_model_identities_licences_and_citations_are_published(
     _stub_metallicity(monkeypatch)
     store = AssetStore(tmp_path / "model-assets")
     expected_licences: dict[str, bytes] = {}
+    registry = tmp_path / "models.toml"
+    original_registry = (
+        resources.files("goldilocks_core.ml")
+        .joinpath("registry.toml")
+        .read_text(encoding="utf-8")
+    )
+    registry.write_text(original_registry, encoding="utf-8")
     config = load_default_qrf_config()
     specs = (config.model_asset, config.metallicity_asset)
     used_specs = specs[1:] if hinted else specs
-    for spec in specs:
+    for spec in used_specs:
         contents = {
             file.path: (
                 f"Exact licence for {spec.id}@{spec.version}\n".encode()
@@ -468,36 +481,42 @@ def test_only_used_model_identities_licences_and_citations_are_published(
             for file in spec.files
         }
         _create_installed_asset(store, spec, contents)
-        if spec in used_specs:
-            expected_licences[
-                f"licences/{spec.id.replace('/', '_')}-{spec.version}.md"
-            ] = next(
-                contents[file.path] for file in spec.files if file.role == "licence"
-            )
+        expected_licences[f"licences/{spec.id.replace('/', '_')}-{spec.version}.md"] = (
+            next(contents[file.path] for file in spec.files if file.role == "licence")
+        )
 
-    def predict(self, structure: Structure) -> JsonDict:
-        del self, structure
-        return {
-            "grid": [4, 4, 4],
-            "shift": [0, 0, 0],
-            "mesh_type": "monkhorst-pack",
-            "provenance": Provenance(
-                source="model",
-                reason="Fixture model prediction.",
-                data_source="fixture-qrf",
-            ),
-        }
+    class QuantileModel:
+        def predict(self, features):
+            return [[0.2], [0.25], [0.3]]
 
-    monkeypatch.setattr("goldilocks_core.advice.kdistance.QrfBackend.__call__", predict)
+    monkeypatch.setattr(
+        "goldilocks_core.ml.models.load_model", lambda spec: QuantileModel()
+    )
+    monkeypatch.setattr(
+        "goldilocks_core.ml.qrf.features.extract_qrf_features",
+        lambda structure, model, atom_init, settings: (np.zeros(1), ["fixture"]),
+    )
     request = _explicit_request(tmp_path, "model-Si.UPF")
     if not hinted:
         request = replace(
             request,
             draft=replace(request.draft, hints=CalculationHints(pseudo_type="NC")),
         )
-    with Runtime(asset_store=store) as runtime:
+    with Runtime(asset_store=store, registry_path=registry) as runtime:
         with Service(runtime) as service:
+            first = service.compute(request)
+            registry.write_text(
+                original_registry.replace("QRF95", "QRF96")
+                .replace('version = "1"', 'version = "2"')
+                .replace("Elena Patyukova", "Changed registry author"),
+                encoding="utf-8",
+            )
             result = service.compute(request)
+
+    assert result.records[KPointSelection] == first.records[KPointSelection]
+    assert Publisher().files(result.records[DftInputData]) == Publisher().files(
+        first.records[DftInputData]
+    )
 
     input_data = result.records[DftInputData]
     store.root.rename(tmp_path / "offline-model-assets")
@@ -529,6 +548,73 @@ def test_only_used_model_identities_licences_and_citations_are_published(
     }
     assert len(input_data["citations"]) == len(set(input_data["citations"]))
     assert str(store.root) not in json.dumps(input_data_portable(input_data))
+
+
+def test_staggered_model_loads_publish_both_classifier_snapshots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_metallicity(monkeypatch)
+    config = load_default_qrf_config()
+    store = AssetStore(tmp_path / "assets")
+    for spec in (config.model_asset, config.metallicity_asset):
+        _create_installed_asset(
+            store,
+            spec,
+            {file.path: f"Fixture {file.role}\n".encode() for file in spec.files},
+        )
+    registry = tmp_path / "models.toml"
+    original = (
+        resources.files("goldilocks_core.ml")
+        .joinpath("registry.toml")
+        .read_text(encoding="utf-8")
+    )
+    registry.write_text(original, encoding="utf-8")
+
+    class QuantileModel:
+        def predict(self, features):
+            return [[0.2], [0.25], [0.3]]
+
+    monkeypatch.setattr(
+        "goldilocks_core.ml.models.load_model", lambda spec: QuantileModel()
+    )
+    monkeypatch.setattr(
+        "goldilocks_core.ml.qrf.features.extract_qrf_features",
+        lambda structure, model, atom_init, settings: (np.zeros(1), ["fixture"]),
+    )
+    request = _explicit_request(tmp_path)
+    with Runtime(asset_store=store, registry_path=registry) as runtime:
+        with Service(runtime) as service:
+            service.compute(request)
+            registry.write_text(
+                original.replace(
+                    'name = "metallicity-goldilocks-CGCNN"',
+                    'name = "updated-classifier"',
+                ),
+                encoding="utf-8",
+            )
+            result = service.compute(
+                replace(
+                    request,
+                    draft=replace(
+                        request.draft, hints=CalculationHints(pseudo_type="NC")
+                    ),
+                )
+            )
+
+    published = Publisher().files(result.records[DftInputData])
+    files = {item["path"]: item["content"] for item in published}
+    assert len(files) == len(published)
+    manifest = json.loads(files["goldilocks.json"])
+    assert {model["name"] for model in manifest["runtime"]["models"]} == {
+        config.model.name,
+        config.metallicity_model.name,
+        "updated-classifier",
+    }
+    assert {asset["id"] for asset in manifest["runtime"]["assets"]} == {
+        config.model_asset.id,
+        config.metallicity_asset.id,
+    }
+    assert len(manifest["runtime"]["assets"]) == 2
 
 
 @pytest.mark.parametrize("missing_legal", [False, True])

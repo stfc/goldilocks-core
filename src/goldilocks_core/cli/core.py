@@ -211,6 +211,18 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
         "--model-version",
         help="Model version recorded in metadata when --model is used.",
     )
+    parser.add_argument(
+        "--model-licence",
+        help="Licence identifier for the local model (required for publication).",
+    )
+    parser.add_argument(
+        "--model-licence-file",
+        help="UTF-8 licence text file for the local model (required for publication).",
+    )
+    parser.add_argument(
+        "--model-citation",
+        help="Citation for the local model (required for publication).",
+    )
     parser.add_argument("--k-spacing", type=float)
     parser.add_argument(
         "--k-grid",
@@ -258,6 +270,14 @@ def _request_from_args(args: argparse.Namespace) -> ComputeRequest:
         records = [name.strip() for name in args.outputs.split(",")]
         if any(not name for name in records):
             raise ValueError("--outputs must contain comma-separated record type ids")
+    licence_text = None
+    if args.model_licence_file is not None:
+        try:
+            licence_text = (
+                Path(args.model_licence_file).expanduser().read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeError) as error:
+            raise ValueError(f"Cannot read --model-licence-file: {error}") from error
     return ComputeRequest.from_local(
         args.structure,
         preset=args.preset,
@@ -288,6 +308,9 @@ def _request_from_args(args: argparse.Namespace) -> ComputeRequest:
         model=args.model,
         model_name=args.model_name,
         model_version=args.model_version,
+        model_licence=args.model_licence,
+        model_licence_text=licence_text,
+        model_citation=args.model_citation,
     )
 
 
@@ -340,6 +363,9 @@ def _validate_backend_options(args: argparse.Namespace) -> None:
         for option, value in (
             ("--model-name", args.model_name),
             ("--model-version", args.model_version),
+            ("--model-licence", args.model_licence),
+            ("--model-licence-file", args.model_licence_file),
+            ("--model-citation", args.model_citation),
         )
         if value is not None
     ]

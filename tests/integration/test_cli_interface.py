@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from goldilocks_core.cli import core
+from goldilocks_core.cli.core import main
 from goldilocks_core.examples.structures import structure
 from goldilocks_core.pseudo import pp_registry
 
@@ -168,7 +168,7 @@ def test_cli_pseudo_ingestion_programming_error_propagates(
     )
 
     with pytest.raises(ValueError, match="unexpected parser bug"):
-        core.main()
+        main()
 
 
 def test_cli_compute_preset_returns_canonical_memory_result(tmp_path: Path) -> None:
@@ -249,6 +249,108 @@ def test_cli_compute_publishes_an_explicit_directory(tmp_path: Path) -> None:
     assert result["publication"]["path"] == str(destination)
     assert (destination / "inputs" / "qe.in").is_file()
     assert (destination / "goldilocks.json").is_file()
+
+
+@pytest.mark.parametrize("legal_material", ["complete", "absent", "blank"])
+def test_cli_local_model_publication_requires_explicit_legal_material(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    legal_material: str,
+) -> None:
+    pseudo_root = _pseudo_root(tmp_path / "pseudos")
+    destination = tmp_path / "ready"
+    monkeypatch.setenv("GOLDILOCKS_ASSET_ROOT", str(tmp_path / "empty-assets"))
+    monkeypatch.setattr(
+        "goldilocks_core.advice.kindex.predict_kindex",
+        lambda structure, spec: 1.0,
+    )
+    arguments = [
+        "goldilocks",
+        "compute",
+        str(structure("Si.cif")),
+        "--preset",
+        "generate",
+        "--pseudo-root",
+        str(pseudo_root),
+        "--model",
+        str(tmp_path / "operator.joblib"),
+        "--model-name",
+        "operator-kmesh",
+        "--model-version",
+        "2026",
+        "--out",
+        str(destination),
+        "--json",
+    ]
+    if legal_material != "absent":
+        licence_file = tmp_path / "MODEL-LICENSE.txt"
+        licence_file.write_text(
+            "Operator redistribution terms.\n"
+            if legal_material == "complete"
+            else " \n",
+            encoding="utf-8",
+        )
+        arguments.extend(
+            [
+                "--model-licence",
+                "LicenseRef-Operator",
+                "--model-licence-file",
+                str(licence_file),
+                "--model-citation",
+                "Operator k-mesh model (2026).",
+            ]
+        )
+    monkeypatch.setattr(sys, "argv", arguments)
+    if legal_material != "complete":
+        with pytest.raises(SystemExit) as error:
+            main()
+        assert error.value.code == 2
+        assert not destination.exists()
+        return
+
+    main()
+    result = json.loads(capsys.readouterr().out)
+    assert result["publication"]["path"] == str(destination)
+    manifest = json.loads((destination / "goldilocks.json").read_text())
+    assert (
+        manifest["records"]["k_points"]["provenance"]["data_source"] == "operator-kmesh"
+    )
+    assert [
+        (model["name"], model["version"], model["licence"])
+        for model in manifest["runtime"]["models"]
+    ] == [("operator-kmesh", "2026", "LicenseRef-Operator")]
+    assert (
+        destination / "licences" / "custom-kmesh-model.txt"
+    ).read_text() == "Operator redistribution terms.\n"
+    assert "Operator k-mesh model (2026)." in (destination / "CITATIONS.md").read_text()
+
+
+@pytest.mark.parametrize(
+    "option", ["--model-licence", "--model-licence-file", "--model-citation"]
+)
+def test_cli_rejects_model_legal_options_without_a_model(
+    option: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "goldilocks",
+            "compute",
+            str(structure("Si.cif")),
+            "--preset",
+            "generate",
+            option,
+            "operator-metadata",
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 2
+    assert "--model" in capsys.readouterr().err
 
 
 def test_cli_human_compute_summary_reports_science_and_publication(

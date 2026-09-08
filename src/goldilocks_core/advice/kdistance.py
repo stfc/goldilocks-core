@@ -88,6 +88,11 @@ class QrfBackend:
             confidence=prediction.confidence,
         )
 
+    @property
+    def loaded_config(self) -> QrfKpointsConfig | None:
+        """Registry snapshot belonging to the loaded prediction resources."""
+        return self._config if self._resources is not None else None
+
     def reset(self) -> None:
         with self._load_lock:
             self._resources = None

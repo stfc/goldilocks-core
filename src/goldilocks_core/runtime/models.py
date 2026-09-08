@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib.metadata import version
 from pathlib import Path
 from threading import Lock
@@ -14,11 +14,23 @@ from goldilocks_core.advice.kindex import ml_kmesh_advisor
 from goldilocks_core.analysis import StructureAnalysisRecord, heuristic_metallicity
 from goldilocks_core.assets.records import AssetSpec
 from goldilocks_core.assets.store import AssetNotInstalled, AssetStore
+from goldilocks_core.failures import ExpectedFailure
 from goldilocks_core.generation.files import InputArtifact
 from goldilocks_core.kmesh.resolve import KMeshAdvisor, KPointSelection
-from goldilocks_core.ml.models import ModelSpec, load_default_qrf_config
+from goldilocks_core.ml.models import (
+    ModelSpec,
+    QrfKpointsConfig,
+    load_default_qrf_config,
+)
 from goldilocks_core.serialization import Portable, to_portable
 from goldilocks_core.types import ElectronicCharacter, JsonDict, PathLike
+
+
+class ModelMetadataError(ExpectedFailure, ValueError):
+    """A local model lacks the legal metadata required for publication."""
+
+    kind = "invalid_model_metadata"
+    category = "local"
 
 
 class RuntimeAssetIdentity(TypedDict):
@@ -118,6 +130,11 @@ class MetallicityModel:
         )
         return character, "model", confidence
 
+    @property
+    def loaded_config(self) -> QrfKpointsConfig | None:
+        """Registry snapshot belonging to the loaded classifier."""
+        return self._config if self._model is not None else None
+
     def reset(self) -> None:
         with self._load_lock:
             self._model = None
@@ -211,7 +228,7 @@ class Runtime:
                     or not getattr(model, field).strip()
                 ]
                 if missing:
-                    raise ValueError(
+                    raise ModelMetadataError(
                         f"Model {model.name!r} used for publication must declare "
                         "non-empty licence, licence_text, and citation"
                     )
@@ -227,6 +244,13 @@ class Runtime:
 
             citations.append(model.citation)
             installed = self._asset_store.resolve_spec(material.asset)
+            identity: RuntimeAssetIdentity = {
+                "id": installed.id,
+                "version": installed.version,
+                "preparation_fingerprint": installed.preparation_fingerprint,
+            }
+            if identity in identities:
+                continue
             licence = next(
                 file for file in material.asset.files if file.role == "licence"
             )
@@ -239,13 +263,7 @@ class Runtime:
                     "content": installed.read_bytes(licence.path),
                 }
             )
-            identities.append(
-                {
-                    "id": installed.id,
-                    "version": installed.version,
-                    "preparation_fingerprint": installed.preparation_fingerprint,
-                }
-            )
+            identities.append(identity)
         return RuntimeMaterial(
             tuple(artifacts),
             {
@@ -262,59 +280,61 @@ class Runtime:
         k_points: KPointSelection,
         kmesh_model: ModelSpec | None,
     ) -> tuple[_ModelMaterial, ...]:
-        kpoints_uses_model = k_points["provenance"].source == "model"
-        analysis_uses_model = analysis["electronic_character_source"] == "model"
-        if not kpoints_uses_model and not analysis_uses_model:
-            return ()
-
-        default_kmesh_used = (
-            kpoints_uses_model
-            and kmesh_model is None
-            and self._uses_default_kmesh_model
-        )
-        needs_metallicity = analysis_uses_model or default_kmesh_used
-        needs_registry = default_kmesh_used or (
-            needs_metallicity and self._metallicity_model_spec is None
-        )
         config = (
-            load_default_qrf_config(self._registry_path) if needs_registry else None
+            self._backend.loaded_config
+            if self._uses_default_kmesh_model and isinstance(self._backend, QrfBackend)
+            else None
         )
         materials: list[_ModelMaterial] = []
-        if kpoints_uses_model:
+        if k_points["provenance"].source == "model":
             if kmesh_model is not None:
                 materials.append(
                     _ModelMaterial(kmesh_model, None, "licences/custom-kmesh-model.txt")
                 )
-            elif self._uses_default_kmesh_model:
+            elif config is not None:
                 materials.append(
                     _ModelMaterial(
                         config.model, config.model_asset, "licences/k-point-model.txt"
                     )
                 )
+                # QRF uses its own classifier resources for feature extraction.
+                materials.append(self._metallicity_material(config))
             else:
                 raise ValueError(
-                    "Custom KMeshService produced a model result without identity; "
+                    "KMeshService produced a model result without loaded identity; "
                     "supply a CalculationDraft.kmesh_model with explicit licence and "
                     "citation material"
                 )
-        if needs_metallicity:
-            if self._metallicity_model_spec is None:
-                materials.append(
-                    _ModelMaterial(
-                        config.metallicity_model,
-                        config.metallicity_asset,
-                        "licences/metallicity-model.txt",
+        if analysis["electronic_character_source"] == "model":
+            material = self._metallicity_material(self._metallicity.loaded_config)
+            if material not in materials:
+                if material.asset is None and any(
+                    item.licence_path == material.licence_path for item in materials
+                ):
+                    material = replace(
+                        material, licence_path="licences/analysis-metallicity-model.txt"
                     )
-                )
-            else:
-                materials.append(
-                    _ModelMaterial(
-                        self._metallicity_model_spec,
-                        None,
-                        "licences/custom-metallicity-model.txt",
-                    )
-                )
+                materials.append(material)
         return tuple(materials)
+
+    def _metallicity_material(self, config: QrfKpointsConfig | None) -> _ModelMaterial:
+        if self._metallicity_model_spec is not None:
+            return _ModelMaterial(
+                self._metallicity_model_spec,
+                None,
+                "licences/custom-metallicity-model.txt",
+            )
+        if config is not None:
+            return _ModelMaterial(
+                config.metallicity_model,
+                config.metallicity_asset,
+                "licences/metallicity-model.txt",
+            )
+        raise ValueError(
+            "Metallicity classifier produced a model result without loaded identity; "
+            "supply Runtime(metallicity_model=ModelSpec(...)) with explicit licence "
+            "and citation material"
+        )
 
     def describe_models(self) -> list[dict[str, str | None]]:
         config = load_default_qrf_config(self._registry_path)

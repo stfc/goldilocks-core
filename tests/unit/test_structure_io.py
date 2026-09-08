@@ -34,7 +34,9 @@ def test_sources_preserve_structure_and_source_provenance(
         InMemoryStructureSource(silicon_structure),
     )
     inspections = [service.inspect_structure(source) for source in sources]
-    for inspection, origin in zip(inspections, ("inline", "path", "generated")):
+    for inspection, origin in zip(
+        inspections, ("inline", "path", "generated"), strict=True
+    ):
         canonical = Structure.from_str(inspection["canonical_cif"], fmt="cif")
         assert canonical.matches(silicon_structure)
         assert inspection["source"]["origin"] == origin

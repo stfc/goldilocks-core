@@ -98,33 +98,27 @@ def test_computations_and_discovery_are_not_serialized() -> None:
     with (
         Runtime(kmesh_service=BlockingBackend()) as runtime,
         Service(runtime) as service,
+        ThreadPoolExecutor(max_workers=3) as pool,
     ):
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            computations = [pool.submit(service.compute, request) for _ in range(2)]
-            try:
-                entered.wait(timeout=2)
-                capabilities = pool.submit(service.capabilities)
-                assert (
-                    capabilities.result(timeout=0.5)["tasks"][0]["id"]
-                    == "scf_single_point"
-                )
-                inspection = pool.submit(
-                    service.inspect_structure, request.draft.structure
-                )
-                assert (
-                    inspection.result(timeout=0.5)["structure"]["reduced_formula"]
-                    == "Si"
-                )
-            finally:
-                release.set()
-            for computation in computations:
-                assert computation.result(timeout=2).records[KPointSelection][
-                    "grid"
-                ] == [
-                    2,
-                    2,
-                    2,
-                ]
+        computations = [pool.submit(service.compute, request) for _ in range(2)]
+        try:
+            entered.wait(timeout=2)
+            capabilities = pool.submit(service.capabilities)
+            assert (
+                capabilities.result(timeout=0.5)["tasks"][0]["id"] == "scf_single_point"
+            )
+            inspection = pool.submit(service.inspect_structure, request.draft.structure)
+            assert (
+                inspection.result(timeout=0.5)["structure"]["reduced_formula"] == "Si"
+            )
+        finally:
+            release.set()
+        for computation in computations:
+            assert computation.result(timeout=2).records[KPointSelection]["grid"] == [
+                2,
+                2,
+                2,
+            ]
 
 
 def test_concurrent_first_computations_wait_for_default_task_registration(

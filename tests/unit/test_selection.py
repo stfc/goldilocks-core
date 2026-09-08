@@ -1,3 +1,6 @@
+from dataclasses import replace
+
+import pytest
 from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.contracts import (
@@ -225,6 +228,34 @@ def test_pseudo_type_and_relativistic_treatment_are_required() -> None:
     assert "matches type NC" in wrong_type.warnings[0]
     assert wrong_relativistic.pseudopotentials[0].filename is None
     assert "scalar PBEsol" in wrong_relativistic.warnings[0]
+
+
+@pytest.mark.parametrize(
+    ("provider", "table_treatment"),
+    [
+        ("custom", "scalar"),
+        ("pseudodojo", None),
+        ("pseudodojo", "full"),
+    ],
+)
+def test_nr_requires_curated_scalar_table_for_scalar_selection(
+    provider: str | None, table_treatment: str | None
+) -> None:
+    metadata = replace(
+        make_metadata(provider=provider, relativistic="non-relativistic"),
+        pseudo_info=(
+            {} if table_treatment is None else {"table_relativistic": table_treatment}
+        ),
+    )
+
+    selection = select_pseudopotentials(
+        make_structure("Si"),
+        make_requirements(relativistic="scalar"),
+        [metadata],
+    )
+
+    assert selection.pseudopotentials[0].filename is None
+    assert "scalar PBEsol" in selection.warnings[0]
 
 
 def test_frozen_4f_core_warning_survives_selection() -> None:

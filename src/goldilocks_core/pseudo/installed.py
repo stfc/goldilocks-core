@@ -180,6 +180,7 @@ def load_installed_table(
                     frozen_4f_core=entry["frozen_4f_core"],
                     pseudo_info={
                         "table_version": data["version"],
+                        "table_relativistic": relativistic,
                         "licence": licence,
                         "citation": citation,
                         "upf_relativistic": entry.get("upf_relativistic", relativistic),

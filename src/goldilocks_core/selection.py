@@ -58,7 +58,7 @@ def _select_for_element(
             requirements.pseudo_type is None
             or item.pseudo_type == requirements.pseudo_type
         )
-        and item.relativistic == requirements.relativistic
+        and _relativistic_compatible(item, requirements)
     ]
     if element in LANTHANIDES or element in ACTINIDES:
         candidates = [item for item in candidates if item.provider == "sssp"]
@@ -108,6 +108,20 @@ def _select_for_element(
             warnings=warnings,
         ),
         warnings=warnings,
+    )
+
+
+def _relativistic_compatible(
+    metadata: PseudoMetadata,
+    requirements: PseudopotentialRequirements,
+) -> bool:
+    # Curated scalar tables may contain NR files; custom NR files do not imply
+    # scalar compatibility, and table classification must not overwrite UPF facts.
+    return metadata.relativistic == requirements.relativistic or (
+        requirements.relativistic == "scalar"
+        and metadata.relativistic == "non-relativistic"
+        and metadata.provider in {"pseudodojo", "sssp"}
+        and metadata.pseudo_info.get("table_relativistic") == "scalar"
     )
 
 
@@ -191,7 +205,7 @@ def _missing_pseudo_reason(
         )
 
     relativistic = [
-        item for item in functional if item.relativistic == requirements.relativistic
+        item for item in functional if _relativistic_compatible(item, requirements)
     ]
     if not relativistic:
         return (

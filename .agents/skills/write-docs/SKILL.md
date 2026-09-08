@@ -39,12 +39,12 @@ Primary docs:
 
    - `Service` implements Capabilities, Structure Inspection, and Compute.
    - `compute(ComputeRequest)` is the short-lived Python convenience.
-   - Python selects recommendation and generation through Preset IDs.
-   - The existing CLI implements `recommend`, `generate`, `compute`, `serve`,
-     `examples`, and explicit `assets` lifecycle commands.
-   - Optional `[http]` and `[mcp]` transports retain preset/query interfaces
-     over one process-owned Service.
-   - Directory output writes generated inputs and their manifest.
+   - `recommend` and `generate` are Preset IDs, not operations.
+   - The unified `goldilocks` CLI implements `capabilities`, `inspect`,
+     `compute`, `serve`, `examples`, and explicit `assets` lifecycle commands.
+   - Optional `[http]` and `[mcp]` transports expose the same three scientific
+     operations over one process-owned Service.
+   - One publisher creates complete Ready-to-run Output directories and ZIPs.
    - DFT execution, AiiDA, authentication, sessions, and saved Workspaces are
      out of scope.
 
@@ -55,6 +55,7 @@ Primary docs:
    Load -> Kmesh
    Load + Advice -> Select
    Load + Advice + Select + Kmesh -> Generate
+   Analysis + Advice + Kmesh + Select + Generate -> DFT Input Data
    ```
 
 4. Keep package ownership consistent.
@@ -64,14 +65,16 @@ Primary docs:
    runtime/graph.py      -> type-keyed DAG execution
    runtime/dispatch.py   -> Calculation Task registry and Compute dispatch
    runtime/models.py     -> model lifecycle
-   runtime/service.py    -> reusable operations and generated-input bundles
+   runtime/service.py    -> reusable operations, locking, and publication
    runtime/jobs.py       -> short-lived Compute convenience
    io/structures.py      -> Structure Source normalization and Inspection
    runtime/capabilities.py -> coherent catalog snapshot
-   bundle.py             -> generated-input directory and manifest
+   input_data.py         -> complete DFT Input Data assembly
+   publication.py        -> one directory/ZIP output layout
    server/request.py     -> shared transport deserializer
    server/http*.py       -> optional HTTP adapter
    server/mcp.py         -> optional local stdio MCP adapter
+   web/                  -> generated OpenAPI and TypeScript HTTP contracts
    analysis.py           -> structure facts
    advice/               -> provenance-backed recommendations
    kmesh/                -> k-point resolution

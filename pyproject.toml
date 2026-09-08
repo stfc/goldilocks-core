@@ -29,8 +29,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-http = ["fastapi", "uvicorn"]
-mcp = ["mcp"]
+http = ["fastapi", "pydantic>=2.12", "uvicorn"]
+mcp = ["mcp", "pydantic>=2.12"]
 
 [project.scripts]
 goldilocks = "goldilocks_core.cli.core:main"

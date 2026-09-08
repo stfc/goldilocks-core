@@ -37,3 +37,7 @@ plan-*.md
 # Graphify code-graph output (local only)
 graphify-out/
 graph.json
+
+# Generated transport contracts
+web/openapi.json
+web/src/api/schema.d.ts

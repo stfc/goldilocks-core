@@ -20,8 +20,8 @@ from goldilocks_core.assets import (
     AssetStore,
     asset_root,
 )
+from goldilocks_core.assets import runtime as asset_runtime
 from goldilocks_core.assets.download import download
-from goldilocks_core.cli import assets as asset_runtime
 
 
 def source_spec(
@@ -325,7 +325,7 @@ def test_download_fails_after_exhausted_retries(tmp_path: Path) -> None:
 
 def test_references_resolves_bare_registry_table_id() -> None:
     """The operator-facing table id resolves without the storage prefix."""
-    from goldilocks_core.cli.assets import catalogue, references
+    from goldilocks_core.assets.runtime import catalogue, references
 
     resolved = references("pseudodojo-pbesol-efficiency-sr", catalogue())
 
@@ -335,7 +335,7 @@ def test_references_resolves_bare_registry_table_id() -> None:
 
 def test_references_resolves_asset_ids_and_profiles() -> None:
     """Exact asset ids and the shipped profile keep resolving as before."""
-    from goldilocks_core.cli.assets import catalogue, references
+    from goldilocks_core.assets.runtime import catalogue, references
 
     entries = catalogue()
 
@@ -350,7 +350,7 @@ def test_references_resolves_asset_ids_and_profiles() -> None:
 
 def test_references_rejects_unknown_names() -> None:
     """A name that is no asset, table, or profile fails with guidance."""
-    from goldilocks_core.cli.assets import references
+    from goldilocks_core.assets.runtime import references
 
     with pytest.raises(KeyError, match="unknown asset 'not-a-table-or-profile'"):
         references("not-a-table-or-profile", {})

@@ -1,239 +1,122 @@
-"""Shared request deserialization for HTTP and MCP transports.
+"""Strict HTTP and MCP inputs, converted directly into native Core requests.
 
-The existing flat transport request is converted to a typed ComputeRequest.
-Unknown keys and bad types are rejected with named-field RequestError messages.
-Responses retain the preset and record-query document shapes.
-
-The parser accepts only the calculation itself: an inline Structure Source,
-the calculation intent, scientist hints, and (for queries) the requested
-record types. Deployment configuration is never request data — model and
-pseudopotential selection and output locations are resolved by the server
-from its own environment, so no transport field names server-side paths or
-loadable artifacts.
+Remote callers supply inline content and registered identities, never server
+paths, model artifacts, or publication destinations.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import fields
-from typing import Any
+from dataclasses import MISSING, fields
+from typing import Annotated, Any, Literal, get_type_hints
 
-from pymatgen.core import Structure
+from pydantic import ConfigDict, Field, ValidateAs, create_model, model_validator
 
 from goldilocks_core.contracts import (
     CalculationDraft,
     CalculationHints,
     CalculationIntent,
-    ComputationResult,
     ComputeRequest,
-    InMemoryStructureSource,
+    InlineStructureSource,
     PresetSelection,
     RecordSelection,
     resolve_output_types,
 )
 
-__all__ = ["RequestError", "from_dict", "result_to_dict"]
-
-_ALLOWED_TOP_LEVEL = frozenset(
-    {
-        "structure",
-        "intent",
-        "hints",
-        "mode",
-        "outputs",
-    }
-)
-_INTENT_FIELDS = frozenset(field.name for field in fields(CalculationIntent))
-_HINT_FIELDS = frozenset(field.name for field in fields(CalculationHints))
-_STRING_HINTS = {
-    "smearing_type",
-    "pseudo_accuracy",
-    "pseudo_type",
-    "relativistic_mode",
-    "vdw_method",
-}
-_FLOAT_HINTS = {
-    "k_spacing",
-    "smearing_width_ry",
-    "conv_thr",
-    "mixing_beta",
-}
-_BOOL_HINTS = {"spin_polarized", "spin_orbit_coupling", "use_vdw"}
+_STRICT = ConfigDict(extra="forbid", strict=True)
 
 
-class RequestError(ValueError):
-    """A malformed transport request."""
-
-
-def from_dict(data: Mapping[str, Any]) -> ComputeRequest:
-    """Parse an existing transport request into the Core computation model."""
-    if not isinstance(data, Mapping):
-        raise RequestError("Request body must be a JSON object.")
-    _reject_unknown(data, _ALLOWED_TOP_LEVEL, "request")
-    if "structure" not in data or data["structure"] is None:
-        raise RequestError("Request body requires 'structure'.")
-
-    mode = _parse_mode(data.get("mode"))
-    outputs = _parse_outputs(data.get("outputs"))
-
-    structure = _parse_structure(data["structure"])
-    intent = _parse_intent(data.get("intent"))
-    hints = _parse_hints(data.get("hints"))
-
-    return ComputeRequest(
-        draft=CalculationDraft(
-            structure=InMemoryStructureSource(structure),
-            intent=intent,
-            hints=hints,
-        ),
-        selection=(
-            RecordSelection(outputs) if outputs is not None else PresetSelection(mode)
-        ),
+def _contract_document(contract: type, **overrides: Any) -> Any:
+    hints = get_type_hints(contract)
+    definitions: dict[str, Any] = {}
+    for item in fields(contract):
+        default = (
+            Field(default_factory=item.default_factory)
+            if item.default_factory is not MISSING
+            else item.default
+            if item.default is not MISSING
+            else ...
+        )
+        definitions[item.name] = (hints[item.name], default)
+    model = create_model(
+        contract.__name__, __config__=_STRICT, **(definitions | overrides)
     )
+    return Annotated[contract, ValidateAs(model, lambda value: contract(**vars(value)))]
 
 
-def result_to_dict(result: ComputationResult) -> dict[str, Any]:
-    """Render the existing preset or record-query response document."""
-    records = result.records.to_dict()
-    if isinstance(result.selection, RecordSelection):
-        return records
-    return {
-        **records,
-        "intent": result.draft.intent.to_dict(),
-        "generated_files": records.get("generated_files", []),
-        "warnings": list(result.warnings),
-        "bundle": result.bundle.to_dict() if result.bundle is not None else None,
-    }
+IntentDocument = _contract_document(CalculationIntent)
+HintsDocument = _contract_document(CalculationHints, k_grid=(list[int] | None, None))
 
 
-def _reject_unknown(
-    data: Mapping[str, Any], allowed: frozenset[str], section: str
-) -> None:
-    unknown = sorted(set(data) - allowed)
-    if unknown:
-        raise RequestError(f"Unknown {section} fields: {', '.join(unknown)}")
-
-
-def _parse_structure(value: Any) -> Structure:
-    """Parse a Structure Source: inline content only, never a server path."""
-    if isinstance(value, str):
-        if "\n" in value or value.lstrip().startswith("data_"):
-            return _parse_structure_text(value, None)
-        raise RequestError(
-            "Field 'structure' must be inline CIF/POSCAR content; transports "
-            "do not accept file paths. Read the file and pass its text."
+def _inline_structure(value: Any) -> Any:
+    if isinstance(value, str) or (
+        isinstance(value, dict) and (value.get("kind") == "path" or "path" in value)
+    ):
+        raise ValueError(
+            "Transports do not accept file paths. Read the file and pass its "
+            "text as an inline Structure Source."
         )
-    if not isinstance(value, Mapping):
-        raise RequestError(
-            "Field 'structure' must be inline CIF/POSCAR content as a string, "
-            "a content object, or a pymatgen Structure object."
-        )
-    if (
-        value.get("@module") == "pymatgen.core.structure"
-        and value.get("@class") == "Structure"
-    ):
-        try:
-            return Structure.from_dict(dict(value))
-        except (KeyError, TypeError, ValueError) as error:
-            raise RequestError(
-                f"Could not parse pymatgen structure object: {error}"
-            ) from error
-    _reject_unknown(value, frozenset({"content", "format"}), "structure")
-    content = value.get("content")
-    fmt = value.get("format")
-    if not isinstance(content, str):
-        raise RequestError("Inline 'structure' requires a 'content' string.")
-    if fmt is not None and not isinstance(fmt, str):
-        raise RequestError("Field 'structure.format' must be a string or null.")
-    return _parse_structure_text(content, fmt)
-
-
-def _parse_structure_text(content: str, fmt: str | None) -> Structure:
-    """Parse inline CIF or POSCAR content, trying the declared format first."""
-    formats = (fmt,) if fmt is not None else ("cif", "poscar")
-    last_error: Exception | None = None
-    for structure_format in formats:
-        try:
-            return Structure.from_str(content, fmt=structure_format)
-        except (IndexError, KeyError, TypeError, ValueError) as error:
-            last_error = error
-    raise RequestError(f"Could not parse inline structure content: {last_error}")
-
-
-def _parse_intent(value: Any) -> CalculationIntent:
-    if value is None:
-        return CalculationIntent()
-    if not isinstance(value, Mapping):
-        raise RequestError("Field 'intent' must be a JSON object or null.")
-    _reject_unknown(value, _INTENT_FIELDS, "intent")
-    for name, item in value.items():
-        if not isinstance(item, str):
-            raise RequestError(f"Field 'intent.{name}' must be a string.")
-    try:
-        return CalculationIntent(**value)
-    except (TypeError, ValueError) as error:
-        raise RequestError(str(error)) from error
-
-
-def _parse_hints(value: Any) -> CalculationHints:
-    if value is None:
-        return CalculationHints()
-    if not isinstance(value, Mapping):
-        raise RequestError("Field 'hints' must be a JSON object or null.")
-    _reject_unknown(value, _HINT_FIELDS, "hints")
-    parsed = {
-        name: _parse_hint(name, item)
-        for name, item in value.items()
-        if item is not None
-    }
-    try:
-        return CalculationHints(**parsed)
-    except (TypeError, ValueError) as error:
-        raise RequestError(str(error)) from error
-
-
-def _parse_hint(name: str, value: Any) -> Any:
-    if name == "k_grid":
-        if not _is_sequence(value) or len(value) != 3:
-            raise RequestError("Field 'hints.k_grid' must be a list of three integers.")
-        if any(not isinstance(item, int) or isinstance(item, bool) for item in value):
-            raise RequestError("Field 'hints.k_grid' must be a list of three integers.")
-        return tuple(value)
-    if name in _STRING_HINTS and not isinstance(value, str):
-        raise RequestError(f"Field 'hints.{name}' must be a string or null.")
-    if name in _FLOAT_HINTS and (
-        not isinstance(value, (int, float)) or isinstance(value, bool)
-    ):
-        raise RequestError(f"Field 'hints.{name}' must be a number or null.")
-    if name in _BOOL_HINTS and not isinstance(value, bool):
-        raise RequestError(f"Field 'hints.{name}' must be a boolean or null.")
-    if name == "electron_maxstep" and (
-        not isinstance(value, int) or isinstance(value, bool)
-    ):
-        raise RequestError("Field 'hints.electron_maxstep' must be an integer or null.")
     return value
 
 
-def _parse_mode(value: Any) -> str:
-    if value is None:
-        return "recommend"
-    if not isinstance(value, str) or value not in {"recommend", "generate"}:
-        raise RequestError("Field 'mode' must be 'recommend' or 'generate'.")
-    return value
-
-
-def _parse_outputs(value: Any) -> tuple[type, ...] | None:
-    if value is None:
-        return None
-    if not _is_sequence(value):
-        raise RequestError("Field 'outputs' must be a list of record type names.")
-    if any(not isinstance(item, str) for item in value):
-        raise RequestError("Field 'outputs' must be a list of record type names.")
-    try:
-        return resolve_output_types(list(value))
-    except ValueError as error:
-        raise RequestError(str(error)) from error
-
-
-def _is_sequence(value: Any) -> bool:
-    return isinstance(value, Sequence) and not isinstance(value, (str, bytes))
+InlineStructureDocument = Annotated[
+    InlineStructureSource,
+    ValidateAs(
+        create_model(
+            "InlineStructureSource",
+            __config__=_STRICT,
+            __validators__={
+                "inline_structure": model_validator(mode="before")(_inline_structure)
+            },
+            kind=(Literal["inline"], "inline"),
+            name=(str, ...),
+            content=(str, ...),
+            format=(Literal["cif", "poscar"] | None, None),
+        ),
+        lambda value: InlineStructureSource(value.name, value.content, value.format),
+    ),
+]
+InspectRequestDocument = create_model(
+    "StructureInspectionRequest",
+    __config__=_STRICT,
+    source=(InlineStructureDocument, ...),
+)
+DraftDocument = Annotated[
+    CalculationDraft,
+    ValidateAs(
+        create_model(
+            "CalculationDraft",
+            __config__=_STRICT,
+            structure=(InlineStructureDocument, ...),
+            intent=(IntentDocument | None, None),
+            hints=(HintsDocument | None, None),
+            pseudo_table=(str | None, None),
+        ),
+        lambda value: CalculationDraft(
+            structure=value.structure,
+            intent=value.intent or CalculationIntent(),
+            hints=value.hints or CalculationHints(),
+            pseudo_table=value.pseudo_table,
+        ),
+    ),
+]
+PresetSelectionDocument = _contract_document(PresetSelection)
+RecordSelectionDocument = Annotated[
+    RecordSelection,
+    ValidateAs(
+        create_model("RecordSelection", __config__=_STRICT, records=(list[str], ...)),
+        lambda value: RecordSelection(resolve_output_types(value.records)),
+    ),
+]
+type SelectionDocument = PresetSelectionDocument | RecordSelectionDocument
+ComputeRequestDocument = Annotated[
+    ComputeRequest,
+    ValidateAs(
+        create_model(
+            "ComputeRequest",
+            __config__=_STRICT,
+            draft=(DraftDocument, ...),
+            selection=(SelectionDocument, ...),
+        ),
+        lambda value: ComputeRequest(value.draft, value.selection),
+    ),
+]

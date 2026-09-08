@@ -27,6 +27,7 @@ Load -> Analyze -> Advise
 Load -> Kmesh
 Load + Advice -> Select
 Load + Advice + Select + Kmesh -> Generate
+Analysis + Advice + Kmesh + Select + Generate -> DFT Input Data
 ```
 
 Use one `ComputeRequest` with either `PresetSelection` or `RecordSelection`.
@@ -63,20 +64,21 @@ with Service() as core:
 ```
 
 ```bash
-uv run goldilocks recommend STRUCTURE --json
-uv run goldilocks generate STRUCTURE --out RUN_DIR --json
-uv run goldilocks compute STRUCTURE --outputs analysis,k_points --k-grid 4 4 4
+uv run goldilocks capabilities --json
+uv run goldilocks inspect STRUCTURE --json
+uv run goldilocks compute STRUCTURE --preset recommend --no-out --json
+uv run goldilocks compute STRUCTURE --preset generate --out RUN_DIR --json
 ```
 
-HTTP exposes `/recommend`, `/generate`, `/compute`, `/tasks`, `/codes`, and
-`/models`; local MCP exposes `recommend`, `generate`, `compute`, `list_tasks`,
-`list_codes`, and `list_models`. Send inline structure content, intent, and
-hints. Models and pseudopotentials are server-managed; transports accept no
-filesystem or model configuration.
+HTTP exposes `/capabilities`, `/inspect`, and `/compute`; local stdio MCP exposes
+`capabilities`, `inspect_structure`, and `compute`. Send inline structure content
+and, when needed, a registered Pseudopotential Set ID. HTTP and MCP do not
+accept structure paths, local pseudopotential sources, model locations, or
+publication paths.
 
 ## Completion check
 
 For prepared input data, report the Structure Source, functional, target
 code/Task, k-grid and shift, pseudopotentials and cutoffs, smearing, spin/SOC,
-convergence controls, factual warnings, generated paths, and bundle path.
+convergence controls, factual warnings, generated paths, and publication path.
 Core prepares inputs; it does not run DFT.

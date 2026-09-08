@@ -39,9 +39,11 @@ resolution and generated-input bundle writing touch the filesystem.
 | `selection.py` | Pseudopotentials and cutoffs. |
 | `generation/` | Calculation-specific file generation. |
 | `bundle.py` | Generated-input directory bundles and their manifests. |
-| `server/request.py` | Existing transport request/response conversion around the Core computation model. |
-| `server/http.py` | Optional HTTP lifecycle, errors, and preset/query routes. |
+| `server/request.py` | Strict HTTP/MCP validation directly into native Core requests. |
+| `server/wire.py` | Mechanically derived Core response schemas. |
+| `server/http.py`, `server/http_contract.py` | Optional HTTP lifecycle, errors, and scientific route adapter. |
 | `server/mcp.py` | Optional local stdio MCP adapter. |
+| `server/readiness.py` | Cached asset readiness for the Workbench profile. |
 
 Stages communicate through dataclasses. They do not need to inherit from a Core
 class, and callers can invoke any stage function directly.
@@ -69,22 +71,25 @@ Handlers supply context and collect factual warnings.
 
 ## Transport adapters
 
-Python exposes Capabilities, Structure Inspection, and Compute. The existing CLI
-and HTTP/MCP preset/query interfaces convert their inputs to `ComputeRequest`.
-`server/request.py` retains the flat transport request and response documents;
-Core constructors validate domain values.
+Python, CLI, HTTP, and MCP expose Capabilities, Structure Inspection, and
+Compute. `server/request.py` converts strict transport shapes into Core
+contracts; Core constructors validate domain values once. Responses serialize
+Core contracts mechanically.
 
-HTTP and MCP accept inline structures and resolve pseudopotentials and models
-from the server environment. They return JSON without creating output
-directories.
+HTTP accepts inline structures and stable Pseudopotential Set IDs. Compute
+returns one multipart response containing the canonical `ComputationResult`.
+HTTP never accepts or creates a server output directory.
 HTTP Compute handlers execute concurrently over one process-owned Runtime.
 Task Graph declarations are immutable, execution state is request-local, and
 shared models synchronize only their first lazy load.
 
-HTTP and MCP never accept structure paths, pseudopotential roots or metadata
-payloads, registered table overrides, model locations, or output paths.
-Python and CLI own trusted local filesystem controls. HTTP and MCP remain
-optional imports.
+Local MCP accepts inline structures and returns Results in memory.
+HTTP and MCP may carry a stable registered
+Pseudopotential Set ID, but never structure paths, pseudopotential roots or
+metadata payloads, model locations, or publication paths. Python and CLI own
+trusted local filesystem controls. HTTP and MCP remain optional imports.
+OpenAPI is exported from the application. Committed TypeScript declarations
+are generated from that document for HTTP clients.
 
 ## Runtime assets
 
@@ -162,8 +167,8 @@ boundaries, concurrency safety, or the task extension model.
   context and stage graph; they do not edit the generic executor.
 - Importing `goldilocks_core` never imports FastAPI or the MCP SDK.
   The `[http]` and `[mcp]` extras are lazy boundaries.
-- `server/request.py` rejects unknown fields and bad transport types and
-  constructs Core computation contracts without revalidating Records.
+- `server/request.py` rejects unknown fields, bad types, and remote paths while
+  constructing native Core inputs. Handlers serialize trusted Records directly.
 - `DimensionalityClassificationError` is an `Exception`, not a
   `ValueError`, so HTTP maps it explicitly to 422.
 - MCP maps only known stage errors to `ToolError`; internal defects

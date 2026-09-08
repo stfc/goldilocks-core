@@ -44,27 +44,31 @@ print(records["selection"]["pseudopotentials"])
 print(result.warnings)
 ```
 
-`PresetSelection("generate")` also returns `generated_files`.
+`PresetSelection("generate")` also returns `generated_files` and complete
+`dft_input_data`.
 
-## Write a generated-input bundle
+## Publish Ready-to-run Output
 
 ```python
 from goldilocks_core import DirectoryOutput
 
-request = ComputeRequest(request.draft, PresetSelection("generate"))
 with Service() as core:
     result = core.compute(request, output=DirectoryOutput("run-dir"))
 
-print(result.bundle.path)
+print(result.publication.path)
 ```
 
-The destination must not exist. Use `None` for memory-only output.
-The bundle contains generated inputs and `manifest.json`; it does not copy UPFs.
+The destination must not exist. Use `ArchiveOutput("run.zip")` for ZIP,
+`DirectoryOutput()` for automatic allocation, or `None` for memory-only output.
+Directory and ZIP outputs contain the same logical files: source and canonical
+structures, inputs, selected UPFs, licences, citations, provenance, and
+checksums.
 
 CLI equivalents:
 
 ```bash
-uv run goldilocks generate structure.cif --pseudo-table pseudodojo-pbesol-efficiency-sr --k-grid 4 4 4 --out run-dir --json
+uv run goldilocks compute structure.cif --preset generate --pseudo-table pseudodojo-pbesol-efficiency-sr --k-grid 4 4 4 --out run-dir --json
+uv run goldilocks compute structure.cif --preset generate --pseudo-table pseudodojo-pbesol-efficiency-sr --k-grid 4 4 4 --archive run.zip --json
 ```
 
 ## Select Records
@@ -85,16 +89,18 @@ print(result.records[KPointSelection])
 CLI equivalent:
 
 ```bash
-uv run goldilocks compute structure.cif --outputs analysis,k_points --k-grid 4 4 4
+uv run goldilocks compute structure.cif --outputs analysis,k_points --k-grid 4 4 4 --no-out --json
 ```
 
 ## Use a local pseudopotential root
 
 ```bash
-uv run goldilocks generate structure.cif --pseudo-root pseudos --k-grid 4 4 4 --out run-dir
+uv run goldilocks compute structure.cif --preset generate --pseudo-root pseudos --k-grid 4 4 4 --out run-dir
 ```
 
-Provide real cutoff metadata beside the UPFs. Never invent missing cutoffs.
+`goldilocks-pseudopotentials.json` in the root must identify the real licence
+file and citation before Core can publish local UPFs. Never invent missing
+cutoffs or redistribution terms.
 
 ## Use a local k-point model
 
@@ -123,6 +129,7 @@ request = ComputeRequest(
 )
 ```
 
+Publishable model-backed Results require licence and citation identity.
 
 ## Optional transports
 
@@ -132,7 +139,9 @@ uv run goldilocks serve http --host 127.0.0.1 --port 8000
 uv run goldilocks serve mcp
 ```
 
-HTTP and MCP accept inline structure content, intent, and hints through their
-preset/query interfaces. They return JSON and reuse one process-owned `Service`.
-Neither accepts structure paths, pseudopotential source overrides, model
-locations, or output paths.
+HTTP accepts inline Structure Sources and returns one multipart response with
+reviewed Result JSON and its exact optional ZIP. Local MCP accepts inline
+content and either publishes automatically to a server-chosen directory or
+keeps the Result in memory. Both may select a registered pseudopotential table
+by stable ID. Neither accepts structure paths, pseudopotential roots, model
+locations, or publication paths. Both reuse one process-owned `Service`.

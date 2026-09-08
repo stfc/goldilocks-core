@@ -29,6 +29,18 @@ uv run --extra http poe stage
 
 Then open **http://127.0.0.1:8000**.
 
+## Run in Docker
+
+Alternatively, build and run from the repository root:
+
+```bash
+docker build --tag goldilocks-workbench .
+docker run --rm --publish 127.0.0.1:8000:8000 goldilocks-workbench
+```
+
+Open **http://127.0.0.1:8000**. The image includes the frontend and runtime
+assets. The anonymous HTTP server is intended for trusted networks.
+
 ## Development
 
 ```bash

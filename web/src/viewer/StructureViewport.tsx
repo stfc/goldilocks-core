@@ -134,7 +134,6 @@ export function StructureViewport({
             </Text>
           ) : null}
           <Button
-            variant="subtle"
             fullWidth
             styles={{ label: { whiteSpace: "normal" } }}
             onClick={() => {

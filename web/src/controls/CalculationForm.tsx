@@ -144,7 +144,9 @@ export function CalculationForm({
       <NativeSelect
         label="Pseudopotential table"
         disabled={inspecting}
-        aria-describedby="pseudo-table-help"
+        aria-describedby={
+          matchingTables.length === 0 ? "pseudo-table-help" : undefined
+        }
         value={draft.pseudo_table ?? ""}
         onChange={(event) => {
           const table = matchingTables.find(
@@ -173,13 +175,7 @@ export function CalculationForm({
           No registered table supports this structure with these settings.
           Choose another functional or accuracy.
         </Text>
-      ) : (
-        <Text id="pseudo-table-help" c="dimmed" size="sm">
-          The table sets pseudopotential relativistic treatment, not spin-orbit
-          coupling. Automatic lets Core choose; changing functional or accuracy
-          resets both the table and its treatment.
-        </Text>
-      )}
+      ) : null}
 
       <ScientificOverrides hints={hints} inspecting={inspecting} />
 

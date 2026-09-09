@@ -62,5 +62,10 @@
     "typescript-eslint": "8.67.0",
     "vite": "8.2.2",
     "vitest": "4.1.11"
+  },
+  "overrides": {
+    "@redocly/openapi-core": {
+      "js-yaml": "4.3.2"
+    }
   }
 }

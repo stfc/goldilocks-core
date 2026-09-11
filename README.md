@@ -56,6 +56,17 @@ Treat the recommended settings as a starting point: review warnings and check
 convergence for your calculation. The [quickstart](docs/quickstart.md) explains
 the output and how to run it.
 
+## Run the Workbench from a container
+
+Images are hosted on the GitHub Container Registry: `latest` tracks the
+newest release, `nightly` tracks `main` (rebuilds daily).
+
+```bash
+docker run --publish 8000:8000 ghcr.io/stfc/goldilocks-workbench:latest
+```
+
+Then open **http://127.0.0.1:8000**.
+
 ## Guides and reference
 
 - [First calculation](docs/quickstart.md) — generate, check, and run an input.

@@ -15,6 +15,12 @@ uv run pre-commit run --all-files
 
 Run `pre-commit` before committing. CI (on `main` and PRs) runs Ruff, pytest with branch coverage, focused mutation testing, and distribution validation — all via `uv`.
 
+## Releases and versioning
+
+- One version for the repository: `pyproject.toml` owns it. `web/package.json` is vestigial; the Workbench frontend ships inside the image.
+- Publishing is gated on `v*` tags and the nightly schedule, never on merges to `main` or PRs. Bump the version in a merged PR, then tag from `main`: tag must equal the `pyproject.toml` version (nothing else validates the pairing).
+- Published artifacts: GHCR image `ghcr.io/stfc/goldilocks-workbench` (semver + `latest` on tags; `nightly` from the daily schedule; `sha-<ref>` on manual dispatch) and sdist+wheel as GitHub Release assets. The Python package is never published to PyPI.
+
 ## Code style
 
 - Ruff `E`, `F`, `I`. Target Python 3.12.

@@ -39,7 +39,9 @@ CI runs the full suite on the tagged commit, then pushes
 and creates a GitHub Release containing the sdist and wheel. Nightly builds of
 `main` publish `nightly` and `nightly-<date>` image tags at 03:00 UTC; PRs and
 plain `main` pushes publish nothing. Keep the tag and `pyproject.toml` version
-identical — nothing else validates the pairing.
+identical — nothing else validates the pairing. The first publish creates the
+container package private; flip it to public once in the package settings so
+anonymous pulls work.
 
 ## Follow a request
 

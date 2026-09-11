@@ -58,16 +58,14 @@ the output and how to run it.
 
 ## Run the Workbench from a container
 
-CI publishes the built image to GitHub Container Registry: `latest` tracks the
-newest release, `nightly` tracks `main` (rebuilds daily). The image bundles the
-model assets, so no `assets install` step is needed:
+Images are hosted on the GitHub Container Registry: `latest` tracks the
+newest release, `nightly` tracks `main` (rebuilds daily).
 
 ```bash
 docker run --publish 8000:8000 ghcr.io/stfc/goldilocks-workbench:latest
 ```
 
-Then open **http://127.0.0.1:8000**. The Python package is distributed as
-sdist and wheel assets on the repository's GitHub Releases, not on PyPI.
+Then open **http://127.0.0.1:8000**.
 
 ## Guides and reference
 

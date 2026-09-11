@@ -56,6 +56,30 @@ Treat the recommended settings as a starting point: review warnings and check
 convergence for your calculation. The [quickstart](docs/quickstart.md) explains
 the output and how to run it.
 
+## Run the Workbench from a container
+
+CI publishes the built Workbench image to GitHub Container Registry on every
+version tag and nightly:
+
+```bash
+docker pull ghcr.io/stfc/goldilocks-workbench:0.1.0
+```
+
+Choose a tag: version numbers (`0.1.0`, rolling `0.1`, `0`, `latest`) track
+GitHub releases, `nightly` tracks `main` (rebuilds at 03:00 UTC daily), and
+`nightly-<date>` or `sha-<ref>` pins an exact build. The image is private;
+authenticate before pulling:
+
+```bash
+docker login ghcr.io -u <github-username> -p <token-with-read-packages>
+docker run --publish 8000:8000 ghcr.io/stfc/goldilocks-workbench:0.1.0
+```
+
+Then open **http://127.0.0.1:8000**. The image bundles the models and
+pseudopotential tables, so `assets install` is not needed. The Python package
+is not published to PyPI; download the sdist or wheel from the repository's
+GitHub Releases page.
+
 ## Guides and reference
 
 - [First calculation](docs/quickstart.md) — generate, check, and run an input.

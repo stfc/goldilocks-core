@@ -19,6 +19,28 @@ uv run poe check
 and pytest with branch coverage. For frontend checks and API-schema refresh, follow the
 [Workbench guide](../web/README.md).
 
+## Cut a release
+
+One version covers the repository: `pyproject.toml` owns it, and the Workbench
+frontend ships inside the same image rather than carrying its own version.
+Treat API/schema changes (the OpenAPI export) as at least a minor bump during
+`0.x`; frontend-only fixes can be patches.
+
+To publish, merge a PR that bumps `pyproject.toml` to the release version, then
+from `main`:
+
+```bash
+git tag -a v0.1.0 -m "v0.1.0"
+git push origin v0.1.0
+```
+
+CI runs the full suite on the tagged commit, then pushes
+`ghcr.io/stfc/goldilocks-workbench` with `X.Y.Z`, `X.Y`, `X`, and `latest` tags,
+and creates a GitHub Release containing the sdist and wheel. Nightly builds of
+`main` publish `nightly` and `nightly-<date>` image tags at 03:00 UTC; PRs and
+plain `main` pushes publish nothing. Keep the tag and `pyproject.toml` version
+identical — nothing else validates the pairing.
+
 ## Follow a request
 
 `Service` exposes three operations: `capabilities`, `inspect_structure`, and

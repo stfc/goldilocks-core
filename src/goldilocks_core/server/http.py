@@ -23,10 +23,11 @@ from typing import Any
 
 from goldilocks_core.runtime.service import OperationFailure, Service
 from goldilocks_core.server.readiness import AssetReadiness
+from goldilocks_core.server.workers import configure_threadpool
 
-__all__ = ["create_app", "serve"]
+__all__ = ["create_app"]
 
-_MISSING_HTTP_EXTRA = (
+MISSING_HTTP_EXTRA = (
     "The HTTP transport requires goldilocks-core[http]. "
     "Install it with `uv sync --extra http`."
 )
@@ -57,7 +58,7 @@ def create_app(
         from fastapi.responses import JSONResponse, Response
         from fastapi.staticfiles import StaticFiles
     except ImportError as error:
-        raise ImportError(_MISSING_HTTP_EXTRA) from error
+        raise ImportError(MISSING_HTTP_EXTRA) from error
     from goldilocks_core.server.documents import (
         CapabilitiesDocument,
         ComputeRequestDocument,
@@ -78,6 +79,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        configure_threadpool()
         try:
             yield
         finally:
@@ -207,25 +209,6 @@ def _operational_routes(app: Any, readiness: AssetReadiness) -> None:
                 }
             },
         )
-
-
-def serve(
-    *,
-    host: str = "127.0.0.1",
-    port: int = 8000,
-    static_root: str | Path | None = None,
-) -> None:
-    try:
-        import uvicorn
-    except ImportError as error:
-        raise ImportError(_MISSING_HTTP_EXTRA) from error
-    uvicorn.run(
-        create_app(
-            static_root=static_root,
-        ),
-        host=host,
-        port=port,
-    )
 
 
 def _prepared_multipart(result: bytes, archive: bytes | None) -> tuple[bytes, str]:

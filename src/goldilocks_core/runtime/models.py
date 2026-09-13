@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import os
 from dataclasses import dataclass, replace
 from importlib.metadata import version
@@ -90,6 +91,31 @@ class MetallicityModel:
         self._closed = False
         self._load_lock = Lock()
 
+    def prewarm(self) -> None:
+        with self._load_lock:
+            if self._closed:
+                raise RuntimeError("MetallicityModel is closed.")
+            self._load_model()
+
+    def _load_model(self) -> None:
+        if self._model is not None:
+            return
+        if self._config is None:
+            self._config = load_default_qrf_config(self._registry_path)
+        config = self._config
+        if self._checkpoint is None or self._atom_init is None:
+            if config.metallicity_asset is None:
+                return
+            try:
+                installed = self._asset_store.resolve_spec(config.metallicity_asset)
+            except AssetNotInstalled:
+                return
+            self._checkpoint = installed.path(config.metallicity_checkpoint_file)
+            self._atom_init = installed.path(config.metallicity_atom_init_file)
+        from goldilocks_core.ml.qrf.metallicity import load_metallicity_model
+
+        self._model = load_metallicity_model(os.fspath(self._checkpoint))
+
     def __call__(
         self, structure: Structure
     ) -> tuple[ElectronicCharacter, str, float | None]:
@@ -98,28 +124,14 @@ class MetallicityModel:
                 raise RuntimeError("MetallicityModel is closed.")
             if not structure.is_ordered:
                 return heuristic_metallicity(structure), "heuristic", None
-            from goldilocks_core.ml.qrf.metallicity import (
-                classify_metallicity,
-                load_metallicity_model,
-            )
-
-            if self._config is None:
-                self._config = load_default_qrf_config(self._registry_path)
-            config = self._config
-            if self._checkpoint is None or self._atom_init is None:
-                if config.metallicity_asset is None:
-                    return heuristic_metallicity(structure), "heuristic", None
-                try:
-                    installed = self._asset_store.resolve_spec(config.metallicity_asset)
-                except AssetNotInstalled:
-                    return heuristic_metallicity(structure), "heuristic", None
-                self._checkpoint = installed.path(config.metallicity_checkpoint_file)
-                self._atom_init = installed.path(config.metallicity_atom_init_file)
+            self._load_model()
             if self._model is None:
-                self._model = load_metallicity_model(os.fspath(self._checkpoint))
+                return heuristic_metallicity(structure), "heuristic", None
             model = self._model
             atom_init = os.fspath(self._atom_init)
-            settings = config.feature_settings
+            settings = self._config.feature_settings
+
+        from goldilocks_core.ml.qrf.metallicity import classify_metallicity
 
         character, confidence = classify_metallicity(
             structure,
@@ -197,6 +209,12 @@ class Runtime:
     @property
     def asset_store(self) -> AssetStore:
         return self._asset_store
+
+    def prewarm(self) -> None:
+        if self._uses_default_kmesh_model and isinstance(self._backend, QrfBackend):
+            with contextlib.suppress(AssetNotInstalled):
+                self._backend.prewarm()
+        self._metallicity.prewarm()
 
     @property
     def pseudo_registry_path(self) -> PathLike | None:

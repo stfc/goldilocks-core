@@ -343,7 +343,7 @@ def _assets(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
 
 def _serve(args: argparse.Namespace) -> None:
     if args.transport == "http":
-        from goldilocks_core.server.http import serve
+        from goldilocks_core.server.workers import serve
 
         serve(
             host=args.host,

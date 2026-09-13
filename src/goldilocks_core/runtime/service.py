@@ -82,6 +82,10 @@ class Service:
     def is_closed(self) -> bool:
         return self._closed
 
+    def prewarm(self) -> None:
+        self._ensure_open()
+        self._runtime.prewarm()
+
     def compute(
         self,
         request: ComputeRequest,

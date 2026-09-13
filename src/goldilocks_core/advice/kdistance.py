@@ -62,20 +62,27 @@ class QrfBackend:
         self._closed = False
         self._load_lock = Lock()
 
+    def prewarm(self) -> None:
+        with self._load_lock:
+            self._load()
+
+    def _load(self) -> QrfResources:
+        if self._closed:
+            raise RuntimeError("QrfBackend is closed.")
+        if self._resources is None:
+            if self._config is None:
+                self._config = load_default_qrf_config(self._registry_path)
+            self._resources = load_qrf_resources(
+                self._config,
+                metallicity_checkpoint=self._metallicity_checkpoint,
+                metallicity_atom_init=self._metallicity_atom_init,
+                asset_store=self._asset_store,
+            )
+        return self._resources
+
     def __call__(self, structure: Structure) -> KPointSelection:
         with self._load_lock:
-            if self._closed:
-                raise RuntimeError("QrfBackend is closed.")
-            if self._resources is None:
-                if self._config is None:
-                    self._config = load_default_qrf_config(self._registry_path)
-                self._resources = load_qrf_resources(
-                    self._config,
-                    metallicity_checkpoint=self._metallicity_checkpoint,
-                    metallicity_atom_init=self._metallicity_atom_init,
-                    asset_store=self._asset_store,
-                )
-            resources = self._resources
+            resources = self._load()
         prediction = predict_kdistance_with_resources(
             structure, self._config, resources
         )

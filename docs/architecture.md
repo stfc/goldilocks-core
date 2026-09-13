@@ -116,7 +116,7 @@ Paths below are relative to `src/goldilocks_core/` unless stated otherwise.
 | Scientific behavior | `analysis.py`, `advice/`, `kmesh/`, `selection.py`: facts, recommendations, grids, and pseudopotential selection.                                                                                                                      |
 | Assets              | `assets/`: installation and integrity; `ml/models.py`: model declarations; `pseudo/registry.py` and `pseudo/import_*`: table declarations and provider normalization; `pseudo/source.py`: selection and deferred publication material. |
 | Output              | `generation/`: target-code writers; `input_data.py`: complete input assembly; `publication.py`: directory and ZIP layout; `serialization.py`: JSON projections.                                                                        |
-| Transports          | `cli/core.py`: local commands; `server/documents.py`: strict native request conversion and derived response schemas; `server/http.py` and `server/mcp.py`: adapters; `server/readiness.py`: cached asset checks.                       |
+| Transports          | `cli/core.py`: local commands; `server/documents.py`: strict native request conversion and derived response schemas; `server/http.py` and `server/mcp.py`: adapters; `server/readiness.py`: cached asset checks; `server/workers.py`: HTTP worker planning.                       |
 | Browser             | Repository `web/src/api/`: HTTP client and generated types; `web/src/workspace/`: draft, request, result, and download state.                                                                                                          |
 
 ## Extend a workflow

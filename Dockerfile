@@ -57,7 +57,7 @@ COPY --chown=goldilocks:goldilocks LICENSE /usr/share/licenses/goldilocks-core/L
 USER goldilocks
 EXPOSE 8000
 STOPSIGNAL SIGTERM
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
 
 CMD ["goldilocks", "serve", "http", "--host", "0.0.0.0", "--port", "8000"]

@@ -187,3 +187,28 @@ def test_qrf_backend_model_loading_errors_propagate(monkeypatch) -> None:
 
     with pytest.raises(FileNotFoundError, match="missing model"):
         backend(make_structure())
+
+
+def test_qrf_backend_prewarm_loads_resources_once(monkeypatch) -> None:
+    config = local_config()
+    loads = []
+    sentinel = object()
+
+    def record_load(config_arg, **kwargs):
+        loads.append(config_arg)
+        return sentinel
+
+    monkeypatch.setattr(
+        "goldilocks_core.advice.kdistance.load_qrf_resources", record_load
+    )
+    backend = QrfBackend(config=config)
+
+    backend.prewarm()
+    backend.prewarm()
+
+    assert loads == [config]
+    assert backend.loaded_config == config
+
+    backend.close()
+    with pytest.raises(RuntimeError, match="closed"):
+        backend.prewarm()

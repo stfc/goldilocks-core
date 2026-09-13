@@ -77,6 +77,7 @@ class QrfBackend:
                 metallicity_checkpoint=self._metallicity_checkpoint,
                 metallicity_atom_init=self._metallicity_atom_init,
                 asset_store=self._asset_store,
+                warm=True,
             )
         return self._resources
 

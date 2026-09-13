@@ -61,6 +61,7 @@ def load_qrf_resources(
     metallicity_checkpoint: str | None = None,
     metallicity_atom_init: str | None = None,
     asset_store: AssetStore | None = None,
+    warm: bool = False,
 ) -> QrfResources:
     from goldilocks_core.ml.models import load_model
     from goldilocks_core.ml.qrf.metallicity import load_metallicity_model
@@ -75,11 +76,20 @@ def load_qrf_resources(
         model = replace(
             model, source="local", location=str(installed.path(config.model_file))
         )
-    return QrfResources(
+    resources = QrfResources(
         model=load_model(model),
         metal_model=load_metallicity_model(checkpoint),
         atom_init=atom_init,
     )
+    if warm:
+        from goldilocks_core.ml.qrf.features import warm_feature_pipeline
+
+        warm_feature_pipeline(
+            config.feature_settings,
+            resources.metal_model,
+            resources.atom_init,
+        )
+    return resources
 
 
 def _predict_kdistance_quantiles(

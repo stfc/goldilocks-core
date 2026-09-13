@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ctypes
 import multiprocessing
 import os
+import signal
 import sys
 from multiprocessing.connection import Connection
 from pathlib import Path
@@ -52,11 +54,24 @@ def serve(
 
 
 def create_worker_app() -> Any:
+    _die_with_parent()
     from goldilocks_core.server.http import create_app
 
     app = create_app()
     app.state.goldilocks.prewarm()
     return app
+
+
+def _die_with_parent() -> None:
+    if sys.platform != "linux":
+        return
+    libc = ctypes.CDLL("libc.so.6", use_errno=True)
+    libc.prctl(_PR_SET_PDEATHSIG, signal.SIGKILL)
+    if os.getppid() == 1:
+        os._exit(0)
+
+
+_PR_SET_PDEATHSIG = 1
 
 
 def configure_threadpool() -> None:

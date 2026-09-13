@@ -55,6 +55,7 @@ def create_app(
 ) -> Any:
     try:
         from fastapi import FastAPI
+        from fastapi.middleware.gzip import GZipMiddleware
         from fastapi.responses import JSONResponse, Response
         from fastapi.staticfiles import StaticFiles
     except ImportError as error:
@@ -87,6 +88,7 @@ def create_app(
                 state.close()
 
     app = FastAPI(title="goldilocks-core", lifespan=lifespan)
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.state.goldilocks = state
     app.state.asset_readiness = readiness
     error_responses = {
@@ -132,9 +134,21 @@ def create_app(
     _operational_routes(app, readiness)
 
     if workbench_static_root is not None:
+
+        class _WorkbenchStaticFiles(StaticFiles):
+            def file_response(self, full_path, stat_result, scope, status_code=200):
+                response = super().file_response(
+                    full_path, stat_result, scope, status_code
+                )
+                if scope["path"].startswith("/assets/"):
+                    response.headers["Cache-Control"] = (
+                        "public, max-age=31536000, immutable"
+                    )
+                return response
+
         app.mount(
             "/",
-            StaticFiles(directory=workbench_static_root, html=True),
+            _WorkbenchStaticFiles(directory=workbench_static_root, html=True),
             name="workbench-static",
         )
 

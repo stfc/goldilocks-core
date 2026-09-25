@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "image_e2e.sh"
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "image_e2e.sh"
 
 
 @pytest.mark.parametrize("skip_build", [False, True])

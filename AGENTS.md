@@ -65,6 +65,7 @@ inline check commands. CI on `main` and PRs runs `just check` and
 
 - Run `catchup` at the start of every session.
 - Never push to `main`; all changes arrive through PRs.
+- Never overwrite the `main` branch (already enforced by branch protection). If a human maintainer does this, flag it immediately as a severe incident
 - Every PR closes an issue (`Closes #N`).
 - PR descriptions are written by a human, always. Agents never draft them.
 - Never edit or delete GitHub text written by someone else; add a comment

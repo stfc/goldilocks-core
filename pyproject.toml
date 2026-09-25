@@ -96,6 +96,7 @@ skip_covered = true
 source_paths = [
     "src/goldilocks_core",
     "web/README.md",
+    "scripts/image_e2e.sh",
     ".agents/skills/use-goldilocks/references/workflows.md",
     ".agents/skills/use-goldilocks/references/qe-scf-template.md",
 ]

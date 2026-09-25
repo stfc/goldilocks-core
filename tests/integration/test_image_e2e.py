@@ -6,6 +6,10 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.skipif(
+    os.name == "nt", reason="Image entry point uses POSIX shell executable stubs"
+)
+
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "image_e2e.sh"
 
 

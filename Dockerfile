@@ -6,6 +6,26 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     GOLDILOCKS_ASSET_ROOT=/opt/goldilocks/assets
+
+# enumlib (external dependency for AFM species-splitting -- see
+# advisors/magnetic_config.py's shutil.which("enum.x")/("multienum.x") check): built here
+# from source, the same way ci.yml's "Build enumlib" step does, so the shipped image
+# supports magnetic_ordering=afm out of the box instead of silently degrading to FM.
+RUN rm -f /etc/apt/sources.list.d/debian.sources \
+    && printf '%s\n' 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260801T000000Z bookworm main' > /etc/apt/sources.list \
+    && apt-get update \
+    && apt-get install --no-install-recommends -y git gfortran make \
+    && rm -rf /var/lib/apt/lists/* \
+    && git clone --recursive --depth 1 https://github.com/msg-byu/enumlib.git /tmp/enumlib \
+    && make -C /tmp/enumlib/symlib/src F90=gfortran \
+    && make -C /tmp/enumlib/src F90=gfortran \
+    && make -C /tmp/enumlib/src F90=gfortran enum.x \
+    && install -d /build/enumlib-bin \
+    && install /tmp/enumlib/src/enum.x /build/enumlib-bin/enum.x \
+    && sed '1s|.*|#!/app/.venv/bin/python3|' /tmp/enumlib/aux_src/makeStr.py > /build/enumlib-bin/makeStr.py \
+    && chmod +x /build/enumlib-bin/makeStr.py \
+    && rm -rf /tmp/enumlib
+
 WORKDIR /build/core
 COPY pyproject.toml uv.lock README.md LICENSE ./
 COPY src/ ./src/
@@ -34,23 +54,31 @@ LABEL org.opencontainers.image.title="Goldilocks Workbench" \
 RUN rm -f /etc/apt/sources.list.d/debian.sources \
     && printf '%s\n' 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260801T000000Z bookworm main' > /etc/apt/sources.list \
     && apt-get update \
-    && apt-get install --no-install-recommends -y libgomp1=12.2.0-14+deb12u1 \
+    && apt-get install --no-install-recommends -y \
+       libgomp1=12.2.0-14+deb12u1 libgfortran5=12.2.0-14+deb12u1 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system goldilocks \
     && useradd --system --gid goldilocks --home-dir /app goldilocks
 
-ENV PATH=/app/.venv/bin:$PATH \
+ENV PATH=/opt/goldilocks/enumlib-bin:/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     MPLCONFIGDIR=/app/.cache/matplotlib \
     GOLDILOCKS_ASSET_ROOT=/opt/goldilocks/assets \
     GOLDILOCKS_WORKBENCH_STATIC_ROOT=/app/workbench
 
 WORKDIR /app
+# /app itself (not just the files copied into it below) must be writable by
+# goldilocks: pymatgen's enumlib caller (monty.tempfile.ScratchDir(".")) creates its
+# scratch directory as a subdirectory of the process's cwd, not of $TMPDIR/tempfile's
+# system default -- so AFM magnetic-ordering enumeration fails with a permission error
+# at runtime otherwise, even with enum.x itself present and working.
+RUN chown goldilocks:goldilocks /app
 COPY --from=core-build --chown=goldilocks:goldilocks /app/.venv ./.venv
 RUN mkdir -p "$MPLCONFIGDIR" \
     && /app/.venv/bin/python -c "import matplotlib.font_manager" \
     && chown -R goldilocks:goldilocks /app/.cache
 COPY --from=core-build --chown=goldilocks:goldilocks /opt/goldilocks/assets /opt/goldilocks/assets
+COPY --from=core-build --chown=goldilocks:goldilocks /build/enumlib-bin /opt/goldilocks/enumlib-bin
 COPY --from=workbench-build --chown=goldilocks:goldilocks /build/web/dist ./workbench
 COPY --chown=goldilocks:goldilocks LICENSE /usr/share/licenses/goldilocks-core/LICENSE
 

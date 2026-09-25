@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build the production Workbench image, boot it, and run the Playwright e2e
-# suite against the running container.
+# suite against the running container. Pass --skip-build to test an image
+# already loaded into Docker (CI builds it with the GHA layer cache).
 #
 # Assumes: Docker is running, web/node_modules is installed, and a Playwright
 # chromium browser is available (CI installs it; locally run
@@ -13,8 +14,19 @@ IMAGE_TAG="${IMAGE_TAG:-goldilocks-workbench:e2e}"
 CONTAINER=goldilocks-workbench-e2e
 READY_URL=http://127.0.0.1:8000/ready
 
+case "$*" in
+    "") skip_build=false ;;
+    --skip-build) skip_build=true ;;
+    *)
+        echo "Usage: $0 [--skip-build]" >&2
+        exit 2
+        ;;
+esac
+
 docker build --check .
-docker build --tag "$IMAGE_TAG" .
+if [[ "$skip_build" == false ]]; then
+    docker build --tag "$IMAGE_TAG" .
+fi
 
 docker rm --force "$CONTAINER" >/dev/null 2>&1 || true
 docker run --detach --name "$CONTAINER" --publish 8000:8000 "$IMAGE_TAG"

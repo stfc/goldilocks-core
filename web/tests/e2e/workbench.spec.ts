@@ -207,11 +207,20 @@ test("keeps an old Result visible until the recommendation auto-recomputes", asy
   await expectNoAxeViolations(page);
 
   // No manual "update" action exists any more -- the recommendation
-  // recomputes on its own; just wait for it to settle again.
+  // recomputes on its own; wait for it to settle again. The notice
+  // hiding is not a complete proxy for "ready to download": clearing
+  // outOfDate also clears lastDownload in the same update (workspace.ts's
+  // computeReview), which immediately arms useAutoCompute's second,
+  // independently-debounced effect (review.refreshArchive) -- that
+  // re-disables the button for the duration of its own network
+  // round-trip, after the notice has already gone hidden. Reuse
+  // waitForBundleReady, which already waits out both stages (it exists
+  // for exactly this reason on the initial load), instead of a one-stage
+  // wait that races the second fetch.
   await expect(
     page.getByRole("status", { name: "Recommendation notice" }),
   ).toBeHidden({ timeout: 20_000 });
-  await expect(downloadButton).toBeEnabled();
+  await waitForBundleReady(page);
   await page.getByRole("button", { name: /^scf\.in/ }).click();
   await expect(page.getByLabel("Generated input scf.in")).toContainText(
     "1 1 1",

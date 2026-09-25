@@ -685,10 +685,17 @@ function KDistanceIntervalNote({
   }
   const interval = decision.k_distance_interval;
   if (!Array.isArray(interval) || interval.length !== 2) return null;
-  const [low, high] = interval as [number, number];
+  const [low, high] = interval as [unknown, unknown];
+  if (typeof low !== "number") return null;
+  // The ladder's coarsest rung (Gamma-only) has no upper k_distance bound --
+  // any distance at or above `low` still resolves to the same mesh -- and
+  // the backend represents that open end as `null`, not a number
+  // (kmesh.py's `(candidates[0], math.inf)`). Render "∞" instead of calling
+  // .toFixed() on null.
+  const highText = typeof high === "number" ? high.toFixed(3) : "∞";
   return (
     <Text size="xs" c="dimmed">
-      This rung corresponds to Δk ∈ [{low.toFixed(3)}, {high.toFixed(3)}] Å⁻¹
+      This rung corresponds to Δk ∈ [{low.toFixed(3)}, {highText}] Å⁻¹
     </Text>
   );
 }

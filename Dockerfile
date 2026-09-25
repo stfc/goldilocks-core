@@ -7,6 +7,13 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     GOLDILOCKS_ASSET_ROOT=/opt/goldilocks/assets
 
+# Build toolchain for this stage: gfortran/make/git build enumlib (below); g++ lets
+# uv sync compile dscribe from its sdist on platforms with no prebuilt wheel -- dscribe
+# 2.1.2 ships linux wheels for x86_64 only (confirmed against PyPI's own file list), so
+# arm64 (e.g. a plain `docker build .` on Apple Silicon) always needs to build it from
+# source; pybind11/Eigen are already resolved by that build itself (build-isolation
+# installs pybind11, Eigen is vendored in the sdist), g++ was the only missing piece.
+#
 # enumlib (external dependency for AFM species-splitting -- see
 # advisors/magnetic_config.py's shutil.which("enum.x")/("multienum.x") check): built here
 # from source, the same way ci.yml's "Build enumlib" step does, so the shipped image
@@ -14,7 +21,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 RUN rm -f /etc/apt/sources.list.d/debian.sources \
     && printf '%s\n' 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260801T000000Z bookworm main' > /etc/apt/sources.list \
     && apt-get update \
-    && apt-get install --no-install-recommends -y git gfortran make \
+    && apt-get install --no-install-recommends -y g++ git gfortran make \
     && rm -rf /var/lib/apt/lists/* \
     && git clone --recursive --depth 1 https://github.com/msg-byu/enumlib.git /tmp/enumlib \
     && make -C /tmp/enumlib/symlib/src F90=gfortran \

@@ -56,8 +56,7 @@ there even are -- a documented gap, not a default of 1 masquerading as
 a decision.
 
 No `llm` override: `npool`/`ndiag` are technical MPI-layout tuning
-knobs, not a scientific judgement call -- the same category
-`advisors/n_irr_k.py`'s `nosym` put itself in.
+knobs, not a scientific judgement call.
 """
 
 from __future__ import annotations

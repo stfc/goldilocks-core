@@ -64,15 +64,15 @@ class TestCoerceCliValue:
 
     @pytest.mark.parametrize("raw", ["true", "True", "1", "yes", "on"])
     def test_boolean_true_spellings(self, raw: str) -> None:
-        assert coerce_cli_value(self._binding("nosym"), "nosym", raw) is True
+        assert coerce_cli_value(self._binding("use_vdw"), "use_vdw", raw) is True
 
     @pytest.mark.parametrize("raw", ["false", "False", "0", "no", "off"])
     def test_boolean_false_spellings(self, raw: str) -> None:
-        assert coerce_cli_value(self._binding("nosym"), "nosym", raw) is False
+        assert coerce_cli_value(self._binding("use_vdw"), "use_vdw", raw) is False
 
     def test_invalid_boolean_raises(self) -> None:
         with pytest.raises(InvalidSetting, match="not a boolean"):
-            coerce_cli_value(self._binding("nosym"), "nosym", "maybe")
+            coerce_cli_value(self._binding("use_vdw"), "use_vdw", "maybe")
 
     def test_integer(self) -> None:
         assert coerce_cli_value(self._binding("nbnd"), "nbnd", "12") == 12
@@ -411,14 +411,25 @@ class TestBuildOverrides:
 class TestBuildOverridesFromCli:
     def test_full_pipeline_from_raw_set_flags(self) -> None:
         overrides = build_overrides_from_cli(
-            ["functional=PBE", "ecutwfc_ry=30.5", "k_grid=[4,4,4]", "nosym=true"],
+            [
+                "functional=PBE",
+                "ecutwfc_ry=30.5",
+                "k_grid=[4,4,4]",
+                "spin_polarized=true",
+            ],
             task="scf_single_point",
         )
 
         assert overrides.system.functional.functional == "PBE"
         assert overrides.system.cutoffs.ecutwfc_ry == 30.5
         assert overrides.steps["scf"].kpoints.k_sampling.k_grid == (4, 4, 4)
-        assert overrides.steps["scf"].kpoints.n_irr_k.nosym is True
+        assert overrides.system.magnetic.spin_polarized is True
+
+    def test_the_removed_nosym_setting_is_refused(self) -> None:
+        """#225: nosym changed only the recorded k-point count, never the
+        input, so it is gone, and a request that sets it is told so."""
+        with pytest.raises(InvalidSetting, match="unknown setting 'nosym'"):
+            build_overrides_from_cli(["nosym=true"], task="scf_single_point")
 
     def test_steps_scf_prefix_lands_the_same_as_flat(self) -> None:
         flat = build_overrides_from_cli(["k_distance=0.12"], task="scf_single_point")

@@ -65,10 +65,10 @@ describe("resolvedValue", () => {
   });
 
   it("is nothing without a path, past a null, or for an unresolved record", () => {
-    const nIrrK: ResolvedField = { status: "resolved", value: 35 };
+    const nbnd: ResolvedField = { status: "resolved", value: { nbnd: 20 } };
 
     expect(
-      resolvedValue(setting("nosym", "n_irr_k", null), nIrrK),
+      resolvedValue(setting("extra_bands", "nbnd", null), nbnd),
     ).toBeUndefined();
     expect(
       resolvedValue(
@@ -109,9 +109,9 @@ describe("resolvedSource", () => {
       ),
     ).toBeUndefined();
     expect(
-      resolvedSource(setting("nosym", "n_irr_k", null), {
+      resolvedSource(setting("extra_bands", "nbnd", null), {
         status: "resolved",
-        value: 35,
+        value: { nbnd: 20 },
         source: "heuristic",
       }),
     ).toBeUndefined();

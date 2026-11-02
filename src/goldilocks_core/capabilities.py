@@ -70,7 +70,7 @@ exceptions: ``pseudo_table_id`` resolves in ``pseudo_table.id``,
 ``magnetic_ordering`` in ``magnetic.ordering.applied``, ``k_grid`` in
 ``k_sampling.mesh``, ``hubbard_projectors`` in ``hubbard.projectors``,
 ``q_grid`` in the phonon tasks' ``q_sampling.mesh``, and a knob no record
-holds a value of (``extra_bands``, ``nosym``, ``hubbard_needs_correlation``,
+holds a value of (``extra_bands``, ``hubbard_needs_correlation``,
 ``u_by_element``) has no path. Neither has a setting published under a key
 other than its field name, since a record's ``field_sources`` names
 settings by field name.
@@ -166,7 +166,7 @@ from goldilocks_core.service import (
 )
 from goldilocks_core.types import CalcTask
 
-VOCABULARY_VERSION = "4"
+VOCABULARY_VERSION = "5"
 """Bump when the settings/facts vocabulary changes in a way other
 ecosystem repos (ml/agent/data) need to know about -- goldilocks-core
 -design.md S4.2's cross-repo validation antidote."""
@@ -220,7 +220,7 @@ once in the density the scf step wrote: QE 7.3 runs ``non_scf`` instead of
 _MESH_STEPS = ("scf", "nscf", "relax", "vc-relax")
 """The pw.x steps on a k-mesh. A bands step runs the band path of its cell
 (``k_path_distance``) with the occupations of the scf step before it
-(#118), so the k-mesh, ``nosym`` and occupations keys have no effect on it."""
+(#118), so the k-mesh and occupations keys have no effect on it."""
 _BRANCH_STEPS: dict[_Branch, tuple[str, ...] | None] = {
     "analysis": None,
     "system": None,
@@ -598,13 +598,6 @@ _SETTING_META: dict[str, _SettingExtra] = {
         "description": (
             "K-mesh origin offset per axis (0 or 1); defaults to Gamma-centered."
         ),
-    },
-    "nosym": {
-        "structure_specific": False,
-        "path": None,
-        "default": False,
-        "steps": _MESH_STEPS,
-        "description": "Disable symmetry reduction of the k-point mesh entirely.",
     },
     "k_path_distance": {
         "structure_specific": False,

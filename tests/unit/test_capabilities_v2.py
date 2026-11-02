@@ -147,7 +147,7 @@ class TestTopLevelShape:
     def test_vocabulary_version_is_the_module_constant(self) -> None:
         """'4': the band task's path record, bands_k_path, was renamed
         k_path (#215)."""
-        assert capabilities()["vocabulary_version"] == VOCABULARY_VERSION == "4"
+        assert capabilities()["vocabulary_version"] == VOCABULARY_VERSION == "5"
 
     def test_sources_is_the_closed_priority_order(self) -> None:
         assert (
@@ -537,7 +537,6 @@ class TestSettingApplicability:
             "k_index",
             "k_distance",
             "shift",
-            "nosym",
         )
         for key in mesh:
             assert settings[key]["steps"] == ["scf", "nscf", "relax", "vc-relax"], key
@@ -861,14 +860,12 @@ class TestResolvedIn:
         }
 
     def test_input_only_knobs_name_their_record_but_no_path(self) -> None:
-        """extra_bands only shifts nbnd, nosym only changes the k-point
-        count, and the Hubbard switches only decide which U values apply:
-        no record holds a value of any of them."""
+        """extra_bands only shifts nbnd, and the Hubbard switches only decide
+        which U values apply: no record holds a value of any of them."""
         settings = self._settings()
 
         for key, record in (
             ("extra_bands", "nbnd"),
-            ("nosym", "n_irr_k"),
             ("hubbard_needs_correlation", "hubbard"),
             ("u_by_element", "hubbard"),
         ):

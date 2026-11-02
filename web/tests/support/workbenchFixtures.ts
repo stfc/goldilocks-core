@@ -44,7 +44,7 @@ const pbeTable: PseudopotentialTable = {
 
 export const capabilities: Capabilities = {
   core_version: "1.2.3",
-  vocabulary_version: "4",
+  vocabulary_version: "5",
   codes: [
     {
       id: "quantum_espresso",
@@ -225,22 +225,6 @@ export const capabilities: Capabilities = {
       ml_target: "k_distance",
       approaches: ["human", "ml", "heuristic"],
       description: "Target reciprocal-space spacing between k-points.",
-    },
-    {
-      key: "nosym",
-      group: "n_irr_k",
-      type: "boolean",
-      unit: null,
-      codes: ["quantum_espresso"],
-      tasks: ["scf_single_point", "relax"],
-      steps: ["scf", "relax"],
-      programs: ["pw.x"],
-      scope: "per_step",
-      structure_specific: false,
-      resolved_in: { record: "n_irr_k", path: null },
-      ml_target: null,
-      approaches: ["human", "heuristic"],
-      description: "Disable symmetry reduction when counting k-points.",
     },
     {
       key: "hubbard_needs_correlation",

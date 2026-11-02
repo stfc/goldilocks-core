@@ -117,12 +117,9 @@ vc-relax.in carry them too; no other task sets them.
   ``atomic_species``/``cell_parameters``/``atomic_positions``/
   ``k_points``/``validated_pseudo_by_element`` (un-privatized for that
   reuse) rather than duplicating them.
-- ``nosym``/``noinv``/``no_t_rev``. ``advisors/n_irr_k.py``'s ``nosym``
-  input only affects *that advisor's own* irreducible-k-point count; no
-  field on ``KSamplingDecision``/``PwSettings`` carries a resolved
-  ``nosym`` decision forward, so there is nothing to translate into the
-  actual QE input yet -- a pre-existing, documented gap in epic 6's
-  output, not something this epic re-decides.
+- ``nosym``/``noinv``/``no_t_rev``. No setting decides them, so pw.x runs
+  with its defaults, which ``advisors/n_irr_k.py`` counts k-points with
+  (#225).
 """
 
 from __future__ import annotations

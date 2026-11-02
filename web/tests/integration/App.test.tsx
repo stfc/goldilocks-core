@@ -1251,11 +1251,14 @@ describe("Goldilocks Workbench", () => {
     expect(within(calculation).getByLabelText("k distance · Å⁻¹")).toHaveValue(
       "0.15",
     );
-    // n_irr_k (10, merged into this same section) has no override of
-    // its own -- shown as a plain resolved-value line instead.
+    // n_irr_k (10) has no setting, so it is a read-only record after the
+    // settings groups (#187, #225).
+    await user.click(
+      within(calculation).getByRole("button", { name: /^N Irr K\s*n_irr_k$/ }),
+    );
     expect(
-      within(calculation).getByText(/Irreducible k-points: 10/),
-    ).toBeInTheDocument();
+      within(calculation).getByRole("region", { name: /^N Irr K\s*n_irr_k$/ }),
+    ).toHaveTextContent("10");
   });
 
   it("shows the k_distance interval instead of a fabricated point when k_index resolved the mesh", async () => {
@@ -1507,9 +1510,9 @@ describe("Goldilocks Workbench", () => {
   });
 
   it("captions no setting whose record holds no value of it", async () => {
-    // #187: n_irr_k is a bare count and hubbard lists the U values applied,
-    // so nosym and hubbard_needs_correlation have no recorded value, yet
-    // both showed "—" captioned "Heuristic default".
+    // #187: hubbard lists the U values applied, so
+    // hubbard_needs_correlation has no recorded value, yet it showed "—"
+    // captioned "Heuristic default".
     const user = userEvent.setup();
     const core = new CoreStub(Promise.resolve(capabilities));
     core.inspectionResults = [Promise.resolve(inspection)];
@@ -1521,14 +1524,8 @@ describe("Goldilocks Workbench", () => {
     await openStructure(user, container);
     await screen.findByRole("button", { name: "Download (.zip)" });
     const calculation = advisorsPanel();
-    await user.click(within(calculation).getByText("K sampling"));
     await user.click(within(calculation).getByText("Hubbard"));
 
-    const nosym = within(calculation).getByRole("combobox", { name: "nosym" });
-    expect(nosym).toHaveValue("");
-    expect(nosym).toHaveAccessibleDescription(
-      "Disable symmetry reduction when counting k-points.",
-    );
     const needsCorrelation = within(calculation).getByRole("combobox", {
       name: "hubbard needs correlation",
     });
@@ -1536,10 +1533,6 @@ describe("Goldilocks Workbench", () => {
     expect(needsCorrelation).toHaveAccessibleDescription(
       "Force whether a Hubbard +U correction is applied.",
     );
-    // The scalar n_irr_k record still shows its count and its tier.
-    expect(
-      within(calculation).getByText(/Irreducible k-points: 10/),
-    ).toHaveTextContent("Irreducible k-points: 10 · Heuristic default");
   });
 
   it("does not caption a value derived from another setting's override as yours", async () => {

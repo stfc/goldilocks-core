@@ -11,7 +11,7 @@ from goldilocks_core.advisors.magnetic_config import (
     framed_cell,
     magnetic_cell,
 )
-from goldilocks_core.advisors.n_irr_k import NIrrKHumanInput, n_irr_k
+from goldilocks_core.advisors.n_irr_k import n_irr_k
 from goldilocks_core.resolution import Blocked, Provenance, Resolved, Unavailable
 
 _DIAMOND_SILICON = Structure.from_spacegroup(
@@ -105,17 +105,6 @@ def test_gamma_only_mesh_has_exactly_one_irreducible_kpoint() -> None:
     state = n_irr_k(_cell(_DIAMOND_SILICON), _k_sampling((1, 1, 1)))
 
     assert state.value == 1
-
-
-def test_nosym_returns_the_full_mesh_size_unreduced() -> None:
-    state = n_irr_k(
-        _cell(_DIAMOND_SILICON),
-        _k_sampling((4, 4, 4)),
-        human=NIrrKHumanInput(nosym=True),
-    )
-
-    assert state.value == 64
-    assert state.source == "human"
 
 
 def test_blocked_k_sampling_propagates_as_blocked() -> None:

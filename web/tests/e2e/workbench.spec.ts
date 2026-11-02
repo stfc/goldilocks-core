@@ -302,8 +302,7 @@ test("shows each setting's recorded value, captioned only by the tier that set i
 }) => {
   // #187: the Workbench read record.value[setting.key], so spin orbit
   // coupling (recorded as spin_orbit_enabled) and magnetic ordering
-  // (ordering.applied) showed nothing under a tier caption, nosym (no field
-  // in the n_irr_k count) "—" under "Heuristic default", and pinning spin
+  // (ordering.applied) showed nothing under a tier caption, and pinning spin
   // polarized captioned the untouched tot magnetization "Your override".
   await page.goto("/");
   await page.waitForLoadState("networkidle");
@@ -338,13 +337,6 @@ test("shows each setting's recorded value, captioned only by the tier that set i
   await expect(
     magnetic.getByRole("combobox", { name: "spin polarized" }),
   ).toHaveAccessibleDescription(/ · Your override$/);
-
-  await expandAdvisorGroup(page, "K sampling");
-  const nosym = page.getByRole("combobox", { name: "nosym" });
-  await expect(nosym).toHaveValue("");
-  await expect(nosym).toHaveAccessibleDescription(
-    "Disable symmetry reduction of the k-point mesh entirely.",
-  );
   await expectNoAxeViolations(page);
 });
 
@@ -1092,10 +1084,12 @@ test("keeps the document static and scrolls long content inside its own card", a
   for (const card of Object.keys(records)) {
     const body = page.locator(`.card-${card} .card-body`);
     const lastRecord = page.locator(`.card-${card} .record-card`).last();
+    // The card body is focusable so keyboard users can scroll it (App.css),
+    // and End takes it to its last record. The string evaluate this replaces
+    // was evaluated as an expression and never called, so the card never
+    // scrolled and only a last record already in view passed.
     await body.focus();
-    await body.evaluate(
-      "(element) => { element.scrollTop = element.scrollHeight; }",
-    );
+    await page.keyboard.press("End");
     await expect(lastRecord).toBeInViewport();
   }
 });

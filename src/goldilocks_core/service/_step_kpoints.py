@@ -46,7 +46,7 @@ from goldilocks_core.advisors.k_sampling import (
     KSamplingLlmInput,
     k_sampling,
 )
-from goldilocks_core.advisors.n_irr_k import NIrrKHumanInput, n_irr_k
+from goldilocks_core.advisors.n_irr_k import n_irr_k
 from goldilocks_core.advisors.nbnd import (
     NbndDecision,
     NbndHumanInput,
@@ -75,7 +75,6 @@ class KpointsOverrides:
     occupations_llm: OccupationsLlmInput | None = None
     k_sampling: KSamplingHumanInput | None = None
     k_sampling_llm: KSamplingLlmInput | None = None
-    n_irr_k: NIrrKHumanInput | None = None
     nbnd: NbndHumanInput | None = None
     nbnd_llm: NbndLlmInput | None = None
     convergence: ConvergenceHumanInput | None = None
@@ -177,7 +176,7 @@ def _cell_sampling(
     )
     return (
         k_sampling_state,
-        n_irr_k(cell, k_sampling_state, overrides.n_irr_k),
+        n_irr_k(cell, k_sampling_state),
         convergence(
             len(cell.structure),
             hubbard=system.hubbard,

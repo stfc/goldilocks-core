@@ -47,29 +47,18 @@ ordinary integers, so a caller could not tell a fallback from a real
 answer (a cubic cell reduces by up to 48x) -- a silently wrong value
 there is far more dangerous than a raised error.
 
-**``nosym``**: QE's own flag to disable symmetry reduction entirely
-(every k-point in the full mesh is kept). When set, this returns the
-full mesh size directly without counting symmetry at all. The other
-three symmetry-related flags in the design doc's dependency table for
-this step -- ``noinv``, ``no_t_rev``, ``force_symmorphic`` -- would
-change the count, but no setting writes them to the input, so pw.x runs
-with its defaults, which this count follows. Add them once something
-writes them.
-
-No ``llm`` override: ``nosym`` is an operator's technical choice about
-how a specific calculation should be run (e.g. preserving site-resolved
-information around a defect), not a scientific judgement call an agent
-is asked to make on the structure's behalf -- the same category
-``analysis/symmetry.py`` put itself in when it declined an override
-entirely, though here a human operator's own preference is still
-plausible enough to keep.
+**pw.x's symmetry flags.** ``nosym``, ``noinv``, ``no_t_rev`` and
+``force_symmorphic`` would change the count, but no setting writes them to
+the input, so pw.x runs with its defaults, which this count follows. A
+``nosym`` setting that changed this count but never the input was removed
+(#225); add one back together with the decision that writes it. There is
+no override: the count is a fact of the written mesh and cell.
 """
 
 from __future__ import annotations
 
 from goldilocks_core.advisors.k_sampling import KSamplingDecision
 from goldilocks_core.advisors.magnetic_config import MagneticCell
-from goldilocks_core.inputs.overrides import HumanInput
 from goldilocks_core.pw_symmetry import irreducible_kpoint_count, pw_rotations
 from goldilocks_core.resolution import (
     Blocked,
@@ -80,30 +69,21 @@ from goldilocks_core.resolution import (
 )
 
 
-class NIrrKHumanInput(HumanInput):
-    nosym: bool = False
-
-
 def n_irr_k(
     cell: MagneticCell,
     k_sampling: FieldState[KSamplingDecision],
-    human: NIrrKHumanInput | None = None,
 ) -> FieldState[int]:
     """The k-points pw.x runs of ``k_sampling``'s mesh on the simulated
     ``cell`` as written: by its magnetic symmetry when it has a moment
     direction (a spin-polarized spin-orbit run), otherwise by its
     structural symmetry, each as pw.x finds it (module docstring)."""
-    human = human or NIrrKHumanInput()
-
     if isinstance(k_sampling, Blocked):
         return Blocked(by=k_sampling)
     if not k_sampling.ok:
         return Blocked(by=blocked_by(k_sampling))
 
-    mesh = k_sampling.value.mesh
-    if human.nosym:
-        return Resolved(mesh[0] * mesh[1] * mesh[2], Provenance(source="human"))
-
     rotations = pw_rotations(cell.structure, cell.moment_axis)
-    count = irreducible_kpoint_count(rotations, mesh, k_sampling.value.shift)
+    count = irreducible_kpoint_count(
+        rotations, k_sampling.value.mesh, k_sampling.value.shift
+    )
     return Resolved(count, Provenance(source="heuristic"))

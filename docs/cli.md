@@ -180,7 +180,7 @@ q2r.x, and matdyn.x for the phonon DOS and for the dispersion, with
   so pw.x does not use them there.
 - A `band` task's bands step runs its band path with the scf step's
   occupations and no SCF loop, so the k-mesh settings (`k_grid`,
-  `k_distance`, `k_index`, `shift`, `nosym`), `occupations`,
+  `k_distance`, `k_index`, `shift`), `occupations`,
   `smearing_type`, `degauss` and the SCF-loop settings set its scf step
   only, without a notice, and `k_path_distance` sets its bands step only.
   `nbnd`, `extra_bands`, `conv_thr`, `npool` and `ndiag` reach both pw.x
@@ -239,9 +239,9 @@ which applies no ordering), `moment_direction` in
 `magnetic.moment_direction.uvw`, `k_grid` in `k_sampling.mesh`,
 `hubbard_projectors` in `hubbard.projectors` (`null` without +U) and
 `q_grid` in `q_sampling.mesh`. `path` is `null` where the record holds no
-value of the setting: `extra_bands` only shifts `nbnd`, `nosym` only changes
-the `n_irr_k` count, and `hubbard_needs_correlation` and `u_by_element`
-decide which U values the `hubbard` record lists.
+value of the setting: `extra_bands` only shifts `nbnd`, and
+`hubbard_needs_correlation` and `u_by_element` decide which U values the
+`hubbard` record lists.
 
 Quote `--set` values that contain brackets or braces (e.g. `--set
 'k_grid=[8,8,8]'`) so the shell does not glob-expand them; array and object

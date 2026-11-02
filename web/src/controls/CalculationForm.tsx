@@ -69,12 +69,10 @@ const GROUP_ORDER: readonly string[] = [
 
 /** A settings group can be folded into another group's accordion
  * section for display -- still two distinct `Setting.group`s/resolved
- * records underneath, purely a presentation grouping. n_irr_k's only
- * real lever (`nosym`) belongs next to the k-mesh it changes the count
- * for; cutoffs are computed against whichever pseudopotential table is
- * selected, so they read naturally right below it. */
+ * records underneath, purely a presentation grouping. Cutoffs are computed
+ * against whichever pseudopotential table is selected, so they read
+ * naturally right below it. */
 const GROUP_MERGE_INTO: Readonly<Record<string, string>> = {
-  n_irr_k: "k_sampling",
   cutoffs: "pseudo_table_id",
 };
 
@@ -667,11 +665,6 @@ function settingControl({
   );
 }
 
-/** The resolved `n_irr_k` count has no override of its own (only
- * `nosym`, a real `Setting` under the same merged section, does) -- so
- * it's shown as a plain read-only line rather than a control, the same
- * "Blocked --"/"Unavailable --" phrasing `AnalysisSection` uses for a
- * fact that failed to resolve. */
 /** `k_distance` is deliberately `None` whenever `k_index` is what
  * actually resolved the mesh (a whole interval maps to one rung, not
  * one point -- see `KSamplingDecision.k_distance_interval`'s own
@@ -704,34 +697,6 @@ function KDistanceIntervalNote({
   return (
     <Text size="xs" c="dimmed">
       This rung corresponds to {range} Å⁻¹
-    </Text>
-  );
-}
-
-function NIrrKSummary({
-  record,
-}: {
-  readonly record: ResolvedField | undefined;
-}) {
-  if (record === undefined) return null;
-  if (record.status === "resolved") {
-    return (
-      <Text size="sm" c="dimmed">
-        Irreducible k-points: {String(record.value)}
-        {record.source ? (
-          <>
-            {" "}
-            · <SourceLabel source={record.source} />
-          </>
-        ) : null}
-      </Text>
-    );
-  }
-  return (
-    <Text size="xs" c={record.status === "blocked" ? "red" : "dimmed"}>
-      {record.status === "blocked"
-        ? `Irreducible k-points blocked — ${record.blocked_by ?? "an upstream field failed"}`
-        : `Irreducible k-points unavailable — ${record.reason ?? "no reason given"}`}
     </Text>
   );
 }
@@ -819,9 +784,8 @@ function PseudoTableGroupBody({
   );
 }
 
-/** The k-mesh settings, then the note on the interval `k_index` covers
- * and the irreducible k-point count -- read from the records the k-mesh
- * and `nosym` settings resolve into -- then `nosym`. */
+/** The k-mesh settings, then the note on the interval `k_index` covers,
+ * read from the record they resolve into. */
 function KSamplingGroupBody({
   groupedSettings,
   overrides,
@@ -833,18 +797,14 @@ function KSamplingGroupBody({
   readonly disabled: boolean;
   readonly onChange: (patch: Readonly<Record<string, unknown>>) => void;
 }) {
-  const render = (group: string) =>
-    groupedSettings
-      .filter((entry) => entry.originalGroup === group)
-      .map((entry) => renderSetting({ entry, overrides, disabled, onChange }));
   return (
     <>
-      {render("k_sampling")}
+      {groupedSettings.map((entry) =>
+        renderSetting({ entry, overrides, disabled, onChange }),
+      )}
       <KDistanceIntervalNote
         record={groupRecord(groupedSettings, "k_sampling")}
       />
-      <NIrrKSummary record={groupRecord(groupedSettings, "n_irr_k")} />
-      {render("n_irr_k")}
     </>
   );
 }

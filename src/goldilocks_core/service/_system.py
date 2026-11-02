@@ -15,7 +15,10 @@ decides the functional, the Hubbard decision (spin polarization reads it,
 coupling and the applied magnetic ordering), its symmetry
 (``symmetry_eff``), the pseudopotentials and the starting moments, once
 each and in that order. ``electron_count`` counts that cell, and
-``boundary`` reads its vacuum (``MagneticAdvice.geometry_eff``, #144);
+``boundary`` reads its vacuum (``geometry_eff``, #144), which is
+published beside ``geometry``, the uploaded structure's, as ``symmetry_eff``
+is beside ``symmetry``, and which vc-relax's ``cell_dofree`` reads too
+(#210);
 ``cutoffs`` and ``vdw`` read the uploaded structure's facts. ``hubbard``
 reads the input structure too: its decision is keyed by element, so it is
 the same for the cell.
@@ -49,6 +52,7 @@ from goldilocks_core.advisors.electron_count import (
 from goldilocks_core.advisors.hubbard_u import HubbardUDecision
 from goldilocks_core.advisors.magnetic_config import MagneticCell, MagneticConfigFacts
 from goldilocks_core.advisors.vdw_method import VdwFacts, vdw_method
+from goldilocks_core.analysis.geometry import GeometryFacts
 from goldilocks_core.analysis.symmetry import SymmetryFacts
 from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.resolution import FieldState
@@ -69,6 +73,7 @@ class SystemAdvice:
     pseudo: PseudoAdvice
     magnetic: FieldState[MagneticConfigFacts]
     symmetry_eff: FieldState[SymmetryFacts]
+    geometry_eff: FieldState[GeometryFacts]
     cutoffs: FieldState[CutoffsDecision]
     electron_count: FieldState[ElectronCountDecision]
     vdw: FieldState[VdwFacts]
@@ -98,6 +103,7 @@ class SystemAdvice:
             "relativistic": self.pseudo.relativistic,
             "magnetic": self.magnetic,
             "symmetry_eff": self.symmetry_eff,
+            "geometry_eff": self.geometry_eff,
             "cutoffs": self.cutoffs,
             "electron_count": self.electron_count,
             "vdw": self.vdw,
@@ -125,6 +131,7 @@ def system_advice(
         pseudo=pseudo,
         magnetic=selection.magnetic,
         symmetry_eff=selection.symmetry_eff,
+        geometry_eff=selection.geometry_eff,
         cutoffs=cutoffs(pseudo.metadata, pseudo.table, overrides.cutoffs),
         electron_count=electron_count(
             selection.cell, pseudo.metadata, overrides.electron_count

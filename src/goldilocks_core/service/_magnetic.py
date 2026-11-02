@@ -22,7 +22,7 @@ These decisions depend on one another in a fixed order:
 
 ``symmetry_eff`` is the cell's own symmetry, counted on those species,
 and ``geometry_eff`` the uploaded structure's geometry with the written
-cell's own vacuum and frame (``cell_geometry``), which the boundary
+cell's own vacuum and frame (``_cell_geometry``), which the boundary
 advisor's dipole notice and 'slab' offer describe (#144) and vc-relax's
 ``cell_dofree`` is decided from (#140). Every later decision -- the
 electron count, bands, k-points, convergence, resources, the gate and the
@@ -65,8 +65,9 @@ from goldilocks_core.service._system_overrides import SystemOverrides
 class MagneticAdvice:
     """The decisions above, in order; ``system_advice`` copies them onto
     ``SystemAdvice``. ``geometry_eff`` is the uploaded structure's geometry
-    with the written cell's vacuum facts (``cell_geometry``), which the
-    boundary advisor reads (#144)."""
+    with the written cell's vacuum facts (``_cell_geometry``), which the
+    boundary advisor and vc-relax's ``cell_dofree`` read and the advice
+    publishes as its ``geometry_eff`` record (#144, #210)."""
 
     functional: FieldState[str]
     hubbard: FieldState[HubbardUDecision]
@@ -117,7 +118,7 @@ def magnetic_advice(
         )
         soc_table = soc_pseudo_table(elements, functional_state.value)
         symmetry_eff = symmetry(cell.value.structure)
-        geometry_eff = cell_geometry(analysis.geometry, cell)
+        geometry_eff = _cell_geometry(analysis.geometry, cell)
     else:
         cause = Blocked(by=blocked_by(cell))
         pseudo = PseudoAdvice(
@@ -135,7 +136,7 @@ def magnetic_advice(
     )
 
 
-def cell_geometry(
+def _cell_geometry(
     geometry: FieldState[GeometryFacts], cell: FieldState[MagneticCell]
 ) -> FieldState[GeometryFacts]:
     """``geometry`` with the vacuum facts of the written ``cell``

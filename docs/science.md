@@ -201,10 +201,13 @@ the cell; it is recorded as no rotation and counted in the displacement. The
 info notice `magnetic.cell_framed` names the rotation, shift and
 displacement when the cell was turned, its origin moved, or an atom moved by
 1e-4 Å or more.
-The `geometry` record describes the uploaded cell. The dipole notice and the
-`vc-relax` default for `cell_dofree` read the vacuum and frame of the written
-cell, so a slab uploaded tilted shows `xy_frame` false in that record and is
-still written, and relaxed with `'2Dxy'`, in the xy frame.
+The `geometry` record describes the uploaded cell, and `geometry_eff` the
+written one: its vacuum axes and widths and its `slab` facts, with the bond
+rank (`dimensionality`) of the upload, as `symmetry_eff` is the written cell's
+`symmetry`. The dipole notice, its `isolation='slab'` offer and the `vc-relax`
+default for `cell_dofree` read `geometry_eff`, so a slab uploaded tilted shows
+`xy_frame` false in `geometry` and true in `geometry_eff`, and is written, and
+relaxed with `'2Dxy'`, in the xy frame.
 A `cell_dofree` that holds or frees Cartesian components (`a`, `b`, `c`, `x`,
 `y`, `z`, `xy`, `xz`, `yz`, `xyz`) is refused on a turned cell, whose x, y and
 z are not the uploaded cell's; `all`, `shape` and `fixa`, `fixb` or `fixc`
@@ -603,7 +606,8 @@ The notice describes the cell that is written, which an antiferromagnetic
 origin moved as [the written cell](#check-the-written-cell) describes. The
 `geometry` record's `slab` field (`vacuum_center`, `vacuum_fraction`,
 `fits_2d_truncation`) describes the uploaded cell, so it can differ from the
-written one when the cell was turned or its origin moved.
+written one when the cell was turned or its origin moved; the `geometry_eff`
+record's `slab` field is the written cell's, the one the notice reads.
 Symmetric monolayers and bulk crystals get no notice: a bulk layered crystal
 such as graphite classifies as `2d` but has no vacuum.
 
@@ -756,7 +760,8 @@ vacuum lies along c and a and b lie in the Cartesian xy plane, the frame every
 slab with its vacuum along c is written in (see
 [the written cell](#check-the-written-cell)). The `geometry` record's `slab`
 field shows the vacuum axis and whether the uploaded cell is in that frame
-(`xy_frame`); the default is decided on the written cell. A wire, or a slab
+(`xy_frame`); the default is decided on the written cell, whose `slab` facts
+the `geometry_eff` record shows. A wire, or a slab
 with its vacuum along a or b, has no default:
 Goldilocks refuses the `vc-relax` until you set `cell_dofree` or reorient the
 cell. Whatever its source, `'2Dxy'` or `'2Dshape'` is refused

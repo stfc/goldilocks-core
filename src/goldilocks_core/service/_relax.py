@@ -44,7 +44,6 @@ from goldilocks_core.service._bundle import (
     request_identity,
 )
 from goldilocks_core.service._generate import AdviceIncomplete, generate
-from goldilocks_core.service._magnetic import cell_geometry
 from goldilocks_core.service._pipeline import advise_steps, check
 from goldilocks_core.steps import SharedContext, Step, default_shared_context
 
@@ -85,9 +84,10 @@ def advise_relax(
     """Diagnosis, under the same contract as ``advise()``: an undecided
     field degrades, a fault raises. ``relax_settings`` reads
     ``advice.step.kpoints.convergence`` (for ``etot_conv_thr``) and
-    ``advice.analysis.geometry`` with the vacuum and frame of the cell to
-    be written (``service._magnetic.cell_geometry``), which decide
-    vc-relax's ``cell_dofree``, off the very same ``Advice`` this function
+    ``advice.system.geometry_eff``, the uploaded structure's geometry with
+    the vacuum and frame of the cell to be written, the record the advice
+    publishes (#210), which decides vc-relax's ``cell_dofree``, off the very
+    same ``Advice`` this function
     just built -- no second structure-analysis pass. The written cell puts
     every slab with its vacuum along c in the xy frame, so such a slab
     gets '2Dxy' however it was uploaded (#140)."""
@@ -106,7 +106,7 @@ def advise_relax(
     relax = relax_settings(
         calculation,
         advice.step.kpoints.convergence,
-        cell_geometry(advice.analysis.geometry, advice.system.cell),
+        advice.system.geometry_eff,
         relax_overrides.relax,
         relax_overrides.relax_llm,
     )

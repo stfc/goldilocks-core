@@ -27,7 +27,8 @@ LIMITS = {
     "cli.core": (11, 16),  # + cli._output.command_stdout (#183)
     "server.http": (5, 12),
     "server.mcp": (5, 10),
-    "service._system": (13, 23),
+    # + analysis.geometry.GeometryFacts for the geometry_eff record (#210)
+    "service._system": (14, 23),
     "service._dos": (16, 26),
     # + advisors.q_sampling, advisors.phonon for the phonon steps' override bags (#215)
     "service._step": (14, 25),

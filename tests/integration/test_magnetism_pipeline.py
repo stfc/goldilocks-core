@@ -1064,3 +1064,13 @@ def test_the_dipole_notice_reads_the_vacuum_of_the_cell_written(monkeypatch) -> 
     assert edir == 3
     assert _drop_in_vacuum(cell, edir, emaxpos, eopreg)
     assert not _drop_in_vacuum(janus, edir, emaxpos, eopreg)
+    # #210: the published geometry_eff is the written cell's, the one the
+    # notice reads; geometry stays the upload's.
+    records = advice.records()
+    centre = (emaxpos + eopreg / 2) % 1
+    assert records["geometry_eff"].value.slab.vacuum_center == pytest.approx(
+        centre, abs=1e-4
+    )
+    assert records["geometry"].value.slab.vacuum_center != pytest.approx(
+        centre, abs=1e-2
+    )

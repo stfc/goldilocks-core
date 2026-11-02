@@ -243,6 +243,11 @@ def test_a_tilted_slab_is_written_in_the_xy_frame_and_relaxed_under_2dxy(
     assert "cell_dofree      = '2Dxy'" in content
     assert a[1] == a[2] == b[2] == 0.0
     assert advice.records()["magnetic"].value.frame.rotated is True
+    # #210: goldilocks.json's geometry is the tilted upload's, and its
+    # geometry_eff the written cell's, the one '2Dxy' was decided on.
+    records = records_document(advice.records())
+    assert records["geometry"]["value"]["slab"]["xy_frame"] is False
+    assert records["geometry_eff"]["value"]["slab"]["xy_frame"] is True
 
 
 def test_vc_relax_of_a_slab_with_its_vacuum_along_a_is_refused(

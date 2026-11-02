@@ -57,7 +57,8 @@ Bi2Se3 rank '2d' but have no vacuum (#160). Without a resolved point group
 the slab may be symmetric, so there is no notice either.
 
 The service passes the vacuum facts of the cell the input is written for
-(``service/_magnetic.py``'s ``geometry_eff``), so ``edir``, ``emaxpos`` and
+(``geometry_eff``, which the advice publishes as a record, #210), so
+``edir``, ``emaxpos`` and
 the 'slab' offer describe that cell, the one ``checks.check_all`` tests
 'slab' on. ``symmetry`` is the uploaded structure's: an antiferromagnetic
 ordering writes the same atoms in another cell with the vacuum vector at

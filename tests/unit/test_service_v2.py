@@ -15,7 +15,9 @@ from support import (
     fcc_lead,
     hcp_gadolinium,
     in_memory_source,
+    janus_molybdenum_sulfide_selenide,
     mc3d_42058_silicon,
+    rotated_about_x,
     sssp_fixture_table_spec as _sssp_table_spec,
 )
 
@@ -905,6 +907,36 @@ class TestAfmRelabeling:
         assert [site.label for site in cell] == ["Fe", "O"]
         assert cell.frac_coords.tolist() == rock_salt_feo.frac_coords.tolist()
         assert advice.system.symmetry_eff.value == advice.analysis.symmetry.value
+
+    def test_geometry_eff_is_the_written_cell_s_geometry(self, hpc) -> None:
+        """#210: records.geometry describes the uploaded cell, and geometry_eff
+        the written one, which the dipole notice, its 'slab' offer and
+        vc-relax's cell_dofree read. A Janus MoSSe monolayer as built is
+        written as uploaded, so the two agree; turned 30 degrees about x it is
+        written back in the xy frame, so only geometry_eff has its slab there
+        and fitting the 2D truncation the notice offers."""
+        built = advise(janus_molybdenum_sulfide_selenide(), hpc=hpc).records()
+        turned = advise(
+            rotated_about_x(janus_molybdenum_sulfide_selenide(), 30.0), hpc=hpc
+        ).records()
+
+        assert built["geometry_eff"].value == built["geometry"].value
+        uploaded, written = turned["geometry"].value, turned["geometry_eff"].value
+        assert (uploaded.slab.xy_frame, uploaded.slab.fits_2d_truncation) == (
+            False,
+            False,
+        )
+        assert (written.slab.xy_frame, written.slab.fits_2d_truncation) == (
+            True,
+            True,
+        )
+        assert written.vacuum_axes == uploaded.vacuum_axes
+        assert written.vacuum_widths_angstrom == pytest.approx(
+            uploaded.vacuum_widths_angstrom
+        )
+        (notice,) = turned["boundary"].value.warnings
+        assert notice.code == "boundary.dipole_correction_suggested"
+        assert "isolation='slab'" in notice.message
 
 
 @pytest.fixture

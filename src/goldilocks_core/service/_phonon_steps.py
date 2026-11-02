@@ -59,7 +59,6 @@ from goldilocks_core.advisors.relax import (
 )
 from goldilocks_core.resolution import FieldState
 from goldilocks_core.service._advice import Advice
-from goldilocks_core.service._magnetic import cell_geometry
 from goldilocks_core.service._step import StepOverrides
 from goldilocks_core.step_settings import (
     DispersionSettings,
@@ -130,7 +129,7 @@ def phonon_steps_advice(
     ``steps["ph"]``, so its k-mesh meets the q-mesh decided here."""
     system = first.system
     kpoints = first.step.kpoints
-    geometry = cell_geometry(first.analysis.geometry, system.cell)
+    geometry = system.geometry_eff
     relax = None
     if first_step != "scf":
         relax_overrides = steps[first_step].relax

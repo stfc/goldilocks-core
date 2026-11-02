@@ -6,6 +6,7 @@ FastAPI or the mcp package installed at all.
 from __future__ import annotations
 
 import hashlib
+import re
 from importlib.metadata import version
 
 import pytest
@@ -425,13 +426,10 @@ class TestRun:
 
         _summary, bundle_input = _handlers.run(document)
 
-        (manifest,) = (
-            strict_json(file["content"])
-            for file in bundle_files(bundle_input)
-            if file["path"] == "goldilocks.json"
-        )
+        files = {file["path"]: file["content"] for file in bundle_files(bundle_input)}
+        manifest = strict_json(files["goldilocks.json"])
         content = silicon_cif.encode("utf-8")
-        assert manifest["schema_version"] == 2
+        assert manifest["schema_version"] == 3
         assert manifest["request"] == {
             "code": "quantum_espresso",
             "task": task,
@@ -445,6 +443,17 @@ class TestRun:
                 "size_bytes": len(content),
             },
         }
+        # #222: the manifest's steps and README.md list the inputs in the
+        # order submit.sh runs them, not alphabetically.
+        run_order = re.findall(r" -in (\S+)", files["submit.sh"].decode("utf-8"))
+        assert [
+            path for step in manifest["steps"] for path in step["files"]
+        ] == run_order
+        contents = re.findall(
+            r"^- `([^`]+)`$", files["README.md"].decode("utf-8"), flags=re.M
+        )
+        assert contents[: len(run_order)] == run_order
+        assert contents[len(run_order)] == "submit.sh"
 
 
 class TestBuildReadiness:

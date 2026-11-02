@@ -14,9 +14,10 @@ import { readableName } from "./readableName";
 
 /** Mirrors the roles `bundle.py`/`_bundle.py` actually assign in
  * `goldilocks.json` (verified against source, not guessed) -- this is
- * the display order the user asked for: rendered code input, then the
- * submission script, then pseudopotentials and their table's licence,
- * then the machine-readable manifest, then the human-readable docs. */
+ * the display order the user asked for: rendered code input, in the order
+ * its steps run (the manifest's `steps`, #222), then the submission
+ * script, then pseudopotentials and their table's licence, then the
+ * machine-readable manifest, then the human-readable docs. */
 const ROLE_RANK: Readonly<Record<string, number>> = {
   input: 0,
   submission_script: 1,
@@ -45,10 +46,19 @@ function orderedFiles(
   files: readonly ArchiveFile[],
   manifest: InputManifest | null,
 ): ArchiveFile[] {
+  const runOrder = new Map(
+    (manifest === null ? [] : manifest.steps)
+      .flatMap((step) => step.files)
+      .map((path, index) => [path, index]),
+  );
+  const placeOf = (path: string) => runOrder.get(path) ?? runOrder.size;
   return [...files].sort((a, b) => {
     const rankA = ROLE_RANK[roleOf(manifest, a.path) ?? ""] ?? UNRANKED;
     const rankB = ROLE_RANK[roleOf(manifest, b.path) ?? ""] ?? UNRANKED;
-    return rankA !== rankB ? rankA - rankB : a.path.localeCompare(b.path);
+    if (rankA !== rankB) return rankA - rankB;
+    const placeA = placeOf(a.path);
+    const placeB = placeOf(b.path);
+    return placeA !== placeB ? placeA - placeB : a.path.localeCompare(b.path);
   });
 }
 

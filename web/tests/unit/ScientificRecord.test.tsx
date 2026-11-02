@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import type { ResolvedField } from "../../src/api/coreClient";
-import { buildArchive } from "../support/workbenchFixtures";
+import { buildArchive, buildDosArchive } from "../support/workbenchFixtures";
 import { GeneratedInputReview } from "../../src/review/GeneratedInputReview";
 import { ScientificRecord } from "../../src/review/ScientificRecord";
 
@@ -143,6 +143,31 @@ describe("GeneratedInputReview", () => {
         name: "Generated input licences/pseudodojo-pbesol-efficiency-sr.txt",
       }),
     ).toHaveTextContent("PseudoDojo pseudopotentials are CC BY 4.0.");
+  });
+
+  it("lists the inputs in the order their steps run, not by path", async () => {
+    // #222: a dos bundle listed dos.in, nscf.in, scf.in, the reverse of the
+    // order the job runs them in.
+    render(
+      <GeneratedInputReview
+        archive={buildDosArchive()}
+        placeholder={PENDING}
+      />,
+      { wrapper: MantineProvider },
+    );
+
+    await screen.findByRole("button", { name: /^scf\.in/ });
+    const paths = screen
+      .getAllByRole("button")
+      .map((button) => button.textContent.replace(/[0-9a-f]{10}$/, ""));
+    expect(paths).toEqual([
+      "scf.in",
+      "nscf.in",
+      "dos.in",
+      "submit.sh",
+      "pseudo/Si.upf",
+      "goldilocks.json",
+    ]);
   });
 
   it("shows a pseudopotential's entries instead of its raw file content", async () => {

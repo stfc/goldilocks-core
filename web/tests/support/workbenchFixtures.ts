@@ -480,7 +480,7 @@ export const runResult: RunResult = {
 };
 
 const MANIFEST_TEXT = JSON.stringify({
-  schema_version: 2,
+  schema_version: 3,
   request: {
     code: "quantum_espresso",
     task: "scf_single_point",
@@ -497,6 +497,7 @@ const MANIFEST_TEXT = JSON.stringify({
   records: scientificRecords,
   warnings: [],
   citations: ["van Setten et al."],
+  steps: [{ name: "scf", files: ["scf.in"] }],
   files: {
     "scf.in": { role: "input", sha256: "c".repeat(64), size_bytes: 11 },
     "pseudo/Si.upf": {
@@ -547,5 +548,38 @@ export function buildArchive(
   return {
     blob: new Blob([new Uint8Array(zipped)], { type: "application/zip" }),
     filename,
+  };
+}
+
+/** A dos task's archive: its inputs named so that path order (dos, nscf,
+ * scf) is the reverse of the order its steps run (scf, nscf, dos, #222). */
+export function buildDosArchive(): ArchiveDownload {
+  const files = {
+    "dos.in": "input",
+    "nscf.in": "input",
+    "scf.in": "input",
+    "submit.sh": "submission_script",
+    "pseudo/Si.upf": "pseudopotential",
+  } as const;
+  const manifest = JSON.stringify({
+    schema_version: 3,
+    steps: ["scf", "nscf", "dos"].map((name) => ({
+      name,
+      files: [`${name}.in`],
+    })),
+    files: Object.fromEntries(
+      Object.entries(files).map(([path, role]) => [
+        path,
+        { role, sha256: "a".repeat(64), size_bytes: 1 },
+      ]),
+    ),
+  });
+  const zipped = zipSync({
+    ...Object.fromEntries(Object.keys(files).map((path) => [path, u8("x")])),
+    "goldilocks.json": u8(manifest),
+  });
+  return {
+    blob: new Blob([new Uint8Array(zipped)], { type: "application/zip" }),
+    filename: "Si.cif-dos.zip",
   };
 }

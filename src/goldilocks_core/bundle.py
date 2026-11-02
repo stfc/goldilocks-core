@@ -87,7 +87,7 @@ from goldilocks_core.resolution import (
 from goldilocks_core.serialization import to_portable
 
 _COMPLETE_MARKER = ".complete"
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 _MANIFEST_KEYS = {
     "citations": "every citation the records carry, as `CITATIONS.md` lists them",
     "files": "the role, sha256 and size of every file in the bundle but "
@@ -97,6 +97,8 @@ _MANIFEST_KEYS = {
     "overrides as submitted, the input structure's name, format, sha256 and "
     "size, and the goldilocks-core version that answered it",
     "schema_version": "the layout version of `goldilocks.json`",
+    "steps": "the task's steps in the order they run, each with the input files "
+    "it reads",
     "warnings": "every warning raised while deciding the records, each naming "
     "the record it concerns",
 }
@@ -140,6 +142,15 @@ class RequestIdentity:
 
 
 @dataclass(frozen=True, slots=True)
+class BundleStep:
+    """One step of the task, in run order: its name and the input files it
+    reads, as the rendered ``steps.Step`` names them (#222)."""
+
+    name: str
+    files: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class BundleInput:
     """Everything one calculation's published output needs -- content
     (``artifacts``), the facts/decisions behind it (``records``, tri
@@ -154,9 +165,13 @@ class BundleInput:
     (``resolution.collect_citations``): the selected pseudopotential table
     and every model that decided a record (#156). ``request`` has no
     default, so no bundle is built without the request it answers (#176).
+    ``steps`` are the task's steps in run order, from the same rendered steps
+    as the input artifacts, so the manifest and ``README.md`` list the inputs
+    in the order they run (#222).
     """
 
     artifacts: tuple[InputArtifact, ...]
+    steps: tuple[BundleStep, ...]
     records: dict[str, FieldState[Any]]
     warnings: tuple[dict[str, object], ...]
     request: RequestIdentity
@@ -200,6 +215,10 @@ def bundle_files(bundle_input: BundleInput) -> tuple[InputArtifact, ...]:
         "records": records_document(bundle_input.records),
         "warnings": list(bundle_input.warnings),
         "citations": collect_citations(bundle_input.records),
+        "steps": [
+            {"name": step.name, "files": list(step.files)}
+            for step in bundle_input.steps
+        ],
     }
     keys = sorted((*document, "files"))
     files: dict[str, tuple[bytes, str]] = {}
@@ -345,6 +364,27 @@ def _manifest_lines(keys: Iterable[str]) -> str:
     return "".join(f"- `{key}`: {_MANIFEST_KEYS[key]}.\n" for key in keys)
 
 
+def _contents(bundle_input: BundleInput) -> list[str]:
+    run_order = {
+        path: index
+        for index, path in enumerate(
+            path for step in bundle_input.steps for path in step.files
+        )
+    }
+
+    def place(artifact: InputArtifact) -> tuple[int, int, str]:
+        role = artifact["role"]
+        rank = (
+            _CONTENTS_ROLES.index(role)
+            if role in _CONTENTS_ROLES
+            else len(_CONTENTS_ROLES)
+        )
+        path = artifact["path"]
+        return rank, run_order.get(path, len(run_order)), path
+
+    return [artifact["path"] for artifact in sorted(bundle_input.artifacts, key=place)]
+
+
 def _citations(bundle_input: BundleInput, keys: list[str]) -> str:
     """The records' citations, then each ``licence`` artifact: a table's
     licence material, which holds the per-family references the records do
@@ -379,12 +419,17 @@ def _citations(bundle_input: BundleInput, keys: list[str]) -> str:
     )
 
 
+_CONTENTS_ROLES = ("input", "submission_script", "pseudopotential", "licence")
+"""The order ``README.md`` lists the artifacts in, by role (#222)."""
+
+
 def _readme(bundle_input: BundleInput, keys: list[str]) -> str:
     """What ``goldilocks.json`` holds, key by key for ``keys`` (those it is
-    written with, #176), then every artifact path. Names no code: the
-    code is a value of the manifest's ``request``."""
-    paths = sorted(artifact["path"] for artifact in bundle_input.artifacts)
-    listing = "".join(f"- `{path}`\n" for path in paths)
+    written with, #176), then every artifact path, by role in
+    ``_CONTENTS_ROLES`` order, the inputs in the order their steps run and
+    the rest by path (#222). Names no code: the code is a value of the
+    manifest's ``request``."""
+    listing = "".join(f"- `{path}`\n" for path in _contents(bundle_input))
     return (
         "# Goldilocks DFT Input Data\n\n"
         "`goldilocks.json` holds:\n\n"

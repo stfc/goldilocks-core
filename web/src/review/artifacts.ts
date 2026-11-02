@@ -30,6 +30,9 @@ export interface InputManifest {
   readonly records: Readonly<Record<string, unknown>>;
   readonly warnings: readonly unknown[];
   readonly citations: readonly string[];
+  /** The task's steps in run order, each with the input files it reads
+   * (#222). */
+  readonly steps: readonly ManifestStep[];
   readonly files: Readonly<
     Record<
       string,
@@ -40,6 +43,11 @@ export interface InputManifest {
       }
     >
   >;
+}
+
+export interface ManifestStep {
+  readonly name: string;
+  readonly files: readonly string[];
 }
 
 export interface ArchiveFile {
@@ -86,7 +94,9 @@ function isManifest(value: unknown): value is InputManifest {
     typeof value === "object" &&
     value !== null &&
     "files" in value &&
-    typeof value.files === "object"
+    typeof value.files === "object" &&
+    "steps" in value &&
+    Array.isArray(value.steps)
   );
 }
 

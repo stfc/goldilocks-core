@@ -8,7 +8,12 @@ from collections.abc import Mapping
 from importlib.metadata import version as package_version
 from pathlib import PurePosixPath
 
-from goldilocks_core.bundle import BundleInput, RequestIdentity, StructureIdentity
+from goldilocks_core.bundle import (
+    BundleInput,
+    BundleStep,
+    RequestIdentity,
+    StructureIdentity,
+)
 from goldilocks_core.generation.files import InputArtifact
 from goldilocks_core.inputs.hpc import HpcProfile
 from goldilocks_core.resolution import FieldState
@@ -126,6 +131,9 @@ def assemble_bundle_input(
     )
     return BundleInput(
         artifacts=tuple(artifacts),
+        steps=tuple(
+            BundleStep(name=step.name, files=tuple(step.files)) for step in steps
+        ),
         records=records,
         warnings=tuple(warnings),
         request=request,

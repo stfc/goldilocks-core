@@ -18,6 +18,7 @@ from goldilocks_core.assets.pseudopotentials.upf import PseudoMetadata
 from goldilocks_core.bundle import (
     ArchiveOutput,
     BundleInput,
+    BundleStep,
     DirectoryOutput,
     RequestIdentity,
     archive_bytes,
@@ -59,6 +60,7 @@ def _bundle_input(**overrides) -> BundleInput:
             _artifact("source/original.cif", b"cif content", "structure_source"),
             _artifact("inputs/scf.in", b"&CONTROL\n/\n", "input"),
         ),
+        "steps": (BundleStep(name="scf", files=("inputs/scf.in",)),),
         "records": {
             "functional": Resolved("PBEsol", Provenance(source="heuristic")),
             "pseudo_table": Resolved(
@@ -489,16 +491,61 @@ def test_readme_lists_every_artifact_path_without_naming_a_specific_code() -> No
     assert "quantum" not in readme.lower()
 
 
+def test_readme_lists_the_inputs_in_run_order_then_each_role() -> None:
+    """#222: README.md listed every path alphabetically, so a dos bundle read
+    dos.in, licences/..., nscf.in, pseudo/..., scf.in, submit.sh. The inputs
+    now come in the order their steps run, then the submission script, the
+    pseudopotentials, the licences and any other file, each by path, and the
+    manifest names the steps."""
+    artifacts = tuple(
+        _artifact(path, b"x", role)
+        for path, role in (
+            ("dos.in", "input"),
+            ("licences/table.txt", "licence"),
+            ("nscf.in", "input"),
+            ("pseudo/Si.upf", "pseudopotential"),
+            ("scf.in", "input"),
+            ("source/original.cif", "structure_source"),
+            ("submit.sh", "submission_script"),
+        )
+    )
+    steps = tuple(
+        BundleStep(name=name, files=(f"{name}.in",)) for name in ("scf", "nscf", "dos")
+    )
+
+    files = {
+        item["path"]: item["content"]
+        for item in bundle_files(_bundle_input(artifacts=artifacts, steps=steps))
+    }
+    readme = files["README.md"].decode("utf-8")
+
+    assert re.findall(r"^- `([^`]+)`$", readme, flags=re.MULTILINE) == [
+        "scf.in",
+        "nscf.in",
+        "dos.in",
+        "submit.sh",
+        "pseudo/Si.upf",
+        "licences/table.txt",
+        "source/original.cif",
+    ]
+    assert strict_json(files["goldilocks.json"])["steps"] == [
+        {"name": "scf", "files": ["scf.in"]},
+        {"name": "nscf", "files": ["nscf.in"]},
+        {"name": "dos", "files": ["dos.in"]},
+    ]
+
+
 def test_manifest_records_the_request_the_bundle_answers() -> None:
     """#176: goldilocks.json held records, warnings, citations and file
     hashes, but not the code, task, HPC profile, engine version, overrides or
     input structure, so no bundle could be traced back to its request. Its
     ``request`` block now holds them as given, the overrides verbatim with
-    their step prefixes; the manifest layout is schema_version 2."""
+    their step prefixes; the manifest layout is schema_version 3, which adds
+    the steps (#222)."""
     files = {item["path"]: item["content"] for item in bundle_files(_bundle_input())}
     manifest = strict_json(files["goldilocks.json"])
 
-    assert manifest["schema_version"] == 2
+    assert manifest["schema_version"] == 3
     assert manifest["request"] == {
         "code": "quantum_espresso",
         "task": "dos",
@@ -542,6 +589,7 @@ def test_readme_and_citations_describe_only_keys_the_manifest_holds() -> None:
             "records",
             "request",
             "schema_version",
+            "steps",
             "warnings",
         ]
     )

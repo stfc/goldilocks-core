@@ -39,7 +39,7 @@ The main files in `si-run/` are:
 | `pseudo/`                    | The selected UPF pseudopotential file(s)                                                         |
 | `licences/`                  | The pseudopotential table's licence file, shipped with its UPFs                                 |
 | `submit.sh`                  | Generated SLURM submission script for the chosen `--hpc` profile; a phonon task's also runs a job timer and resumes from a later step (see [phonon jobs](cli.md#submit-and-resume-a-phonon-job)) |
-| `goldilocks.json`            | The request (code, task, HPC profile, overrides as given, structure sha256, goldilocks-core version), every setting with its provenance (including the model behind each ML-chosen record), and file hashes |
+| `goldilocks.json`            | The request (code, task, HPC profile, overrides as given, structure sha256, goldilocks-core version), the steps in run order with their input files, every setting with its provenance (including the model behind each ML-chosen record), and file hashes |
 | `README.md`, `CITATIONS.md`  | What `goldilocks.json` holds and the bundle contents; what to cite: the pseudopotential table, every model used, the path table of a `band` task or a phonon task's dispersion, a phonon task's protocols and DFPT reference, and the licence files |
 
 ## 3. Check the settings

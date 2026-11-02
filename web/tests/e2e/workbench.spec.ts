@@ -1879,8 +1879,8 @@ function verifyArchive(
     };
   };
   // The request the bundle answers (#176): the uploaded file by name and
-  // the sha256 of its bytes.
-  expect(manifest.schema_version).toBe(2);
+  // the sha256 of its bytes. Schema 3 adds the steps in run order (#222).
+  expect(manifest.schema_version).toBe(3);
   expect(manifest.request.code).toBe("quantum_espresso");
   expect(manifest.request.structure).toMatchObject({
     name: expected.structureName,

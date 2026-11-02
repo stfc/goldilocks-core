@@ -666,6 +666,8 @@ describe("Workspace", () => {
           code: "parallelisation.npool_does_not_divide_ntasks",
           fields: ["npool", "ntasks"],
           message: "npool=7 does not divide ntasks=8.",
+          summary:
+            "npool must divide the job's task count: choose a divisor, or leave npool automatic.",
           remedies: [{ npool: null }],
         },
       ],

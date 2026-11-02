@@ -1,4 +1,6 @@
-import { Alert, Button, Group, List, Stack, Text } from "@mantine/core";
+import { useId, useState } from "react";
+import { ActionIcon, Button, Group, List, Stack, Text } from "@mantine/core";
+import { Info } from "lucide-react";
 
 import type { BlockingFinding } from "../api/coreClient";
 import { currentFindings } from "../workspace/pipelineStatus";
@@ -79,8 +81,10 @@ function findingKey(finding: BlockingFinding): string {
   return JSON.stringify([finding.code, finding.message]);
 }
 
-/** `findings` as a list, each message with its remedy buttons: the failure
- * banner's and the Bundle card's account of why no input files exist. */
+/** `findings` as a list, each its summary, a toggle that shows its full
+ * message in place, and its remedy buttons: the failure banner's and the
+ * Bundle card's account of why no input files exist, the one place a
+ * finding's remedies are offered (#223). */
 export function FindingList({
   findings,
 }: {
@@ -90,19 +94,45 @@ export function FindingList({
     <List size="sm" spacing="xs">
       {findings.map((finding) => (
         <List.Item key={findingKey(finding)}>
-          <Stack gap={4} align="flex-start">
-            <Text size="sm">{finding.message}</Text>
-            <RemedyButtons finding={finding} />
-          </Stack>
+          <FindingEntry finding={finding} />
         </List.Item>
       ))}
     </List>
   );
 }
 
-/** The current draft's findings that concern setting or fact `field`, shown
- * under its control with their remedies (#151); nothing when there are
- * none. */
+function FindingEntry({ finding }: { readonly finding: BlockingFinding }) {
+  const [expanded, setExpanded] = useState(false);
+  const detailsId = useId();
+  return (
+    <Stack gap={4} align="flex-start">
+      <Group gap={4} wrap="nowrap" align="flex-start">
+        <Text size="sm">{finding.summary}</Text>
+        <ActionIcon
+          variant="subtle"
+          color="gray"
+          aria-expanded={expanded}
+          aria-controls={detailsId}
+          aria-label={expanded ? "Hide the details" : "Show the details"}
+          title={expanded ? "Hide the details" : "Show the details"}
+          onClick={() => {
+            setExpanded(!expanded);
+          }}
+        >
+          <Info aria-hidden="true" size={16} />
+        </ActionIcon>
+      </Group>
+      <Text id={detailsId} size="xs" hidden={!expanded}>
+        {finding.message}
+      </Text>
+      <RemedyButtons finding={finding} />
+    </Stack>
+  );
+}
+
+/** One line under the control of setting or fact `field` while a finding of
+ * the current draft concerns it, pointing to the Bundle card, which holds
+ * the findings and their remedies (#223); nothing when none does. */
 export function FindingNotes({ field }: { readonly field: string }) {
   const snapshot = useWorkspaceSnapshot();
   const findings = currentFindings(snapshot).filter((finding) =>
@@ -110,21 +140,15 @@ export function FindingNotes({ field }: { readonly field: string }) {
   );
   if (findings.length === 0) return null;
   return (
-    <Stack gap={4}>
-      {findings.map((finding) => (
-        <Alert
-          key={findingKey(finding)}
-          role="note"
-          aria-label={`Blocks input generation: ${field}`}
-          color="red"
-          p="xs"
-        >
-          <Stack gap={4} align="flex-start">
-            <Text size="xs">{finding.message}</Text>
-            <RemedyButtons finding={finding} />
-          </Stack>
-        </Alert>
-      ))}
-    </Stack>
+    <Text
+      size="xs"
+      c="red"
+      role="note"
+      aria-label={`Blocks input generation: ${field}`}
+    >
+      {findings.every((finding) => finding.remedies.length > 0)
+        ? "Needs confirmation — see Bundle"
+        : "Blocks input generation — see Bundle"}
+    </Text>
   );
 }

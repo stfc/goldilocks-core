@@ -62,6 +62,9 @@ from goldilocks_core.resolution import Blocked, Provenance, Resolved, Unavailabl
 from goldilocks_core.set_overrides import build_overrides
 from goldilocks_core.types import CalcTask
 
+_SUMMARY = {finding.code: finding.summary for finding in FINDING_CATALOGUE}
+"""Each catalogued finding's summary, which every occurrence of it keeps
+unless its code words one per branch (#223)."""
 _IRON = Structure(Lattice.cubic(2.87), ["Fe"], [[0.0, 0.0, 0.0]])
 
 
@@ -73,7 +76,12 @@ def _only(report: CheckReport) -> Finding:
 
 def _blocked(*causes: str) -> tuple[Finding, ...]:
     """The findings ``collect_blocked`` gives for root causes ``causes``."""
-    return tuple(Finding(code="advice.blocked", message=cause) for cause in causes)
+    return tuple(
+        Finding(
+            code="advice.blocked", message=cause, summary=_SUMMARY["advice.blocked"]
+        )
+        for cause in causes
+    )
 
 
 def _messages(report: CheckReport) -> list[str]:
@@ -199,6 +207,7 @@ def test_fixed_occupations_with_missing_moment_blocks() -> None:
     assert report.blocking == (
         Finding(
             code="occupations.fixed_needs_tot_magnetization",
+            summary=_SUMMARY["occupations.fixed_needs_tot_magnetization"],
             message=(
                 "occupations=fixed on a collinear spin-polarized run needs an "
                 "integer tot_magnetization of the electron count's parity, and "
@@ -293,6 +302,7 @@ def test_fixed_occupations_non_spin_polarized_odd_electron_count_blocks() -> Non
     assert report.blocking == (
         Finding(
             code="occupations.fixed_needs_even_electron_count",
+            summary=_SUMMARY["occupations.fixed_needs_even_electron_count"],
             message=(
                 "occupations=fixed without spin polarization needs an even "
                 "electron count, but nelec=3 is odd, which leaves one band half "
@@ -1035,6 +1045,7 @@ def test_d3_dispersion_with_lda_blocks() -> None:
     assert report.blocking == (
         Finding(
             code="vdw.use_vdw_without_d3bj_parameters",
+            summary=_SUMMARY["vdw.use_vdw_without_d3bj_parameters"],
             message=(
                 "use_vdw=true adds D3(BJ) dispersion, but Quantum ESPRESSO's "
                 "DFT-D3 has no parameters for functional LDA, so pw.x would stop "
@@ -1155,6 +1166,7 @@ def test_fix_bottom_layers_may_fix_every_layer_of_the_slab_but_no_more() -> None
     assert _fix_bottom_layers_findings(4, sheet) == (
         Finding(
             code="relax.fix_bottom_layers_exceeds_layers",
+            summary=_SUMMARY["relax.fix_bottom_layers_exceeds_layers"],
             message=(
                 "fix_bottom_layers=4 exceeds the 3 atomic layers of the slab to "
                 "be written. Set fix_bottom_layers to at most 3, or unset it."
@@ -1219,6 +1231,7 @@ def test_npool_not_dividing_ntasks_blocks() -> None:
     assert report.blocking == (
         Finding(
             code="parallelisation.npool_does_not_divide_ntasks",
+            summary=_SUMMARY["parallelisation.npool_does_not_divide_ntasks"],
             message=(
                 "npool=7 does not divide ntasks=64, and pw.x refuses that layout. "
                 "Unset npool for the default, or set npool to a divisor of ntasks."
@@ -1283,6 +1296,7 @@ def test_ndiag_reason_states_the_grid_the_bound_and_the_remedy() -> None:
     assert report.blocking == (
         Finding(
             code="parallelisation.ndiag_grid_too_large",
+            summary=_SUMMARY["parallelisation.ndiag_grid_too_large"],
             message=(
                 "ndiag=16 gives a 4x4 diagonalization grid, which cannot "
                 "distribute nbnd=8 bands (it needs nbnd > 9); pw.x would abort "
@@ -1382,6 +1396,7 @@ def test_too_few_spin_up_bands_for_the_pinned_moment_blocks() -> None:
     assert report.blocking == (
         Finding(
             code="nbnd.too_few_bands",
+            summary=_SUMMARY["nbnd.too_few_bands"],
             message=(
                 "nbnd=96 cannot hold 104 spin-up electrons: pw.x stops in setup "
                 "with 'too few spin up bands'. Unset nbnd and extra_bands for the "
@@ -1460,6 +1475,7 @@ def test_the_band_rule_holds_without_an_scf_loop_where_pw_x_does_not_stop(
     assert report.blocking == (
         Finding(
             code="nbnd.too_few_bands",
+            summary=_SUMMARY["nbnd.too_few_bands"],
             message=(
                 "nbnd=2 cannot hold 8 electrons, two per band, so this "
                 f"{purpose} step would leave occupied bands out; pw.x checks the "
@@ -1521,6 +1537,7 @@ def test_a_moment_on_a_collinear_bands_step_blocks(occupations, written) -> None
     assert report.blocking == (
         Finding(
             code="occupations.bands_x_refuses_tot_magnetization",
+            summary=_SUMMARY["occupations.bands_x_refuses_tot_magnetization"],
             message=(
                 f"A band task cannot pin tot_magnetization={written} on a "
                 "collinear spin-polarized run: it gives the scf two Fermi "
@@ -1570,6 +1587,7 @@ def test_a_bands_step_above_pw_x_s_k_point_limit_blocks() -> None:
     assert report.blocking == (
         Finding(
             code="k_path.too_many_kpoints",
+            summary=_SUMMARY["k_path.too_many_kpoints"],
             message=(
                 "The band path gives the bands step 40001 k-point/spin pairs, "
                 "more than the 40000 pw.x accepts: it stops in setup with 'too "
@@ -1616,6 +1634,7 @@ def test_a_hubbard_u_on_ortho_atomic_projectors_is_refused_in_a_phonon_task(
     assert report.blocking == (
         Finding(
             code="phonon.hubbard_projectors_unsupported",
+            summary=_SUMMARY["phonon.hubbard_projectors_unsupported"],
             message=(
                 "The Hubbard U on Ni is written with ortho-atomic projectors, but "
                 "ph.x computes phonons with a Hubbard U only for atomic ones and "
@@ -1660,6 +1679,7 @@ def test_spin_orbit_coupling_with_a_hubbard_u_is_refused_in_a_phonon_task(
     assert report.blocking == (
         Finding(
             code="phonon.noncollinear_hubbard_unsupported",
+            summary=_SUMMARY["phonon.noncollinear_hubbard_unsupported"],
             message=(
                 "The phonon tasks cannot combine spin_orbit_coupling with the "
                 "Hubbard U on Ni: ph.x computes phonons with a Hubbard U for "
@@ -1708,6 +1728,7 @@ def test_spin_orbit_with_an_ortho_atomic_hubbard_u_names_both_causes() -> None:
 
 _PHONON_ISOLATED = Finding(
     code="phonon.isolated_boundary_unsupported",
+    summary=_SUMMARY["phonon.isolated_boundary_unsupported"],
     message=(
         "isolation=isolated writes Martyna-Tuckerman, which ph.x does not "
         "implement: Quantum ESPRESSO 7.3's ph.x drops it, treating the molecule or "
@@ -1791,6 +1812,7 @@ def test_a_periodic_molecule_in_a_box_is_refused_in_a_phonon_task(
     assert report.blocking == (
         Finding(
             code="phonon.isolated_boundary_unsupported",
+            summary=_SUMMARY["phonon.isolated_boundary_unsupported"],
             message=(
                 "A molecule or cluster in a box (vacuum along a, b and c) has no "
                 "phonon dispersion, and with isolation=periodic ph.x would compute "
@@ -1910,6 +1932,7 @@ def test_a_pinned_moment_on_smearing_or_tetrahedra_is_refused(occupations: str) 
     assert report.blocking == (
         Finding(
             code="phonon.pinned_moment_with_smearing",
+            summary=_SUMMARY["phonon.pinned_moment_with_smearing"],
             message=(
                 f"tot_magnetization=2 with occupations={occupations} "
                 f"{_TWO_FERMI_ENERGIES}, or set occupations=fixed, which this "
@@ -1987,6 +2010,7 @@ def test_a_q_grid_that_breaks_symmetry_is_refused(q_grid: tuple[int, int, int]) 
     assert report.blocking == (
         Finding(
             code="phonon.q_grid_breaks_symmetry",
+            summary=_SUMMARY["phonon.q_grid_breaks_symmetry"],
             message=f"{q.value.refusal.cause}. Unset q_grid for the default q-mesh.",
             fields=("q_grid",),
             remedies=({"q_grid": None},),
@@ -2004,6 +2028,7 @@ def test_a_q_mesh_beyond_q2r_x_is_refused() -> None:
     assert report.blocking == (
         Finding(
             code="phonon.too_many_q_points",
+            summary=_SUMMARY["phonon.too_many_q_points"],
             message=(
                 f"The phonon run would stop in q2r.x: {q.value.refusal.cause}. Unset "
                 "q_grid and q_distance for the default q-mesh, or set a coarser one."
@@ -2050,6 +2075,7 @@ def test_a_fragile_cell_is_refused_in_vc_relax_phonon() -> None:
     assert report.blocking == (
         Finding(
             code="phonon.vc_relax_fft_grid_unsupported",
+            summary=_SUMMARY["phonon.vc_relax_fft_grid_unsupported"],
             message=(
                 "vc-relax-phonon cannot run on this cell: pw.x's own FFT grid for "
                 "it, 40x45x64, is not mapped onto itself by the symmetry operations "
@@ -2109,6 +2135,7 @@ def test_a_cell_that_is_not_fragile_passes_in_vc_relax_phonon() -> None:
 
 _PHONON_FIX_BOTTOM_LAYERS = Finding(
     code="phonon.fix_bottom_layers_unsupported",
+    summary=_SUMMARY["phonon.fix_bottom_layers_unsupported"],
     message=(
         "fix_bottom_layers=1 pins atoms in the relaxation, so they keep leftover "
         "forces, while ph.x computes the phonons as second derivatives at an "
@@ -2221,6 +2248,21 @@ def _spin(
         hubbard=hubbard,
     )
     return magnetic_config(cell)
+
+
+def _metallicity_summary(chosen: str) -> str:
+    """The rule-17 summary of a run on ``chosen`` occupations (#223)."""
+    stake = "an insulator loses its LO-TO splitting"
+    if chosen == "fixed":
+        return (
+            "Confirm whether this structure is a metal: the requested "
+            "occupations=fixed cannot run as it stands, and a metal needs smearing "
+            f"instead, where {stake}."
+        )
+    return (
+        "Confirm whether this structure is a metal: its composition is not "
+        f"all-metallic, and it runs on occupations={chosen}, where {stake}."
+    )
 
 
 def _metallicity_finding(report: CheckReport) -> Finding:
@@ -2357,6 +2399,7 @@ def test_a_composition_that_is_not_all_metallic_on_smearing_needs_an_answer(
     assert report.blocking == (
         Finding(
             code="phonon.metallicity_unconfirmed",
+            summary=_metallicity_summary("smearing"),
             message=(
                 f"{_opening()} {_CLASSIFIER_THRESHOLD} For an insulator set "
                 f"is_metal=non_metal, which runs it on fixed occupations{_keeps()}"
@@ -2450,6 +2493,7 @@ def test_a_collinear_run_without_a_moment_needs_one_or_no_spin_polarization(
     assert report.blocking == (
         Finding(
             code="phonon.metallicity_unconfirmed",
+            summary=_metallicity_summary("smearing"),
             message=(
                 f"{_opening()} {_held(_NO_MOMENT)[fact]} {_magnetic_insulator()}; "
                 "for one without magnetic moments set is_metal=non_metal and "
@@ -2571,6 +2615,7 @@ def test_an_odd_electron_count_without_spin_polarization_needs_a_metal(
     assert report.blocking == (
         Finding(
             code="phonon.metallicity_unconfirmed",
+            summary=_metallicity_summary("smearing"),
             message=(
                 f"{_opening()} {_held(_ODD_COUNT)[fact]} {_odd_insulator()}{_keeps()}"
             ),
@@ -2601,6 +2646,7 @@ def test_occupations_the_request_sets_need_occupations_fixed_for_an_insulator(
     assert report.blocking == (
         Finding(
             code="phonon.metallicity_unconfirmed",
+            summary=_metallicity_summary(occupations),
             message=(
                 f"{_opening(occupations)} The request sets occupations={occupations}, "
                 "which is_metal does not change. For an insulator set "
@@ -2664,6 +2710,7 @@ def test_requested_occupations_that_fixed_occupations_cannot_replace_say_why(
     assert report.blocking == (
         Finding(
             code="phonon.metallicity_unconfirmed",
+            summary=_metallicity_summary(occupations),
             message=(
                 f"{_opening(occupations)} The request sets occupations={occupations}, "
                 "which is_metal does not change, and setting occupations=fixed alone "
@@ -2784,6 +2831,7 @@ def test_a_requested_fixed_the_run_cannot_take_needs_an_insulator_or_a_metal(
     assert report.blocking == (
         Finding(
             code="phonon.metallicity_unconfirmed",
+            summary=_metallicity_summary("fixed"),
             message=(
                 "The phonon tasks need this structure on fixed occupations, or "
                 "confirmed as a metal: the request sets occupations=fixed, which "
@@ -3018,6 +3066,7 @@ def test_a_finding_document_is_the_json_every_transport_returns() -> None:
         "fields": ["nbnd", "extra_bands"],
         "message": _only(report).message,
         "remedies": [{"nbnd": None, "extra_bands": None}],
+        "summary": _SUMMARY["nbnd.too_few_bands"],
     }
 
 

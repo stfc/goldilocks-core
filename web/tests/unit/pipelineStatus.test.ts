@@ -42,6 +42,8 @@ const reason: BlockingFinding = {
   fields: ["occupations", "tot_magnetization"],
   message:
     "occupations=fixed on a collinear spin-polarized run needs an integer tot_magnetization of the electron count's parity, and none was set or derived. Set occupations=smearing, or set tot_magnetization.",
+  summary:
+    "Fixed occupations on this spin-polarized run need an integer tot_magnetization: set one, or switch occupations to smearing.",
   remedies: [{ occupations: "smearing" }],
 };
 const npoolReason: BlockingFinding = {
@@ -49,6 +51,8 @@ const npoolReason: BlockingFinding = {
   fields: ["npool", "ntasks"],
   message:
     "npool=7 does not divide ntasks=64, and pw.x refuses that layout. Unset npool for the default, or set npool to a divisor of ntasks.",
+  summary:
+    "npool must divide the job's task count: choose a divisor, or leave npool automatic.",
   remedies: [{ npool: null }],
 };
 /** A /run refused with `npoolReason`, and an entry that is no finding. */
@@ -253,7 +257,7 @@ describe("downloadState", () => {
     {
       state: "the verdict blocks",
       fields: { explain: explained(current, [reason, npoolReason]) },
-      reason: `Input files cannot be generated for the current settings: ${reason.message} ${npoolReason.message}`,
+      reason: `Input files cannot be generated for the current settings: ${reason.summary} ${npoolReason.summary}`,
     },
     {
       state: "the preview is on its way",
@@ -287,7 +291,7 @@ describe("downloadState", () => {
 
     expect(downloadState(snapshot(refused))).toEqual({
       enabled: false,
-      reason: `Input generation failed for the current settings: ${npoolReason.message}`,
+      reason: `Input generation failed for the current settings: ${npoolReason.summary}`,
     });
   });
 

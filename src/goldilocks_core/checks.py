@@ -349,7 +349,10 @@ class Finding:
     """One reason the gate refuses a request (module docstring). ``code`` is
     a stable ``FINDING_CATALOGUE`` key a caller may match on; ``fields`` are
     the ``capabilities()`` setting keys it concerns; ``message`` is the text
-    a user reads, with the occurrence's values filled in; each of
+    a user reads, with the occurrence's values filled in; ``summary`` states
+    the decision it asks for in at most 200 characters, about four lines of
+    the Workbench's Bundle card, which shows ``message`` on request (#223);
+    each of
     ``remedies`` is a complete override patch that resolves it, a ``None``
     value clearing that override. ``cause`` states the occurrence's root
     cause where ``message`` words it for one step of a task (rule 4), so
@@ -358,6 +361,7 @@ class Finding:
 
     code: str
     message: str
+    summary: str
     fields: tuple[str, ...] = ()
     remedies: tuple[dict[str, object], ...] = ()
     cause: str | None = field(default=None, compare=False)
@@ -369,6 +373,7 @@ class Finding:
             "fields": list(self.fields),
             "message": self.message,
             "remedies": [dict(remedy) for remedy in self.remedies],
+            "summary": self.summary,
         }
 
 
@@ -388,6 +393,10 @@ _BLOCKED = Finding(
         "A decision the input needs could not be made; the message gives the "
         "root cause."
     ),
+    summary=(
+        "A decision the input files need could not be made; the details name its "
+        "root cause."
+    ),
 )
 _MISSING_TOT_MAGNETIZATION = Finding(
     code="occupations.fixed_needs_tot_magnetization",
@@ -395,6 +404,10 @@ _MISSING_TOT_MAGNETIZATION = Finding(
         "occupations=fixed on a collinear spin-polarized run needs an integer "
         "tot_magnetization of the electron count's parity, and none was set or "
         "derived. Set occupations=smearing, or set tot_magnetization."
+    ),
+    summary=(
+        "Fixed occupations on this spin-polarized run need an integer "
+        "tot_magnetization: set one, or switch occupations to smearing."
     ),
     fields=_MOMENT_FIELDS,
     remedies=(_SMEARING,),
@@ -404,6 +417,10 @@ _NON_INTEGER_TOT_MAGNETIZATION = Finding(
     message=(
         "occupations=fixed on a collinear spin-polarized run needs an integer "
         "tot_magnetization."
+    ),
+    summary=(
+        "Fixed occupations on this spin-polarized run need an integer "
+        "tot_magnetization: set an integer, or switch occupations to smearing."
     ),
     fields=_MOMENT_FIELDS,
     remedies=(_SMEARING, _UNPINNED_SMEARING),
@@ -417,6 +434,10 @@ _TOT_MAGNETIZATION_PARITY = Finding(
         "occupations=fixed needs tot_magnetization to share parity with the "
         "electron count."
     ),
+    summary=(
+        "Fixed occupations need tot_magnetization to share the electron count's "
+        "parity: change it, or switch occupations to smearing."
+    ),
     fields=_MOMENT_FIELDS,
     remedies=(_SMEARING, _UNPINNED_SMEARING),
 )
@@ -426,12 +447,20 @@ _ODD_ELECTRON_COUNT = Finding(
     message=(
         "occupations=fixed without spin polarization needs an even electron count."
     ),
+    summary=(
+        "Fixed occupations without spin polarization need an even electron count: "
+        "turn spin polarization on, or switch occupations to smearing."
+    ),
     fields=("occupations", "spin_polarized"),
     remedies=(_SMEARING, {"spin_polarized": True, **_SMEARING}),
 )
 _TOO_FEW_BANDS = Finding(
     code="nbnd.too_few_bands",
     message="nbnd is below the bands the electrons of each spin channel fill.",
+    summary=(
+        "nbnd is too small to hold the electrons of each spin channel: raise nbnd "
+        "or extra_bands."
+    ),
     fields=("nbnd", "extra_bands"),
     remedies=({"nbnd": None, "extra_bands": None},),
 )
@@ -441,6 +470,11 @@ _BANDS_X_TOT_MAGNETIZATION = Finding(
         "A band task cannot pin tot_magnetization on a collinear spin-polarized "
         "run: bands.x stops on the two Fermi energies it gives."
     ),
+    summary=(
+        "A band task cannot pin tot_magnetization on this spin-polarized run, "
+        "since bands.x stops on the two Fermi energies it gives: unset "
+        "tot_magnetization."
+    ),
     fields=_MOMENT_FIELDS,
     remedies=({**_SMEARING, "tot_magnetization": None},),
 )
@@ -449,24 +483,38 @@ occupations=fixed with no moment to pin."""
 _TOO_MANY_KPOINTS = Finding(
     code="k_path.too_many_kpoints",
     message="The band path holds more k-points than pw.x accepts.",
+    summary=(
+        "The band path holds more k-points than pw.x accepts: raise k_path_distance."
+    ),
     fields=("k_path_distance",),
     remedies=({"k_path_distance": None},),
 )
 _NPOOL = Finding(
     code="parallelisation.npool_does_not_divide_ntasks",
     message="npool must divide ntasks.",
+    summary=(
+        "npool must divide the job's task count: choose a divisor, or leave npool "
+        "automatic."
+    ),
     fields=("npool", "ntasks"),
     remedies=({"npool": None},),
 )
 _NDIAG = Finding(
     code="parallelisation.ndiag_grid_too_large",
     message="ndiag gives a diagonalization grid too large for nbnd.",
+    summary=(
+        "ndiag gives a diagonalization grid too large for nbnd: lower ndiag, or "
+        "leave it automatic."
+    ),
     fields=("ndiag", "nbnd"),
     remedies=({"ndiag": None},),
 )
 _VC_RELAX_ION_DYNAMICS = Finding(
     code="relax.vc_relax_needs_bfgs",
     message="vc-relax is generated only with ion_dynamics=bfgs.",
+    summary=(
+        "vc-relax is generated only with ion_dynamics=bfgs: set ion_dynamics to bfgs."
+    ),
     fields=("ion_dynamics",),
     remedies=({"ion_dynamics": "bfgs"},),
 )
@@ -474,6 +522,10 @@ _ISOLATED_WITHOUT_VACUUM = Finding(
     code="boundary.isolated_needs_vacuum",
     message=(
         "isolation=isolated needs vacuum along a, b and c of the cell to be written."
+    ),
+    summary=(
+        "isolation=isolated needs vacuum along a, b and c of the written cell: "
+        "choose another isolation, or upload the structure in a box."
     ),
     fields=("isolation",),
     remedies=(_PERIODIC,),
@@ -483,6 +535,10 @@ _SLAB_UNSUITED = Finding(
     message=(
         "isolation=slab needs a cell that suits Quantum ESPRESSO's 2D Coulomb "
         "truncation."
+    ),
+    summary=(
+        "isolation=slab needs a cell that suits Quantum ESPRESSO's 2D Coulomb "
+        "truncation, which this one does not: choose another isolation."
     ),
     fields=("isolation",),
     remedies=(_PERIODIC,),
@@ -496,6 +552,11 @@ _ISOLATED_VC_RELAX = Finding(
         "molecule or cluster in a box, or set isolation=periodic for a periodic "
         "structure."
     ),
+    summary=(
+        "vc-relax cannot relax the cell of an isolated system, since pw.x "
+        "computes no stress for it: use the relax task, or isolation=periodic for "
+        "a periodic structure."
+    ),
     fields=("isolation",),
 )
 """No remedy: only a cell with vacuum along a, b and c may be isolated (the
@@ -506,6 +567,10 @@ box."""
 _SLAB_VC_RELAX_CELL_DOFREE = Finding(
     code="relax.slab_vc_relax_needs_2d_cell_dofree",
     message="vc-relax with isolation=slab needs a 2D cell_dofree.",
+    summary=(
+        "vc-relax of a slab needs a 2D cell_dofree, which keeps the vacuum fixed: "
+        "set a 2D cell_dofree, or choose another isolation."
+    ),
     fields=("cell_dofree", "isolation"),
     remedies=({"cell_dofree": "2Dxy"}, {**_PERIODIC, "cell_dofree": None}),
 )
@@ -517,6 +582,10 @@ other cell to the boundary rule's isolation=periodic."""
 _TWO_D_CELL_DOFREE_FRAME = Finding(
     code="relax.two_d_cell_dofree_needs_xy_frame",
     message="A 2D cell_dofree needs a and b in the Cartesian xy plane.",
+    summary=(
+        "A 2D cell_dofree needs a and b in the Cartesian xy plane, which this "
+        "written cell does not have: choose another cell_dofree."
+    ),
     fields=("cell_dofree",),
     remedies=({"cell_dofree": "all"},),
 )
@@ -529,24 +598,40 @@ _CARTESIAN_CELL_DOFREE_ROTATED = Finding(
         "A cell_dofree that masks Cartesian components needs the cell written "
         "unrotated."
     ),
+    summary=(
+        "This cell_dofree masks Cartesian components, which needs the cell "
+        "written unrotated: choose a cell_dofree without Cartesian masks."
+    ),
     fields=("cell_dofree",),
     remedies=({"cell_dofree": None},),
 )
 _DISPERSION_FUNCTIONAL = Finding(
     code="vdw.use_vdw_without_d3bj_parameters",
     message="use_vdw=true needs a functional with D3(BJ) parameters.",
+    summary=(
+        "use_vdw=true needs a functional with D3(BJ) parameters: choose such a "
+        "functional, or turn use_vdw off."
+    ),
     fields=("use_vdw", "functional"),
     remedies=({"use_vdw": False},),
 )
 _FIX_BOTTOM_LAYERS_WITHOUT_SLAB = Finding(
     code="relax.fix_bottom_layers_needs_slab",
     message="fix_bottom_layers needs a slab.",
+    summary=(
+        "fix_bottom_layers needs a slab, which this structure is not: unset "
+        "fix_bottom_layers."
+    ),
     fields=("fix_bottom_layers",),
     remedies=({"fix_bottom_layers": None},),
 )
 _FIX_BOTTOM_LAYERS_EXCEEDS = Finding(
     code="relax.fix_bottom_layers_exceeds_layers",
     message="fix_bottom_layers exceeds the atomic layers of the slab.",
+    summary=(
+        "fix_bottom_layers asks for more layers than the slab has: lower "
+        "fix_bottom_layers."
+    ),
     fields=("fix_bottom_layers",),
     remedies=({"fix_bottom_layers": None},),
 )
@@ -557,6 +642,10 @@ _PHONON_HUBBARD_PROJECTORS = Finding(
         "The phonon tasks need hubbard_projectors=atomic with a Hubbard U: ph.x "
         "computes phonons with a Hubbard U only for atomic projectors."
     ),
+    summary=(
+        "ph.x computes phonons with a Hubbard U only for atomic projectors: set "
+        "hubbard_projectors to atomic, or run without the U."
+    ),
     fields=("hubbard_projectors", "hubbard_needs_correlation"),
     remedies=({"hubbard_projectors": "atomic"}, _NO_U),
 )
@@ -565,6 +654,10 @@ _PHONON_NONCOLLINEAR_HUBBARD = Finding(
     message=(
         "The phonon tasks cannot combine spin_orbit_coupling with a Hubbard U: "
         "ph.x computes phonons with a Hubbard U for collinear spins only."
+    ),
+    summary=(
+        "ph.x computes phonons with a Hubbard U for collinear spins only: turn "
+        "spin-orbit coupling off, or run without the U."
     ),
     fields=("spin_orbit_coupling", "hubbard_needs_correlation"),
     remedies=({"spin_orbit_coupling": False}, _NO_U),
@@ -581,6 +674,11 @@ _PHONON_ISOLATED = Finding(
         "cluster in the box as a periodic array of copies, and 7.5's applies it "
         f"only in part. {_MOLECULAR_VIBRATIONS}"
     ),
+    summary=(
+        "The phonon tasks cannot treat an isolated molecule or cluster: ph.x does "
+        "not implement its boundary. A molecule's vibrations need a Gamma-only "
+        "calculation."
+    ),
     fields=("isolation",),
 )
 """A molecule or cluster in a box, with the message of isolation=isolated;
@@ -592,6 +690,10 @@ _PHONON_PINNED_MOMENT = Finding(
     message=(
         "The phonon tasks cannot pin tot_magnetization on smearing or tetrahedra: "
         "ph.x refuses the two Fermi energies it gives there."
+    ),
+    summary=(
+        "ph.x refuses a pinned tot_magnetization on smearing or tetrahedra: unset "
+        "tot_magnetization, or use fixed occupations."
     ),
     fields=_MOMENT_FIELDS,
     remedies=(_UNPINNED, {"occupations": "fixed"}),
@@ -605,6 +707,10 @@ _PHONON_Q_GRID_SYMMETRY = Finding(
         "one division along each vacuum axis and equal counts on the axes an "
         "operation mixes."
     ),
+    summary=(
+        "q_grid must be a mesh every symmetry operation maps onto itself: change "
+        "q_grid, or set q_distance instead."
+    ),
     fields=("q_grid",),
     remedies=({"q_grid": None},),
 )
@@ -613,6 +719,10 @@ _PHONON_TOO_MANY_Q_POINTS = Finding(
     message=(
         "The q-mesh is beyond q2r.x's limits: at most 1024 divisions along each "
         "axis and 1024 irreducible q-points."
+    ),
+    summary=(
+        "The q-mesh exceeds q2r.x's limits, 1024 divisions per axis and 1024 "
+        "irreducible q-points: use a coarser q_grid or a larger q_distance."
     ),
     fields=("q_grid", "q_distance"),
     remedies=({"q_grid": None, "q_distance": None},),
@@ -623,6 +733,10 @@ _PHONON_VC_RELAX_FFT_GRID = Finding(
         "vc-relax-phonon cannot run on a cell whose FFT grid, rebuilt by the "
         "vc-relax for the relaxed cell, ph.x can refuse; use relax-phonon."
     ),
+    summary=(
+        "vc-relax-phonon cannot run on this cell: the vc-relax rebuilds an FFT "
+        "grid that ph.x can refuse. Use the relax-phonon task."
+    ),
     fields=("cell_dofree",),
 )
 """No remedy: no setting keeps a written grid through a vc-relax's final scf
@@ -630,6 +744,10 @@ _PHONON_VC_RELAX_FFT_GRID = Finding(
 _PHONON_FIX_BOTTOM_LAYERS = Finding(
     code="phonon.fix_bottom_layers_unsupported",
     message="The phonon tasks cannot pin atoms with fix_bottom_layers.",
+    summary=(
+        "The phonon tasks cannot pin atoms with fix_bottom_layers: unset "
+        "fix_bottom_layers."
+    ),
     fields=("fix_bottom_layers",),
     remedies=({"fix_bottom_layers": None},),
 )
@@ -647,6 +765,11 @@ _PHONON_METALLICITY_UNCONFIRMED = Finding(
         "insulator gets no LO-TO splitting there, and its response can diverge at "
         "Gamma. For a metal set is_metal=metal; put an insulator on fixed "
         "occupations."
+    ),
+    summary=(
+        "Confirm whether this structure is a metal: its composition is not "
+        "all-metallic, and an insulator run on smearing or tetrahedra, as ph.x "
+        "runs a metal, loses its LO-TO splitting."
     ),
     fields=(
         "is_metal",
@@ -1784,8 +1907,18 @@ def _phonon_needs_confirmed_metallicity(
         *metal_remedy,
         *(("occupations",) if requested else ()),
     }
+    stake = "an insulator loses its LO-TO splitting"
+    summary = (
+        "Confirm whether this structure is a metal: the requested "
+        "occupations=fixed cannot run as it stands, and a metal needs smearing "
+        f"instead, where {stake}."
+        if chosen == "fixed"
+        else "Confirm whether this structure is a metal: its composition is not "
+        f"all-metallic, and it runs on occupations={chosen}, where {stake}."
+    )
     return replace(
         _PHONON_METALLICITY_UNCONFIRMED,
+        summary=summary,
         message=(
             "The phonon tasks need this structure on fixed occupations, or "
             f"confirmed as a metal: {runs}, and its composition is not "

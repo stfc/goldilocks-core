@@ -96,8 +96,8 @@ if something the run needs is still `unavailable`/`blocked` or the settings
 contradict each other. Always call `check()` first and inspect
 `report.blocking` rather than relying on `generate()`'s exception alone. It
 holds one `Finding` per root cause: a stable `code`, the settings it concerns
-(`fields`), a `message` to show, and `remedies`, override patches that each
-resolve it (a `None` value clears that override):
+(`fields`), a `message` to show and its shorter `summary`, and `remedies`,
+override patches that each resolve it (a `None` value clears that override):
 
 ```python
 from goldilocks_core.service import check, generate

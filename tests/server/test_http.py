@@ -433,6 +433,8 @@ class TestExplain:
             "fields": ["ion_dynamics"],
             "message": ion_dynamics["message"],
             "remedies": [{"ion_dynamics": "bfgs"}],
+            "summary": "vc-relax is generated only with ion_dynamics=bfgs: set "
+            "ion_dynamics to bfgs.",
         }
         assert ion_dynamics["message"].startswith(
             "vc-relax is generated only with ion_dynamics=bfgs, not damp:"

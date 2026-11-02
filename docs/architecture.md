@@ -57,8 +57,9 @@ A `run` (or `explain`) request follows this path, shown for the
    returns a `CheckReport` whose `.ok`/`.blocking` decide whether `generate()`
    may proceed. Each entry of `.blocking` is a `checks.Finding`, one per root
    cause: a code from `checks.FINDING_CATALOGUE`, the settings it concerns
-   (`fields`), a user-facing `message`, and `remedies`, override patches that
-   each resolve it (`None` clears an override). A decision that could not be
+   (`fields`), a user-facing `message` and its `summary` (at most 200
+   characters), and `remedies`, override patches that each resolve it (`None`
+   clears an override). A decision that could not be
    made reaches it as `advice.blocked`, with its root cause and no remedy.
 4. `service.generate(advice, report, *, ctx, purpose, relax)` raises
    `AdviceIncomplete` (an `ExpectedFailure`, see `failures.py`) if
@@ -561,10 +562,14 @@ decide what is shown, sent or saved. Workbench sends the current draft's
 `/explain` automatically. Once its recommendation has arrived with an empty
 `blocking` verdict, Workbench fetches that draft's archive from `/run` as the
 generated-inputs preview; a draft whose verdict blocks gets no `/run`, and the
-Bundle card lists the findings. The findings of the current draft, from its
-`/explain` verdict or its refused `/run`, are also shown under each control
-their `fields` name, whose Advisors group then reads blocked, and every remedy
-is a button that applies its override patch to the draft. A failure is the outcome of its draft: nothing
+Bundle card lists the findings, each its `summary` with its full `message`
+behind a details toggle, and every remedy as a button that applies its
+override patch to the draft. Its title asks the user to confirm one setting
+per finding when every finding has a remedy, and says that no input files can
+be generated otherwise. The findings of the current draft, from its `/explain`
+verdict or its refused `/run`, also put one line under each control their
+`fields` name, pointing to the Bundle card, and that control's Advisors group
+then reads blocked (#223). A failure is the outcome of its draft: nothing
 is sent again until the draft or the structure changes or the user presses
 Retry, which every failure offers. Dismiss only hides the banner; the Bundle
 card still shows the failure. Download saves the previewed archive of the

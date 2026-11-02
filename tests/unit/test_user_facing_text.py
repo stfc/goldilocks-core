@@ -303,9 +303,20 @@ def test_every_published_warning_reads_as_user_text(warning: Warning) -> None:
     assert _internal(warning.message) == []
 
 
+_SUMMARY_LIMIT = 200
+"""Characters in a finding's summary: about four lines of the Workbench's
+Bundle card (#223)."""
+
+
+def _summary_reads_as_user_text(summary: str) -> None:
+    assert 0 < len(summary) <= _SUMMARY_LIMIT, summary
+    assert _internal(summary) == []
+
+
 @pytest.mark.parametrize("finding", FINDING_CATALOGUE, ids=lambda f: f.code)
 def test_every_catalogued_finding_reads_as_user_text(finding) -> None:
     assert _internal(finding.message) == []
+    _summary_reads_as_user_text(finding.summary)
 
 
 def test_every_catalogued_finding_has_a_trigger() -> None:
@@ -313,10 +324,12 @@ def test_every_catalogued_finding_has_a_trigger() -> None:
 
 
 def _reads_as_user_text(code: str, report: CheckReport) -> None:
-    """``report`` holds exactly one finding, of ``code``, in user text."""
+    """``report`` holds exactly one finding, of ``code``, in user text, with
+    a summary of at most ``_SUMMARY_LIMIT`` characters."""
     (finding,) = report.blocking
     assert finding.code == code
     assert _internal(finding.message) == []
+    _summary_reads_as_user_text(finding.summary)
 
 
 @pytest.mark.parametrize("code", list(_TRIGGERS))

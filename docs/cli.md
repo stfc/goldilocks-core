@@ -91,10 +91,11 @@ an output flag: without `-o/--out` it prints `{"files": [...], "records":
 --json` prints `{"records": {...}, "warnings": [...], "blocking": [...],
 "layout": {...}}`, where `blocking` lists the findings `run` would refuse to
 generate an input for, one per root cause, and is empty when its checks pass.
-Each finding is `{"code", "fields", "message", "remedies"}`: a stable `code`
-(`advice.blocked` for a decision that could not be made, whose `message` is the
-root cause), the settings it concerns, the text to show, and the override
-patches that each resolve it, where `null` clears that override. `layout` names
+Each finding is `{"code", "fields", "message", "remedies", "summary"}`: a
+stable `code` (`advice.blocked` for a decision that could not be made, whose
+`message` is the root cause), the settings it concerns, the full text to show,
+the override patches that each resolve it, where `null` clears that override,
+and a summary of the decision it asks for in at most 200 characters. `layout` names
 each record's tier and step: `analysis` (what the structure alone decides),
 `system` (what every step shares), then `steps`, one `{"name", "records"}`
 per step of the task in run order -- the task's one `job` with its first step,

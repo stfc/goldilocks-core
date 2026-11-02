@@ -878,10 +878,24 @@ describe("Goldilocks Workbench", () => {
     await pause(1000);
 
     expect(core.archiveCalls).toHaveLength(0);
+    // #223: the finding offers a remedy, so the notice asks for a setting to
+    // be confirmed, and shows the summary with the full message behind a
+    // toggle.
     const notice = screen.getByRole("status", {
-      name: "Cannot generate input files",
+      name: "Confirm one setting to generate input files",
     });
-    expect(notice).toHaveTextContent(FIXED_WITHOUT_MOMENT.message);
+    expect(notice).toHaveTextContent(FIXED_WITHOUT_MOMENT.summary);
+    const details = within(notice).getByText(FIXED_WITHOUT_MOMENT.message);
+    expect(details).not.toBeVisible();
+    const toggle = within(notice).getByRole("button", {
+      name: "Show the details",
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    expect(details).toBeVisible();
+    expect(
+      within(notice).getByRole("button", { name: "Hide the details" }),
+    ).toHaveAttribute("aria-expanded", "true");
     expect(
       within(notice).getByRole("button", {
         name: "Apply occupations = smearing",
@@ -889,7 +903,7 @@ describe("Goldilocks Workbench", () => {
     ).toBeEnabled();
     expect(download).toBeDisabled();
     expect(download).toHaveAccessibleDescription(
-      `Input files cannot be generated for the current settings: ${FIXED_WITHOUT_MOMENT.message}`,
+      `Input files cannot be generated for the current settings: ${FIXED_WITHOUT_MOMENT.summary}`,
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByText(/will appear here/)).not.toBeInTheDocument();
@@ -921,21 +935,19 @@ describe("Goldilocks Workbench", () => {
 
     const alert = await screen.findByRole("alert", {}, { timeout: 5000 });
     expect(alert).toHaveTextContent("Recommendation incomplete");
-    expect(alert).toHaveTextContent(FIXED_WITHOUT_MOMENT.message);
+    expect(alert).toHaveTextContent(FIXED_WITHOUT_MOMENT.summary);
     expect(alert).not.toHaveTextContent("Remedy overrides");
     await user.click(within(advisorsPanel()).getByText("Occupations"));
+    // #223: under its control the finding is one line pointing to the
+    // Bundle card, with no remedy of its own.
     const note = within(advisorsPanel()).getByRole("note", {
       name: "Blocks input generation: occupations",
     });
-    expect(note).toHaveTextContent(FIXED_WITHOUT_MOMENT.message);
+    expect(note).toHaveTextContent("Needs confirmation — see Bundle");
+    expect(within(note).queryByRole("button")).not.toBeInTheDocument();
     // #165: the finding turns the badge of the group it concerns red.
     expect(groupBadgeStyle("Occupations")).toContain("red");
     expect(groupBadgeStyle("K sampling")).toContain("green");
-    expect(
-      within(note).getByRole("button", {
-        name: "Apply occupations = smearing",
-      }),
-    ).toBeEnabled();
     const explained = core.explainCalls.length;
 
     await user.click(
@@ -961,6 +973,7 @@ describe("Goldilocks Workbench", () => {
       code: "occupations.width_rejected",
       fields: ["degauss"],
       message: "degauss=0.02 is not usable here. Unset degauss.",
+      summary: "degauss=0.02 is not usable here: unset degauss.",
       remedies: [{ degauss: null }],
     };
     const core = new CoreStub(Promise.resolve(occupationsCapabilities()));
@@ -983,14 +996,14 @@ describe("Goldilocks Workbench", () => {
     });
     const notice = await screen.findByRole(
       "status",
-      { name: "Cannot generate input files" },
+      { name: "Confirm one setting to generate input files" },
       { timeout: 5000 },
     );
     expect(
       within(advisorsPanel()).getByRole("note", {
         name: "Blocks input generation: degauss",
       }),
-    ).toHaveTextContent(pinnedWidth.message);
+    ).toHaveTextContent("Needs confirmation — see Bundle");
 
     await user.click(
       within(notice).getByRole("button", { name: "Apply degauss = automatic" }),
@@ -1813,6 +1826,8 @@ const FIXED_WITHOUT_MOMENT: BlockingFinding = {
   fields: ["occupations", "tot_magnetization"],
   message:
     "occupations=fixed on a collinear spin-polarized run needs an integer tot_magnetization of the electron count's parity, and none was set or derived. Set occupations=smearing, or set tot_magnetization.",
+  summary:
+    "Fixed occupations on this spin-polarized run need an integer tot_magnetization: set one, or switch occupations to smearing.",
   remedies: [{ occupations: "smearing" }],
 };
 

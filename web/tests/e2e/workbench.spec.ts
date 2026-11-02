@@ -48,6 +48,7 @@ interface BlockingFindingDocument {
   readonly code: string;
   readonly fields: readonly string[];
   readonly message: string;
+  readonly summary: string;
   readonly remedies: readonly Readonly<Record<string, unknown>>[];
 }
 
@@ -678,7 +679,7 @@ test("sends no /run for a draft the /explain verdict refuses", async ({
       remedies: [{ occupations: "smearing" }],
     }),
   ]);
-  const message = verdict.blocking[0]?.message ?? "";
+  const summary = verdict.blocking[0]?.summary ?? "";
   const runsBeforeVerdict = runs;
   await page.waitForTimeout(2_000);
 
@@ -686,15 +687,17 @@ test("sends no /run for a draft the /explain verdict refuses", async ({
   const download = page.getByRole("button", { name: "Download (.zip)" });
   await expect(download).toBeDisabled();
   await expect(download).toHaveAccessibleDescription(
-    `Input files cannot be generated for the current settings: ${message}`,
+    `Input files cannot be generated for the current settings: ${summary}`,
   );
+  // #223: the finding offers a remedy, so the Bundle card asks for a setting
+  // to be confirmed and shows the summary; the control points to it.
   const notice = page.getByRole("status", {
-    name: "Cannot generate input files",
+    name: "Confirm one setting to generate input files",
   });
-  await expect(notice).toContainText(message);
+  await expect(notice).toContainText(summary);
   await expect(
     page.getByRole("note", { name: "Blocks input generation: occupations" }),
-  ).toContainText(message);
+  ).toHaveText("Needs confirmation — see Bundle");
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expectNoAxeViolations(page);
 
@@ -723,6 +726,8 @@ test("offers a refused /run's remedies and sends the chosen one with the next /e
     fields: ["occupations", "tot_magnetization"],
     message:
       "occupations=fixed on a collinear spin-polarized run needs an integer tot_magnetization of the electron count's parity, and none was set or derived. Set occupations=smearing, or set tot_magnetization.",
+    summary:
+      "Fixed occupations on this spin-polarized run need an integer tot_magnetization: set one, or switch occupations to smearing.",
     remedies: [{ occupations: "smearing" }],
   };
   await page.goto("/");
@@ -747,7 +752,7 @@ test("offers a refused /run's remedies and sends the chosen one with the next /e
   await page.locator('input[type="file"]').setInputFiles(SILICON_CIF);
 
   const alert = page.getByRole("alert");
-  await expect(alert).toContainText(finding.message, { timeout: 20_000 });
+  await expect(alert).toContainText(finding.summary, { timeout: 20_000 });
   await expect(alert).not.toContainText("Remedy overrides");
   const remedy = alert.getByRole("button", {
     name: "Apply occupations = smearing",
@@ -756,7 +761,7 @@ test("offers a refused /run's remedies and sends the chosen one with the next /e
   await expandAdvisorGroup(page, "Occupations");
   await expect(
     page.getByRole("note", { name: "Blocks input generation: occupations" }),
-  ).toContainText(finding.message);
+  ).toHaveText("Needs confirmation — see Bundle");
   await expectNoAxeViolations(page);
 
   const overrides = await clickForNextExplain(page, remedy);
@@ -766,13 +771,13 @@ test("offers a refused /run's remedies and sends the chosen one with the next /e
   await expect(alert).toHaveCount(0);
 });
 
-test("wraps a finding's remedy buttons within a control's note at the column floor", async ({
+test("wraps a finding's remedy buttons in the Bundle card and keeps its control's note to one line", async ({
   page,
 }) => {
-  // #151: remedy labels never wrapped. At 1440 px wide every narrow column
-  // sits at its 20rem floor, where this finding's widest label ran past the
-  // note under the occupations control, which cut it and the message above it
-  // off mid-word, with nothing to scroll.
+  // #151: remedy labels never wrapped, and ran past the note under a control
+  // in a column at its 20rem floor. #223 moved the remedies to the Bundle
+  // card, which every column width at 1440 px must still fit, and left the
+  // control a one-line note.
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.waitForLoadState("networkidle");
@@ -800,14 +805,22 @@ test("wraps a finding's remedy buttons within a control's note at the column flo
   const note = page.getByRole("note", {
     name: "Blocks input generation: occupations",
   });
+  await expect(note).toHaveText("Needs confirmation — see Bundle");
+  await expect(note.getByRole("button")).toHaveCount(0);
+  const notice = page.getByRole("status", {
+    name: "Confirm one setting to generate input files",
+  });
   await expect(
-    note.getByRole("button", {
+    notice.getByRole("button", {
       name: "Apply spin_polarized = true, occupations = smearing",
     }),
   ).toBeVisible();
 
   const clipped = await page.evaluate<readonly string[]>(`(() => {
-    const notes = [...document.querySelectorAll('.card-advisors [role="note"]')];
+    const notes = [
+      ...document.querySelectorAll('.card-advisors [role="note"]'),
+      ...document.querySelectorAll('.card-bundle [role="status"]'),
+    ];
     return notes
       .flatMap((note) => [note, ...note.querySelectorAll("button, .mantine-Button-label")])
       .filter(
@@ -820,7 +833,7 @@ test("wraps a finding's remedy buttons within a control's note at the column flo
   expect(clipped).toEqual([]);
   // Wrapping keeps each remedy button, one line or two, at least as tall as
   // the theme's 44 px minimum for a target.
-  const remedies = note.getByRole("button");
+  const remedies = notice.getByRole("button", { name: /^Apply / });
   await expect(remedies).toHaveCount(2);
   for (const remedy of await remedies.all()) {
     expect((await remedy.boundingBox())?.height).toBeGreaterThanOrEqual(44);

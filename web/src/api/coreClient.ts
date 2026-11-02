@@ -271,14 +271,17 @@ export interface RecordLayout {
 
 /** One reason `/run` refuses a draft (`checks.Finding` on the wire, #151):
  * a stable `code`, the setting or fact keys it concerns (`fields`, as
- * `/capabilities` names them), the `message` to show, and `remedies`, each a
- * complete override patch that resolves it, where `null` clears that
- * override. An `advice.blocked` finding names a decision that could not be
- * made, its root cause the message; it has no fields and no remedy. */
+ * `/capabilities` names them), the full `message`, the `summary` of the
+ * decision it asks for (at most 200 characters, shown first, #223), and
+ * `remedies`, each a complete override patch that resolves it, where `null`
+ * clears that override. An `advice.blocked` finding names a decision that
+ * could not be made, its root cause the message; it has no fields and no
+ * remedy. */
 export interface BlockingFinding {
   readonly code: string;
   readonly fields: readonly string[];
   readonly message: string;
+  readonly summary: string;
   readonly remedies: readonly Readonly<Record<string, unknown>>[];
 }
 
@@ -570,6 +573,8 @@ function isBlockingFinding(value: unknown): value is BlockingFinding {
     typeof value.code === "string" &&
     "message" in value &&
     typeof value.message === "string" &&
+    "summary" in value &&
+    typeof value.summary === "string" &&
     "fields" in value &&
     Array.isArray(value.fields) &&
     value.fields.every((field) => typeof field === "string") &&

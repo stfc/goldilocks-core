@@ -32,6 +32,8 @@ const npoolFinding: BlockingFinding = {
   fields: ["npool", "ntasks"],
   message:
     "npool=7 does not divide ntasks=64, and pw.x refuses that layout. Unset npool for the default, or set npool to a divisor of ntasks.",
+  summary:
+    "npool must divide the job's task count: choose a divisor, or leave npool automatic.",
   remedies: [{ npool: null }],
 };
 
@@ -133,6 +135,12 @@ describe("HttpCoreClient", () => {
               npoolFinding,
               { ...npoolFinding, fields: [7] },
               { ...npoolFinding, remedies: [["npool", null]] },
+              {
+                code: npoolFinding.code,
+                fields: npoolFinding.fields,
+                message: npoolFinding.message,
+                remedies: npoolFinding.remedies,
+              },
               { code: "advice.blocked", fields: [], remedies: [] },
               "npool=7",
               null,

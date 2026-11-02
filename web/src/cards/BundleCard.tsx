@@ -12,7 +12,7 @@ import {
 } from "@mantine/core";
 import { Download, RotateCw } from "lucide-react";
 
-import { findingsOf } from "../api/coreClient";
+import { type BlockingFinding, findingsOf } from "../api/coreClient";
 import { GeneratedInputReview } from "../review/GeneratedInputReview";
 import { WarningsPanel } from "../review/WarningsPanel";
 import { FindingList } from "../status/FindingNote";
@@ -138,13 +138,26 @@ function BundleNotice({ status }: { readonly status: BundleStatus }) {
     }
     case "blocked":
       return (
-        <Alert role="status" color="red" title="Cannot generate input files">
+        <Alert role="status" color="red" title={blockedTitle(status.findings)}>
           <FindingList findings={status.findings} />
         </Alert>
       );
     default:
       return null;
   }
+}
+
+/** What the user has to do when every finding offers a remedy, one setting
+ * to confirm per finding; otherwise that no input files can be generated
+ * (#223). */
+function blockedTitle(findings: readonly BlockingFinding[]): string {
+  const choices = findings.filter((finding) => finding.remedies.length > 0);
+  if (choices.length === 0 || choices.length < findings.length) {
+    return "Cannot generate input files";
+  }
+  return choices.length === 1
+    ? "Confirm one setting to generate input files"
+    : `Confirm ${String(choices.length)} settings to generate input files`;
 }
 
 const FAILURE_TITLES = {

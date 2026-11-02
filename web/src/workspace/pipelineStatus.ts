@@ -220,18 +220,20 @@ function disabledReason(
     case "explainFailed":
       return `The recommendation for the current settings failed: ${status.failure.message}`;
     case "blocked":
-      return `Input files cannot be generated for the current settings: ${messages(status.findings)}`;
+      return `Input files cannot be generated for the current settings: ${summaries(status.findings)}`;
     case "generating":
       return "Generating the input files for the current settings.";
     case "generationFailed": {
       const findings = findingsOf(status.failure);
-      return `Input generation failed for the current settings: ${findings.length === 0 ? status.failure.message : messages(findings)}`;
+      return `Input generation failed for the current settings: ${findings.length === 0 ? status.failure.message : summaries(findings)}`;
     }
   }
 }
 
-function messages(findings: readonly BlockingFinding[]): string {
-  return findings.map((finding) => finding.message).join(" ");
+/** The findings' summaries: the full messages are the Bundle card's, behind
+ * each finding's details toggle (#223). */
+function summaries(findings: readonly BlockingFinding[]): string {
+  return findings.map((finding) => finding.summary).join(" ");
 }
 
 /** Whether something waits for the user: capabilities or a structure that

@@ -1,4 +1,4 @@
-import { ActionIcon, Group, Stack, Text } from "@mantine/core";
+import { ActionIcon, Group, Text } from "@mantine/core";
 import { Moon, Sun } from "lucide-react";
 
 import type { Theme } from "../theme";
@@ -20,28 +20,16 @@ export function AppHeader({
     >
       <Group gap="xs" wrap="nowrap">
         <img src="/brand/goldilocks-logo.png" alt="" width={40} height={40} />
-        <Stack gap={0}>
-          <Text
-            style={{
-              fontSize: "var(--mantine-h2-font-size)",
-              fontWeight: "var(--mantine-h2-font-weight)",
-              color: "#ffffff",
-              lineHeight: 1.1,
-            }}
-          >
-            Goldilocks
-          </Text>
-          <Text
-            style={{
-              fontSize: "0.75rem",
-              fontStyle: "italic",
-              color: "rgba(255, 255, 255, 0.7)",
-              lineHeight: 1.1,
-            }}
-          >
-            Towards Greener Computation
-          </Text>
-        </Stack>
+        <Text
+          style={{
+            fontSize: "var(--mantine-h2-font-size)",
+            fontWeight: "var(--mantine-h2-font-weight)",
+            color: "#ffffff",
+            lineHeight: 1.1,
+          }}
+        >
+          Goldilocks
+        </Text>
       </Group>
       <ActionIcon
         variant="subtle"

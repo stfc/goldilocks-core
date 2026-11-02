@@ -18,46 +18,20 @@ env:
   UV_NO_PROGRESS: "1"
 
 jobs:
+  # Lint and pytest, and mutation testing, run as two parallel jobs with
+  # budgets of their own (#237). As one job they shared a 45-minute ceiling,
+  # and on the public runners pytest took 7 to 14 minutes and mutation testing
+  # 15 to 28 from one run to the next, so a slow runner cut the job off
+  # (#234's first run) although nothing in it had changed.
   quality-and-test:
-    name: Quality, tests, and mutations
+    name: Quality and tests
     runs-on: ubuntu-latest
-    # Confirmed 2026-09-22: a real, crash-free mutmut run (post-forkserver-fix,
-    # #104) reached 813/817 mutants at exactly 30m22s before the job's own
-    # 30-minute ceiling cut it off -- lint+pytest+enumlib setup alone already
-    # eat a meaningful chunk of that budget, so mutation testing was never
-    # actually given a comfortable margin to finish in the first place.
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          version: "0.12.3"
-          enable-cache: true
-
-      - name: Install frozen dependencies
-        run: uv sync --group dev --all-extras
-
-      # Known gap: this clones and rebuilds enumlib from source on every CI run,
-      # with no retry around the network calls and no cache keyed on the pinned
-      # ref. Worth hardening the same way src/goldilocks_core/assets/download.py
-      # retries/backs off PSDI downloads, but that needs real CI validation this
-      # pass didn't do -- flagging for a future pass rather than guessing at it.
-      - name: Build enumlib (external dependency for AFM species-splitting)
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes gfortran
-          git clone --recursive --depth 1 https://github.com/msg-byu/enumlib.git /tmp/enumlib
-          make -C /tmp/enumlib/symlib/src F90=gfortran
-          make -C /tmp/enumlib/src F90=gfortran
-          make -C /tmp/enumlib/src F90=gfortran enum.x
-          install -d /tmp/enumlib-bin
-          install /tmp/enumlib/src/enum.x /tmp/enumlib-bin/enum.x
-          sed "1s|.*|#!${{ github.workspace }}/.venv/bin/python3|" \
-            /tmp/enumlib/aux_src/makeStr.py > /tmp/enumlib-bin/makeStr.py
-          chmod +x /tmp/enumlib-bin/makeStr.py
-          echo "/tmp/enumlib-bin" >> "$GITHUB_PATH"
+      - name: Install uv, the dependencies and enumlib
+        uses: ./.github/actions/core-setup
 
       - name: Ruff check
         run: uv run ruff check src tests scripts
@@ -72,6 +46,17 @@ jobs:
         run: >-
           uv run pytest --cov --cov-report=term-missing:skip-covered
           --cov-report=xml
+
+  mutation:
+    name: Mutation testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # enumlib too: the real-enumlib tests in tests/unit run under each mutant.
+      - name: Install uv, the dependencies and enumlib
+        uses: ./.github/actions/core-setup
 
       - name: Mutation testing
         # `shell: bash` adds -o pipefail to the default `bash -e`, so a score

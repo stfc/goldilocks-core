@@ -48,6 +48,7 @@ from goldilocks_core.advisors.magnetic_ordering_ml import (
     rank_orderings,
 )
 from goldilocks_core.analysis.local_moments import LocalMomentFacts, local_moments
+from goldilocks_core.inputs.structure import require_ordered
 from goldilocks_core.resolution import FieldState, Warning
 
 
@@ -153,7 +154,10 @@ def list_magnetic_orderings(
     enumlib not installed), no site carries a local d or f moment to order
     (a radical such as solid O2, #143), or which sites carry one could not
     be determined. A closed-shell structure (Si) lists "fm" alone silently.
+    Raises ``StructureInputError`` for a disordered ``structure``
+    (``inputs.structure.require_ordered``).
     """
+    require_ordered(structure)
     moments = local_moments(structure)
     candidates, afm_warning = enumerate_magnetic_orderings(structure, moments)
     warnings = (

@@ -36,9 +36,10 @@ the moment-bearing elements, and a third looks for radicals:
   1.25. The radii are pymatgen's ``CovalentRadius`` (Cordero et al., Dalton
   Trans. 2008), tabulated up to Cm.
 
-``Unavailable`` for a disordered structure, for an undecided element, and
-for an element without a covalent radius in a structure with an open-shell
-main-group atom to test.
+``Unavailable`` for an undecided element, and for an element without a
+covalent radius in a structure with an open-shell main-group atom to test.
+A disordered structure is refused before it gets here
+(``inputs.structure.require_ordered``, #224).
 """
 
 from __future__ import annotations
@@ -93,11 +94,6 @@ class LocalMomentFacts:
 def local_moments(structure: Structure) -> FieldState[LocalMomentFacts]:
     """The local moments of ``structure`` (module docstring), always from
     the heuristic: there is no model or override for them."""
-    if not structure.is_ordered:
-        return Unavailable(
-            reason="local moments need an ordered structure; this one has "
-            "fractional site occupancies"
-        )
     radical = _radical(structure)
     if isinstance(radical, Unavailable):
         return radical

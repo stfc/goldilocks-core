@@ -11,6 +11,7 @@ from goldilocks_core.inputs.structure import (
     PathStructureSource,
     StructureInputError,
     normalize_structure,
+    require_ordered,
 )
 from goldilocks_core.serialization import to_portable
 
@@ -209,3 +210,40 @@ def test_inline_source_rejects_invalid_filename(name) -> None:
 def test_structure_sources_reject_invalid_shapes(source) -> None:
     with pytest.raises(ValueError):
         source()
+
+
+def test_an_ordered_structure_is_accepted() -> None:
+    silicon = Structure(
+        Lattice.cubic(5.43), ["Si", "Si"], [[0, 0, 0], [0.25, 0.25, 0.25]]
+    )
+
+    assert require_ordered(silicon) is None
+
+
+def test_a_disordered_structure_names_its_first_partially_occupied_sites() -> None:
+    """#224: sites are numbered from 1, as the Workbench's site list is; a
+    vacancy counts like a mixed site, and sites past the third are counted."""
+    alloy = {"Fe": 0.5, "Ni": 0.5}
+    structure = Structure(
+        Lattice.cubic(8.0),
+        ["O", alloy, {"O": 0.9}, alloy, alloy, alloy],
+        [
+            [0, 0, 0],
+            [0.5, 0, 0],
+            [0, 0.5, 0],
+            [0, 0, 0.5],
+            [0.5, 0.5, 0],
+            [0.5, 0, 0.5],
+        ],
+    )
+
+    with pytest.raises(StructureInputError) as error:
+        require_ordered(structure)
+
+    assert str(error.value) == (
+        "the structure has partially occupied sites, which no input file can "
+        "describe: site 2 (Fe0.5 Ni0.5), site 3 (O0.9), site 4 (Fe0.5 Ni0.5) and "
+        "2 more. Order it first, for example as a supercell with one species on "
+        "every site."
+    )
+    assert error.value.public_error()["kind"] == "invalid_structure"

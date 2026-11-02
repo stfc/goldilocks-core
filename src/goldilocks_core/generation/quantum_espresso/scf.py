@@ -186,10 +186,6 @@ def write_qe_scf(
     the default so every existing caller is unaffected.
     """
     structure = system.magnetic.cell
-    if not structure.is_ordered:
-        raise GenerationError(
-            "cannot generate Quantum ESPRESSO input for a disordered structure"
-        )
     if step.relax is not None:
         raise GenerationError(
             "write_qe_scf does not render a relax/vc-relax input; "

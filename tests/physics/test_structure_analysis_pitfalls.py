@@ -28,27 +28,6 @@ from goldilocks_core.analysis.is_metal import is_metal
 from goldilocks_core.analysis.symmetry import symmetry
 
 
-def test_disordered_structure_degrades_dimensionality_and_symmetry_gracefully() -> None:
-    """A6: disordered structures (partial occupancy) make CrystalNN/spglib
-    crash on a lot of real inputs, so both geometry() and symmetry()
-    special-case ``not structure.is_ordered`` up front, before either
-    external library ever runs -- both degrade to ``Unavailable`` with a
-    reason naming why, and neither call raises."""
-    disordered = Structure(
-        Lattice.cubic(4.0),
-        [{"Fe": 0.5, "Ni": 0.5}],
-        [[0.0, 0.0, 0.0]],
-    )
-
-    dimensionality = geometry(disordered)
-    space_group = symmetry(disordered)
-
-    assert not dimensionality.ok
-    assert "disordered" in dimensionality.reason
-    assert not space_group.ok
-    assert "disordered" in space_group.reason
-
-
 def test_dimensionality_classifier_failure_degrades_instead_of_aborting() -> None:
     """A7 (half): v1's analyze_structure re-raised as
     DimensionalityClassificationError when CrystalNN/get_dimensionality_

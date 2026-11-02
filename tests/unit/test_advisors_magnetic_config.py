@@ -307,46 +307,6 @@ def test_unavailable_magnetism_defaults_to_spin_polarized_with_a_warning() -> No
     assert "spin_polarized" in warning.message
 
 
-_DISORDERED_FECO = Structure(
-    Lattice.cubic(2.86),
-    [{"Fe": 0.5, "Co": 0.5}, {"Fe": 0.5, "Co": 0.5}],
-    [[0, 0, 0], [0.5, 0.5, 0.5]],
-)
-
-
-@pytest.mark.parametrize(
-    "human",
-    [MagneticConfigHumanInput(), MagneticConfigHumanInput(spin_polarized=True)],
-    ids=["undecidable-default", "spin_polarized=true"],
-)
-def test_a_spin_polarized_disordered_structure_is_blocked(
-    human: MagneticConfigHumanInput,
-) -> None:
-    """Seeds are set per site species, which a fractionally occupied site
-    does not have (seeding one raised AttributeError on site.specie). The
-    magnetism of a disordered structure cannot be decided, so its default
-    is spin-polarized too (#142)."""
-    state = magnetic_decision(
-        _DISORDERED_FECO, is_magnetic(_DISORDERED_FECO), human=human
-    )
-
-    assert isinstance(state, Blocked)
-    assert "ordered structure" in state.root_cause()
-    assert "fractional site occupancies" in state.root_cause()
-
-
-def test_an_unpolarized_disordered_structure_is_not_blocked_here() -> None:
-    state = magnetic_decision(
-        _DISORDERED_FECO,
-        is_magnetic(_DISORDERED_FECO),
-        human=MagneticConfigHumanInput(spin_polarized=False),
-    )
-
-    assert state.ok
-    assert state.value.spin_polarized is False
-    assert state.value.starting_magnetization is None
-
-
 def test_blocked_magnetism_propagates_as_blocked() -> None:
     state = magnetic_cell(_IRON, Blocked(by="synthetic failure"))
 

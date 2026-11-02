@@ -66,7 +66,7 @@ from goldilocks_core.checks import CheckReport
 from goldilocks_core.generation.quantum_espresso.bands import path_rows
 from goldilocks_core.generation.quantum_espresso.phonon import write_qe_phonon
 from goldilocks_core.inputs.hpc import load_hpc_profile
-from goldilocks_core.resolution import Blocked, Unavailable, Warning
+from goldilocks_core.resolution import Unavailable, Warning
 from goldilocks_core.service import (
     TASK_PHASES,
     Advice,
@@ -752,30 +752,6 @@ def test_a_conventional_cell_s_phonon_branches_are_noticed_as_folded(
     for term in ("4 primitive cells", "phonon branches"):
         assert term in folded["message"], term
     assert "listed twice" in advice.records()["k_path"].provenance.source_note
-
-
-@pytest.mark.parametrize("task", [task for task, _ in _PHONON_TASKS])
-def test_a_disordered_structure_blocks_the_dispersion_without_a_finding_of_its_own(
-    store, task
-) -> None:
-    """The spin-unpolarized Si vacancy, set to a non-metal: its written cell
-    has no dimensionality classification, which blocks q2r and so the
-    dispersion, with that root cause. The gate refuses the run on the causes
-    it gave before the dispersion existed, none of them about the path, and
-    nothing raises."""
-    vacancy = Structure(
-        Lattice.cubic(5.43), [{"Si": 0.5}, "Si"], [[0, 0, 0], [0.25, 0.25, 0.25]]
-    )
-
-    advice, report = _task(
-        task, vacancy, store, {"spin_polarized": False, **_NON_METAL}
-    )
-
-    dispersion = advice.records()["k_path"]
-    assert isinstance(dispersion, Blocked)
-    assert "disordered" in dispersion.root_cause()
-    assert not report.ok
-    assert not any("path" in finding.message for finding in report.blocking)
 
 
 @pytest.mark.parametrize(("task", "first_step"), _PHONON_TASKS)

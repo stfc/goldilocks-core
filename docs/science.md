@@ -145,6 +145,14 @@ task raises its first step's mesh against its q-point mesh (see
 
 ## Check the written cell
 
+Every site of the cell has to hold one species. No input file can describe a
+site with a fraction of a species, or several (an alloy such as
+Fe0.5Ni0.5O, or a vacancy), so `explain`, `run` and the magnetic-ordering
+listing refuse such a structure before any advice, naming the first partially
+occupied sites (exit 2 on the command line, HTTP 422). Order it first, for
+example as a supercell with one species on every site. `inspect` still reads
+it, occupancies included.
+
 Quantum ESPRESSO does not search a cell for its symmetry. pw.x tests 32 fixed
 Cartesian rotations, the 24 of a cube with its axes along x, y and z and 8 for
 a hexagonal axis along z, and keeps those that map the cell as written onto
@@ -267,10 +275,7 @@ quench a moment it was seeded with, but a non-spin-polarized run can never
 find one, so a wrong default costs compute time, not physics. The rules still
 over-seed where a formally open shell keeps no moment (low-spin Co3+ in
 LiCoO2, Mo4+ in MoS2), and a misguessed oxidation state can hide one (pymatgen
-reads CrTe3 as d0 Cr6+): set `spin_polarized` when you know better. A
-structure with fractional site occupancies is undecidable too, and since a
-spin-polarized run needs one species per site to seed, its magnetic setup is
-blocked until you set `spin_polarized` to false or upload an ordered cell.
+reads CrTe3 as d0 Cr6+): set `spin_polarized` when you know better.
 
 A [Hubbard U](#check-hubbard-u) on an element whose d or f count (from the
 ionic oxidation-state guess above) is odd also makes the run spin-polarized,
@@ -521,11 +526,10 @@ correction is physically appropriate: a solid held together only by
 dispersion, such as a noble-gas crystal, classifies as `3d`, and so does a
 molecular crystal whose intermolecular contacts fall inside those bonding
 ranges. Check the structure and choose `use_vdw` and `method` accordingly.
-Disordered structures, and a bonding or
-classification failure on an ordered structure, both report that
-dimensionality couldn't be determined (with a reason) rather than raising an
-error or silently guessing -- and the vdW decision itself then becomes
-unresolved (blocked), not silently set to `use_vdw=False`.
+A bonding or classification failure reports that dimensionality couldn't be
+determined (with a reason) rather than raising an error or silently guessing
+-- and the vdW decision itself then becomes unresolved (blocked), not
+silently set to `use_vdw=False`.
 
 ## Check boundary conditions and vacuum
 

@@ -18,6 +18,7 @@ from goldilocks_core.advisors.magnetic_ordering_ml import (
     OrderingMlResult,
 )
 from goldilocks_core.analysis.is_magnetic import is_magnetic
+from goldilocks_core.inputs.structure import StructureInputError
 from goldilocks_core.resolution import Provenance, Resolved
 from goldilocks_core.service import _magnetic_orderings as magnetic_orderings_module
 from goldilocks_core.service._magnetic_orderings import (
@@ -351,3 +352,14 @@ def test_a_monolayer_whose_orderings_all_cross_its_vacuum_lists_fm_with_why(
     [warning] = report.warnings
     assert warning.code == "magnetic.afm_ordering_unavailable"
     assert "across its vacuum along c" in warning.message
+
+
+def test_a_disordered_structure_is_refused_before_any_candidate() -> None:
+    """#224: a partially occupied site has no species to seed, so the listing
+    refuses the structure as advice does, instead of listing a lone 'fm'."""
+    wustite_vacancy = Structure(
+        Lattice.cubic(4.3), [{"Fe": 0.9}, "O"], [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]]
+    )
+
+    with pytest.raises(StructureInputError, match=r"site 1 \(Fe0\.9\)\. Order it"):
+        list_magnetic_orderings(wustite_vacancy)

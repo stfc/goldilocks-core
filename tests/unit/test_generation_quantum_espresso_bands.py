@@ -311,18 +311,6 @@ def test_a_bands_step_without_a_setting_it_renders_is_refused(
         write_qe_bands(system, dataclasses.replace(bands_step, **{setting: None}), _CTX)
 
 
-def test_a_disordered_cell_is_refused(pseudo_metadata_factory) -> None:
-    system, _, bands_step = _silicon(pseudo_metadata_factory)
-    alloy = mc3d_42058_silicon()
-    alloy.replace_species({"Si": {"Si": 0.5, "Ge": 0.5}})
-    system = dataclasses.replace(
-        system, magnetic=dataclasses.replace(system.magnetic, cell=alloy)
-    )
-
-    with pytest.raises(GenerationError, match="disordered"):
-        write_qe_bands(system, bands_step, _CTX)
-
-
 @pytest.mark.parametrize("spin_mode", ["none", "noncollinear"])
 def test_bands_x_reads_a_single_spin_channel_once_on_one_task(spin_mode) -> None:
     """A noncollinear run has one channel: bands.x accepts only spin_component

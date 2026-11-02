@@ -20,6 +20,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
+from pymatgen.core import Lattice, Structure
 from support import silicon_dimer_in_a_box, strict_json
 
 from goldilocks_core.server.http import create_app
@@ -280,6 +281,36 @@ class TestInspect:
         assert body["error"]["kind"] == "invalid_request"
         # No raw exception object anywhere in the sanitized body.
         json.dumps(body)
+
+
+class TestDisorderedStructures:
+    def test_explain_run_and_orderings_refuse_it_as_422_and_inspect_reads_it(
+        self, client: TestClient
+    ) -> None:
+        """#224: explain and run returned 500 when the ML tiers raised on a
+        partially occupied site; every route that advises now refuses it with
+        the sites named, and inspect still reads the file."""
+        content = Structure.from_spacegroup(
+            "Fm-3m",
+            Lattice.cubic(4.2),
+            [{"Fe": 0.5, "Ni": 0.5}, "O"],
+            [[0, 0, 0], [0.5, 0, 0]],
+        ).to(fmt="cif")
+
+        for route, body in (
+            ("/explain", {"structure_content": content, "hpc": "scarf"}),
+            ("/run", {"structure_content": content, "hpc": "scarf"}),
+            ("/magnetic-orderings", {"structure_content": content}),
+        ):
+            response = client.post(route, json=body)
+
+            assert response.status_code == 422, route
+            error = response.json()["error"]
+            assert error["kind"] == "invalid_structure", route
+            assert "site 1 (Fe0.5 Ni0.5)" in error["message"], route
+
+        inspected = client.post("/inspect", json={"structure_content": content})
+        assert inspected.status_code == 200
 
 
 class TestMagneticOrderings:

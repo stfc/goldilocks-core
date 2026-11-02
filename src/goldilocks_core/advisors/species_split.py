@@ -36,10 +36,7 @@ def split_species(structure: Structure, classes: Sequence[float] | None) -> Stru
     highest class first. With classes, each site's species is
     ``Species(symbol, spin=class)``, so spglib (``SpacegroupAnalyzer``)
     tells the split sites apart as pw.x will; without, a plain element.
-    Site properties are kept. A disordered structure has no single species
-    per site and is returned unchanged."""
-    if not structure.is_ordered:
-        return structure
+    Site properties are kept."""
     values = (
         [None] * len(structure)
         if classes is None

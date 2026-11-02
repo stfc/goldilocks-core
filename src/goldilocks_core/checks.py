@@ -286,9 +286,8 @@ steps share it.
 not a rule here. Memory overflow is a warning, not a block
 (``job.memory_exceeds_node`` in ``advisors/job_resources.py``), like a
 node count above the partition's ceiling: the memory figure is an
-estimate. A disordered structure leaves the job unavailable, since no
-written cell exists to size it for (``service/_step_resources.py``),
-and that blocks through ``parallelisation``. The tri-tier
+estimate. A disordered structure never gets here: advice refuses it
+first (``inputs.structure.require_ordered``, #224). The tri-tier
 override-conflict rules are left as a gap. This module's job is to
 establish *that* single gate exists and works for what is checkable
 today, not to enumerate every rule up front.

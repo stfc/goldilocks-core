@@ -77,10 +77,6 @@ def write_qe_bands(
     """The bands step: ``pw.x`` on ``bands.in`` along ``step.k_path``, checked
     by the status file every ``pw.x`` step writes (module docstring)."""
     structure = system.magnetic.cell
-    if not structure.is_ordered:
-        raise GenerationError(
-            "cannot generate Quantum ESPRESSO input for a disordered structure"
-        )
     for name, value in (
         ("occupations", step.occupations),
         ("k_path", step.k_path),

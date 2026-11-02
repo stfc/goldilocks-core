@@ -181,6 +181,34 @@ class StructureFileNotFound(ExpectedFailure, FileNotFoundError):
     kind = "invalid_structure"
 
 
+_LISTED_SITES = 3
+"""How many partially occupied sites ``require_ordered`` names."""
+
+
+def require_ordered(structure: Structure) -> None:
+    """Raise ``StructureInputError`` when a site of ``structure`` holds a
+    fraction of a species, or several: no input file describes such a site,
+    and every step needs one species on every site (#224). Advice and
+    magnetic-ordering listings call this first; ``normalize_structure`` does
+    not, so a disordered file can still be inspected. The message names the
+    first such sites, numbered from 1 as the Workbench's site list is."""
+    partial = [
+        f"site {index} ({site.species.formula})"
+        for index, site in enumerate(structure, start=1)
+        if not site.is_ordered
+    ]
+    if not partial:
+        return
+    listed = ", ".join(partial[:_LISTED_SITES])
+    if len(partial) > _LISTED_SITES:
+        listed += f" and {len(partial) - _LISTED_SITES} more"
+    raise StructureInputError(
+        f"the structure has partially occupied sites, which no input file can "
+        f"describe: {listed}. Order it first, for example as a supercell with "
+        "one species on every site."
+    )
+
+
 def normalize_structure(source: StructureSource) -> NormalizedStructure:
     if isinstance(source, InMemoryStructureSource):
         structure = source.structure

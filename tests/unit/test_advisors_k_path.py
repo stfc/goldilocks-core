@@ -451,14 +451,3 @@ def test_an_unresolved_cell_blocks_the_path(cell) -> None:
     assert isinstance(state, Blocked)
     expected = cell.root_cause() if isinstance(cell, Blocked) else cell.reason
     assert state.root_cause() == expected
-
-
-def test_a_disordered_cell_has_no_band_path() -> None:
-    alloy = Structure(
-        Lattice.cubic(3.6), [{"Cu": 0.5, "Au": 0.5}], [[0, 0, 0]]
-    ).make_supercell([2, 2, 2])
-
-    state = k_path(framed_magnetic_cell(alloy))
-
-    assert isinstance(state, Unavailable)
-    assert "disordered" in state.reason

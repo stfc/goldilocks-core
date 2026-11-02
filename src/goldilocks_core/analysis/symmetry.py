@@ -60,10 +60,6 @@ class SymmetryFacts:
 
 
 def symmetry(structure: Structure) -> FieldState[SymmetryFacts]:
-    if not structure.is_ordered:
-        return Unavailable(
-            reason="symmetry analysis does not support disordered structures"
-        )
     try:
         analyzer = SpacegroupAnalyzer(structure, symprec=SYMPREC)
         facts = SymmetryFacts(

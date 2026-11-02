@@ -370,19 +370,6 @@ def test_bonded_atoms_and_closed_shells_are_not_radicals(
     assert state.value.radical is False
 
 
-def test_a_disordered_structure_is_unavailable() -> None:
-    disordered = Structure(
-        Lattice.cubic(2.86),
-        [{"Fe": 0.5, "Co": 0.5}, {"Fe": 0.5, "Co": 0.5}],
-        [[0, 0, 0], [0.5, 0.5, 0.5]],
-    )
-
-    state = local_moments(disordered)
-
-    assert isinstance(state, Unavailable)
-    assert "occupancies" in state.reason
-
-
 def test_an_element_without_a_covalent_radius_leaves_the_radical_test_unavailable() -> (
     None
 ):

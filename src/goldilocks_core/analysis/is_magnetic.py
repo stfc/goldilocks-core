@@ -5,8 +5,8 @@ Resolves ``human > ml > llm > heuristic``. The heuristic tier (#142) reads
 ``analysis/local_moments.py``, the package's one open-shell model: magnetic
 when an element carries a local d or f moment or the structure holds an
 open-shell radical, non-magnetic otherwise, and ``Unavailable`` -- never a
-guessed answer -- when that model cannot decide (a disordered structure, an
-oxidation state it cannot pin down, an element without a covalent radius).
+guessed answer -- when that model cannot decide (an oxidation state it
+cannot pin down, an element without a covalent radius).
 ``advisors/magnetic_config.py`` then defaults the run to spin-polarized
 under a warning.
 

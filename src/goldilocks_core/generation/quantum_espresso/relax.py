@@ -89,10 +89,6 @@ def write_qe_relax(
     that by itself.
     """
     structure = system.magnetic.cell
-    if not structure.is_ordered:
-        raise GenerationError(
-            "cannot generate Quantum ESPRESSO input for a disordered structure"
-        )
     relax = step.relax
     if relax is None:
         raise GenerationError(

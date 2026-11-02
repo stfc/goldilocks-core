@@ -311,18 +311,6 @@ def test_c_lies_along_z_to_the_same_tolerance(xy: float, along: bool) -> None:
     assert c_along_z(tilted_y) is along
 
 
-def test_geometry_is_unavailable_for_disordered_structures() -> None:
-    disordered = Structure(
-        Lattice.cubic(4.0), [{"Fe": 0.5, "Ni": 0.5}], [[0.0, 0.0, 0.0]]
-    )
-
-    state = geometry(disordered)
-
-    assert not state.ok
-    assert state.status == "unavailable"
-    assert "disordered" in state.reason
-
-
 def test_dimensionality_classifier_failure_degrades_to_unavailable_not_a_raise(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -31,6 +31,7 @@ from goldilocks_core.assets.pseudopotentials.upf import parse_upf_metadata
 from goldilocks_core.assets.store import AssetCorrupt, AssetStore
 from goldilocks_core.bundle import DirectoryOutput, is_complete, publish
 from goldilocks_core.inputs.hpc import Hardware, HpcProfile, Partition
+from goldilocks_core.inputs.structure import StructureInputError
 from goldilocks_core.resolution import Blocked, Unavailable, records_document
 from goldilocks_core.service import (
     AdviceIncomplete,
@@ -494,25 +495,6 @@ class TestJobMemory:
         report = check(advice)
         assert any("Si.upf" in finding.message for finding in report.blocking)
 
-    def test_a_disordered_cell_leaves_the_job_unavailable_not_a_crash(
-        self, hpc, installed_table
-    ) -> None:
-        """The estimate counts the species of the written cell, which a
-        partially occupied site does not have. (Spin-unpolarized: a
-        spin-polarized disordered cell is already Blocked, #142.)"""
-        store, _table = installed_table
-        vacancy = Structure(
-            Lattice.cubic(5.43), [{"Si": 0.5}, "Si"], [[0, 0, 0], [0.25, 0.25, 0.25]]
-        )
-        overrides = build_overrides({"spin_polarized": False}, task="scf_single_point")
-
-        advice = advise(vacancy, hpc=hpc, overrides=overrides, store=store)
-
-        job = advice.step.resources.job
-        assert isinstance(job, Unavailable)
-        assert "disordered" in job.reason
-        assert not check(advice).ok
-
 
 class TestPoolsShareKpointSpinPairs:
     """#168: pw.x splits k-point/spin pairs over pools, two per k-point
@@ -712,33 +694,30 @@ class TestAdviseDegradation:
             assert notices[notice].endswith(f"pseudopotential tables: {table.reason}")
 
     @pytest.mark.parametrize(
-        "settings", [{}, {"spin_polarized": True}], ids=["default", "spin_polarized"]
+        "settings", [{}, {"spin_polarized": False}], ids=["default", "unpolarized"]
     )
-    def test_a_disordered_structure_blocks_the_magnetic_record_not_a_crash(
+    def test_a_disordered_structure_is_refused_before_any_record(
         self, hpc, settings
     ) -> None:
-        """#142: the magnetism of fractional site occupancies cannot be
-        decided, so the run defaults to spin-polarized, whose seeds need
-        one species per site. The magnetic record is Blocked with that
-        reason. It used to resolve spin-unpolarized by default, and with
-        spin_polarized=true seeding raised AttributeError on
-        ``site.specie``."""
+        """#224: no input file describes a partially occupied site, so advice
+        refuses the structure up front, whatever the settings, instead of
+        reaching the ML tiers, which raised AttributeError on ``site.specie``,
+        or blocking records one by one (#142)."""
         disordered = Structure(
             Lattice.cubic(2.86),
             [{"Fe": 0.5, "Co": 0.5}, {"Fe": 0.5, "Co": 0.5}],
             [[0, 0, 0], [0.5, 0.5, 0.5]],
         )
 
-        advice = advise(
-            disordered,
-            hpc=hpc,
-            overrides=build_overrides(settings, task="scf_single_point"),
-        )
-
-        magnetic = advice.records()["magnetic"]
-        assert isinstance(magnetic, Blocked)
-        assert "fractional site occupancies" in magnetic.root_cause()
-        assert not check(advice).ok
+        with pytest.raises(
+            StructureInputError,
+            match=r"site 1 \(Fe0\.5 Co0\.5\), site 2 \(Fe0\.5 Co0\.5\)\. Order it",
+        ):
+            advise(
+                disordered,
+                hpc=hpc,
+                overrides=build_overrides(settings, task="scf_single_point"),
+            )
 
     def test_blocked_root_cause_is_reachable_from_a_downstream_field(
         self, silicon, hpc

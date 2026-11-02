@@ -33,8 +33,8 @@ its k-points.
 The estimate needs ``cutoffs``, the pseudopotentials, ``magnetic`` and
 ``hubbard``, and each step's ``nbnd``/``n_irr_k``/``convergence``
 resolved, so the job is ``Blocked`` by the first of those that is not;
-a disordered cell, or a pseudopotential header without projector counts
-(naming the file), makes it ``Unavailable``.
+a pseudopotential header without projector counts (naming the file) makes
+it ``Unavailable``.
 """
 
 from __future__ import annotations
@@ -175,15 +175,8 @@ def _without_job(
 
 def _written_species(system: SystemAdvice) -> tuple[Species, ...] | Unavailable:
     """The species of the cell the writer renders (module docstring);
-    ``Unavailable`` for a disordered cell, which it cannot render."""
+    ``Unavailable`` for a pseudopotential header without projector counts."""
     magnetic = system.magnetic.value
-    if not magnetic.cell.is_ordered:
-        return Unavailable(
-            reason=(
-                "pw.x's memory cannot be estimated for a disordered structure: "
-                "a Quantum ESPRESSO input needs one element on every site"
-            )
-        )
     metadata = system.pseudo.metadata.value
     projectors = upf_projectors(metadata)
     if isinstance(projectors, Unavailable):

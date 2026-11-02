@@ -57,8 +57,9 @@ gap along that axis holds two slabs and has no layers to count.
 ``checks.check_all`` and the ``fix_bottom_layers`` writer both read them, on
 the cell the writer renders.
 
-Disordered structures and classifier failures are ``Unavailable``, like
-every other ``analysis/`` fact.
+Classifier failures are ``Unavailable``, like every other ``analysis/``
+fact. A disordered structure is refused before it gets here
+(``inputs.structure.require_ordered``, #224).
 """
 
 from __future__ import annotations
@@ -188,11 +189,6 @@ def _bond_graph(structure: Structure) -> StructureGraph:
 
 
 def geometry(structure: Structure) -> FieldState[GeometryFacts]:
-    if not structure.is_ordered:
-        return Unavailable(
-            reason="dimensionality classification does not support "
-            "disordered structures"
-        )
     try:
         dim_value = get_dimensionality_larsen(_bond_graph(structure))
     except (ValueError, RuntimeError) as error:

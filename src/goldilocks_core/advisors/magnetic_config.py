@@ -458,11 +458,6 @@ _MOMENT_DIRECTION_IGNORED_WARNING = Warning(
     ),
 )
 
-_DISORDERED_SPIN_POLARIZED = (
-    "spin-polarized setup needs an ordered structure; the input has fractional "
-    "site occupancies (set spin_polarized to false, or upload an ordered cell)"
-)
-
 _SEED_IT_YOURSELF = (
     "set starting_magnetization per site label, on a cell whose labels "
     "separate the sublattices, to seed an ordering yourself"
@@ -818,12 +813,8 @@ def magnetic_cell(
     spin-orbit coupling (#146), when ``magnetic_ordering`` names a
     candidate the enumeration does not produce (#170), when a human
     ``starting_magnetization`` has a key outside its domain
-    (``_requested_seeds``, #185), or
-    when a disordered structure resolves spin-polarized: seeds are set per
-    site species, which a fractionally occupied site does not have, and
-    such a structure's magnetism is undecidable, so it defaults to
-    spin-polarized (#142). The provenance names, per setting, who decided
-    it (``_provenance``, #173)."""
+    (``_requested_seeds``, #185). The provenance names, per setting, who
+    decided it (``_provenance``, #173)."""
     human = human or MagneticConfigHumanInput()
     llm = llm or MagneticConfigLlmInput()
 
@@ -840,8 +831,6 @@ def magnetic_cell(
         hubbard,
     )
     spin_polarized, warnings = spin.polarized, spin.warnings
-    if spin_polarized and not structure.is_ordered:
-        return Blocked(by=_DISORDERED_SPIN_POLARIZED)
     spin_orbit_enabled = human.spin_orbit_coupling is True
     # A requested moment belongs to a spin-polarized run: an explicit
     # spin_polarized=false drops it (the warning above). With spin-orbit
@@ -1489,7 +1478,7 @@ def _odd_shells(structure: Structure, decision: HubbardUDecision) -> str:
     """The elements ``decision`` applies a U to whose d or f count
     (``local_moments``' ``shell_counts``) is odd, as ``Cu 3d9``, joined;
     empty without a U on one, or when ``local_moments`` cannot count the
-    shells (a disordered structure, an undecided element)."""
+    shells (an undecided element)."""
     if not decision.u_values:
         return ""
     moments = local_moments(structure)

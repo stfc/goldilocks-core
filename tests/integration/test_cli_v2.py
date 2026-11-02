@@ -108,6 +108,36 @@ def test_inspect_missing_structure_is_an_operator_error_not_a_traceback() -> Non
     assert "not found" in completed.stderr
 
 
+def test_a_disordered_structure_is_refused_but_still_inspected(tmp_path) -> None:
+    """#224: rock-salt Fe0.5Ni0.5O exits 2 with its partially occupied sites
+    named, from explain, run and magnetic-orderings alike, where explain and
+    run used to end in a traceback from the ML tiers. inspect still reads it,
+    occupancies included."""
+    path = tmp_path / "feni_o.cif"
+    Structure.from_spacegroup(
+        "Fm-3m",
+        Lattice.cubic(4.2),
+        [{"Fe": 0.5, "Ni": 0.5}, "O"],
+        [[0, 0, 0], [0.5, 0, 0]],
+    ).to(filename=str(path))
+
+    for command in (
+        ("explain", "--hpc", "scarf"),
+        ("run", "--hpc", "scarf"),
+        ("magnetic-orderings",),
+    ):
+        refused = _run_cli(*command, str(path))
+        assert refused.returncode == 2, (command, refused.stderr)
+        assert "Traceback" not in refused.stderr
+        assert "partially occupied sites" in refused.stderr
+        assert "site 1 (Fe0.5 Ni0.5)" in refused.stderr
+
+    inspected = _run_cli("inspect", str(path), "--json")
+    assert inspected.returncode == 0, inspected.stderr
+    site = json.loads(inspected.stdout)["structure"]["sites"][0]
+    assert [species["occupancy"] for species in site["species"]] == [0.5, 0.5]
+
+
 def test_magnetic_orderings_lists_the_fm_identity_by_default() -> None:
     """The fm candidate is always listed first, regardless of whatever
     else enumlib (if present on this machine's real PATH -- this

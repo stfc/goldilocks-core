@@ -11,7 +11,7 @@ import dataclasses
 
 import pytest
 from pydantic import ValidationError
-from pymatgen.core import Lattice, Structure
+from pymatgen.core import Structure
 from support import (
     INTERNAL_TEXT,
     carbon_pair_in_a_box,
@@ -618,27 +618,3 @@ def test_an_unresolved_geometry_is_not_read() -> None:
 
     assert state.ok
     assert state.value.n_kpoints == 294
-
-
-def test_a_disordered_cell_is_blocked_by_q2r_before_its_path() -> None:
-    """An unresolved q2r record blocks the dispersion before the path is
-    read, so a disordered written cell keeps q2r's root cause, the
-    boundary's, which waits on the cell's unavailable geometry. With q2r
-    resolved, the path's own reason blocks it."""
-    alloy = Structure(
-        Lattice.cubic(3.6), [{"Cu": 0.5, "Au": 0.5}], [[0, 0, 0]]
-    ).make_supercell([2, 2, 2])
-    cell = framed_magnetic_cell(alloy)
-    geometry = Unavailable(
-        reason="dimensionality classification does not support disordered structures"
-    )
-
-    by_q2r = dispersion_path(
-        cell, geometry, _occupations(), Blocked(by=geometry.reason)
-    )
-    by_path = dispersion_path(cell, geometry, _occupations(), _q2r_record())
-
-    assert isinstance(by_q2r, Blocked)
-    assert by_q2r.root_cause() == geometry.reason
-    assert isinstance(by_path, Blocked)
-    assert by_path.root_cause() == k_path(cell).reason

@@ -138,7 +138,6 @@ from goldilocks_core.resolution import (
     FieldState,
     Provenance,
     Resolved,
-    Unavailable,
     Warning,
     blocked_by,
     field_sources_from,
@@ -232,7 +231,6 @@ _BOX = (
     "a molecule or cluster in a box has no band structure; use the "
     "scf_single_point or relax task"
 )
-_DISORDERED = "the high-symmetry path does not support disordered structures"
 
 FOLDED_BANDS = Warning(
     code="k_path.folded_bands",
@@ -369,15 +367,11 @@ def k_path(
     """The band path of the written ``cell`` (module docstring), its points
     spaced by the human ``k_path_distance``, else
     ``DEFAULT_K_PATH_DISTANCE``. ``Blocked`` when ``cell`` is not resolved or
-    is a molecule or cluster in a box (vacuum along every lattice vector);
-    ``Unavailable`` for a disordered cell, whose sites have no single
-    species."""
+    is a molecule or cluster in a box (vacuum along every lattice vector)."""
     human = human or KPathHumanInput()
     if not cell.ok:
         return Blocked(by=blocked_by(cell))
     written = cell.value.structure
-    if not written.is_ordered:
-        return Unavailable(reason=_DISORDERED)
     vacuum = tuple(LATTICE_AXES.index(axis) for axis in vacuum_axes(written))
     if len(vacuum) == 3:
         return Blocked(by=_BOX)

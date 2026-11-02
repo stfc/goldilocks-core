@@ -2,9 +2,10 @@
 (v2 epic 8, #8).
 
 Two-phase split, per goldilocks-core-design.md's own promise: ``advise()``
-diagnoses field by field and never refuses a request as a whole (a field
-it cannot decide is ``unavailable``/``blocked``, not an exception);
-``generate()`` (``service/_generate.py``) hard-fails via
+diagnoses field by field and refuses a request as a whole only for a
+disordered structure, which no step can simulate (``StructureInputError``,
+#224); a field it cannot decide is ``unavailable``/``blocked``, not an
+exception. ``generate()`` (``service/_generate.py``) hard-fails via
 ``checks.check_all`` if anything needed is ``unavailable``/``blocked``
 (delivery has preconditions). A fault is not an undecided field: it
 propagates out of both. ``explain`` (CLI, HTTP, MCP) is ``advise()`` ->
@@ -43,6 +44,7 @@ from goldilocks_core.advisors.relax import RelaxOptions, VcRelaxOptions
 from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.checks import CheckReport, check_all
 from goldilocks_core.inputs.hpc import HpcProfile
+from goldilocks_core.inputs.structure import require_ordered
 from goldilocks_core.resolution import FieldState
 from goldilocks_core.service._advice import Advice, RunOverrides
 from goldilocks_core.service._analysis import analyze
@@ -108,7 +110,9 @@ def advise_steps(
     step's overrides and above the ML tier (#174). A ``bands`` step needs
     an ``scf`` step before it in ``steps``: its ``Advice`` holds its band
     path in place of a k-mesh and the scf step's occupations
-    (``PathStepAdvice``)."""
+    (``PathStepAdvice``). Raises ``StructureInputError`` for a disordered
+    ``structure`` (``inputs.structure.require_ordered``)."""
+    require_ordered(structure)
     analysis = analyze(structure, overrides.analysis)
     system = system_advice(
         structure,

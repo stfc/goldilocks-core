@@ -1032,25 +1032,3 @@ def test_pseudopotential_functional_mismatch_raises_generation_error(
 
     with pytest.raises(GenerationError, match="functional mismatch"):
         write_qe_scf(system, _step(), _CTX)
-
-
-def test_disordered_structure_is_rejected(pseudo_metadata_factory) -> None:
-    structure = Structure(
-        Lattice.cubic(4.0),
-        [{"Si": 0.5, "Ge": 0.5}],
-        [[0.0, 0.0, 0.0]],
-    )
-    magnetic = _magnetic(structure)
-    system = SystemSettings(
-        functional="PBEsol",
-        cutoffs=CutoffsDecision(ecutwfc_ry=30.0, ecutrho_ry=120.0),
-        electron_count=ElectronCountDecision(nelec=4.0, tot_charge=0.0),
-        pseudopotentials=(pseudo_metadata_factory("Si"), pseudo_metadata_factory("Ge")),
-        magnetic=magnetic,
-        vdw=VdwFacts(use_vdw=False, method=None),
-        hubbard=HubbardUDecision(),
-        boundary=BoundaryFacts(isolation="periodic"),
-    )
-
-    with pytest.raises(GenerationError, match="disordered"):
-        write_qe_scf(system, _step(), _CTX)

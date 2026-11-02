@@ -5,8 +5,9 @@ is a claim about *availability*, not about always resolving: is_metal,
 symmetry, geometry, is_magnetic and local_moments all have real cases where
 the honest answer is Unavailable (see their own test files) -- that is still "the
 heuristic tier ran to completion," the thing #175 asks to guarantee.
-Verified here as "calling every heuristic tier on a handful of structures,
-including a deliberately awkward disordered one, never raises."
+Verified here as "calling every heuristic tier on a handful of structures
+never raises." A disordered structure never reaches them: advice refuses it
+first (``inputs.structure.require_ordered``, #224).
 """
 
 from __future__ import annotations
@@ -26,11 +27,10 @@ _FIELD_STATE_TYPES = (Resolved, Unavailable, Blocked)
 
 _SILICON = Structure(Lattice.cubic(5.43), ["Si", "Si"], [[0, 0, 0], [0.25, 0.25, 0.25]])
 _ZINC_OXIDE = Structure(Lattice.cubic(4.0), ["Zn", "O"], [[0, 0, 0], [0.5, 0.5, 0.5]])
-_DISORDERED = Structure(Lattice.cubic(4.0), [{"Fe": 0.5, "Ni": 0.5}], [[0.0, 0.0, 0.0]])
 
 
 def test_every_heuristic_tier_runs_to_completion_with_no_external_dependency() -> None:
-    for structure in (_SILICON, _ZINC_OXIDE, _DISORDERED):
+    for structure in (_SILICON, _ZINC_OXIDE):
         composition_state = composition(structure)
         assert isinstance(composition_state, _FIELD_STATE_TYPES)
         assert composition_state.ok  # composition never fails, see its own tests

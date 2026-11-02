@@ -273,7 +273,7 @@ def _phonon(
         fetch_missing=False,
         protocols={first_step: protocol},
     )[first_step]
-    return first, phonon_steps_advice(first_step, first, steps, hpc, protocol.relax)
+    return first, phonon_steps_advice(first_step, first, steps, protocol.relax)
 
 
 def _codes(warnings: tuple[Warning, ...]) -> list[str]:
@@ -289,7 +289,7 @@ def _keywords(text: str) -> dict[str, str]:
 def test_the_phonon_steps_of_silicon(store) -> None:
     """Diamond Si: ph.x runs the 7x7x7 q-mesh of 0.3 1/A, 20 irreducible
     q-points and a work of 2401 scf-equivalents, with the balanced ph
-    protocol; q2r.x and matdyn.x apply asr 'crystal', and the DOS mesh is
+    protocol; q2r.x and matdyn.x apply asr 'simple', and the DOS mesh is
     21x21x21. The phonon record carries the phonon task's relax-first notice.
     pw.x's own FFT grid passes ph.x's test, so the first step writes none,
     and the job runs the phonon tasks' timer in place of any max_seconds
@@ -313,7 +313,7 @@ def test_the_phonon_steps_of_silicon(store) -> None:
     assert phonon.source == "heuristic"
     assert first.step.kpoints.occupations.value.occupations == "smearing"
     assert _codes(phonon.value.warnings) == ["phonon.relax_first"]
-    assert (steps.q2r.value.asr, steps.q2r.value.loto_2d) == ("crystal", False)
+    assert (steps.q2r.value.asr, steps.q2r.value.loto_2d) == ("simple", False)
     assert steps.phonon_dos.value.mesh == (21, 21, 21)
     fft_grid = steps.fft_grid.value
     assert (fft_grid.compatible, fft_grid.written, fft_grid.fragile) == (
@@ -468,12 +468,12 @@ def test_the_phonon_inputs_follow_the_first_step_on_its_context(store) -> None:
     assert _keywords(q2r.files["q2r.in"]) == {
         "fildyn": "'si.dyn'",
         "flfrc": "'si.fc'",
-        "zasr": "'crystal'",
+        "zasr": "'simple'",
     }
     dos_keywords = _keywords(dos.files["phonon_dos.in"])
     assert (dos_keywords["flfrc"], dos_keywords["asr"], dos_keywords["fldos"]) == (
         "'si.fc'",
-        "'crystal'",
+        "'simple'",
         "'si.phdos'",
     )
     assert (dos_keywords["nk1"], dos_keywords["nk2"], dos_keywords["nk3"]) == (

@@ -147,7 +147,7 @@ def advise_phonon(
     return PhononAdvice(
         task=task,
         first=first,
-        steps=phonon_steps_advice(first_step, first, steps, hpc, protocol.relax),
+        steps=phonon_steps_advice(first_step, first, steps, protocol.relax),
         routing=overrides.warnings,
     )
 

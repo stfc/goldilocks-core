@@ -157,7 +157,7 @@ its type, default, and description; a selection of commonly used keys:
 | `k_path_distance`                   | Largest spacing between neighbouring points of the high-symmetry path of a `band` task's bands step and a phonon task's dispersion step, in 1/Å with 2π included (default 0.025); see [the band structure path](science.md#check-the-band-structure-path) |
 | `q_grid`, `q_distance`              | A phonon task's ph.x q-point mesh: an explicit Γ-centred mesh, e.g. `--set 'q_grid=[4,4,4]'`, or a spacing in 1/Å with 2π included (default 0.3); see [the phonon tasks](science.md#check-the-phonon-tasks) |
 | `tr2_ph`, `alpha_mix`, `nmix_ph`    | ph.x's linear-response threshold, mixing factor and number of mixed iterations (defaults 1e-18, 0.4 and 8) |
-| `asr`                               | Acoustic sum rule of q2r.x and matdyn.x: `crystal` (default, falling back to `simple` with a notice where its memory would not fit one task) or `simple` |
+| `asr`                               | Acoustic sum rule of q2r.x and matdyn.x: `simple` (default) or `crystal`; see [the phonon tasks](science.md#check-the-phonon-tasks) |
 | `dos_q_distance`                    | Spacing of the mesh matdyn.x interpolates a phonon task's phonon DOS on, in 1/Å with 2π included (default 0.10) |
 
 Each setting applies to the steps that read it, and `goldilocks settings

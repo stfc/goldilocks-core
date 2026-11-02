@@ -12,17 +12,19 @@ notices (``phonon_notices``).
 
 **q2r.x and matdyn.x** (``q2r_settings``). ``asr`` is the acoustic sum rule
 both apply, q2r.x to the effective charges and matdyn.x to the force
-constants: 'crystal' is INPUT_MATDYN's "optimized correction of the force
-constants (projection)", 'simple' corrects only their diagonal. matdyn.x's
-projection holds (18 nat + 29) arrays of 9 nat^2 N_q doubles, N_q being the
-points of the q-mesh: 18 nat + 15 basis vectors and the corrected force
-constants (``PHonon/PH/matdyn.f90:1545-1549``), ``ind_v`` and ``v``
-(``:1763``), ``w`` and ``x`` (``:1820``), and the force constants and their
-long-range part in its caller (``asr_memory_mb``). matdyn.x runs as one
-task, so the default is 'crystal' while that fits one task's share of a
-node's memory on the job's partition, mem_per_node_gb / cores_per_node, and
-otherwise 'simple', with ``ASR_SIMPLE_FALLBACK_NOTE``; a request ``asr`` is
-used as given. ``loto_2d`` is set with isolation=slab, Quantum ESPRESSO's 2D
+constants. The default is 'simple', which corrects the on-site force
+constants (``PHonon/PH/matdyn.f90:1355-1392``) and so shifts every q alike;
+'crystal', INPUT_MATDYN's "optimized correction of the force constants
+(projection)", is used when the request sets it (#219). The dominant
+violation, the FFT-grid (egg-box) error of the exchange-correlation term, is
+on-site and the same at every q. The 'crystal' projection spreads its
+correction evenly over the force constants of the q-mesh supercell, which
+in q-space is zero at every q-mesh point but Gamma, so it leaves that
+violation at every other computed q: on bcc Li it turned a stable Gamma-N
+branch imaginary (-1.16 THz) that 'simple' keeps real. q2r.x applies the
+same rule to the effective charges only (``do_q2r.f90:214-215``), where
+'simple' subtracts their mean (``:697-708``), the correction 'crystal' gives
+a 3D crystal. ``loto_2d`` is set with isolation=slab, Quantum ESPRESSO's 2D
 Coulomb truncation: q2r.x and matdyn.x then take the 2D non-analytic term
 (``PHonon/PH/rigid.f90:129-137``; PHonon example17; Sohier et al., Phys.
 Rev. B 96, 075448 (2017)).
@@ -107,7 +109,6 @@ tasks' relaxation warning, carried by the relax record
 from __future__ import annotations
 
 import itertools
-import math
 from dataclasses import dataclass, replace
 from typing import Literal
 
@@ -115,7 +116,6 @@ from pydantic import Field
 
 from goldilocks_core.advisors.boundary import BoundaryFacts
 from goldilocks_core.advisors.hubbard_u import HubbardUDecision
-from goldilocks_core.advisors.job_resources import JobDecision
 from goldilocks_core.advisors.k_path import (
     KPathDecision,
     KPathHumanInput,
@@ -124,9 +124,7 @@ from goldilocks_core.advisors.k_path import (
 )
 from goldilocks_core.advisors.magnetic_config import MagneticCell, MagneticConfigFacts
 from goldilocks_core.advisors.occupations import OccupationsDecision
-from goldilocks_core.advisors.q_sampling import QSamplingDecision
 from goldilocks_core.analysis.geometry import GeometryFacts
-from goldilocks_core.inputs.hpc import HpcProfile, Partition
 from goldilocks_core.inputs.overrides import HumanInput
 from goldilocks_core.kmesh import k_distance_to_mesh
 from goldilocks_core.resolution import (
@@ -158,10 +156,6 @@ docstring)."""
 DOS_DELTA_E = 1.0
 """cm^-1: the phonon DOS's energy step, matdyn.x's own default."""
 
-_MB_PER_GB = 1024
-_DOUBLE_BYTES = 8
-_BYTES_PER_MB = 2**20
-
 AIIDA_PROTOCOLS_CITATION = "S. P. Huber et al., npj Comput. Mater. 7, 136 (2021)"
 """The aiida-quantumespresso protocols the phonon tasks' ph.x settings and
 relaxation threshold come from."""
@@ -180,9 +174,9 @@ _PH_NOTE = (
 )
 
 _ASR_NOTE = (
-    "Default asr 'crystal', matdyn.x's optimized correction of the force "
-    "constants by projection, or 'simple', which corrects only their diagonal, "
-    "when the projection would not fit one task's share of a node's memory."
+    "Default asr 'simple', which corrects the on-site force constants at every "
+    "q, where the dominant sum-rule violation, the FFT-grid error, sits. "
+    "matdyn.x's 'crystal' projection corrects that violation at Gamma only."
 )
 
 _DOS_NOTE = (
@@ -304,23 +298,6 @@ D3_TWO_BODY_NOTE = Warning(
     ),
 )
 
-_ASR_FALLBACK_REMEDY = (
-    "so the acoustic sum rule falls back to asr='simple', which corrects only "
-    "the diagonal of the force constants. Set asr=crystal to keep the "
-    "projection if matdyn.x, which runs as one task, can use more memory."
-)
-
-ASR_SIMPLE_FALLBACK_NOTE = Warning(
-    code="phonon.asr_simple_fallback",
-    level="info",
-    category="q2r",
-    message=(
-        "matdyn.x's asr='crystal' projection would need more than one task's "
-        f"share of a node's memory, {_ASR_FALLBACK_REMEDY}"
-    ),
-)
-"""Catalogue entry; ``_asr_fallback`` names the figures."""
-
 WARNING_CATALOGUE = (
     RELAX_FIRST_NOTE,
     LOOSE_FORCE_THRESHOLD_WARNING,
@@ -329,13 +306,11 @@ WARNING_CATALOGUE = (
     MAGNETIC_NONCOLLINEAR_WARNING,
     HUBBARD_EXPERIMENTAL_WARNING,
     D3_TWO_BODY_NOTE,
-    ASR_SIMPLE_FALLBACK_NOTE,
 )
 """Every warning code this module can emit -- ``capabilities.py``'s
 ``warnings[]`` catalogue aggregates one of these tuples per advisor. Each
 category is the record that carries the code: the relax record the
-force-threshold warning, the q2r record the fallback, the phonon record
-the rest."""
+force-threshold warning, the phonon record the rest."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -352,13 +327,10 @@ class PhononDecision:
 @dataclass(frozen=True, slots=True)
 class Q2rDecision:
     """The acoustic sum rule and the 2D non-analytic term q2r.x and matdyn.x
-    apply (module docstring); ``asr_memory_mb`` is the memory matdyn.x's
-    asr='crystal' projection needs, in MB."""
+    apply (module docstring)."""
 
     asr: Asr
     loto_2d: bool
-    asr_memory_mb: float
-    warnings: tuple[Warning, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -470,76 +442,27 @@ def _magnetic_spin_orbit(magnetic: FieldState[MagneticConfigFacts]) -> bool:
 
 
 def q2r_settings(
-    cell: FieldState[MagneticCell],
-    q: FieldState[QSamplingDecision],
     boundary: FieldState[BoundaryFacts],
-    job: FieldState[JobDecision],
-    hpc: HpcProfile,
     human: Q2rHumanInput | None = None,
 ) -> FieldState[Q2rDecision]:
-    """q2r.x's and matdyn.x's acoustic sum rule for the written ``cell`` on
-    ``q``'s mesh, the default's against one task's share of a node's memory
-    on ``job``'s partition of ``hpc``, and ``loto_2d`` from ``boundary``
-    (module docstring). ``Blocked`` when ``cell``, ``q``, ``boundary`` or
-    ``job`` is not resolved."""
+    """q2r.x's and matdyn.x's acoustic sum rule, 'simple' unless the request
+    sets one, and ``loto_2d`` from ``boundary`` (module docstring).
+    ``Blocked`` when ``boundary`` is not resolved."""
     human = human or Q2rHumanInput()
-    for state in (cell, q, boundary, job):
-        if not state.ok:
-            return Blocked(by=blocked_by(state))
-    atoms = len(cell.value.structure)
-    memory_mb = _asr_memory_mb(atoms, q.value.mesh)
-    asr = human.asr
-    warnings: tuple[Warning, ...] = ()
-    derived_from: tuple[str, ...] = ("magnetic", "q_sampling", "boundary")
-    if asr is None:
-        fallback = _asr_fallback(
-            memory_mb, atoms, q.value.mesh, hpc.partition(job.value.partition)
-        )
-        asr = "crystal" if fallback is None else "simple"
-        warnings = () if fallback is None else (fallback,)
-        derived_from = (*derived_from, "job")
+    if not boundary.ok:
+        return Blocked(by=blocked_by(boundary))
     decision = Q2rDecision(
-        asr=asr,
+        asr=human.asr or "simple",
         loto_2d=boundary.value.isolation == "slab",
-        asr_memory_mb=round(memory_mb, 2),
-        warnings=warnings,
     )
     return Resolved(
         decision,
         Provenance.from_field_sources(
             field_sources_from(human, None, fields=("asr",)),
             source_note=_ASR_NOTE if human.asr is None else None,
-            derived_from=derived_from,
+            derived_from=("boundary",),
         ),
     )
-
-
-def _asr_memory_mb(atoms: int, mesh: tuple[int, int, int]) -> float:
-    """The memory matdyn.x's asr='crystal' projection needs for a cell of
-    ``atoms`` atoms on the q-``mesh``, in MB: (18 atoms + 29) arrays of
-    9 atoms^2 doubles per q-point (module docstring)."""
-    doubles = (18 * atoms + 29) * 9 * atoms**2 * math.prod(mesh)
-    return doubles * _DOUBLE_BYTES / _BYTES_PER_MB
-
-
-def _asr_fallback(
-    memory_mb: float, atoms: int, mesh: tuple[int, int, int], partition: Partition
-) -> Warning | None:
-    """``ASR_SIMPLE_FALLBACK_NOTE`` with its figures when ``memory_mb``, the
-    projection's memory for ``atoms`` atoms on ``mesh``, exceeds one task's
-    share of a ``partition`` node's memory; ``None`` when it fits."""
-    hardware = partition.hardware
-    share_mb = hardware.mem_per_node_gb * _MB_PER_GB / hardware.cores_per_node
-    if memory_mb <= share_mb:
-        return None
-    message = (
-        "matdyn.x's asr='crystal' projection would need an estimated "
-        f"{memory_mb:.1f} MB for {atoms} atoms on the {'x'.join(map(str, mesh))} "
-        "q-mesh, more than one task's share of a node's memory on partition "
-        f"{partition.name} ({share_mb:.0f} MB: {hardware.mem_per_node_gb:g} GB over "
-        f"{hardware.cores_per_node} cores), {_ASR_FALLBACK_REMEDY}"
-    )
-    return ASR_SIMPLE_FALLBACK_NOTE.model_copy(update={"message": message})
 
 
 def phonon_dos_settings(

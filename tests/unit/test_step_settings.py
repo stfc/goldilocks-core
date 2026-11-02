@@ -135,7 +135,7 @@ def test_pw_settings_has_no_dos_specific_fields() -> None:
 
 
 def _q2r() -> Q2rDecision:
-    return Q2rDecision(asr="crystal", loto_2d=False, asr_memory_mb=6.12)
+    return Q2rDecision(asr="simple", loto_2d=False)
 
 
 def _ph_settings() -> PhSettings:
@@ -215,7 +215,7 @@ def test_the_dispersion_takes_the_sum_rule_and_a_path_but_no_dos_mesh() -> None:
     (#215)."""
     dispersion = _dispersion_settings()
 
-    assert (dispersion.q2r.asr, dispersion.path.n_kpoints) == ("crystal", 46)
+    assert (dispersion.q2r.asr, dispersion.path.n_kpoints) == ("simple", 46)
     assert not hasattr(dispersion, "phonon_dos")
     with pytest.raises(TypeError, match="path"):
         DispersionSettings(q2r=_q2r())  # type: ignore[call-arg]

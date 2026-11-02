@@ -276,7 +276,6 @@ class TestTopLevelShape:
             ("phonon.hubbard_experimental", "warning", "phonon"),
             ("phonon.d3_two_body", "info", "phonon"),
             ("phonon.loose_force_threshold", "warning", "relax"),
-            ("phonon.asr_simple_fallback", "info", "q2r"),
             ("phonon.k_mesh_raised", "info", "k_sampling"),
             ("phonon.k_grid_coarser_than_q", "warning", "k_sampling"),
             ("phonon.k_grid_not_commensurate", "warning", "k_sampling"),
@@ -630,7 +629,7 @@ class TestSettingApplicability:
             ("tr2_ph", "phonon", "ph", "ph.x", 1e-18),
             ("alpha_mix", "phonon", "ph", "ph.x", 0.4),
             ("nmix_ph", "phonon", "ph", "ph.x", 8),
-            ("asr", "q2r", "q2r", "q2r.x", None),
+            ("asr", "q2r", "q2r", "q2r.x", "simple"),
             ("dos_q_distance", "phonon_dos", "phonon_dos", "matdyn.x", 0.1),
         ):
             setting = settings[key]

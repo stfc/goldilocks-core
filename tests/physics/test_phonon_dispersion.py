@@ -93,9 +93,7 @@ def _fixed_dispersion(
             OccupationsDecision(occupations="fixed", smearing_type=None, degauss=None),
             provenance,
         ),
-        Resolved(
-            Q2rDecision(asr="crystal", loto_2d=False, asr_memory_mb=1.0), provenance
-        ),
+        Resolved(Q2rDecision(asr="simple", loto_2d=False), provenance),
         KPathHumanInput(k_path_distance=distance),
     )
     assert state.ok, state

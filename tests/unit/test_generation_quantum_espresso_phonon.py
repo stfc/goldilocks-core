@@ -105,9 +105,9 @@ def _silicon(
 ) -> _PhononSettings:
     """Diamond Si's phonon steps, as the advisors decide them on its written
     cell: the 7x7x7 q-mesh (20 irreducible q-points, work 2401), the balanced
-    ph protocol, asr 'crystal' and the 21x21x21 DOS mesh at 0.10 1/Angstrom;
+    ph protocol, asr 'simple' and the 21x21x21 DOS mesh at 0.10 1/Angstrom;
     the first step runs 4 pools. The dispersion follows ``_split_fcc_path``."""
-    q2r = Q2rDecision(asr="crystal", loto_2d=False, asr_memory_mb=6.12)
+    q2r = Q2rDecision(asr="simple", loto_2d=False)
     return (
         PhSettings(
             q_sampling=QSamplingDecision(
@@ -132,7 +132,7 @@ def _graphene() -> _PhononSettings:
     """Graphene with isolation=slab: the 10x10x1 q-mesh (14 irreducible
     q-points, work 700), loto_2d, the 30x30x1 DOS mesh and
     ``_hex2d_path``."""
-    q2r = Q2rDecision(asr="crystal", loto_2d=True, asr_memory_mb=1.79)
+    q2r = Q2rDecision(asr="simple", loto_2d=True)
     return (
         PhSettings(
             q_sampling=QSamplingDecision(
@@ -292,7 +292,7 @@ def test_q2r_x_and_matdyn_x_turn_the_matrices_into_a_phonon_dos() -> None:
         "&INPUT\n"
         "   fildyn           = 'pwscf.dyn'\n"
         "   flfrc            = 'pwscf.fc'\n"
-        "   zasr             = 'crystal'\n"
+        "   zasr             = 'simple'\n"
         "/\n"
     )
     assert dataclasses.replace(phonon_dos, files={}) == Step(
@@ -306,7 +306,7 @@ def test_q2r_x_and_matdyn_x_turn_the_matrices_into_a_phonon_dos() -> None:
     assert phonon_dos.files["phonon_dos.in"] == (
         "&INPUT\n"
         "   flfrc            = 'pwscf.fc'\n"
-        "   asr              = 'crystal'\n"
+        "   asr              = 'simple'\n"
         "   dos              = .true.\n"
         "   nk1              = 21\n"
         "   nk2              = 21\n"
@@ -333,7 +333,7 @@ def test_dispersion_in_lists_the_path_after_matdyn_x_s_namelist() -> None:
     assert _step(steps, "dispersion").files["dispersion.in"] == (
         "&INPUT\n"
         "   flfrc            = 'pwscf.fc'\n"
-        "   asr              = 'crystal'\n"
+        "   asr              = 'simple'\n"
         "   flfrq            = 'pwscf.freq'\n"
         "   flvec            = ' '\n"
         "   q_in_band_form   = .true.\n"
@@ -353,10 +353,10 @@ def test_dispersion_in_lists_the_path_after_matdyn_x_s_namelist() -> None:
 def test_the_dispersion_runs_on_one_task_with_q2r_s_sum_rule() -> None:
     """Like the phonon DOS, matdyn.x runs on one task and passes on JOB DONE,
     with no stop file and nothing a rerun resumes from; it applies the sum
-    rule of the q2r record, here the 'simple' fallback."""
+    rule of the q2r record, here a request's 'crystal'."""
     ph, q2r, matdyn, dispersion = _silicon()
-    simple = Q2rDecision(asr="simple", loto_2d=False, asr_memory_mb=6.12)
-    dispersion = dataclasses.replace(dispersion, q2r=simple)
+    crystal = Q2rDecision(asr="crystal", loto_2d=False)
+    dispersion = dataclasses.replace(dispersion, q2r=crystal)
 
     steps = write_qe_phonon(ph, q2r, matdyn, dispersion, _CTX, d3hess=False)
 
@@ -369,7 +369,7 @@ def test_the_dispersion_runs_on_one_task_with_q2r_s_sum_rule() -> None:
         completion=StdoutMarkerCheck("JOB DONE"),
         ntasks=1,
     )
-    assert _keywords(step.files["dispersion.in"])["asr"] == "'simple'"
+    assert _keywords(step.files["dispersion.in"])["asr"] == "'crystal'"
 
 
 def test_a_slab_under_2d_truncation_takes_the_2d_non_analytic_term() -> None:

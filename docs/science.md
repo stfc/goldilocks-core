@@ -1235,17 +1235,22 @@ Quantum ESPRESSO's own defaults are 1e-12, 0.7 and 4. A value you set must
 pass ph.x's own checks, `tr2_ph` > 0 and 0 ≤ `alpha_mix` ≤ 1, and `nmix_ph`
 must be at least 1. ph.x runs on the whole allocation with the first step's
 `-npool` and `-ndiag` and no images, always with `recover` on. q2r.x and
-matdyn.x apply the acoustic sum rule `asr`: `crystal`, matdyn.x's optimized
-correction of the force constants by projection, or `simple`, which corrects
-only their diagonal. The projection holds (18 nat + 29) arrays of
-9 nat² N_q numbers, N_q being the points of the q-mesh: 80.9 MB for the
-4-atom antiferromagnetic NiO cell on its 9×9×9 mesh, and about 1.7 GB for
-a 28-atom cell on a 3×4×5 mesh. matdyn.x runs as one task, so `asr` is
-`crystal` unless the projection would not fit one task's share of a node's
-memory on the job's partition (`mem_per_node_gb` / `cores_per_node`: 4000 MB
-on SCARF, 250 GB over 64 cores); then it is `simple`, with the info notice
-`phonon.asr_simple_fallback` on the `q2r` record, and `asr=crystal` keeps
-the projection. q2r.x, matdyn.x and d3hess.x each run on one task. matdyn.x
+matdyn.x apply the acoustic sum rule `asr`, by default `simple`, which
+corrects the on-site force constants and so shifts every q alike; set
+`asr=crystal` for matdyn.x's optimized correction by projection. The largest
+violation of the sum rule is usually the error of the exchange-correlation
+term on the FFT grid (the egg-box effect), which is on-site and the same at
+every q. The projection spreads its correction evenly over the force
+constants of the q-mesh supercell, which in q-space is zero at every q-mesh
+point but Γ, so it leaves that violation at every other computed q. On
+bcc Li it gives the lowest Γ–N branch a minimum of −1.16 THz at the default
+`ecutrho` and −0.74 THz at twice that, where `simple` gives no imaginary
+modes at either and the two cutoffs agree within 0.0012 THz. With `crystal`,
+then, a soft branch can turn imaginary, and raising `ecutrho` seems to change
+it, although the dispersion is converged. q2r.x applies the same rule to the
+effective charges only, where `simple` subtracts their mean, the correction
+`crystal` gives a 3D crystal. q2r.x, matdyn.x and d3hess.x each run on one
+task. matdyn.x
 interpolates the phonon DOS on a Γ-centred mesh of `dos_q_distance`
 0.10 Å⁻¹, the dos task's nscf spacing (aiida-quantumespresso's `pdos.yaml`),
 built as the q-mesh is (the primitive cell of Si gets 21×21×21, graphene
@@ -1334,8 +1339,8 @@ lattice vector of the written cell other than Γ, matdyn.x counts that point
 as Γ too, but it is not listed twice, since matdyn.x takes the leaving
 direction only after a point that is exactly 0, and the long-range sum can
 add the term there a second time: upload the primitive cell of a polar
-insulator. `asr='crystal'` imposes the three translational sum rules, not
-the rotational ones, so the flexural (ZA) branch of a two-dimensional
+insulator. Neither `asr` imposes the rotational sum rules, only the
+translational ones, so the flexural (ZA) branch of a two-dimensional
 material can dip below zero near Γ, which the closely spaced points of the
 dispersion show and the phonon DOS mesh can miss.
 
@@ -1432,8 +1437,7 @@ automatically selected `pseudo_table` names `functional` and `magnetic`,
 it reads, and its `bands_occupations` names `occupations`, the scf step's
 decision it follows. A phonon task's `q_sampling` and `phonon_dos` name
 `magnetic`, whose cell they mesh, `fft_grid` names `cutoffs` and `magnetic`,
-`q2r` names `magnetic`, `q_sampling` and `boundary`, and also `job` when
-the default `asr` was weighed against the job's partition, and the
+`q2r` names `boundary`, whose isolation decides `loto_2d`, and the
 dispersion step's `k_path` names `magnetic`, `occupations` and `q2r`, whose
 occupations and `loto_2d` decide whether matdyn.x adds the non-analytic
 term. A non-metal's

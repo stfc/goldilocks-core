@@ -121,7 +121,7 @@ setting's lower bound is `0.001` Å⁻¹.
 | Phonon tasks' relaxation                      | `forc_conv_thr 1e-4` Ry/Bohr (the `relax` and `vc-relax` tasks: Quantum ESPRESSO's `1e-3`) |
 | Phonon tasks' first step                      | k-mesh raised against the q-mesh; no `max_seconds`, a job timer at 95% of the walltime |
 | Phonon tasks' ph step                         | `q_distance 0.3` Å⁻¹; `tr2_ph 1e-18`, `alpha_mix(1) 0.4`, `nmix_ph 8` |
-| Phonon tasks' q2r and phonon_dos steps        | `asr` `crystal` (`simple` where it would not fit one task's memory); `dos_q_distance 0.10` Å⁻¹, every 1 cm⁻¹ |
+| Phonon tasks' q2r and phonon_dos steps        | `asr` `simple`; `dos_q_distance 0.10` Å⁻¹, every 1 cm⁻¹ |
 | Phonon tasks' dispersion step                 | the `band` task's path at `k_path_distance 0.025` Å⁻¹          |
 
 `conv_thr`/`etot_conv_thr` scale with the structure's atom count `nat`, not a

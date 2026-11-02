@@ -57,7 +57,6 @@ from goldilocks_core.advisors.relax import (
     VcRelaxOptions,
     relax_settings,
 )
-from goldilocks_core.inputs.hpc import HpcProfile
 from goldilocks_core.resolution import FieldState
 from goldilocks_core.service._advice import Advice
 from goldilocks_core.service._magnetic import cell_geometry
@@ -120,15 +119,13 @@ def phonon_steps_advice(
     first_step: Literal["scf", "relax", "vc-relax"],
     first: Advice,
     steps: Mapping[str, StepOverrides],
-    hpc: HpcProfile,
     relax_protocol: RelaxProtocol | None,
 ) -> PhononStepsAdvice:
     """The phonon steps on ``first``, the advice of the task's first step,
     ``first_step`` (module docstring). ``steps`` holds the request's
     overrides by purpose, for ``first_step`` and the ``ph``, ``q2r``,
-    ``phonon_dos`` and ``dispersion`` steps; ``hpc`` holds the job's
-    partition, against which the acoustic sum rule's memory is weighed;
-    ``relax_protocol`` is the first step's ``StepProtocol.relax``. ``first``
+    ``phonon_dos`` and ``dispersion`` steps; ``relax_protocol`` is the first
+    step's ``StepProtocol.relax``. ``first``
     is advised under ``phonon_step_protocol`` with the q request of
     ``steps["ph"]``, so its k-mesh meets the q-mesh decided here."""
     system = first.system
@@ -156,14 +153,7 @@ def phonon_steps_advice(
         system.hubbard,
         d3=system.vdw.ok and system.vdw.value.use_vdw,
     )
-    q2r = q2r_settings(
-        system.cell,
-        q,
-        system.boundary,
-        first.step.resources.job,
-        hpc,
-        steps["q2r"].q2r.q2r,
-    )
+    q2r = q2r_settings(system.boundary, steps["q2r"].q2r.q2r)
     return PhononStepsAdvice(
         relax=relax,
         fft_grid=fft_grid(system.cell, system.cutoffs, first_step),

@@ -30,7 +30,6 @@ from support import (
 
 from goldilocks_core.advisors.boundary import BoundaryFacts
 from goldilocks_core.advisors.hubbard_u import HubbardU, HubbardUDecision
-from goldilocks_core.advisors.job_resources import JobDecision
 from goldilocks_core.advisors.k_path import KPathDecision, KPathHumanInput, k_path
 from goldilocks_core.advisors.occupations import OccupationsDecision
 from goldilocks_core.advisors.phonon import (
@@ -48,8 +47,6 @@ from goldilocks_core.advisors.phonon import (
     phonon_settings,
     q2r_settings,
 )
-from goldilocks_core.advisors.q_sampling import QSamplingDecision
-from goldilocks_core.inputs.hpc import Hardware, HpcProfile, Partition, load_hpc_profile
 from goldilocks_core.resolution import (
     Blocked,
     Provenance,
@@ -340,7 +337,6 @@ def test_the_catalogue_holds_every_notice_and_the_relax_warning() -> None:
         "warning",
         "relax",
     )
-    assert by_code["phonon.asr_simple_fallback"].category == "q2r"
     raised = [
         *_notices("scf", d3=True, **_NICKEL_OXIDE_WITH_U),
         *_notices("vc-relax"),
@@ -352,101 +348,30 @@ def test_the_catalogue_holds_every_notice_and_the_relax_warning() -> None:
         assert (catalogued.level, catalogued.category) == (notice.level, "phonon")
 
 
-_AFM_NICKEL_OXIDE_Q = _resolved(
-    QSamplingDecision(mesh=(9, 9, 9), q_distance=0.3, n_irr_q=85, work=9477)
-)
-"""AFM NiO's default q-mesh (its q_sampling record)."""
+def _q2r(isolation: str = "periodic", human: Q2rHumanInput | None = None):
+    return q2r_settings(_resolved(BoundaryFacts(isolation)), human)
 
 
-def _job(partition: str = "scarf") -> Resolved[JobDecision]:
-    return _resolved(
-        JobDecision(
-            partition=partition,
-            nodes=1,
-            ntasks=64,
-            ntasks_per_node=64,
-            walltime_h=168.0,
-            max_seconds_by_step={},
-            memory_per_process_mb=50.0,
-            memory_total_mb=3200.0,
-            account=None,
-            timer_seconds=574560,
-        )
-    )
-
-
-def _small_memory_profile() -> HpcProfile:
-    """A node of 64 cores and 4 GB: 64 MB per task, below AFM NiO's
-    asr='crystal' projection at 9x9x9."""
-    hardware = Hardware(
-        cores_per_node=64, mem_per_node_gb=4.0, max_nodes=10, max_walltime_h=168
-    )
-    return HpcProfile(
-        name="small",
-        scheduler="slurm",
-        launcher="srun",
-        modules={},
-        partitions={"scarf": Partition("scarf", hardware, default=True)},
-    )
-
-
-def _q2r(
-    isolation: str = "periodic",
-    hpc: HpcProfile | None = None,
-    human: Q2rHumanInput | None = None,
-    *,
-    q=_AFM_NICKEL_OXIDE_Q,
-    job=None,
-):
-    return q2r_settings(
-        written_magnetic_cell(written_afm_nickel_oxide()),
-        q,
-        _resolved(BoundaryFacts(isolation)),
-        job or _job(),
-        hpc or load_hpc_profile("scarf"),
-        human,
-    )
-
-
-def test_asr_is_crystal_when_its_projection_fits_one_task_s_memory() -> None:
-    """matdyn.x's projection holds (18 nat + 29) arrays of 9 nat^2 N_q
-    doubles: 80.9 MB for AFM NiO's 4 atoms at 9x9x9, well within SCARF's
-    4000 MB per task (250 GB over 64 cores)."""
+def test_asr_defaults_to_simple_with_its_note() -> None:
+    """'simple' corrects the on-site force constants at every q, where the
+    FFT-grid violation sits; 'crystal' corrects it at Gamma only, which gave
+    bcc Li a spurious Gamma-N instability (#219)."""
     state = _q2r()
 
     assert state.ok
-    assert state.value.asr == "crystal"
-    assert state.value.asr_memory_mb == 80.89
-    assert state.value.loto_2d is False
-    assert state.value.warnings == ()
+    assert state.value == Q2rDecision(asr="simple", loto_2d=False)
     assert state.provenance.field_sources == {"asr": "heuristic"}
+    assert "Default asr 'simple'" in state.provenance.source_note
+    assert state.provenance.derived_from == ("boundary",)
 
 
-def test_asr_falls_back_to_simple_beyond_one_task_s_memory() -> None:
-    state = _q2r(hpc=_small_memory_profile())
-
-    assert state.value.asr == "simple"
-    assert state.value.asr_memory_mb == 80.89
-    (notice,) = state.value.warnings
-    assert notice.code == "phonon.asr_simple_fallback"
-    assert (notice.level, notice.category) == ("info", "q2r")
-    assert "80.9 MB" in notice.message
-    assert "64 MB" in notice.message
-    assert "scarf" in notice.message
-    assert not INTERNAL_TEXT.findall(notice.message)
-    assert state.provenance.field_sources == {"asr": "heuristic"}
-
-
-@pytest.mark.parametrize(
-    ("asr", "hpc"),
-    [("crystal", _small_memory_profile), ("simple", lambda: load_hpc_profile("scarf"))],
-)
-def test_a_request_asr_is_used_as_given(asr: str, hpc) -> None:
-    state = _q2r(hpc=hpc(), human=Q2rHumanInput(asr=asr))
+@pytest.mark.parametrize("asr", ["crystal", "simple"])
+def test_a_request_asr_is_used_as_given(asr: str) -> None:
+    state = _q2r(human=Q2rHumanInput(asr=asr))
 
     assert state.value.asr == asr
-    assert state.value.warnings == ()
     assert state.provenance.field_sources == {"asr": "human"}
+    assert state.provenance.source_note is None
     assert state.source == "human"
 
 
@@ -460,18 +385,13 @@ def test_loto_2d_follows_the_slab_boundary(isolation: str, loto_2d: bool) -> Non
     assert _q2r(isolation).value.loto_2d is loto_2d
 
 
-@pytest.mark.parametrize(
-    "inputs",
-    [
-        {"q": Blocked(by="pseudopotential table sssp is not installed")},
-        {"job": Unavailable(reason="HPC profile scarf has no partition gpu2")},
-    ],
-    ids=["q", "job"],
-)
-def test_q2r_is_blocked_by_an_unresolved_q_mesh_or_job(inputs) -> None:
-    state = _q2r(**inputs)
+def test_q2r_is_blocked_by_an_unresolved_boundary() -> None:
+    reason = "dimensionality classification does not support disordered structures"
+
+    state = q2r_settings(Blocked(by=reason))
 
     assert isinstance(state, Blocked)
+    assert state.root_cause() == reason
 
 
 @pytest.mark.parametrize(
@@ -521,7 +441,7 @@ def _route(decision: KPathDecision) -> str:
 
 
 def _q2r_record(*, loto_2d: bool = False) -> Resolved[Q2rDecision]:
-    return _resolved(Q2rDecision(asr="crystal", loto_2d=loto_2d, asr_memory_mb=1.0))
+    return _resolved(Q2rDecision(asr="simple", loto_2d=loto_2d))
 
 
 def _nacl() -> Resolved[object]:
@@ -703,9 +623,8 @@ def test_an_unresolved_geometry_is_not_read() -> None:
 def test_a_disordered_cell_is_blocked_by_q2r_before_its_path() -> None:
     """An unresolved q2r record blocks the dispersion before the path is
     read, so a disordered written cell keeps q2r's root cause, the
-    boundary's or the job's: a task never resolves q2r on such a cell,
-    whose job record is unavailable. With q2r resolved by hand, the path's
-    own reason blocks it."""
+    boundary's, which waits on the cell's unavailable geometry. With q2r
+    resolved, the path's own reason blocks it."""
     alloy = Structure(
         Lattice.cubic(3.6), [{"Cu": 0.5, "Au": 0.5}], [[0, 0, 0]]
     ).make_supercell([2, 2, 2])

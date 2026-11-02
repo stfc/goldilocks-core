@@ -953,14 +953,15 @@ _SETTING_META: dict[str, _SettingExtra] = {
     },
     "asr": {
         "structure_specific": False,
+        "default": "simple",
         "description": (
             "Acoustic sum rule q2r.x applies to the effective charges and "
             "matdyn.x to the force constants of the phonon DOS and the "
-            "dispersion: 'crystal', the optimized correction of the force "
-            "constants (a projection), or 'simple', which corrects their "
-            "diagonal only. Unset: 'crystal', or 'simple' with a notice where "
-            "the projection would not fit one task's share of a node's memory "
-            "on the partition, since matdyn.x runs as one task."
+            "dispersion. Default 'simple', which corrects the on-site force "
+            "constants at every q, where the dominant violation, the FFT-grid "
+            "error, sits; 'crystal', matdyn.x's projection, corrects that "
+            "violation at Gamma only and can leave spurious imaginary modes "
+            "elsewhere."
         ),
     },
     "dos_q_distance": {

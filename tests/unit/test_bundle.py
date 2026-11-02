@@ -61,6 +61,7 @@ def _bundle_input(**overrides) -> BundleInput:
             _artifact("inputs/scf.in", b"&CONTROL\n/\n", "input"),
         ),
         "steps": (BundleStep(name="scf", files=("inputs/scf.in",)),),
+        "run_instructions": "## Running it\n\nSubmit it.\n",
         "records": {
             "functional": Resolved("PBEsol", Provenance(source="heuristic")),
             "pseudo_table": Resolved(
@@ -487,6 +488,7 @@ def test_readme_lists_every_artifact_path_without_naming_a_specific_code() -> No
 
     assert "inputs/scf.in" in readme
     assert "source/original.cif" in readme
+    assert readme.endswith("\n## Running it\n\nSubmit it.\n")
     assert "pw.x" not in readme
     assert "quantum" not in readme.lower()
 

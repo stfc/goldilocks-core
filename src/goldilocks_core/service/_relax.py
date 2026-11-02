@@ -178,4 +178,6 @@ def to_bundle_input_relax(
             assignments=assignments,
             source=source,
         ),
+        hpc=hpc,
+        job=advice.advice.step.resources.job.value,
     )

@@ -290,6 +290,64 @@ def render_slurm_script(
     return "\n".join(lines) + "\n"
 
 
+def run_instructions(hpc: HpcProfile, job: JobDecision, steps: list[Step]) -> str:
+    """How to run the script ``render_slurm_script`` writes for the same
+    ``hpc``, ``job`` and ``steps``, as the bundle's ``README.md`` section
+    (#227): copy, unpack, check the request, submit from the bundle's
+    directory, follow each step's output, and resume where the script can.
+    One text for an archive and a directory bundle, whose bytes match."""
+    ceiling = hpc.partition(job.partition).hardware.max_walltime_h
+    if job.walltime_h > ceiling:
+        walltime = (
+            f"It asks for {job.walltime_h:g} h, above the {ceiling:g} h ceiling of "
+            f"partition `{job.partition}`, which the scheduler will likely refuse."
+        )
+    elif job.walltime_h == ceiling:
+        walltime = (
+            f"It asks for {job.walltime_h:g} h, the ceiling of partition "
+            f"`{job.partition}`, which queues slowly: set `walltime_h` to the "
+            "time the run needs and generate it again."
+        )
+    else:
+        walltime = f"It asks for {job.walltime_h:g} h on partition `{job.partition}`."
+    account = (
+        f"It charges account `{job.account}`."
+        if job.account is not None
+        else "It names no account: if the cluster needs one, set `account` and "
+        "generate it again."
+    )
+    outputs = ", ".join(f"`{step.name}` (`{step.stdout}`)" for step in steps)
+    lines = [
+        "## Running it",
+        "",
+        f"`submit.sh` is a SLURM script for the `{hpc.name}` profile.",
+        "",
+        "1. Copy the bundle to a work directory on the cluster, for example "
+        "`scp <bundle>.zip <user>@<login node>:<work directory>/`, or "
+        "`rsync -a <bundle>/ <user>@<login node>:<work directory>/<run>/` for "
+        "a directory.",
+        "2. Unpack a `.zip` bundle into a directory of its own, since its files "
+        "sit at the archive's root: `mkdir <run> && unzip <bundle>.zip -d <run>`. "
+        "A directory bundle is already unpacked.",
+        f"3. Check the request at the top of `submit.sh`. {walltime} {account}",
+        "4. Submit it from a login session in that directory, since the inputs "
+        "name their files relative to it: `cd <run> && sbatch submit.sh`.",
+        "5. Follow it with `squeue -u $USER`. The steps run in this order, each "
+        f"writing its output to its own file: {outputs}. A step that fails stops "
+        "the job with a `goldilocks: <step>: <reason>` line in "
+        "`slurm-<jobid>.out`.",
+    ]
+    if any(step.restart_data for step in steps):
+        later = ", ".join(f"`{step.name}`" for step in steps[1:])
+        lines.append(
+            "6. To start again at a later step, after one fails or is stopped: "
+            "`sbatch --export=ALL,GOLDILOCKS_FROM_STEP=<step> submit.sh`, with "
+            f"`<step>` one of {later}. A plain `sbatch submit.sh` starts at "
+            f"`{steps[0].name}` and deletes the data the later steps resume from."
+        )
+    return "\n".join(lines) + "\n"
+
+
 def _sbatch_directives(job: JobDecision) -> list[str]:
     directives = [
         f"#SBATCH --partition={job.partition}",

@@ -85,7 +85,10 @@ overrides as submitted (`--config` then `--set`, typed, with any
 HTTP and MCP `run` record the same block for the same structure and overrides.
 Its `steps` list the task's steps in the order `submit.sh` runs them, each with
 the input files it reads, and the bundle's `README.md` lists the inputs in that
-order, then `submit.sh`, the pseudopotentials and the licences.
+order, then `submit.sh`, the pseudopotentials and the licences. `README.md` then
+says how to run the bundle: copy and unpack it, check the walltime and account
+`submit.sh` asks for, submit it from its directory, follow each step's output,
+and, for a phonon task, resume at a later step.
 
 `--json` changes the shape of `run`'s output rather than being combined with
 an output flag: without `-o/--out` it prints `{"files": [...], "records":

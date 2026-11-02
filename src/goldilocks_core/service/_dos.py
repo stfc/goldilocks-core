@@ -215,4 +215,6 @@ def to_bundle_input_dos(
         request_identity(
             "dos", code=code, hpc=hpc, assignments=assignments, source=source
         ),
+        hpc=hpc,
+        job=advice.scf.step.resources.job.value,
     )

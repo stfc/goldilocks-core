@@ -245,4 +245,6 @@ def to_bundle_input_phonon(
             assignments=assignments,
             source=source,
         ),
+        hpc=hpc,
+        job=advice.first.step.resources.job.value,
     )

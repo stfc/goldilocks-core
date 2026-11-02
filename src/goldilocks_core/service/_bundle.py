@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from importlib.metadata import version as package_version
 from pathlib import PurePosixPath
 
+from goldilocks_core.advisors.job_resources import JobDecision
 from goldilocks_core.bundle import (
     BundleInput,
     BundleStep,
@@ -20,7 +21,7 @@ from goldilocks_core.resolution import FieldState
 from goldilocks_core.service._advice import Advice
 from goldilocks_core.service._pseudo import PseudoAdvice, pseudo_artifacts
 from goldilocks_core.steps import SharedContext, Step
-from goldilocks_core.submission.slurm import render_slurm_script
+from goldilocks_core.submission.slurm import render_slurm_script, run_instructions
 from goldilocks_core.types import CalcTask
 
 
@@ -64,6 +65,8 @@ def to_bundle_input(
             assignments=assignments,
             source=source,
         ),
+        hpc=hpc,
+        job=advice.step.resources.job.value,
     )
 
 
@@ -104,6 +107,9 @@ def assemble_bundle_input(
     records: dict[str, FieldState[object]],
     warnings: list[dict[str, object]],
     request: RequestIdentity,
+    *,
+    hpc: HpcProfile,
+    job: JobDecision,
 ) -> BundleInput:
     """Shared by ``to_bundle_input`` above and the ``dos``/``relax``
     tasks' ``to_bundle_input_dos``/``to_bundle_input_relax`` -- the
@@ -134,6 +140,7 @@ def assemble_bundle_input(
         steps=tuple(
             BundleStep(name=step.name, files=tuple(step.files)) for step in steps
         ),
+        run_instructions=run_instructions(hpc, job, list(steps)),
         records=records,
         warnings=tuple(warnings),
         request=request,

@@ -167,11 +167,14 @@ class BundleInput:
     default, so no bundle is built without the request it answers (#176).
     ``steps`` are the task's steps in run order, from the same rendered steps
     as the input artifacts, so the manifest and ``README.md`` list the inputs
-    in the order they run (#222).
+    in the order they run (#222). ``run_instructions`` is the ``README.md``
+    section on running the bundle, which the submission script's renderer
+    writes for the same job and steps (#227).
     """
 
     artifacts: tuple[InputArtifact, ...]
     steps: tuple[BundleStep, ...]
+    run_instructions: str
     records: dict[str, FieldState[Any]]
     warnings: tuple[dict[str, object], ...]
     request: RequestIdentity
@@ -427,8 +430,8 @@ def _readme(bundle_input: BundleInput, keys: list[str]) -> str:
     """What ``goldilocks.json`` holds, key by key for ``keys`` (those it is
     written with, #176), then every artifact path, by role in
     ``_CONTENTS_ROLES`` order, the inputs in the order their steps run and
-    the rest by path (#222). Names no code: the code is a value of the
-    manifest's ``request``."""
+    the rest by path (#222), then how to run it (#227). Names no code: the
+    code is a value of the manifest's ``request``."""
     listing = "".join(f"- `{path}`\n" for path in _contents(bundle_input))
     return (
         "# Goldilocks DFT Input Data\n\n"
@@ -436,4 +439,5 @@ def _readme(bundle_input: BundleInput, keys: list[str]) -> str:
         f"{_manifest_lines(keys)}"
         "\n## Contents\n\n"
         f"{listing}"
+        f"\n{bundle_input.run_instructions}"
     )

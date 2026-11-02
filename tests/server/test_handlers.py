@@ -454,6 +454,16 @@ class TestRun:
         )
         assert contents[: len(run_order)] == run_order
         assert contents[len(run_order)] == "submit.sh"
+        # #227: README.md says how to run the script, with the steps' output
+        # files in the order submit.sh writes them and its resume command
+        # exactly where submit.sh has one.
+        script = files["submit.sh"].decode("utf-8")
+        readme = files["README.md"].decode("utf-8")
+        running = readme[readme.index("## Running it") :]
+        assert re.findall(r"\(`(\S+\.out)`\)", running) == re.findall(
+            r" > (\S+\.out)(?=\s|$)", script, flags=re.M
+        )
+        assert ("GOLDILOCKS_FROM_STEP" in running) == ("GOLDILOCKS_FROM_STEP" in script)
 
 
 class TestBuildReadiness:

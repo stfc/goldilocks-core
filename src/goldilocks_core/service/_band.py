@@ -183,4 +183,6 @@ def to_bundle_input_band(
         request_identity(
             "band", code=code, hpc=hpc, assignments=assignments, source=source
         ),
+        hpc=hpc,
+        job=advice.scf.step.resources.job.value,
     )

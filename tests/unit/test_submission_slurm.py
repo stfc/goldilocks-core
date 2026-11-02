@@ -18,7 +18,7 @@ from goldilocks_core.steps import (
     Step,
 )
 from goldilocks_core.submission.errors import SubmissionError
-from goldilocks_core.submission.slurm import render_slurm_script
+from goldilocks_core.submission.slurm import render_slurm_script, run_instructions
 
 _HARDWARE = Hardware(
     cores_per_node=64, mem_per_node_gb=250.0, max_nodes=454, max_walltime_h=168.0
@@ -872,3 +872,57 @@ def test_the_job_timer_leaves_no_process_behind(run_dir: Path) -> None:
             break
         time.sleep(0.1)
     assert found.returncode == 1
+
+
+def test_run_instructions_copy_unpack_submit_and_follow_the_steps() -> None:
+    """#227: README.md said nothing on how to run a bundle. Its archive keeps
+    the files at its root, the inputs name files relative to the bundle's
+    directory, and a failed step leaves a goldilocks: line in SLURM's output;
+    a script without restart data has no resume step."""
+    text = run_instructions(_HPC, _JOB, [_SCF_STEP, _NSCF_STEP, _DOS_STEP])
+
+    assert text.startswith("## Running it\n\n`submit.sh` is a SLURM script for")
+    assert "unzip <bundle>.zip -d <run>" in text
+    assert "`cd <run> && sbatch submit.sh`" in text
+    assert "`scf` (`scf.out`), `nscf` (`nscf.out`), `dos` (`dos.out`)" in text
+    assert "`slurm-<jobid>.out`" in text
+    assert "GOLDILOCKS_FROM_STEP" not in text
+
+
+@pytest.mark.parametrize(
+    ("walltime_h", "said"),
+    [
+        (12.0, "It asks for 12 h on partition `scarf`."),
+        (168.0, "the ceiling of partition `scarf`, which queues slowly"),
+        (200.0, "above the 168 h ceiling of partition `scarf`"),
+    ],
+    ids=["below", "at", "above"],
+)
+def test_run_instructions_weigh_the_walltime_against_the_ceiling(
+    walltime_h: float, said: str
+) -> None:
+    job = replace(_JOB, walltime_h=walltime_h)
+
+    assert said in run_instructions(_HPC, job, [_SCF_STEP])
+
+
+def test_run_instructions_name_the_account_or_ask_for_one() -> None:
+    named = run_instructions(_HPC, replace(_JOB, account="abc123"), [_SCF_STEP])
+    unnamed = run_instructions(_HPC, _JOB, [_SCF_STEP])
+
+    assert "It charges account `abc123`." in named
+    assert "if the cluster needs one, set `account`" in unnamed
+
+
+def test_run_instructions_resume_at_the_later_steps_the_script_takes() -> None:
+    """The resume command and step names are the script's own."""
+    script = render_slurm_script(_HPC, _TIMER_JOB, "quantum_espresso", _RELAX_PHONON)
+    text = run_instructions(_HPC, _TIMER_JOB, _RELAX_PHONON)
+
+    command = "sbatch --export=ALL,GOLDILOCKS_FROM_STEP=<step> submit.sh"
+    assert f"`{command}`" in text
+    assert command.replace("<step>", "${step_name}") in script
+    assert (
+        "with `<step>` one of `d3hess`, `ph`, `q2r`, `phonon_dos`, `dispersion`" in text
+    )
+    assert "A plain `sbatch submit.sh` starts at `relax`" in text

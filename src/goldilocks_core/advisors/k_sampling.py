@@ -44,14 +44,19 @@ it.
 the ground state ph.x reads. Its mesh comes from the tiers above and is then
 held against the q-mesh of the ph step (``PhononKProtocol``: not a tier; it
 carries the ph step's q request). QRF95 predicts the spacing at which scf
-total energies converge to 1 meV/atom, and DFPT asks two more things of k.
-With occupations other than fixed, each k-axis is raised to the next
+total energies converge to 1 meV/atom, and DFPT converges better with two
+more things of k. With occupations other than fixed, each k-axis is raised
+to the next
 multiple of its q-axis, so that every q-point is a difference of k-points,
 without which the phonons of a metal converge very slowly in k (QE 7.3
 ``PHonon/Doc/user_guide.tex:562-565``). With fixed occupations, each is
 raised to at least its q-axis, since a q-mesh denser than the k-mesh can
 give spurious acoustic frequencies near Gamma (Petretto et al., Comput.
-Mater. Sci. 144, 331 (2018)). The q-mesh is ``q_sampling.q_mesh`` of the
+Mater. Sci. 144, 331 (2018)). Both are convergence defaults, not ph.x
+requirements: ph.x computes the k+q states of every q itself (QE 7.3
+``PW/src/set_kplusq.f90:12-18``) and checks no relation between the meshes,
+which only EPW requires in some modes; the notice says so (#226). The
+q-mesh is ``q_sampling.q_mesh`` of the
 same cell, which gives the periodic axes pw.x's operations mix one count,
 as a kmesh mesh does (``q_sampling`` refuses a request ``q_grid`` that does
 not), so the raised mesh keeps them equal and those operations still map
@@ -199,16 +204,28 @@ _PHONON_DEFAULT = (
     "leave k_grid, k_index and k_distance unset for the phonon default, which "
     "raises the k-mesh against the q-mesh."
 )
+_METAL_REASON = (
+    f"{_USER_GUIDE} notes that the phonons of a metal converge slowly in k when "
+    "q-points are not differences of k-points"
+)
+_FIXED_REASON = (
+    "a q-mesh denser than the k-mesh can give spurious acoustic frequencies "
+    f"near Gamma ({_PETRETTO})"
+)
+_RAISE_IS_A_DEFAULT = (
+    "This is a convergence default, not a ph.x requirement: set k_grid, k_index "
+    "or k_distance to use your own mesh."
+)
 
 K_MESH_RAISED_NOTE = Warning(
     code="phonon.k_mesh_raised",
     level="info",
     category="k_sampling",
     message=(
-        "the k-mesh was raised against the phonon q-mesh: each k-axis to the "
-        "next multiple of its q-axis with smearing or tetrahedra, to at least "
-        "its q-axis with fixed occupations; a k_grid, k_index or k_distance "
-        "the request sets is used as given."
+        "the k-mesh was raised against the phonon q-mesh: with smearing or "
+        "tetrahedra each k-axis to the next multiple of its q-axis, since "
+        f"{_METAL_REASON}; with fixed occupations to at least its q-axis, since "
+        f"{_FIXED_REASON}. {_RAISE_IS_A_DEFAULT}"
     ),
 )
 
@@ -629,7 +646,8 @@ def _raise_texts(
     occupied: Occupations,
 ) -> tuple[str, Warning]:
     """The ``source_note`` and the notice of ``mesh`` raised to ``raised``
-    against the q-mesh ``q``."""
+    against the q-mesh ``q``: the rule ``occupied`` triggered, why, and that
+    it is a convergence default a request's own mesh replaces (#226)."""
     rule, why = (
         (
             "at least its q-axis",
@@ -648,12 +666,13 @@ def _raise_texts(
         f"Raised for DFPT from {_grid(mesh)} to {_grid(raised)}: each k-axis to "
         f"{rule} (q-mesh {_grid(q)}), {why}."
     )
+    reason = _FIXED_REASON if occupied == "fixed" else _METAL_REASON
     notice = K_MESH_RAISED_NOTE.model_copy(
         update={
             "message": (
-                f"the k-mesh was raised from {_grid(mesh)} to {_grid(raised)} "
-                f"against the {_grid(q)} phonon q-mesh, each k-axis to {rule}; a "
-                "k_grid, k_index or k_distance the request sets is used as given."
+                f"with occupations='{occupied}', the k-mesh was raised from "
+                f"{_grid(mesh)} to {_grid(raised)}, each k-axis to {rule} of the "
+                f"{_grid(q)} phonon q-mesh, since {reason}. {_RAISE_IS_A_DEFAULT}"
             )
         }
     )

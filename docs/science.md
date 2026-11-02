@@ -1048,18 +1048,24 @@ slab with its vacuum vector perpendicular to the periodic axes.
 The first step's k-mesh comes from the usual tiers (see [k-point
 sampling](#check-k-point-sampling)), and is then held against the q-mesh:
 QRF95 predicts the spacing at which scf total energies converge to 1 meV/atom,
-and DFPT asks two more things of k. With smearing or `tetrahedra_opt`, each
-k-axis is raised to the next multiple of its q-axis, so that every q-point is
-a difference of k-points, without which the phonons of a metal converge very
-slowly in k (Quantum ESPRESSO's PHonon user guide). With fixed occupations,
-each k-axis is raised to at least its q-axis, since a q-mesh denser than the
-k-mesh can give spurious acoustic frequencies near Γ (Petretto et al., Comput.
-Mater. Sci. 144, 331 (2018)). QRF95's 12×12×12 for bcc Fe becomes 22×22×22
-against its 11×11×11 q-mesh, and its 4×4×4 for rock-salt NaCl becomes 7×7×7. A
-raised `k_sampling` record carries the info notice `phonon.k_mesh_raised` and
-names the raise in `source_note`; it keeps the evidence and the shift of the
-tier that decided the starting mesh, such as QRF95's prediction, and has no
-`k_distance`, since no single spacing gives the raised mesh.
+and DFPT converges better with two more things of k. With smearing or
+`tetrahedra_opt`, each k-axis is raised to the next multiple of its q-axis, so
+that every q-point is a difference of k-points, without which the phonons of a
+metal converge very slowly in k (Quantum ESPRESSO's PHonon user guide). With
+fixed occupations, each k-axis is raised to at least its q-axis, since a
+q-mesh denser than the k-mesh can give spurious acoustic frequencies near Γ
+(Petretto et al., Comput. Mater. Sci. 144, 331 (2018)). Both are convergence
+defaults, not requirements of ph.x, which computes the k+q states of every q
+itself and runs any pair of meshes; only EPW requires the k-mesh to be a
+multiple of the q-mesh, in some of its modes. Set `k_grid`, `k_index` or
+`k_distance` to use your own mesh: it is used as given, with a warning where
+it is coarser than the q-mesh or, with smearing or tetrahedra, not a multiple
+of it. QRF95's 12×12×12 for bcc Fe becomes 22×22×22 against its 11×11×11
+q-mesh, and its 4×4×4 for rock-salt NaCl becomes 7×7×7. A raised `k_sampling`
+record carries the info notice `phonon.k_mesh_raised` and names the raise in
+`source_note`; it keeps the evidence and the shift of the tier that decided
+the starting mesh, such as QRF95's prediction, and has no `k_distance`, since
+no single spacing gives the raised mesh.
 
 `n_irr_k`, `npool` and the job follow the raised mesh, and in the relaxation
 tasks every ionic step runs on it. On 83 periodic structures of an end-to-end

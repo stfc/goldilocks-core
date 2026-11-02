@@ -743,7 +743,15 @@ def test_a_metal_s_occupations_raise_the_mesh_to_a_multiple_of_the_q_mesh(
         "info",
         "k_sampling",
     )
-    assert "from 12x12x12 to 22x22x22" in notice.message
+    assert notice.message == (
+        f"with occupations='{occupations.value.occupations}', the k-mesh was "
+        "raised from 12x12x12 to 22x22x22, each k-axis to the next multiple of "
+        "its q-axis of the 11x11x11 phonon q-mesh, since Quantum ESPRESSO's "
+        "PHonon user guide notes that the phonons of a metal converge slowly in k "
+        "when q-points are not differences of k-points. This is a convergence "
+        "default, not a ph.x requirement: set k_grid, k_index or k_distance to "
+        "use your own mesh."
+    )
 
 
 def test_a_request_shift_alone_leaves_the_mesh_to_the_rule(
@@ -794,7 +802,14 @@ def test_fixed_occupations_raise_the_mesh_to_at_least_the_q_mesh(
         "q-mesh denser than the k-mesh can give spurious acoustic frequencies "
         "near Gamma (Petretto et al., Comput. Mater. Sci. 144, 331 (2018))."
     )
-    assert _codes(state) == ["phonon.k_mesh_raised"]
+    (notice,) = state.value.warnings
+    assert notice.code == "phonon.k_mesh_raised"
+    assert notice.message.startswith("with occupations='fixed', the k-mesh")
+    assert "spurious acoustic frequencies near Gamma" in notice.message
+    assert notice.message.endswith(
+        "This is a convergence default, not a ph.x requirement: set k_grid, "
+        "k_index or k_distance to use your own mesh."
+    )
 
 
 def test_a_mesh_that_already_meets_the_q_mesh_is_left_as_it_is(

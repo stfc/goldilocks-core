@@ -62,30 +62,17 @@ for Docker and development checks.
 
 #### With mMACE (ML-backed magnetism features)
 
-Without any extra setup, magnetism classification (`is_magnetic`) and
-magnetic-ordering ranking run at a heuristic/LLM tier. `mace-torch` comes
-with the install; the real ML tier only needs the mMACE backbone checkpoint,
-downloaded once:
-
-```bash
-mkdir -p ~/.local/share/goldilocks/mmace
-curl -L -o ~/.local/share/goldilocks/mmace/mmace-matpes-pbe-pretrained.model \
-  https://data-collections.psdi.ac.uk/api/records/sgk1t-48m42/files/mmace-matpes-pbe-pretrained.model/content
-shasum -a 256 ~/.local/share/goldilocks/mmace/mmace-matpes-pbe-pretrained.model
-# expect: fb43d7aadc63cbfbd00550a17e109553b6c051d6d6f4ab6ebd741849d92dc8bf
-export GOLDILOCKS_MACE_BACKBONE=~/.local/share/goldilocks/mmace/mmace-matpes-pbe-pretrained.model
-```
-
-Then start the Workbench as above **in the same shell** (the backend only
-picks up `GOLDILOCKS_MACE_BACKBONE` if it's set before launch). Load a
-magnetic structure (e.g.
-`src/goldilocks_core/examples/structures/Fe_bcc.cif`) and check the
-**Analysis** column's "is magnetic" field: its caption switches to
+Magnetism classification (`is_magnetic`) and magnetic-ordering ranking run
+on the mMACE backbone, which the asset step above installs with the
+`is_magnetic` classifier; nothing else to set up. Load a magnetic structure
+(e.g. `src/goldilocks_core/examples/structures/Fe_bcc.cif`) and check the
+**Analysis** column's "is magnetic" field: its caption reads
 **"Goldilocks-ML prediction"** once the `ml` tier is live.
 
-The v1.0 checkpoint (`mace_matpes_pbe_baseline_run-3.model`) no longer
-loads; replace it with the file above. Troubleshooting: [mMACE
-setup](docs/mmace-setup.md).
+If you set `GOLDILOCKS_MACE_BACKBONE` to the v1.0 checkpoint
+(`mace_matpes_pbe_baseline_run-3.model`) before, unset it: that file no
+longer loads, and the variable overrides the installed backbone.
+Troubleshooting: [mMACE setup](docs/mmace-setup.md).
 
 ### Generate inputs from the command line
 

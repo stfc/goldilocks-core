@@ -17,10 +17,10 @@ correctly ranks antiferromagnetic candidates below the ferromagnetic guess,
 matching NiO's real, well-established antiferromagnetic ground state.
 
 Needs ``mace``, ``e3nn`` and ``sphericart``, which goldilocks-ml installs
-with ``mace-torch[magnetic]`` (#240), and an mMACE backbone checkpoint,
-configured via ``GOLDILOCKS_MACE_BACKBONE`` (docs/mmace-setup.md). A missing
-one surfaces as :class:`MagneticOrderingMlUnavailable` naming what is
-missing.
+with ``mace-torch[magnetic]`` (#240), and the mMACE backbone checkpoint,
+installed with the is_magnetic classifier asset (#244) or named by
+``GOLDILOCKS_MACE_BACKBONE``. A missing one surfaces as
+:class:`MagneticOrderingMlUnavailable` naming what is missing.
 
 mace changes process-wide state (torch's default dtype, ``os.environ``,
 stdout; see ``ml/mace_process.py``), so this process never imports it: each
@@ -41,6 +41,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from goldilocks_core.assets.store import AssetCorrupt, AssetNotInstalled, AssetStore
+from goldilocks_core.ml.models import load_ml_classifier
 from goldilocks_core.worker_process import run_in_fresh_process
 
 if TYPE_CHECKING:
@@ -82,31 +84,41 @@ class OrderingMlResult:
 
 
 def checkpoint_path() -> Path:
-    """Resolve the configured mMACE backbone checkpoint to an absolute path,
-    or say why it is not usable.
+    """The mMACE backbone checkpoint as an absolute path: the file
+    ``GOLDILOCKS_MACE_BACKBONE`` names, else the one installed with the
+    is_magnetic classifier asset (#244); or say why neither is usable.
 
     A relative ``GOLDILOCKS_MACE_BACKBONE`` is resolved against the current
     directory, here: the child processes that load the checkpoint start in
     the system temporary directory (``worker_process``).
 
     Shared by two callers: this module's own :func:`rank_orderings`, and
-    ``ml.predict``'s ``is_magnetic`` classification (its published record
-    declares no automatic download for this checkpoint -- see that
-    module's docstring), so the same manually-configured file backs both
-    rather than being fetched twice."""
+    ``ml.predict``'s ``is_magnetic`` classification, so one file backs
+    both."""
     raw = os.environ.get(CHECKPOINT_ENV)
     if not raw:
-        raise MagneticOrderingMlUnavailable(
-            f"set {CHECKPOINT_ENV} to the mMACE backbone checkpoint path to "
-            "enable mMACE-based magnetism predictions (ordering ranking or "
-            "is_magnetic classification)"
-        )
+        return _installed_checkpoint()
     path = Path(raw).expanduser().resolve()
     if not path.is_file():
         raise MagneticOrderingMlUnavailable(
             f"{CHECKPOINT_ENV} points at {path}, which does not exist"
         )
     return path
+
+
+def _installed_checkpoint() -> Path:
+    """The backbone file of the installed is_magnetic classifier asset."""
+    asset = load_ml_classifier("is_magnetic").asset
+    backbone = next(file.path for file in asset.files if file.role == "backbone")
+    try:
+        root = AssetStore().resolve_spec(asset).root
+    except (AssetNotInstalled, AssetCorrupt) as error:
+        raise MagneticOrderingMlUnavailable(
+            f"no mMACE backbone checkpoint: run 'goldilocks assets install "
+            f"{asset.id}' (part of the default assets), or set {CHECKPOINT_ENV} "
+            "to a checkpoint"
+        ) from error
+    return root / backbone
 
 
 def require_mace_packages() -> None:

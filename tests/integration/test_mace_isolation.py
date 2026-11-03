@@ -8,15 +8,14 @@ got float64 parameters and failed, and the failure looked like a missing
 model: is_metal, is_magnetic and k_sampling silently answered from their
 heuristics.
 
-Local only: needs the default asset profile, the mace stack and
-``GOLDILOCKS_MACE_BACKBONE`` (docs/mmace-setup.md).
+Local only: needs the default asset profile, whose is_magnetic asset carries
+the mMACE backbone (#244), and the mace stack (docs/mmace-setup.md).
 """
 
 from __future__ import annotations
 
 import importlib.util
 import json
-import os
 import pickle
 import subprocess
 import sys
@@ -39,9 +38,8 @@ from goldilocks_core.service import _magnetic_orderings as magnetic_orderings_mo
 pytestmark = [
     pytest.mark.usefixtures("real_assets"),
     pytest.mark.skipif(
-        not os.environ.get("GOLDILOCKS_MACE_BACKBONE")
-        or importlib.util.find_spec("mace") is None,
-        reason="needs mace and GOLDILOCKS_MACE_BACKBONE (docs/mmace-setup.md)",
+        importlib.util.find_spec("mace") is None,
+        reason="needs mace (docs/mmace-setup.md)",
     ),
 ]
 

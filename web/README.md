@@ -58,22 +58,14 @@ Then open **http://127.0.0.1:8000**.
 ## Enable mMACE-based magnetism features
 
 Two Workbench features (the ML `is_magnetic` classification and the
-"Run mMACE" magnetic-ordering ranking button) need one file beyond the steps
-above: the ~80.5 MB mMACE backbone checkpoint (`mace-torch` itself installs
-with `uv sync`). See [mMACE setup](../docs/mmace-setup.md) for the download.
-Once done, set the checkpoint path in the same shell before starting the
-backend:
-
-```bash
-export GOLDILOCKS_MACE_BACKBONE=~/.local/share/goldilocks/mmace/mmace-matpes-pbe-pretrained.model
-uv run --extra http poe workbench   # or: poe stage
-```
+"Run mMACE" magnetic-ordering ranking button) run on the ~80.5 MB mMACE
+backbone, which `goldilocks assets install workbench` above installs with the
+`is_magnetic` classifier (see [mMACE setup](../docs/mmace-setup.md)).
 
 Load a magnetic structure and check the **Analysis** column's "is magnetic"
-field: its caption switches from "Heuristic default" to
-**"Goldilocks-ML prediction"** once the `ml` tier is live. Without this setup
-both features still work, just at a lower tier (LLM/heuristic classification,
-unranked ordering list) — never a failure.
+field: its caption reads **"Goldilocks-ML prediction"** once the `ml` tier is
+live. Without the asset both features still work, just at a lower tier
+(LLM/heuristic classification, unranked ordering list) — never a failure.
 
 "Run mMACE" ranks in a separate backend process, so you can keep editing
 settings while it runs; a ranking can take minutes. Opening another structure

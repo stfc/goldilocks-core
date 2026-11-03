@@ -716,12 +716,15 @@ class TestRunAndExplainAgainstRealAssets:
         completed = _run_cli("run", str(silicon), "--hpc", "scarf", "--set", "npool=7")
 
         assert completed.returncode == 2
-        assert completed.stderr.splitlines()[-2:] == [
+        # mace's own import notices reach stderr too, from the is_magnetic
+        # worker, at no fixed position (docs/mmace-setup.md).
+        lines = completed.stderr.splitlines()
+        blocked = lines.index(
             "blocked: npool=7 does not divide ntasks=64, and pw.x refuses that "
             "layout. Unset npool for the default, or set npool to a divisor of "
-            "ntasks.",
-            "  try: remove --set npool",
-        ]
+            "ntasks."
+        )
+        assert lines[blocked + 1] == "  try: remove --set npool"
 
     def test_run_without_out_previews_without_touching_disk(
         self, real_assets: None, tmp_path: Path

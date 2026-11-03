@@ -51,12 +51,12 @@ _PHONON_TASKS = ["phonon", "relax-phonon", "vc-relax-phonon"]
 
 def _install_every_model(monkeypatch, root) -> None:
     """Every registered model asset resolves to ``root``, as if installed
-    and verified, without installing anything (CI installs no assets)."""
-    monkeypatch.setattr(
-        predict_module,
-        "AssetStore",
-        lambda: SimpleNamespace(resolve_spec=lambda spec: SimpleNamespace(root=root)),
-    )
+    and verified, without installing anything (CI installs no assets): for
+    ``ml.predict``, and for the mMACE backbone lookup, which finds the
+    backbone in is_magnetic's asset (#244)."""
+    installed = SimpleNamespace(resolve_spec=lambda spec: SimpleNamespace(root=root))
+    monkeypatch.setattr(predict_module, "AssetStore", lambda: installed)
+    monkeypatch.setattr(magnetic_ordering_ml, "AssetStore", lambda: installed)
 
 
 def _record_value_type(key: str) -> object:
@@ -923,27 +923,28 @@ class TestFacts:
 
         assert facts["is_metal"]["approaches"] == ["human", "ml", "heuristic"]
 
-    def test_is_magnetic_approaches_omit_ml_without_the_mmace_backbone(
+    def test_is_magnetic_approaches_omit_ml_without_the_mace_packages(
         self, monkeypatch, tmp_path
     ) -> None:
         """#130: ``approaches`` lists ``ml`` only when ml.predict would run
         the model. is_magnetic's installed asset alone is not enough: without
-        its mMACE backbone, every prediction falls back to the heuristic."""
+        mace, every prediction falls back to the heuristic."""
         _install_every_model(monkeypatch, tmp_path)
         monkeypatch.delenv("GOLDILOCKS_MACE_BACKBONE", raising=False)
+        monkeypatch.setattr(magnetic_ordering_ml, "find_spec", lambda name: None)
 
         facts = {f["key"]: f for f in capabilities()["facts"]}
 
         assert facts["is_metal"]["approaches"] == ["human", "ml", "heuristic"]
         assert facts["is_magnetic"]["approaches"] == ["human", "heuristic"]
 
-    def test_is_magnetic_approaches_gain_ml_once_mmace_is_set_up(
+    def test_is_magnetic_approaches_gain_ml_from_the_installed_asset(
         self, monkeypatch, tmp_path
     ) -> None:
+        """#244: the asset carries the mMACE backbone, so no
+        GOLDILOCKS_MACE_BACKBONE is needed."""
         _install_every_model(monkeypatch, tmp_path)
-        checkpoint = tmp_path / "backbone.model"
-        checkpoint.write_bytes(b"stub")
-        monkeypatch.setenv("GOLDILOCKS_MACE_BACKBONE", str(checkpoint))
+        monkeypatch.delenv("GOLDILOCKS_MACE_BACKBONE", raising=False)
         monkeypatch.setattr(
             magnetic_ordering_ml, "find_spec", lambda name: ModuleSpec(name, None)
         )

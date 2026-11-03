@@ -152,13 +152,12 @@ size = 6012
 
 # The standalone is_magnetic classifier (v2 epic 11, #11): a small MLP head
 # reading a 384-number mMACE embedding (goldilocks-ml's own
-# docs/training/models/magnetism/is_magnetic-mace_mlp.md). The mMACE backbone
-# this record also bundles (mmace-matpes-pbe-pretrained.model, ~84 MB) is not
-# an asset file here: it stays the GOLDILOCKS_MACE_BACKBONE path that
-# advisors/magnetic_ordering_ml.py also reads, so both features share one
-# copy. goldilocks-ml checks that file against the backbone_sha256 in this
-# record's model.json before loading it, so the backbone and model.json must
-# come from the same record version (#240).
+# docs/training/models/magnetism/is_magnetic-mace_mlp.md), and the mMACE
+# backbone (~84 MB) it embeds structures with, which magnetic-ordering ranking
+# also relaxes on (advisors/magnetic_ordering_ml.checkpoint_path; #244).
+# GOLDILOCKS_MACE_BACKBONE overrides the installed backbone. goldilocks-ml
+# checks the backbone against the backbone_sha256 in this record's model.json
+# before loading it, so both come from the same record version (#240).
 #
 # No paper describes this classifier, so its citation is its PSDI record. It
 # used to repeat the QRF95 k-point paper, which nothing read until bundles
@@ -197,3 +196,10 @@ path = "MODEL_CARD.md"
 url = "https://data-collections.psdi.ac.uk/api/records/sgk1t-48m42/files/README.md/content"
 checksum = "sha256:8cb4b36ffa60ad169adb98b5a61a6950f004af68f9605999e1889ac65f9bcaeb"
 size = 2155
+
+[[defaults.is_magnetic.asset.files]]
+role = "backbone"
+path = "mmace-matpes-pbe-pretrained.model"
+url = "https://data-collections.psdi.ac.uk/api/records/sgk1t-48m42/files/mmace-matpes-pbe-pretrained.model/content"
+checksum = "sha256:fb43d7aadc63cbfbd00550a17e109553b6c051d6d6f4ab6ebd741849d92dc8bf"
+size = 84437213

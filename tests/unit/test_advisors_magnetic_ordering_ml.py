@@ -11,10 +11,10 @@ from __future__ import annotations
 import importlib.util
 import json
 import math
-import os
 import threading
 import time
 from importlib.machinery import ModuleSpec
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -52,11 +52,44 @@ _BCC_IRON_AFM = Structure(
 )
 
 
-def test_checkpoint_path_requires_the_environment_variable(monkeypatch) -> None:
+def test_checkpoint_path_needs_the_variable_or_the_installed_asset(
+    monkeypatch,
+) -> None:
+    """Neither set nor installed: the message names both remedies."""
     monkeypatch.delenv(CHECKPOINT_ENV, raising=False)
 
-    with pytest.raises(MagneticOrderingMlUnavailable, match=CHECKPOINT_ENV):
+    with pytest.raises(MagneticOrderingMlUnavailable) as raised:
         checkpoint_path()
+
+    install = "goldilocks assets install models/is-magnetic-classifier"
+    assert install in str(raised.value)
+    assert CHECKPOINT_ENV in str(raised.value)
+
+
+def _install_is_magnetic_asset(monkeypatch, root) -> None:
+    """is_magnetic's asset resolves to ``root``, as if installed and
+    verified (CI installs no assets)."""
+    installed = SimpleNamespace(resolve_spec=lambda spec: SimpleNamespace(root=root))
+    monkeypatch.setattr(magnetic_ordering_ml, "AssetStore", lambda: installed)
+
+
+def test_checkpoint_path_uses_the_backbone_installed_with_the_asset(
+    monkeypatch, tmp_path
+) -> None:
+    """#244: the registry installs the backbone with is_magnetic's asset."""
+    monkeypatch.delenv(CHECKPOINT_ENV, raising=False)
+    _install_is_magnetic_asset(monkeypatch, tmp_path)
+
+    assert checkpoint_path() == tmp_path / "mmace-matpes-pbe-pretrained.model"
+
+
+def test_the_variable_overrides_the_installed_backbone(monkeypatch, tmp_path) -> None:
+    checkpoint = tmp_path / "other.model"
+    checkpoint.write_bytes(b"stub")
+    monkeypatch.setenv(CHECKPOINT_ENV, str(checkpoint))
+    _install_is_magnetic_asset(monkeypatch, tmp_path / "asset")
+
+    assert checkpoint_path() == checkpoint
 
 
 def test_checkpoint_path_rejects_a_missing_file(monkeypatch, tmp_path) -> None:
@@ -418,18 +451,16 @@ def test_rankings_run_one_at_a_time(monkeypatch: pytest.MonkeyPatch, tmp_path) -
 
 
 @pytest.mark.skipif(
-    not os.environ.get("GOLDILOCKS_MACE_BACKBONE")
-    or importlib.util.find_spec("goldilocks_ml") is None
-    or importlib.util.find_spec("mace") is None,
-    reason=(
-        "needs a real mMACE backbone checkpoint (GOLDILOCKS_MACE_BACKBONE) and "
-        "goldilocks-ml with mace-torch"
-    ),
+    importlib.util.find_spec("mace") is None,
+    reason="needs goldilocks-ml with mace-torch",
 )
-def test_rank_orderings_ranks_antiferromagnetic_nio_below_ferromagnetic() -> None:
+def test_rank_orderings_ranks_antiferromagnetic_nio_below_ferromagnetic(
+    real_assets: None,
+) -> None:
     """A coarse sanity check against the real backbone, when it is present.
 
-    Never runs in CI, which has no backbone checkpoint (84 MB). Verified
+    Never runs in CI, which installs no assets: the backbone (84 MB) comes
+    with the default profile's is_magnetic asset (#244). Verified
     manually (2026-09-19 on the mace-torch fork; 2026-11-03 on mace-torch
     0.3.17 with the v2.0 backbone of PSDI record sgk1t-48m42, #240): NiO's
     antiferromagnetic candidates rank below its ferromagnetic guess,

@@ -14,12 +14,11 @@ asset directory and run in this process. is_magnetic embeds the structure
 with mMACE, which changes process-wide torch state, so it runs on a worker
 process (``ml/mace_process.py``) and this process never imports mace.
 
-``goldilocks_ml.inference.load_model`` needs is_magnetic's mMACE backbone
-passed as ``artifacts={"mace_backbone": path}``: the registry installs the
-published record's (sgk1t-48m42) ``model.json``, which pins the backbone's
-SHA-256, but not the backbone itself. The path is
-``GOLDILOCKS_MACE_BACKBONE``, the checkpoint ordering ranking also uses
-(``advisors/magnetic_ordering_ml.checkpoint_path``).
+``goldilocks_ml.inference.load_model`` gets is_magnetic's mMACE backbone
+passed as ``artifacts={"mace_backbone": path}``, from
+``advisors/magnetic_ordering_ml.checkpoint_path``, the checkpoint ordering
+ranking also uses: ``GOLDILOCKS_MACE_BACKBONE`` if set, else the backbone
+installed with is_magnetic's asset (#244).
 
 A prediction is an :class:`MlPrediction`: the model's value and the
 ``Provenance`` of the record it decides, which names the model (its
@@ -93,8 +92,8 @@ class MlPrediction:
 
 class MlModelUnavailable(Exception):
     """A registered model is not set up: its asset is not installed or fails
-    verification, or (is_magnetic only) the mMACE backbone is not configured
-    or the mace stack is not installed.
+    verification, or (is_magnetic only) no mMACE backbone is available or
+    the mace stack is not installed.
 
     Callers fall back to their next tier on this and on nothing else; a model
     that is set up but fails to load or predict raises its own error."""

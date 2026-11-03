@@ -385,9 +385,9 @@ two classifiers, `predict_k_distance()` for `qrf-kpoints`), which resolves
 the registered asset via `AssetStore` and loads it once per process through
 `goldilocks_ml.inference.load_model()`. Each caller falls back to its next
 tier only when the model is not set up: its asset is not installed or fails
-checksum verification, or, for `is_magnetic`, the mMACE backbone
-(`GOLDILOCKS_MACE_BACKBONE`) is not configured or `mace`, `e3nn` or
-`sphericart` is not installed. Any other error loading or running a model
+checksum verification, or, for `is_magnetic`, the mMACE backbone (installed
+with its asset, or named by `GOLDILOCKS_MACE_BACKBONE`) is missing or `mace`,
+`e3nn` or `sphericart` is not installed. Any other error loading or running a model
 fails the request (see `ml/predict.py`).
 
 Independent assets install concurrently with at most eight workers. Results

@@ -70,18 +70,18 @@ def _ml_is_magnetic(structure: Structure) -> MlPrediction | None:
     #11), whose ``provenance`` the record carries (#156), or
     ``None`` if it is not set up: its model asset is not installed or fails
     verification, ``mace``/``e3nn``/``sphericart`` are not installed
-    (goldilocks-ml installs them with ``mace-torch[magnetic]``), or
-    ``GOLDILOCKS_MACE_BACKBONE`` is not configured. ``is_magnetic()`` then
-    falls back to its next tier.
+    (goldilocks-ml installs them with ``mace-torch[magnetic]``), or no mMACE
+    backbone is available. ``is_magnetic()`` then falls back to its next
+    tier.
 
-    The backbone is a real requirement: the published record (sgk1t-48m42)
-    pins it in its ``model.json`` by name and SHA-256 but the registry does
-    not install it, so ``goldilocks_ml.inference.load_model`` gets it as an
+    The model asset carries the backbone beside the classifier (#244);
+    ``GOLDILOCKS_MACE_BACKBONE`` overrides it.
+    ``goldilocks_ml.inference.load_model`` gets it as an
     ``artifacts={"mace_backbone": path}`` override, which ``ml.predict``
-    supplies from the same ``GOLDILOCKS_MACE_BACKBONE`` checkpoint
-    ``advisors/magnetic_ordering_ml.py``'s ranking feature already uses,
-    reused rather than downloaded a second time. goldilocks-ml refuses a
-    checkpoint whose SHA-256 differs from the pinned one (#240).
+    supplies from ``advisors/magnetic_ordering_ml.checkpoint_path``, the
+    checkpoint the ranking feature uses too. goldilocks-ml refuses a
+    checkpoint whose SHA-256 differs from the one the record's ``model.json``
+    pins (#240).
 
     The prediction runs on a worker process (``ml/mace_process.py``). A
     model that is set up but fails to load or predict raises, failing

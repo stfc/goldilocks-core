@@ -27,7 +27,7 @@ a structure with local moments gets no antiferromagnetic one; an
 enumeration fault (a scratch-directory
 ``OSError``, a dead worker) propagates instead of looking like a
 ferromagnetic-only answer. Ranking is opt-in and can fail independently
-(checkpoint not configured, mace/e3nn/sphericart not installed, a library
+(no backbone checkpoint, mace/e3nn/sphericart not installed, a library
 error inside the ranking process, or every candidate's relaxation flagged
 invalid) without failing the listing itself -- a caller who asked for
 ranking still gets every candidate back, just unranked, with a warning

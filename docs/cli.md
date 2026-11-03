@@ -269,13 +269,12 @@ installed release as `<id>@<version>`) and keeps what it returned
 `interval`, and `warnings`), and `records[...].citations` says what to cite.
 `is_metal`/`k_distance` become ML-backed once their PSDI-hosted asset is
 installed (`uv run goldilocks assets install <id>` — see [Install and check
-assets](#install-and-check-assets)); `is_magnetic` additionally needs the
-mMACE backbone checkpoint that `GOLDILOCKS_MACE_BACKBONE` points at, the
-same one the [magnetic orderings](#magnetic-orderings) `--rank-with-mmace`
-flag uses below (see [mMACE setup](mmace-setup.md) for the download).
-`mace-torch`, `e3nn` and `sphericart` come with goldilocks-ml. The asset
-install does not fetch the checkpoint, so `is_magnetic` reuses whichever
-file that variable points at rather than keeping a second copy. A model
+assets](#install-and-check-assets)); `is_magnetic`'s asset also carries the
+mMACE backbone it embeds structures with, the one the [magnetic
+orderings](#magnetic-orderings) `--rank-with-mmace` flag uses below, and
+`mace-torch`, `e3nn` and `sphericart` come with goldilocks-ml.
+`GOLDILOCKS_MACE_BACKBONE` overrides the installed backbone for both (see
+[mMACE setup](mmace-setup.md)). A model
 that is not set up (its asset not installed or failing verification, or
 for `is_magnetic` the packages or checkpoint missing) leaves the value to
 the next tier. Once a model is set up, an error
@@ -367,8 +366,8 @@ and applied, so every label writes one slab with the uploaded vacuum.
 
 `--rank-with-mmace` relaxes every candidate's magnetic moments on a frozen
 mMACE potential energy surface and recommends the lowest energy-per-atom
-one -- needs a `GOLDILOCKS_MACE_BACKBONE` environment variable pointing at
-a downloaded mMACE checkpoint file, as described above. Missing it, or an
+one -- needs the mMACE backbone, installed with `is_magnetic`'s asset or
+named by `GOLDILOCKS_MACE_BACKBONE`, as described above. Missing it, or an
 error inside the relaxation itself, degrades to an unranked listing
 with a warning. Each ranking runs in its own process, one ranking at a time,
 so a long ranking never holds up `explain` or `run`; a ranking process that

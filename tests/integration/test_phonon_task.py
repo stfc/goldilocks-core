@@ -1276,7 +1276,7 @@ def test_the_classifier_s_metal_call_needs_an_answer_and_its_non_metal_call_none
         ),
         (
             molybdenum_disulfide_monolayer,
-            {},
+            {"is_magnetic": "magnetic"},
             (
                 {"is_metal": "non_metal", "is_magnetic": "non_magnetic"},
                 {"is_metal": "metal"},
@@ -1295,8 +1295,8 @@ def test_on_the_installed_models_no_remedy_leaves_a_non_metal_on_smearing(
     real_assets, structure, assignments, remedies
 ) -> None:
     """On the installed tables and models: ferromagnetic NiO and MnO set to a
-    non-metal, a MoS2 monolayer, which the classifier calls a non-metal and
-    the is_magnetic heuristic spin-polarizes, and TiN, whose 17 electrons the
+    non-metal, a MoS2 monolayer set to magnetic, which the classifier calls a
+    non-metal, and TiN, whose 17 electrons the
     classifier calls a metal, all stay on smearing, so relax-phonon refuses
     each, and every remedy passes the gate on fixed occupations unless it
     confirms a metal. is_magnetic=non_magnetic is not offered for MnO, whose U
@@ -1317,3 +1317,18 @@ def test_on_the_installed_models_no_remedy_leaves_a_non_metal_on_smearing(
         assert answered_report.ok, [f.message for f in answered_report.blocking]
         metal = remedy.get("is_metal") == "metal"
         assert occupations == ("smearing" if metal else "fixed"), remedy
+
+
+def test_on_the_installed_models_a_molybdenum_disulfide_monolayer_runs_unpolarized(
+    real_assets,
+) -> None:
+    """#244: the default assets carry the mMACE backbone, so is_magnetic comes
+    from the classifier, which calls the MoS2 monolayer non-magnetic (the
+    heuristic tier spin-polarized it). relax-phonon then runs it on fixed
+    occupations instead of refusing it."""
+    advice, report = _installed("relax-phonon", molybdenum_disulfide_monolayer())
+
+    is_magnetic = advice.first.analysis.is_magnetic
+    assert (is_magnetic.value, is_magnetic.source) == ("non_magnetic", "ml")
+    assert advice.first.step.kpoints.occupations.value.occupations == "fixed"
+    assert report.ok, [f.message for f in report.blocking]

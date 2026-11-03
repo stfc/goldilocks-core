@@ -36,8 +36,8 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> None:
         action="store_true",
         help="Relax every candidate on the mMACE potential energy surface and "
         "recommend the lowest energy-per-atom one (needs GOLDILOCKS_MACE_BACKBONE "
-        "and a manual mace install -- see the docs; degrades to an unranked "
-        "listing, with a warning, if either is unavailable).",
+        "-- see the docs; degrades to an unranked listing, with a warning, if "
+        "it is unavailable).",
     )
     parser.add_argument("--json", action="store_true", help="Print JSON output.")
 

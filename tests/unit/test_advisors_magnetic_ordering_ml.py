@@ -423,30 +423,17 @@ def test_rankings_run_one_at_a_time(monkeypatch: pytest.MonkeyPatch, tmp_path) -
     or importlib.util.find_spec("mace") is None,
     reason=(
         "needs a real mMACE backbone checkpoint (GOLDILOCKS_MACE_BACKBONE) and "
-        "goldilocks-ml plus mace/e3nn/sphericart/ase manually installed"
+        "goldilocks-ml with mace-torch"
     ),
 )
 def test_rank_orderings_ranks_antiferromagnetic_nio_below_ferromagnetic() -> None:
     """A coarse sanity check against the real backbone, when it is present.
 
-    Never runs in CI: mirrors goldilocks-ml's own
-    ``test_the_real_backbone_end_to_end`` for the same reason -- the
-    checkpoint and the mace-torch fork are not installable from PyPI alone
-    yet. Verified manually (2026-09-19, re-verified 2026-09-21): NiO's
+    Never runs in CI, which has no backbone checkpoint (84 MB). Verified
+    manually (2026-09-19 on the mace-torch fork; 2026-11-03 on mace-torch
+    0.3.17 with the v2.0 backbone of PSDI record sgk1t-48m42, #240): NiO's
     antiferromagnetic candidates rank below its ferromagnetic guess,
     matching NiO's real, well-established antiferromagnetic ground state.
-
-    Was briefly broken end to end (not by this codebase): goldilocks-ml
-    0.2.0's ``fm_fim_relax.relax`` passes ``use_collinear``/
-    ``constrain_magnitude`` to ``MagneticSCFMACE``, but the mace-torch fork
-    commit its README documented at the time
-    (``ac8ff4764122ced0d57198fe2f9ba170c9fcd16d``) implemented neither
-    keyword -- confirmed empirically 2026-09-21, reported as
-    stfc/goldilocks-ml#92, fixed by re-pinning the documented commit to
-    ``19cdf6692c48e068a24e06cfe1ffc670e8aea3dd`` (stfc/goldilocks-ml#93,
-    merged). Re-ran this exact test against the fixed commit the same day:
-    genuinely passes again (was an ``xfail(strict=True)`` in between, which
-    is what turned this from a silent regression into a required check).
     """
     nio_fm = Structure.from_spacegroup(
         "Fm-3m", Lattice.cubic(4.17), ["Ni", "O"], [[0, 0, 0], [0.5, 0.5, 0.5]]

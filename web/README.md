@@ -58,15 +58,14 @@ Then open **http://127.0.0.1:8000**.
 ## Enable mMACE-based magnetism features
 
 Two Workbench features (the ML `is_magnetic` classification and the
-"Run mMACE" magnetic-ordering ranking button) need an extra, one-time manual
-setup beyond the steps above — `mace`, `e3nn`, `sphericart`, and a
-~80.5 MB mMACE checkpoint file, none of which install via `uv sync` or any
-package extra. See [mMACE setup](../docs/mmace-setup.md) for the full
-walkthrough. Once done, set the checkpoint path in the same shell before
-starting the backend:
+"Run mMACE" magnetic-ordering ranking button) need one file beyond the steps
+above: the ~80.5 MB mMACE backbone checkpoint (`mace-torch` itself installs
+with `uv sync`). See [mMACE setup](../docs/mmace-setup.md) for the download.
+Once done, set the checkpoint path in the same shell before starting the
+backend:
 
 ```bash
-export GOLDILOCKS_MACE_BACKBONE=~/.local/share/goldilocks/mmace/mace_matpes_pbe_baseline_run-3.model
+export GOLDILOCKS_MACE_BACKBONE=~/.local/share/goldilocks/mmace/mmace-matpes-pbe-pretrained.model
 uv run --extra http poe workbench   # or: poe stage
 ```
 

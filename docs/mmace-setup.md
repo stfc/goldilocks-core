@@ -1,19 +1,19 @@
 # Set up mMACE (magnetism ML)
 
-Two features share one manual setup, on top of the default install:
+Two features share one setup step, on top of the default install: downloading the mMACE
+backbone checkpoint.
 
 | Feature | What it needs mMACE for |
 | --- | --- |
 | `is_magnetic` classification | Reads a frozen mMACE embedding to classify magnetic vs. non-magnetic (`human > ml > llm > heuristic`, see [Scientific controls](cli.md#scientific-controls)) |
 | `goldilocks magnetic-orderings --rank-with-mmace` | Relaxes every candidate ordering's magnetic moments on a frozen mMACE potential energy surface and ranks them by energy per atom (see [Magnetic orderings](cli.md#magnetic-orderings)) |
 
-Both stay permanently manual — not something `pip install goldilocks-core[...]` can ever
-complete on its own. The `mace-torch` package this needs is a research collaborator's fork
-with no PyPI release, and PyPI's own upload validation rejects a package that declares a
-direct git dependency in its metadata regardless. Without this setup, both features degrade
-to their next tier (LLM or heuristic for `is_magnetic`; an unranked candidate list with a
-warning for `--rank-with-mmace`) rather than failing. Once it is set up, an `is_magnetic`
-model that fails to run fails the request instead of answering from the heuristic.
+`mace-torch`, `e3nn` and `sphericart` need no setup: goldilocks-ml installs them with
+`mace-torch[magnetic]` as part of the default install. Without the checkpoint, both
+features degrade to their next tier (LLM or heuristic for `is_magnetic`; an unranked
+candidate list with a warning for `--rank-with-mmace`) rather than failing. Once it is set
+up, an `is_magnetic` model that fails to run fails the request instead of answering from
+the heuristic.
 
 ## 1. Install the model asset
 
@@ -27,37 +27,7 @@ uv run goldilocks assets status models/is-magnetic-classifier
 
 This alone is **not** enough to reach the `ml` tier — steps 2 and 3 are the actual gate.
 
-## 2. Install `mace`, `e3nn`, and `sphericart`
-
-None of these are installable as a `goldilocks-core` or `goldilocks-ml` extra. Install them
-directly into the same virtualenv `uv` manages for this project:
-
-```bash
-uv pip install ase==3.28.0 e3nn==0.4.4 sphericart==1.0.9 sphericart-torch==1.0.9
-uv pip install "mace-torch @ git+https://github.com/CheukHinHoJerry/mace.git@19cdf6692c48e068a24e06cfe1ffc670e8aea3dd"
-```
-
-`mace-torch` here is `CheukHinHoJerry/mace`, a research collaborator's fork — **not** the
-`ACEsuit/mace` package published on PyPI under the same distribution name. The pinned commit
-matters: `goldilocks-ml` verified it produces bit-identical classifier embeddings to the
-model's original training commit, and it additionally implements the collinear moment
-relaxation `--rank-with-mmace` needs (an older commit on the same fork lacks that method).
-Installing a different commit, or upstream `ACEsuit/mace`, will not work even though the
-package name matches.
-
-**`uv sync` removes this install.** Because these packages aren't in `uv.lock`, any later
-`uv sync` (including one run for an unrelated reason, e.g. picking up a new dependency after
-`git pull`) silently uninstalls all four again — no error, `is_magnetic` just degrades back to
-the LLM/heuristic tier. Re-run the two commands above after every `uv sync`; step 5 below is
-how you notice if you forgot.
-
-Verify the install:
-
-```bash
-uv run python -c "import mace, e3nn, sphericart; print('ok')"
-```
-
-## 3. Download the mMACE backbone checkpoint
+## 2. Download the mMACE backbone checkpoint
 
 The published `is-magnetic-classifier` asset record bundles this checkpoint file, but
 `goldilocks assets install` deliberately does not download it — see the comment on
@@ -65,40 +35,41 @@ The published `is-magnetic-classifier` asset record bundles this checkpoint file
 
 ```bash
 mkdir -p ~/.local/share/goldilocks/mmace
-curl -L -o ~/.local/share/goldilocks/mmace/mace_matpes_pbe_baseline_run-3.model \
-  https://data-collections.psdi.ac.uk/api/records/1g8rw-q8128/files/mace_matpes_pbe_baseline_run-3.model/content
+curl -L -o ~/.local/share/goldilocks/mmace/mmace-matpes-pbe-pretrained.model \
+  https://data-collections.psdi.ac.uk/api/records/sgk1t-48m42/files/mmace-matpes-pbe-pretrained.model/content
 ```
 
 The `-L` is not optional: this URL 302-redirects to a presigned, short-lived S3 link.
 Without it, `curl` saves the ~500-byte redirect response itself (a plain-text URL) instead
 of the model — a mistake that succeeds silently and only surfaces at the checksum step
-below, or worse, later as `mace` silently mispredicting on truncated weights.
+below.
 
-~80.5 MB (84,430,851 bytes). Verify the download before trusting it:
+~80.5 MB (84,437,213 bytes). Verify the download:
 
 ```bash
-md5sum ~/.local/share/goldilocks/mmace/mace_matpes_pbe_baseline_run-3.model
-# expect: 2486abb4f6380a599759833125565019
+shasum -a 256 ~/.local/share/goldilocks/mmace/mmace-matpes-pbe-pretrained.model
+# expect: fb43d7aadc63cbfbd00550a17e109553b6c051d6d6f4ab6ebd741849d92dc8bf
 ```
 
-(`md5sum` on Linux; `md5 ~/.local/.../mace_matpes_pbe_baseline_run-3.model` on macOS.)
+goldilocks-ml checks the same SHA-256, pinned in the classifier's `model.json`, before it
+loads the file, and refuses a file that differs.
 
 The path above is a suggestion, not a requirement — `goldilocks-core` never manages this
-file, it only reads whatever path you point it at in step 4.
+file, it only reads whatever path you point it at in step 3.
 
-## 4. Point `GOLDILOCKS_MACE_BACKBONE` at it
+## 3. Point `GOLDILOCKS_MACE_BACKBONE` at it
 
 Both features read the same environment variable — set it once, before running either:
 
 ```bash
-export GOLDILOCKS_MACE_BACKBONE=~/.local/share/goldilocks/mmace/mace_matpes_pbe_baseline_run-3.model
+export GOLDILOCKS_MACE_BACKBONE=~/.local/share/goldilocks/mmace/mmace-matpes-pbe-pretrained.model
 ```
 
 Add that line to your shell profile (or `.env` / the launcher you use to start
 `goldilocks serve http` for the Workbench) so it's set for every session, not just the
 current shell.
 
-## 5. Verify it's actually being used
+## 4. Verify it's actually being used
 
 A structure loading successfully is not proof the `ml` tier is live — check the `source`
 field explicitly:
@@ -122,23 +93,34 @@ per-candidate energies instead of degrading with a warning:
 uv run goldilocks magnetic-orderings "$STRUCTURE" --rank-with-mmace --json
 ```
 
-If `is_magnetic.source` still reads `heuristic` after all four steps, check in this order:
-`uv run python -c "import mace"` (step 2 actually installed into *this* venv, not a
-different Python), `echo $GOLDILOCKS_MACE_BACKBONE` (set in *this* shell, and pointing at a
-file that exists), then `ls -la` the checkpoint — a file around 500 bytes instead of ~80.5 MB
-means step 3's `-L` got dropped and you saved the redirect's own presigned-URL text instead
-of the model (`cat` it to confirm: it reads as a `https://s3...` URL, not binary). Re-run the
-`curl -L` command. A genuinely truncated/corrupted download of the right rough size loads
-without error but predicts garbage rather than raising — the md5sum check is what catches
-that case, not the file-size eyeball check.
+If `is_magnetic.source` still reads `heuristic` after all three steps, check in this order:
+`uv run goldilocks assets status models/is-magnetic-classifier` (step 1),
+`echo $GOLDILOCKS_MACE_BACKBONE` (set in *this* shell, and pointing at a file that exists),
+then `ls -la` the checkpoint — a file around 500 bytes instead of ~80.5 MB means step 2's
+`-L` got dropped and you saved the redirect's own presigned-URL text instead of the model
+(`cat` it to confirm: it reads as a `https://s3...` URL, not binary). Re-run the `curl -L`
+command.
 
-## 6. Start the Workbench with mMACE enabled
+A command that fails with `... has SHA-256 ...; its record pins fb43d7aa...` was given a
+different checkpoint, such as the v1.0 one below or a damaged download: replace it with the
+file from step 2.
+
+### Upgrading from the v1.0 checkpoint
+
+Before goldilocks-core moved to goldilocks-ml 0.3.2 (#240), this guide installed a fork of
+`mace-torch` by hand and downloaded `mace_matpes_pbe_baseline_run-3.model` from v1.0 of the
+record (`1g8rw-q8128`). That file no longer loads on `mace-torch` 0.3.17. Download the v2.0
+file from step 2, which holds the same weights re-exported for upstream `mace-torch`, and
+point `GOLDILOCKS_MACE_BACKBONE` at it. Run `uv run goldilocks assets install default` too:
+the classifier's `model.json` moved to v2.0 of the record with it.
+
+## 5. Start the Workbench with mMACE enabled
 
 `GOLDILOCKS_MACE_BACKBONE` has to be set in the shell that launches the **backend** process
 — set it before running the usual startup command, not after:
 
 ```bash
-export GOLDILOCKS_MACE_BACKBONE=~/.local/share/goldilocks/mmace/mace_matpes_pbe_baseline_run-3.model
+export GOLDILOCKS_MACE_BACKBONE=~/.local/share/goldilocks/mmace/mmace-matpes-pbe-pretrained.model
 uv run poe workbench   # dev mode: backend on :8000, Vite dev server on :5173
 # or: uv run poe stage # production-like: one built bundle, served from :8000
 ```

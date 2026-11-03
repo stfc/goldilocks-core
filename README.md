@@ -63,18 +63,17 @@ for Docker and development checks.
 #### With mMACE (ML-backed magnetism features)
 
 Without any extra setup, magnetism classification (`is_magnetic`) and
-magnetic-ordering ranking run at a heuristic/LLM tier. To get the real ML
-tier, install `mace`/`e3nn`/`sphericart` and a checkpoint file once, manually
--- none of this can ever be a `pip`/`uv` extra (the `mace` fork it needs has
-no PyPI release):
+magnetic-ordering ranking run at a heuristic/LLM tier. `mace-torch` comes
+with the install; the real ML tier only needs the mMACE backbone checkpoint,
+downloaded once:
 
 ```bash
-uv pip install ase==3.28.0 e3nn==0.4.4 sphericart==1.0.9 sphericart-torch==1.0.9
-uv pip install "mace-torch @ git+https://github.com/CheukHinHoJerry/mace.git@19cdf6692c48e068a24e06cfe1ffc670e8aea3dd"
 mkdir -p ~/.local/share/goldilocks/mmace
-curl -L -o ~/.local/share/goldilocks/mmace/mace_matpes_pbe_baseline_run-3.model \
-  https://data-collections.psdi.ac.uk/api/records/1g8rw-q8128/files/mace_matpes_pbe_baseline_run-3.model/content
-export GOLDILOCKS_MACE_BACKBONE=~/.local/share/goldilocks/mmace/mace_matpes_pbe_baseline_run-3.model
+curl -L -o ~/.local/share/goldilocks/mmace/mmace-matpes-pbe-pretrained.model \
+  https://data-collections.psdi.ac.uk/api/records/sgk1t-48m42/files/mmace-matpes-pbe-pretrained.model/content
+shasum -a 256 ~/.local/share/goldilocks/mmace/mmace-matpes-pbe-pretrained.model
+# expect: fb43d7aadc63cbfbd00550a17e109553b6c051d6d6f4ab6ebd741849d92dc8bf
+export GOLDILOCKS_MACE_BACKBONE=~/.local/share/goldilocks/mmace/mmace-matpes-pbe-pretrained.model
 ```
 
 Then start the Workbench as above **in the same shell** (the backend only
@@ -84,10 +83,9 @@ magnetic structure (e.g.
 **Analysis** column's "is magnetic" field: its caption switches to
 **"Goldilocks-ML prediction"** once the `ml` tier is live.
 
-One gotcha worth knowing up front: `uv sync` silently removes the two
-manually-installed packages again (they're not in `uv.lock`) -- re-run the
-`uv pip install` lines above after any `uv sync`. Checksum verification and
-full troubleshooting: [mMACE setup](docs/mmace-setup.md).
+The v1.0 checkpoint (`mace_matpes_pbe_baseline_run-3.model`) no longer
+loads; replace it with the file above. Troubleshooting: [mMACE
+setup](docs/mmace-setup.md).
 
 ### Generate inputs from the command line
 

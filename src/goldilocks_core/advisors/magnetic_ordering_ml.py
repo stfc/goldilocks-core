@@ -16,17 +16,11 @@ Verified against a real published checkpoint (2026-09-19): for NiO, this
 correctly ranks antiferromagnetic candidates below the ferromagnetic guess,
 matching NiO's real, well-established antiferromagnetic ground state.
 
-Needs ``mace``, ``e3nn`` and ``sphericart`` (manual installs --
-goldilocks-ml has no extra for these; see its own README's "Use the
-is_magnetic classifier") and an mMACE backbone checkpoint, configured via
-``GOLDILOCKS_MACE_BACKBONE`` rather than an ``AssetStore``-managed
-download: the ``mace-torch`` fork this depends on has no PyPI release
-either, and PyPI's own upload validation rejects a direct git dependency
-regardless (see goldilocks-ml's own
-``deposits/magnetism/is_magnetic/mace_mlp/VENDORING_TODO.md``), so
-automating only the checkpoint's distribution would not make this feature
-installable end-to-end on its own. A missing one surfaces as
-:class:`MagneticOrderingMlUnavailable` naming what is missing.
+Needs ``mace``, ``e3nn`` and ``sphericart``, which goldilocks-ml installs
+with ``mace-torch[magnetic]`` (#240), and an mMACE backbone checkpoint,
+configured via ``GOLDILOCKS_MACE_BACKBONE`` (docs/mmace-setup.md). A missing
+one surfaces as :class:`MagneticOrderingMlUnavailable` naming what is
+missing.
 
 mace changes process-wide state (torch's default dtype, ``os.environ``,
 stdout; see ``ml/mace_process.py``), so this process never imports it: each
@@ -127,8 +121,8 @@ def require_mace_packages() -> None:
     if missing:
         raise MagneticOrderingMlUnavailable(
             f"{', '.join(missing)} not installed: mMACE-based magnetism "
-            "predictions need mace, e3nn and sphericart, installed by hand "
-            "(see docs/mmace-setup.md)"
+            "predictions need mace, e3nn and sphericart, which goldilocks-ml "
+            "installs with mace-torch[magnetic] (see docs/mmace-setup.md)"
         )
 
 
@@ -172,12 +166,9 @@ def rank_orderings(
     Raises :class:`MagneticOrderingMlUnavailable` if the checkpoint is not
     configured or mace, e3nn or sphericart is not installed, before any
     process starts -- and also if relaxing a candidate itself fails at
-    runtime (confirmed empirically, 2026-09-21: the pinned mace-torch fork
-    commit goldilocks-ml's own README documents does not implement the
-    ``use_collinear``/``constrain_magnitude`` keywords
-    ``fm_fim_relax.relax`` passes to ``MagneticSCFMACE``, an upstream
-    goldilocks-ml/mace-fork version mismatch, not a precondition this
-    function can check up front). Either way, the caller sees the same
+    runtime, which no precondition here can check up front (a library
+    error inside the ranking process, such as a goldilocks-ml/mace-torch
+    version mismatch). Either way, the caller sees the same
     "ranking unavailable, degrade to unranked" signal -- this is never a
     reason to fail the caller's own request, precondition or not. A ranking
     process that dies raises ``worker_process.WorkerDied``.

@@ -69,21 +69,19 @@ def _ml_is_magnetic(structure: Structure) -> MlPrediction | None:
     """The published mMACE-embedding MLP classifier's prediction (v2 epic 11,
     #11), whose ``provenance`` the record carries (#156), or
     ``None`` if it is not set up: its model asset is not installed or fails
-    verification, ``mace``/``e3nn``/``sphericart`` are not installed (manual
-    installs -- goldilocks-ml has no extra for these; see its own README's
-    "Use the is_magnetic classifier"), or ``GOLDILOCKS_MACE_BACKBONE`` is not
-    configured. ``is_magnetic()`` then falls back to its next tier.
+    verification, ``mace``/``e3nn``/``sphericart`` are not installed
+    (goldilocks-ml installs them with ``mace-torch[magnetic]``), or
+    ``GOLDILOCKS_MACE_BACKBONE`` is not configured. ``is_magnetic()`` then
+    falls back to its next tier.
 
-    The backbone is a real requirement, not an aspiration: confirmed
-    empirically (2026-09-21) against the real published record
-    (1g8rw-q8128) that its own ``model.json`` declares no automatic
-    download for the mMACE backbone its embedding needs --
-    ``goldilocks_ml.inference.load_model`` requires it passed explicitly
-    as an ``artifacts={"mace_backbone": path}`` override, which
-    ``ml.predict`` supplies from the same manually-configured
-    ``GOLDILOCKS_MACE_BACKBONE`` checkpoint
+    The backbone is a real requirement: the published record (sgk1t-48m42)
+    pins it in its ``model.json`` by name and SHA-256 but the registry does
+    not install it, so ``goldilocks_ml.inference.load_model`` gets it as an
+    ``artifacts={"mace_backbone": path}`` override, which ``ml.predict``
+    supplies from the same ``GOLDILOCKS_MACE_BACKBONE`` checkpoint
     ``advisors/magnetic_ordering_ml.py``'s ranking feature already uses,
-    reused rather than downloaded a second time.
+    reused rather than downloaded a second time. goldilocks-ml refuses a
+    checkpoint whose SHA-256 differs from the pinned one (#240).
 
     The prediction runs on a worker process (``ml/mace_process.py``). A
     model that is set up but fails to load or predict raises, failing

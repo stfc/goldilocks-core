@@ -152,16 +152,13 @@ size = 6012
 
 # The standalone is_magnetic classifier (v2 epic 11, #11): a small MLP head
 # reading a 384-number mMACE embedding (goldilocks-ml's own
-# docs/training/models/magnetism/is_magnetic-mace_mlp.md). Deliberately
-# does not register the mMACE backbone file this record also bundles
-# (mace_matpes_pbe_baseline_run-3.model, ~84 MB) as an asset file here --
-# advisors/magnetic_ordering_ml.py already established that the backbone
-# stays a manually-configured GOLDILOCKS_MACE_BACKBONE path, not an
-# AssetStore download, because the mace-torch fork needed to deserialize
-# it has no PyPI release either; asset-managing just the checkpoint bytes
-# would not make this feature installable end-to-end on its own, and
-# registering the same 84 MB file twice under two different asset ids
-# would be pure duplication for anyone who does have it configured.
+# docs/training/models/magnetism/is_magnetic-mace_mlp.md). The mMACE backbone
+# this record also bundles (mmace-matpes-pbe-pretrained.model, ~84 MB) is not
+# an asset file here: it stays the GOLDILOCKS_MACE_BACKBONE path that
+# advisors/magnetic_ordering_ml.py also reads, so both features share one
+# copy. goldilocks-ml checks that file against the backbone_sha256 in this
+# record's model.json before loading it, so the backbone and model.json must
+# come from the same record version (#240).
 #
 # No paper describes this classifier, so its citation is its PSDI record. It
 # used to repeat the QRF95 k-point paper, which nothing read until bundles
@@ -173,7 +170,7 @@ model_type = "mlp"
 target = "is_magnetic"
 feature_set = "mace_probe.v1"
 licence = "CC-BY-4.0; see the pinned model card"
-citation = "Goldilocks mMACE + MLP magnetism classifier (an MLP on mMACE mace_matpes_pbe_baseline_run-3 embeddings, trained on MatPES PBE), PSDI Data Collections record 1g8rw-q8128, https://data-collections.psdi.ac.uk/records/1g8rw-q8128."
+citation = "Goldilocks mMACE + MLP magnetism classifier (an MLP on mMACE mmace-matpes-pbe-pretrained embeddings, trained on MatPES PBE), PSDI Data Collections record sgk1t-48m42, https://data-collections.psdi.ac.uk/records/sgk1t-48m42."
 
 [defaults.is_magnetic.asset]
 id = "models/is-magnetic-classifier"
@@ -183,20 +180,20 @@ preparation_revision = "1"
 [[defaults.is_magnetic.asset.files]]
 role = "model_record"
 path = "model.json"
-url = "https://data-collections.psdi.ac.uk/api/records/1g8rw-q8128/files/model.json/content"
-checksum = "sha256:108c299904c288d5954fdcf8211c6abe76e18f65acf7299e347c4a71da13ce4b"
-size = 11417
+url = "https://data-collections.psdi.ac.uk/api/records/sgk1t-48m42/files/model.json/content"
+checksum = "sha256:9a698bc5a25326e45b8b8427c81288c2afe1e1068b2ec3600049d97ef9b702f8"
+size = 11411
 
 [[defaults.is_magnetic.asset.files]]
 role = "weights"
 path = "is_magnetic.pt"
-url = "https://data-collections.psdi.ac.uk/api/records/1g8rw-q8128/files/is_magnetic.pt/content"
+url = "https://data-collections.psdi.ac.uk/api/records/sgk1t-48m42/files/is_magnetic.pt/content"
 checksum = "sha256:b575832a9bfdc2a089d81704a09e0578e2ace62f720fc72c2092f845bcd23d2b"
 size = 474957
 
 [[defaults.is_magnetic.asset.files]]
 role = "licence"
 path = "MODEL_CARD.md"
-url = "https://data-collections.psdi.ac.uk/api/records/1g8rw-q8128/files/README.md/content"
-checksum = "sha256:bb61f460e441326a8020b2e649797d8b94da9a31965828f031769753dfe04acd"
-size = 1545
+url = "https://data-collections.psdi.ac.uk/api/records/sgk1t-48m42/files/README.md/content"
+checksum = "sha256:8cb4b36ffa60ad169adb98b5a61a6950f004af68f9605999e1889ac65f9bcaeb"
+size = 2155

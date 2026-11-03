@@ -38,7 +38,7 @@ def predict_is_magnetic(
     ``model_root``, with mMACE backbone ``checkpoint``, for ``structure``.
 
     Raises :class:`~goldilocks_core.ml.predict.MlModelUnavailable` if the
-    worker cannot import the mace fork goldilocks-ml needs. Whatever loading
+    worker cannot import mace-torch's magnetic models. Whatever loading
     or running the model raises is re-raised from the worker, and
     ``worker_process.WorkerDied`` if the worker dies."""
     return _IS_MAGNETIC_WORKER.run(
@@ -54,9 +54,9 @@ def _predict_is_magnetic(
         from mace.calculators.mace import MagneticMACECalculator  # noqa: F401
         from mace.modules import MagneticSCFMACE  # noqa: F401
     except ImportError as error:
-        # A stock PyPI mace-torch is found like the fork but lacks these.
+        # mace-torch before 0.3.17 has no magnetic models.
         raise MlModelUnavailable(
-            "is_magnetic needs the mace-torch fork with MagneticSCFMACE "
+            "is_magnetic needs mace-torch 0.3.17 or later, with MagneticSCFMACE "
             f"(see docs/mmace-setup.md): {error}"
         ) from error
     return _is_magnetic_model(model_root, checkpoint).predict(structure)

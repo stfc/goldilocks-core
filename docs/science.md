@@ -245,10 +245,10 @@ selection rules, installation, and custom files.
 
 Spin polarization allows different spin populations, decided by `is_magnetic`
 (`human > ml > llm > heuristic`, see [CLI reference](cli.md#scientific-controls)).
-Once its ML asset is installed, `mace`/`e3nn`/`sphericart` are on hand (a
-manual install -- see the CLI reference), and `GOLDILOCKS_MACE_BACKBONE`
-points at a downloaded mMACE checkpoint, a published mMACE-embedding
-classifier answers directly (if it then fails to run, the request fails).
+Once its ML asset is installed and `GOLDILOCKS_MACE_BACKBONE` points at a
+downloaded mMACE checkpoint ([mMACE setup](mmace-setup.md)), a published
+mMACE-embedding classifier answers directly (if it then fails to run, the
+request fails).
 Otherwise the heuristic tier answers, and it calls a structure magnetic when
 an element carries a local d or f moment or the structure holds an open-shell
 radical:

@@ -383,23 +383,23 @@ def test_is_magnetic_is_unavailable_when_the_configured_backbone_is_missing(
                     "mace.modules",
                 )
             },
-            id="stock-mace",
+            id="mace-before-0.3.17",
         ),
     ],
 )
-def test_the_mace_worker_reports_a_mace_without_the_fork_as_unavailable(
+def test_the_mace_worker_reports_a_mace_without_magnetic_models_as_unavailable(
     modules: dict[str, ModuleType | None],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A stock PyPI mace-torch passes ``find_spec`` but lacks the fork's
+    """A mace-torch older than 0.3.17 passes ``find_spec`` but lacks the
     magnetic classes goldilocks-ml imports. The worker reports that, like no
     mace at all, as unavailable, so is_magnetic falls back instead of failing
     every request."""
     for name, module in modules.items():
         monkeypatch.setitem(sys.modules, name, module)
 
-    with pytest.raises(MlModelUnavailable, match="mace-torch fork"):
+    with pytest.raises(MlModelUnavailable, match=r"mace-torch 0\.3\.17"):
         mace_process._predict_is_magnetic(tmp_path, tmp_path / "backbone.model", _IRON)
 
 
@@ -410,7 +410,7 @@ def test_is_magnetic_falls_back_when_the_worker_cannot_import_mace(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def unavailable(model_root: Path, checkpoint: Path, structure: Structure) -> None:
-        raise MlModelUnavailable("is_magnetic needs the mace-torch fork")
+        raise MlModelUnavailable("is_magnetic needs mace-torch 0.3.17 or later")
 
     monkeypatch.setattr(predict_module, "AssetStore", lambda: _StubStore(tmp_path))
     monkeypatch.setattr(mace_process, "predict_is_magnetic", unavailable)
@@ -548,7 +548,7 @@ def test_is_magnetic_cites_its_own_classifier_not_the_k_point_paper() -> None:
     is_magnetic_citation = load_ml_classifier("is_magnetic").model.citation
 
     assert is_magnetic_citation != k_point_paper
-    assert "1g8rw-q8128" in is_magnetic_citation
+    assert "sgk1t-48m42" in is_magnetic_citation
     assert load_ml_classifier("is_metal").model.citation == k_point_paper
 
 

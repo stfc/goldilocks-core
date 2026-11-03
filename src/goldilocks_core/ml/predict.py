@@ -15,8 +15,9 @@ with mMACE, which changes process-wide torch state, so it runs on a worker
 process (``ml/mace_process.py``) and this process never imports mace.
 
 ``goldilocks_ml.inference.load_model`` needs is_magnetic's mMACE backbone
-passed as ``artifacts={"mace_backbone": path}``: the published record
-(1g8rw-q8128) declares no download for it. The path is
+passed as ``artifacts={"mace_backbone": path}``: the registry installs the
+published record's (sgk1t-48m42) ``model.json``, which pins the backbone's
+SHA-256, but not the backbone itself. The path is
 ``GOLDILOCKS_MACE_BACKBONE``, the checkpoint ordering ranking also uses
 (``advisors/magnetic_ordering_ml.checkpoint_path``).
 

@@ -269,22 +269,16 @@ installed release as `<id>@<version>`) and keeps what it returned
 `interval`, and `warnings`), and `records[...].citations` says what to cite.
 `is_metal`/`k_distance` become ML-backed once their PSDI-hosted asset is
 installed (`uv run goldilocks assets install <id>` — see [Install and check
-assets](#install-and-check-assets)); `is_magnetic` additionally needs `mace`,
-`e3nn`, `sphericart`, and `ase`, none of which install via a `pip`/`uv`
-extra of this project or of goldilocks-ml -- see [mMACE setup](mmace-setup.md)
-for a complete, copy-pasteable walkthrough (also covered in [goldilocks-ml's
-own README](https://github.com/stfc/goldilocks-ml#use-the-is_magnetic-classifier))
-for the manual install (the `mace` fork it needs has no PyPI release, and
-PyPI's own upload validation rejects a package that declares a direct git
-dependency regardless, so this can never become an automatic extra). It
-also needs the same `GOLDILOCKS_MACE_BACKBONE` checkpoint the [magnetic
-orderings](#magnetic-orderings) `--rank-with-mmace` flag uses below --
-confirmed empirically (2026-09-21): the published record declares no
-automatic download for its mMACE backbone, so `is_magnetic` reuses
-whichever checkpoint that variable already points at rather than fetching
-a second copy. A model that is not set up (its asset not installed or
-failing verification, or for `is_magnetic` the packages or checkpoint
-missing) leaves the value to the next tier. Once a model is set up, an error
+assets](#install-and-check-assets)); `is_magnetic` additionally needs the
+mMACE backbone checkpoint that `GOLDILOCKS_MACE_BACKBONE` points at, the
+same one the [magnetic orderings](#magnetic-orderings) `--rank-with-mmace`
+flag uses below (see [mMACE setup](mmace-setup.md) for the download).
+`mace-torch`, `e3nn` and `sphericart` come with goldilocks-ml. The asset
+install does not fetch the checkpoint, so `is_magnetic` reuses whichever
+file that variable points at rather than keeping a second copy. A model
+that is not set up (its asset not installed or failing verification, or
+for `is_magnetic` the packages or checkpoint missing) leaves the value to
+the next tier. Once a model is set up, an error
 loading or running it fails the command instead of being replaced by the
 heuristic answer. `is_magnetic` runs in a separate worker process, so mMACE
 never changes the torch settings of the command or server that asked for
@@ -373,10 +367,9 @@ and applied, so every label writes one slab with the uploaded vacuum.
 
 `--rank-with-mmace` relaxes every candidate's magnetic moments on a frozen
 mMACE potential energy surface and recommends the lowest energy-per-atom
-one -- needs both a `GOLDILOCKS_MACE_BACKBONE` environment variable
-pointing at a downloaded mMACE checkpoint file, and the same manual
-`mace`/`e3nn`/`sphericart`/`ase` install described above. Missing either,
-or an error inside the relaxation itself, degrades to an unranked listing
+one -- needs a `GOLDILOCKS_MACE_BACKBONE` environment variable pointing at
+a downloaded mMACE checkpoint file, as described above. Missing it, or an
+error inside the relaxation itself, degrades to an unranked listing
 with a warning. Each ranking runs in its own process, one ranking at a time,
 so a long ranking never holds up `explain` or `run`; a ranking process that
 dies fails the request.

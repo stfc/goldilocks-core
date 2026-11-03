@@ -33,6 +33,11 @@ dependencies = [
     # mace-torch[magnetic], which is_magnetic and mMACE ordering ranking
     # run on (#240).
     "goldilocks-ml==0.3.2",
+    # Named only so [tool.uv.sources] below can route it to the CPU-only
+    # PyTorch index: uv applies sources to direct dependencies alone, and
+    # torch otherwise arrives through goldilocks-ml, which pins its version
+    # (#242).
+    "torch",
     # v2: contracts/ is pydantic BaseModel end to end (validation, serialization,
     # OpenAPI/capabilities schema generation) -- promoted from the http/mcp
     # extras to a core dependency (goldilocks-core-design.md S12, already decided).
@@ -138,13 +143,13 @@ dev = [
 [tool.uv]
 package = true
 
-# PyTorch publishes CPU and CUDA wheels on separate indexes. Pin torch to the
-# CPU index so container/workbench builds don't ship ~3.5G of unused CUDA/nvidia
-# libraries. GPU hosts override with `uv sync --index-strategy unsafe-best-match
-# --extra-index-url https://download.pytorch.org/whl/cu130` (or set
-# UV_EXTRA_INDEX_URL to the cu130 index) to pull the CUDA wheel instead.
-# torch-geometric and other torch-* packages stay on PyPI; only torch itself is
-# re-sourced, since it's the one that drags in the nvidia/triton wheels.
+# PyTorch publishes CPU and CUDA wheels on separate indexes, and PyPI's Linux
+# torch wheel pulls in about 2 GB of CUDA/nvidia/triton wheels. torch is routed
+# to the CPU-only index, so every uv-managed install (development, CI and the
+# Workbench image) gets CPU torch; the source applies only because torch is
+# also a direct dependency above (#242). torch-geometric and the other torch-*
+# packages stay on PyPI. pip installs ignore uv sources and take torch from
+# PyPI. No GPU route is configured here: core runs its models on the CPU.
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"

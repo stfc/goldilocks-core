@@ -20,5 +20,5 @@ convergence for your calculation.
 - [Scientific conventions](conventions.md) — units and numerical definitions.
 - [Contributing](architecture.md) — code layout and development checks.
 
-See the [repository README](https://github.com/junwen94/goldilocks-core) for
+See the [repository README](https://github.com/stfc/goldilocks-core) for
 installation and the interactive Workbench.

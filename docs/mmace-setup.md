@@ -1,4 +1,4 @@
-# Set up mMACE (magnetism ML)
+# mMACE (magnetism ML)
 
 Two features run on the mMACE backbone, a frozen magnetic MACE model:
 

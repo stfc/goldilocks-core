@@ -1,12 +1,11 @@
 name: pages
 
-# v2, not main: this fork's default branch is v2 (`gh api repos/.../
-# goldilocks-core --jq .default_branch`, confirmed 2026-09-14) while the
-# v2 rewrite is in progress -- main is dormant. Revisit once v2 merges
-# back into main.
+# Publishes https://stfc.github.io/goldilocks-core/ from stfc's main, which
+# the v2 line becomes after the v0.3.0 release (#239). Forks skip both jobs,
+# so the site has one home.
 on:
   push:
-    branches: [v2]
+    branches: [main]
     paths:
       - docs/**
       - mkdocs.yml
@@ -25,6 +24,7 @@ concurrency:
 jobs:
   build:
     name: Build docs site
+    if: github.repository == 'stfc/goldilocks-core'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

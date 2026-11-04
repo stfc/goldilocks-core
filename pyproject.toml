@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "goldilocks-core"
-version = "0.1.1"
+version = "0.3.0"
 description = "Materials machine learning tools for recommending DFT calculation inputs."
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -59,6 +59,11 @@ mcp = ["mcp"]
 
 [project.scripts]
 goldilocks = "goldilocks_core.cli.core:main"
+
+[project.urls]
+Documentation = "https://stfc.github.io/goldilocks-core/"
+Repository = "https://github.com/stfc/goldilocks-core"
+Issues = "https://github.com/stfc/goldilocks-core/issues"
 
 [tool.poe.tasks.fmt]
 help = "Format src, tests, and scripts with ruff"

@@ -2,7 +2,8 @@ site_name: goldilocks-core
 site_description: >-
   Recommends settings for density functional theory (DFT) calculations and
   generates Quantum ESPRESSO input files from a crystal structure.
-repo_url: https://github.com/junwen94/goldilocks-core
+site_url: https://stfc.github.io/goldilocks-core/
+repo_url: https://github.com/stfc/goldilocks-core
 repo_name: goldilocks-core
 theme:
   name: material
@@ -39,6 +40,6 @@ nav:
   - Recommendations: science.md
   - Pseudopotentials: pseudopotentials.md
   - CLI reference: cli.md
-  - mMACE setup: mmace-setup.md
+  - mMACE: mmace-setup.md
   - Scientific conventions: conventions.md
   - Contributing: architecture.md

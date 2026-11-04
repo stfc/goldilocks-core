@@ -125,6 +125,9 @@ jobs:
           version: "0.12.3"
           enable-cache: false
 
+      - name: Check the package and the Workbench library share one version
+        run: python scripts/check_release_version.py
+
       - name: Build source and wheel distributions
         run: uv build --no-sources
 

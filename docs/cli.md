@@ -274,7 +274,7 @@ mMACE backbone it embeds structures with, the one the [magnetic
 orderings](#magnetic-orderings) `--rank-with-mmace` flag uses below, and
 `mace-torch`, `e3nn` and `sphericart` come with goldilocks-ml.
 `GOLDILOCKS_MACE_BACKBONE` overrides the installed backbone for both (see
-[mMACE setup](mmace-setup.md)). A model
+[mMACE](mmace-setup.md)). A model
 that is not set up (its asset not installed or failing verification, or
 for `is_magnetic` the packages or checkpoint missing) leaves the value to
 the next tier. Once a model is set up, an error

@@ -55,12 +55,12 @@ Then open **http://127.0.0.1:8000**.
   **http://127.0.0.1:5173** explicitly (not `localhost`) to be sure you're
   reaching this project's Workbench.
 
-## Enable mMACE-based magnetism features
+## Magnetism features (mMACE)
 
 Two Workbench features (the ML `is_magnetic` classification and the
 "Run mMACE" magnetic-ordering ranking button) run on the ~80.5 MB mMACE
 backbone, which `goldilocks assets install workbench` above installs with the
-`is_magnetic` classifier (see [mMACE setup](../docs/mmace-setup.md)).
+`is_magnetic` classifier (see [mMACE](../docs/mmace-setup.md)).
 
 Load a magnetic structure and check the **Analysis** column's "is magnetic"
 field: its caption reads **"Goldilocks-ML prediction"** once the `ml` tier is
@@ -73,7 +73,15 @@ abandons the ranking in the Workbench, but the backend still finishes it.
 
 ## Run in Docker
 
-Alternatively, build and run from the repository root:
+Each release publishes the image for x86-64 hosts:
+
+```bash
+docker run --rm --publish 127.0.0.1:8000:8000 ghcr.io/stfc/goldilocks-core
+```
+
+Pin a release with its version as the tag, such as
+`ghcr.io/stfc/goldilocks-core:0.3.0`. Alternatively, build and run from the
+repository root:
 
 ```bash
 docker build --tag goldilocks-workbench .

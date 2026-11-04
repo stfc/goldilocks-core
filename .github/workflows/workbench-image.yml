@@ -8,6 +8,11 @@ name: workbench-image
 # needs this file on the repository's default branch).
 on:
   workflow_call:
+    inputs:
+      keep-image:
+        description: Upload the tested image as the artifact workbench-image.
+        type: boolean
+        default: false
   workflow_dispatch:
 
 permissions:
@@ -65,3 +70,17 @@ jobs:
           done
           curl --fail http://127.0.0.1:8000/ready
           npm run test:e2e
+
+      # release.yml publishes this exact image: a rebuild would download every
+      # runtime asset again and ship an image the e2e suite never ran against.
+      - name: Save the tested image
+        if: inputs.keep-image
+        run: docker save --output workbench-image.tar goldilocks-workbench:e2e
+
+      - name: Upload the tested image
+        if: inputs.keep-image
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: workbench-image
+          path: workbench-image.tar
+          retention-days: 1

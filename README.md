@@ -60,20 +60,6 @@ uv run --extra http poe stage
 Then open **http://127.0.0.1:8000**. See the [Workbench guide](web/README.md)
 for Docker and development checks.
 
-#### With mMACE (ML-backed magnetism features)
-
-Magnetism classification (`is_magnetic`) and magnetic-ordering ranking run
-on the mMACE backbone, which the asset step above installs with the
-`is_magnetic` classifier; nothing else to set up. Load a magnetic structure
-(e.g. `src/goldilocks_core/examples/structures/Fe_bcc.cif`) and check the
-**Analysis** column's "is magnetic" field: its caption reads
-**"Goldilocks-ML prediction"** once the `ml` tier is live.
-
-If you set `GOLDILOCKS_MACE_BACKBONE` to the v1.0 checkpoint
-(`mace_matpes_pbe_baseline_run-3.model`) before, unset it: that file no
-longer loads, and the variable overrides the installed backbone.
-Troubleshooting: [mMACE setup](docs/mmace-setup.md).
-
 ### Generate inputs from the command line
 
 Download the prediction models and default pseudopotential table, then generate
@@ -104,8 +90,8 @@ the output and how to run it.
 - [Pseudopotentials](docs/pseudopotentials.md) — choose a table and understand
   automatic selection.
 - [CLI reference](docs/cli.md) — commands and options.
-- [mMACE setup](docs/mmace-setup.md) — enable the ML-backed magnetism
-  features.
+- [mMACE](docs/mmace-setup.md) — check that the magnetism features use the
+  ML model, or use another checkpoint.
 - [Scientific conventions](docs/conventions.md) — units and numerical
   definitions.
 - [Contributing](docs/architecture.md) — code layout and development checks.

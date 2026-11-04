@@ -7,80 +7,86 @@ states and dispersion) from a crystal structure.
 
 ## Installation
 
-Published on PyPI. For just the `goldilocks` CLI:
+Goldilocks needs Python 3.12 or newer. The documentation is at
+https://stfc.github.io/goldilocks-core/.
+
+### Docker
+
+Each release publishes an image that serves the Workbench, the browser
+interface, with the prediction models and pseudopotential tables already
+installed:
+
+```bash
+docker run --rm --publish 127.0.0.1:8000:8000 ghcr.io/stfc/goldilocks-core
+```
+
+Open **http://127.0.0.1:8000**, upload a CIF or POSCAR, review the
+recommended settings, and download the generated inputs. Pin a release with
+its version as the tag, such as `ghcr.io/stfc/goldilocks-core:0.3.0`. The
+image is built for x86-64; Docker on Apple silicon runs it under emulation.
+See [HTTP security](docs/cli.md#http-security) before exposing it beyond
+localhost.
+
+### pip
+
+For the `goldilocks` command line:
 
 ```bash
 pip install goldilocks-core
+goldilocks assets install default
 ```
 
-For the CLI plus the built Workbench, ready to serve with no separate
-frontend build:
+For the Workbench as well:
 
 ```bash
 pip install "goldilocks-core[http]"
+goldilocks assets install workbench
 goldilocks serve http
 ```
 
-Open **http://127.0.0.1:8000** -- the Workbench frontend is bundled into
-the package itself as of this release.
+Then open **http://127.0.0.1:8000**. The asset step downloads the prediction
+models and pseudopotential tables; without it, Goldilocks refuses to generate
+an input until the table it needs is installed.
 
-To work on the Workbench or the codebase itself, clone the repository
-instead. Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
-first:
+Goldilocks runs its models on the CPU, but on Linux pip installs PyTorch's
+CUDA build. Add `--extra-index-url https://download.pytorch.org/whl/cpu` to
+`pip install` for the much smaller CPU-only build.
+
+### From source
+
+To work on Goldilocks itself, install
+[uv](https://docs.astral.sh/uv/getting-started/installation/) and, for the
+Workbench, Node.js 24 or newer. Then run:
 
 ```bash
 git clone https://github.com/stfc/goldilocks-core.git
 cd goldilocks-core
-uv sync
-```
-
-## Try it
-
-### Start the Workbench
-
-With Node.js 24 or newer installed, run:
-
-```bash
 uv sync --extra http
 npm --prefix web ci
 uv run goldilocks assets install workbench
 uv run --extra http poe workbench
 ```
 
-The asset step installs the models and pseudopotential tables. Open
-**http://127.0.0.1:5173**, upload a CIF or POSCAR, review the recommended
-settings, and download the generated inputs.
+Open **http://127.0.0.1:5173** for the development servers, or run
+`uv run --extra http poe stage` for the built frontend on
+**http://127.0.0.1:8000**. The [Workbench guide](web/README.md) covers the
+development checks.
 
-For a built frontend instead, stop the development servers and run:
+## Try it from the command line
 
-```bash
-uv run --extra http poe stage
-```
-
-Then open **http://127.0.0.1:8000**. See the [Workbench guide](web/README.md)
-for Docker and development checks.
-
-### Generate inputs from the command line
-
-Download the prediction models and default pseudopotential table, then generate
-inputs for the bundled silicon structure:
+Generate inputs for the bundled silicon structure (prefix each command with
+`uv run` in a clone):
 
 ```bash
-uv run goldilocks assets install default
-uv run goldilocks run src/goldilocks_core/examples/structures/Si.cif --out si-run
+goldilocks run "$(goldilocks examples path)/Si.cif" --out si-run
 ```
 
-Open `si-run/scf.in` to see the input. The directory also contains the
-pseudopotential file with its table's licence, a submission script,
-`goldilocks.json` (the request it answers: code, task, HPC profile, your
-overrides, the structure's sha256 and the goldilocks-core version; every
-setting with its source, and for a setting a model chose, the model with what
-it returned) and `CITATIONS.md` (the pseudopotential table and every model
-used).
-
-Treat the recommended settings as a starting point: review warnings and check
-convergence for your calculation. The [quickstart](docs/quickstart.md) explains
-the output and how to run it.
+`si-run/` holds `scf.in`, the pseudopotential and its table's licence, a
+submission script, `goldilocks.json` (every setting with what decided it),
+`CITATIONS.md` and a `README.md` on running the bundle on a cluster. Treat the
+recommended settings as a starting point: review the warnings and check
+convergence for your calculation. The [quickstart](docs/quickstart.md)
+explains each file and how to run it.
 
 ## Guides and reference
 

@@ -84,8 +84,8 @@ Pin a release with its version as the tag, such as
 repository root:
 
 ```bash
-docker build --tag goldilocks-workbench .
-docker run --rm --publish 127.0.0.1:8000:8000 goldilocks-workbench
+docker build --tag goldilocks-core .
+docker run --rm --publish 127.0.0.1:8000:8000 goldilocks-core
 ```
 
 Open **http://127.0.0.1:8000**. The image includes the frontend and runtime

@@ -25,7 +25,7 @@ COPY --from=core-build /build/openapi.json ./openapi.json
 RUN npm run generate:schema && npm --ignore-scripts run build
 
 FROM python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 AS runtime
-LABEL org.opencontainers.image.title="Goldilocks Workbench" \
+LABEL org.opencontainers.image.title="goldilocks-core" \
       org.opencontainers.image.description="Guided DFT input recommendation with bundled runtime assets" \
       org.opencontainers.image.source="https://github.com/stfc/goldilocks-core" \
       org.opencontainers.image.licenses="BSD-3-Clause AND CC-BY-3.0 AND CC-BY-4.0 AND CC-BY-SA-4.0 AND GPL-2.0-or-later AND GPL-3.0-only" \

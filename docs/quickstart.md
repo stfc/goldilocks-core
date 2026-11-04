@@ -8,7 +8,7 @@ Already generated `si-run` from the README? Continue with
 
 ## 1. Install
 
-Follow the [repository setup](../README.md#try-it), then run these commands from
+Follow the [repository setup](../README.md#from-source), then run these commands from
 the repository directory:
 
 ```bash

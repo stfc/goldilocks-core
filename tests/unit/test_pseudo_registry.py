@@ -20,7 +20,12 @@ def test_registry_declares_complete_provider_assets() -> None:
         "pseudopotentials",
         "metadata",
     }
-    assert all("pseudo-dojo.org" in file.url for file in dojo.asset.files)
+    assert all(
+        file.url.startswith(
+            "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/"
+        )
+        for file in dojo.asset.files
+    )
     assert dojo.asset.preparation_revision == "2"
 
     sssp = tables["sssp-pbe-efficiency-sr"]

@@ -1,5 +1,9 @@
 # Domain registry for complete pseudopotential-table runtime assets.
 # Table facts were measured from upstream publications; bytes are external.
+# PseudoDojo's archives download from an unmodified copy on PSDI (record 8gc82-qm928),
+# byte-for-byte the files www.pseudo-dojo.org published and these checksums pin:
+# that single host has been unreachable for days at a time (#246). upstream_url
+# still names PseudoDojo, the authoritative source.
 
 [tables."pseudodojo-pbesol-efficiency-sr"]
 provider       = "pseudodojo"
@@ -29,14 +33,14 @@ elements = [
 [[tables."pseudodojo-pbesol-efficiency-sr".files]]
 role = "pseudopotentials"
 path = "source/upf.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-sr-04_pbesol_standard_upf.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-sr-04_pbesol_standard_upf.tgz/content"
 checksum = "sha256:6e6af9f7ba82d95f8381760780c056b07bdedf7d4c33c1857c97613399ae3c55"
 size = 5201271
 
 [[tables."pseudodojo-pbesol-efficiency-sr".files]]
 role = "metadata"
 path = "source/djrepo.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-sr-04_pbesol_standard_djrepo.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-sr-04_pbesol_standard_djrepo.tgz/content"
 checksum = "sha256:a275c5ef6e1d32852cd9f1d4bc746708763e18cbd2a1aa3d1ed9b0b5e62e9b1c"
 size = 8951
 
@@ -68,14 +72,14 @@ elements = [
 [[tables."pseudodojo-pbesol-precision-sr".files]]
 role = "pseudopotentials"
 path = "source/upf.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-sr-04_pbesol_stringent_upf.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-sr-04_pbesol_stringent_upf.tgz/content"
 checksum = "sha256:7c89c52051dc3e977589c249f4f1c845fd8e2772f5891670eef127df20195c5d"
 size = 5420063
 
 [[tables."pseudodojo-pbesol-precision-sr".files]]
 role = "metadata"
 path = "source/djrepo.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-sr-04_pbesol_stringent_djrepo.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-sr-04_pbesol_stringent_djrepo.tgz/content"
 checksum = "sha256:5cccb204215410eb407d44be468f4d48afc4d4e241c5be3606b34fdd46f0b42f"
 size = 9090
 
@@ -107,14 +111,14 @@ elements = [
 [[tables."pseudodojo-pbe-efficiency-sr".files]]
 role = "pseudopotentials"
 path = "source/upf.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-sr-04_pbe_standard_upf.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-sr-04_pbe_standard_upf.tgz/content"
 checksum = "sha256:603d7f07d364b60b321aa5c8eb0ae809aab339c3e884e4b62f31c35370991067"
 size = 5230385
 
 [[tables."pseudodojo-pbe-efficiency-sr".files]]
 role = "metadata"
 path = "source/djrepo.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-sr-04_pbe_standard_djrepo.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-sr-04_pbe_standard_djrepo.tgz/content"
 checksum = "sha256:092b7bf9cdac2214779686043c17f8bb67686f0fa51fab1526f3469fbef34664"
 size = 611897
 
@@ -145,14 +149,14 @@ elements = [
 [[tables."pseudodojo-pbe-precision-sr".files]]
 role = "pseudopotentials"
 path = "source/upf.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-sr-04_pbe_stringent_upf.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-sr-04_pbe_stringent_upf.tgz/content"
 checksum = "sha256:7291a544e4a10f77b8f5a8e3984876dfedc24c54ec2eac05d81120510848639e"
 size = 5448379
 
 [[tables."pseudodojo-pbe-precision-sr".files]]
 role = "metadata"
 path = "source/djrepo.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-sr-04_pbe_stringent_djrepo.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-sr-04_pbe_stringent_djrepo.tgz/content"
 checksum = "sha256:176481658aafc78ea0f64e83b6f0d7b2ad95eacded50dc81882556ed851324ab"
 size = 598699
 
@@ -183,14 +187,14 @@ elements = [
 [[tables."pseudodojo-lda-efficiency-sr".files]]
 role = "pseudopotentials"
 path = "source/upf.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-sr-04_pw_standard_upf.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-sr-04_pw_standard_upf.tgz/content"
 checksum = "sha256:305351634a791ca63ff8043bd498b526e45d1e893d49e7a4429762cf7c5a3bcd"
 size = 4940384
 
 [[tables."pseudodojo-lda-efficiency-sr".files]]
 role = "metadata"
 path = "source/djrepo.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-sr-04_pw_standard_djrepo.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-sr-04_pw_standard_djrepo.tgz/content"
 checksum = "sha256:745fdbd0b530434dcf5364662f65641d598cda43002d0bffb344c305b82dc373"
 size = 273621
 
@@ -221,14 +225,14 @@ elements = [
 [[tables."pseudodojo-lda-precision-sr".files]]
 role = "pseudopotentials"
 path = "source/upf.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-sr-04_pw_stringent_upf.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-sr-04_pw_stringent_upf.tgz/content"
 checksum = "sha256:aadb3b9e889b044e1756b846a1e71d7698b6a7ba6512a7a0fc757e398deb8290"
 size = 5173731
 
 [[tables."pseudodojo-lda-precision-sr".files]]
 role = "metadata"
 path = "source/djrepo.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-sr-04_pw_stringent_djrepo.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-sr-04_pw_stringent_djrepo.tgz/content"
 checksum = "sha256:70a79d99cea2128e1e1db6ff1ad57c6c2f76853d6c00edee2022c5e1b67edc00"
 size = 260909
 
@@ -261,14 +265,14 @@ elements = [
 [[tables."pseudodojo-pbe-lanthanides-sr".files]]
 role = "pseudopotentials"
 path = "source/upf.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-sr-04-3plus_pbe_standard_upf.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-sr-04-3plus_pbe_standard_upf.tgz/content"
 checksum = "sha256:fca17712108ad8f6f8401552293da306dab8f34d48ff2bdc42e85ab028de7ec3"
 size = 1439256
 
 [[tables."pseudodojo-pbe-lanthanides-sr".files]]
 role = "metadata"
 path = "source/djrepo.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-sr-04-3plus_pbe_standard_djrepo.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-sr-04-3plus_pbe_standard_djrepo.tgz/content"
 checksum = "sha256:03e240b10fa4b3e0d4a519a1bd77c4ca961c9640e3829cdcc8a70e41459b72dc"
 size = 9650
 
@@ -300,14 +304,14 @@ elements = [
 [[tables."pseudodojo-pbesol-efficiency-fr".files]]
 role = "pseudopotentials"
 path = "source/upf.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-fr-04_pbesol_standard_upf.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-fr-04_pbesol_standard_upf.tgz/content"
 checksum = "sha256:1aa17b4d36aa54da1b434bc356348bf537611ad3fb67a45ae9432b490b41d47f"
 size = 6717147
 
 [[tables."pseudodojo-pbesol-efficiency-fr".files]]
 role = "metadata"
 path = "source/djrepo.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-fr-04_pbesol_standard_djrepo.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-fr-04_pbesol_standard_djrepo.tgz/content"
 checksum = "sha256:6a6e0b1bc368c75315e5e828e0293979b1520f0877bf802a6e8a65df2838c524"
 size = 8713
 
@@ -338,14 +342,14 @@ elements = [
 [[tables."pseudodojo-pbesol-precision-fr".files]]
 role = "pseudopotentials"
 path = "source/upf.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-fr-04_pbesol_stringent_upf.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-fr-04_pbesol_stringent_upf.tgz/content"
 checksum = "sha256:9b5a046e68147ada93c02bca305bd52a2f7f916a5416df655a113c825fe77f73"
 size = 7071203
 
 [[tables."pseudodojo-pbesol-precision-fr".files]]
 role = "metadata"
 path = "source/djrepo.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-fr-04_pbesol_stringent_djrepo.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-fr-04_pbesol_stringent_djrepo.tgz/content"
 checksum = "sha256:96d4b52a0f54b390519581f436d7a62d3ac6965436118f7f5acd653bb15ec20b"
 size = 8978
 
@@ -377,14 +381,14 @@ elements = [
 [[tables."pseudodojo-pbe-efficiency-fr".files]]
 role = "pseudopotentials"
 path = "source/upf.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-fr-04_pbe_standard_upf.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-fr-04_pbe_standard_upf.tgz/content"
 checksum = "sha256:6452cc23ed346ad04f9d92cea8601d348a76a6487e8931cc886ea4be086f2328"
 size = 6597203
 
 [[tables."pseudodojo-pbe-efficiency-fr".files]]
 role = "metadata"
 path = "source/djrepo.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-fr-04_pbe_standard_djrepo.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-fr-04_pbe_standard_djrepo.tgz/content"
 checksum = "sha256:8f5e1c28673159aff117279251325175762b4b3c6c9406fea8327f2c85cad818"
 size = 8651
 
@@ -420,14 +424,14 @@ elements = [
 [[tables."pseudodojo-pbe-precision-fr".files]]
 role = "pseudopotentials"
 path = "source/upf.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-fr-04_pbe_stringent_upf.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-fr-04_pbe_stringent_upf.tgz/content"
 checksum = "sha256:f3e0c8c889144e81ffe12d8e7b0b80f7d570de1d2e730abd9cf77ba7e843fab0"
 size = 7261726
 
 [[tables."pseudodojo-pbe-precision-fr".files]]
 role = "metadata"
 path = "source/djrepo.tgz"
-url = "https://www.pseudo-dojo.org/pseudos/nc-fr-04_pbe_stringent_djrepo.tgz"
+url = "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/nc-fr-04_pbe_stringent_djrepo.tgz/content"
 checksum = "sha256:0e54de6a0b3297a1291b44b8c26975f3ed7e9f7ac2f4a81555e8508d31fcd68e"
 size = 9122
 

@@ -403,10 +403,12 @@ HARTREE_TO_RYDBERG = 2.0
 _MD5 = re.compile(r"[0-9a-fA-F]{32}")
 _PSEUDODOJO_LICENCE_NOTICE = """\
 PseudoDojo pseudopotentials are distributed under the Creative Commons
-Attribution 4.0 International licence (CC BY 4.0).
+Attribution 4.0 International licence (CC BY 4.0), as the PseudoDojo project
+states in https://github.com/abinit/pseudo_dojo/blob/404896295771/README.md#license
 
 Licence: https://creativecommons.org/licenses/by/4.0/
 Source: https://www.pseudo-dojo.org/
+Copy downloaded from: https://data-collections.psdi.ac.uk/records/8gc82-qm928
 """
 
 

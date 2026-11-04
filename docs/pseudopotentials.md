@@ -204,8 +204,13 @@ installed publish the same records.
 UPFs retain their upstream licences; the Goldilocks BSD licence does not apply
 to them. UPFs are downloaded separately, not bundled in the package.
 
-- [PseudoDojo](https://www.pseudo-dojo.org/): registered tables use CC BY 4.0.
+- [PseudoDojo](https://www.pseudo-dojo.org/): registered tables use CC BY 4.0,
+  as the project states in its
+  [README](https://github.com/abinit/pseudo_dojo/blob/404896295771/README.md#license).
   Cite van Setten et al., _Computer Physics Communications_ 226, 39–54 (2018).
+  The archives download from an unmodified copy on PSDI
+  ([record 8gc82-qm928](https://data-collections.psdi.ac.uk/records/8gc82-qm928)),
+  since www.pseudo-dojo.org has been unreachable for days at a time.
 - [SSSP 1.3.0](https://archive.materialscloud.org/records/rcyfm-68h65): cite
   Prandini et al., _npj Computational Materials_ 4, 72 (2018), and the data
   record. The record's CC BY 4.0 licence does not replace the individual UPF

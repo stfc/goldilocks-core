@@ -16,9 +16,9 @@ graphify-out
 local_data
 notebooks
 plan-*.md
-reports
 web/node_modules
 web/dist
+web/dist-lib
 web/playwright-report
 web/test-results
 web/openapi.json

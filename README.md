@@ -1,19 +1,40 @@
 # goldilocks-core
 
 Goldilocks recommends settings for density functional theory (DFT) calculations
-and generates Quantum ESPRESSO self-consistent field (SCF) input files from a
-crystal structure.
+and generates Quantum ESPRESSO input files (SCF, DOS, band structure,
+relaxation, variable-cell relaxation, and phonons with their density of
+states and dispersion) from a crystal structure.
 
-## Try it
+## Installation
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then
-clone the repository:
+Published on PyPI. For just the `goldilocks` CLI:
+
+```bash
+pip install goldilocks-core
+```
+
+For the CLI plus the built Workbench, ready to serve with no separate
+frontend build:
+
+```bash
+pip install "goldilocks-core[http]"
+goldilocks serve http
+```
+
+Open **http://127.0.0.1:8000** -- the Workbench frontend is bundled into
+the package itself as of this release.
+
+To work on the Workbench or the codebase itself, clone the repository
+instead. Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
+first:
 
 ```bash
 git clone https://github.com/stfc/goldilocks-core.git
 cd goldilocks-core
 uv sync
 ```
+
+## Try it
 
 ### Start the Workbench
 
@@ -23,7 +44,7 @@ With Node.js 24 or newer installed, run:
 uv sync --extra http
 npm --prefix web ci
 uv run goldilocks assets install workbench
-uv run --extra http just workbench
+uv run --extra http poe workbench
 ```
 
 The asset step installs the models and pseudopotential tables. Open
@@ -33,7 +54,7 @@ settings, and download the generated inputs.
 For a built frontend instead, stop the development servers and run:
 
 ```bash
-uv run --extra http just stage
+uv run --extra http poe stage
 ```
 
 Then open **http://127.0.0.1:8000**. See the [Workbench guide](web/README.md)
@@ -46,39 +67,34 @@ inputs for the bundled silicon structure:
 
 ```bash
 uv run goldilocks assets install default
-uv run goldilocks compute src/goldilocks_core/examples/structures/Si.cif --preset generate --out si-run
+uv run goldilocks run src/goldilocks_core/examples/structures/Si.cif --out si-run
 ```
 
-Open `si-run/inputs/qe.in` to see the input. The directory also contains the
-pseudopotentials, structures, and supporting data.
+Open `si-run/scf.in` to see the input. The directory also contains the
+pseudopotential file with its table's licence, a submission script,
+`goldilocks.json` (the request it answers: code, task, HPC profile, your
+overrides, the structure's sha256 and the goldilocks-core version; every
+setting with its source, and for a setting a model chose, the model with what
+it returned) and `CITATIONS.md` (the pseudopotential table and every model
+used).
 
 Treat the recommended settings as a starting point: review warnings and check
 convergence for your calculation. The [quickstart](docs/quickstart.md) explains
 the output and how to run it.
-
-## Run the Workbench from a container
-
-Images are hosted on the GitHub Container Registry: `latest` tracks the
-newest release, `nightly` tracks `main` (rebuilds daily).
-
-```bash
-docker run --publish 8000:8000 ghcr.io/stfc/goldilocks-workbench:latest
-```
-
-Then open **http://127.0.0.1:8000**.
 
 ## Guides and reference
 
 - [First calculation](docs/quickstart.md) — generate, check, and run an input.
 - [Python API](docs/tutorial.md) — use Goldilocks in a script.
 - [Recommendations](docs/science.md) — understand the choices and their limits.
-- [Pseudopotentials](docs/pseudopotentials.md) — choose a table or use your own
-  files.
+- [Pseudopotentials](docs/pseudopotentials.md) — choose a table and understand
+  automatic selection.
 - [CLI reference](docs/cli.md) — commands and options.
+- [mMACE](docs/mmace-setup.md) — check that the magnetism features use the
+  ML model, or use another checkpoint.
 - [Scientific conventions](docs/conventions.md) — units and numerical
   definitions.
-- [Architecture](docs/architecture.md) — code layout, module map, and extension points.
-- [Contributing](docs/contributing.md) — repository setup, checks, CI, and releases.
+- [Contributing](docs/architecture.md) — code layout and development checks.
 
 ## Licence
 

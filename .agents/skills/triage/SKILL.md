@@ -1,7 +1,7 @@
 ---
 name: triage
 description: Triage the GitHub issue board — close stale/superseded/out-of-scope issues, fold duplicates, assign milestones, enforce one-issue-per-PR/feature. Use when the board has accumulated, before or after a milestone, or when catchup surfaces candidates.
-argument-hint: [repo, or leave blank for stfc/goldilocks-core]
+argument-hint: [repo, or leave blank for junwen94/goldilocks-core]
 ---
 
 # Triage: Clean the Issue Board
@@ -24,9 +24,9 @@ Issue hygiene is policy in AGENTS.md; this skill is the pass that enforces it. T
 ### 1. Snapshot the board
 
 ```bash
-gh issue list --repo stfc/goldilocks-core --state open --limit 200 --json number,title,labels,milestone,createdAt,updatedAt --jq 'sort_by(.number)'
-gh api repos/stfc/goldilocks-core/milestones --jq '.[] | "\(.number) | \(.title) | open=\(.open_issues) closed=\(.closed_issues)"'
-gh issue list --repo stfc/goldilocks-core --state open --limit 200 --json number,milestone --jq '[.[] | select(.milestone == null)] | length'
+gh issue list --repo junwen94/goldilocks-core --state open --limit 200 --json number,title,labels,milestone,createdAt,updatedAt --jq 'sort_by(.number)'
+gh api repos/junwen94/goldilocks-core/milestones --jq '.[] | "\(.number) | \(.title) | open=\(.open_issues) closed=\(.closed_issues)"'
+gh issue list --repo junwen94/goldilocks-core --state open --limit 200 --json number,milestone --jq '[.[] | select(.milestone == null)] | length'
 ```
 
 Read every open issue body and recent comments. You cannot triage what you have not read — a title is not enough.

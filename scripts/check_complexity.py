@@ -13,11 +13,30 @@ from pathlib import Path
 PACKAGE = "goldilocks_core"
 ROOT = Path(__file__).resolve().parents[1]
 LIMITS = {
-    "cli.core": (8, 16),
-    "server.http": (5, 10),
+    # + advisors.k_path for the band path notices (#118)
+    # + advisors.q_sampling and advisors.phonon for the phonon tasks' notices (#215)
+    "advisors.warning_catalogue": (15, 24),
+    # + advisors.vdw_method, functionals for the D3(BJ) rule (#141)
+    # + advisors.hubbard_u, q_sampling and fft_grid for the phonon findings (#215)
+    # + analysis.is_metal for the phonon tasks' metallicity rule (#215)
+    # + advisors.occupations.fixed_occupations_run, so that rule offers fixed
+    #   occupations where the occupations rule gives them (#215)
+    # + advisors.magnetic_config.unpolarized_if_non_magnetic, so that it offers
+    #   is_magnetic=non_magnetic exactly where the spin rules then give none (#215)
+    "checks": (17, 31),
+    "cli.core": (11, 16),  # + cli._output.command_stdout (#183)
+    "server.http": (5, 12),
     "server.mcp": (5, 10),
-    "input_data": (10, 20),
-    "runtime.scf": (10, 20),
+    # + analysis.geometry.GeometryFacts for the geometry_eff record (#210)
+    "service._system": (14, 23),
+    "service._dos": (16, 26),
+    # + advisors.q_sampling, advisors.phonon for the phonon steps' override bags (#215)
+    "service._step": (14, 25),
+    "service._tasks": (8, 26),  # + service._phonon's five phase functions (#215)
+    # the phonon tasks' phase functions, like service._dos (#215)
+    "service._phonon": (14, 27),
+    # + advisors.k_path and the dispersion step's path and settings (#215)
+    "service._phonon_steps": (11, 26),
 }
 DEFAULT_LIMIT = (12, 24)
 
@@ -163,7 +182,7 @@ def main() -> int:
             }
     else:
         sources = {
-            path.relative_to(ROOT / "src").as_posix(): path.read_text(encoding="utf-8")
+            path.relative_to(ROOT / "src").as_posix(): path.read_text()
             for path in (ROOT / "src" / PACKAGE).rglob("*.py")
         }
     reports = analyze(sources)

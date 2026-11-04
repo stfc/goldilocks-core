@@ -1,0 +1,45 @@
+# STFC SCARF cluster. Verified against live `sinfo -o "%20P %.6a %.10l %.6D
+# %.6c %.10m"` / `scontrol show partition` / `sacctmgr show assoc` output
+# (2026-09-14) -- not an invented example.
+scheduler = "slurm"
+launcher  = "srun"
+
+[modules]
+quantum_espresso = ["QuantumESPRESSO/7.5-foss-2025a"]
+
+[hardware]
+# scarf/devel/preemptable share one heterogeneous cn[...] node pool; sinfo
+# reports these as the *minimum* guaranteed spec ("64+ CPUs", "257000+ MB")
+# -- many nodes have more, but sizing off the minimum is the only safe
+# default across a mixed pool.
+cores_per_node  = 64
+mem_per_node_gb = 250      # 257000 MiB / 1024, rounded down
+max_nodes       = 454
+max_walltime_h  = 168      # 7-00:00:00
+
+[partitions.scarf]
+default = true             # scontrol: PartitionName=scarf Default=YES
+
+[partitions.devel]
+max_walltime_h = 12        # shorter queue, same hardware pool
+
+[partitions.preemptable]
+max_walltime_h = 168
+# PreemptMode=REQUEUE: jobs here can be killed and requeued by
+# higher-priority work. Same hardware/walltime ceiling as scarf, but not
+# safe as a default -- anything that can't tolerate being interrupted
+# should not land here without an explicit choice to do so.
+
+[partitions.gpu]
+cores_per_node  = 32
+mem_per_node_gb = 250
+max_nodes       = 12
+max_walltime_h  = 48       # 2-00:00:00
+# 48x A100 not modelled here -- this codebase's QE workloads are CPU-only
+# today; add gres/gpu accounting when that changes.
+
+[partitions.gpu-devel]
+cores_per_node  = 32
+mem_per_node_gb = 250
+max_nodes       = 12
+max_walltime_h  = 12

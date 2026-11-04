@@ -1,5 +1,7 @@
-import { Code, Group, Paper, Text } from "@mantine/core";
+import { Code, Paper } from "@mantine/core";
 import { type KeyboardEvent, type PointerEvent, useRef, useState } from "react";
+
+import "./GeneratedInputPreview.css";
 
 const DEFAULT_INPUT_HEIGHT = 352;
 const MIN_INPUT_HEIGHT = 160;
@@ -14,11 +16,9 @@ const KEYBOARD_RESIZE_DELTAS: Readonly<Record<string, number>> = {
 export function GeneratedInputPreview({
   path,
   content,
-  digest,
 }: {
   readonly path: string;
   readonly content: string;
-  readonly digest: string | null | undefined;
 }) {
   const [inputHeight, setInputHeight] = useState<number | null>(null);
   const [fullHeight, setFullHeight] = useState(DEFAULT_INPUT_HEIGHT);
@@ -74,14 +74,6 @@ export function GeneratedInputPreview({
     inputHeight ?? Math.min(DEFAULT_INPUT_HEIGHT, fullHeight);
   return (
     <Paper withBorder>
-      <Group justify="space-between" gap="xs" p="xs">
-        <Text size="xs" style={{ overflowWrap: "anywhere" }}>
-          {path}
-        </Text>
-        {digest === undefined ? null : (
-          <Code>{digest?.slice(0, 10) ?? "unlisted"}</Code>
-        )}
-      </Group>
       <Code
         block
         role="region"

@@ -16,6 +16,20 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 HTMLElement.prototype.scrollIntoView = vi.fn();
+// jsdom has no ResizeObserver; Mantine's ScrollArea (the magnetic orderings
+// table's scroll container) observes its viewport once it mounts.
+class InertResizeObserver {
+  readonly observe = vi.fn();
+  readonly unobserve = vi.fn();
+  readonly disconnect = vi.fn();
+}
+vi.stubGlobal("ResizeObserver", InertResizeObserver);
+// jsdom has no FontFaceSet; Mantine's autosize Textarea (the JSON override
+// control, e.g. u_by_element) subscribes to document.fonts when it mounts.
+Object.defineProperty(document, "fonts", {
+  configurable: true,
+  value: { addEventListener: vi.fn(), removeEventListener: vi.fn() },
+});
 
 afterEach(() => {
   cleanup();

@@ -7,15 +7,9 @@ from importlib import resources
 from pathlib import Path
 from typing import Annotated, Any, cast, get_args
 
-import joblib
-import numpy as np
-
 from goldilocks_core.assets.records import AssetFile, AssetSpec
-from goldilocks_core.serialization import Portable, portable_record, to_portable
-from goldilocks_core.types import JsonDict, ModelSource, ModelType, PathLike
-
-type StructureFeatureVector = tuple[np.ndarray, list[str]]
-"""Feature values and their names, in matching order."""
+from goldilocks_core.serialization import Portable
+from goldilocks_core.types import ModelType, PathLike
 
 
 @dataclass(slots=True)
@@ -25,7 +19,6 @@ class ModelSpec:
     model_type: ModelType
     target: str
     feature_set: str
-    source: ModelSource
     location: Annotated[str, Portable()]
     revision: str | None = None
     licence: str | None = None
@@ -33,47 +26,9 @@ class ModelSpec:
     citation: str | None = None
 
 
-@to_portable.register(ModelSpec)
-def _model_spec_portable(spec: ModelSpec) -> JsonDict:
-    return portable_record(spec, ModelSpec)
-
-
-def load_model(spec: ModelSpec) -> object:
-    if spec.source != "local":
-        raise ValueError(
-            "model loaders do not fetch remote files; install the runtime asset first"
-        )
-    model_path = Path(spec.location)
-    if not model_path.is_file():
-        raise FileNotFoundError(f"Model file not found: {model_path}")
-    return joblib.load(model_path)
-
-
 MODEL_REGISTRY_ENV = "GOLDILOCKS_MODEL_REGISTRY"
 _REGISTRY_RESOURCE = "registry.toml"
-_VALID_MODEL_SOURCES = frozenset(get_args(ModelSource))
 _VALID_MODEL_TYPES = frozenset(get_args(ModelType))
-
-
-@dataclass(frozen=True, slots=True)
-class QrfFeatureSettings:
-    composition_featurizers: tuple[str, ...]
-    element_property_preset: str
-    impute_nan: bool
-    structure_featurizers: tuple[str, ...]
-    global_symmetry_features: tuple[str, ...]
-    density_features: tuple[str, ...]
-    soap_species: str
-    soap_r_cut: float
-    soap_n_max: int
-    soap_l_max: int
-    soap_sigma: float
-    soap_periodic: bool
-    soap_sparse: bool
-    soap_reduction: str
-    lattice_symprec: float
-    metallicity_graph_radius: float
-    metallicity_max_neighbors: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,7 +43,6 @@ class QrfKpointsConfig:
     model: ModelSpec
     model_asset: AssetSpec | None
     model_file: str
-    feature_settings: QrfFeatureSettings
     confidence: float
     correction: float
     metallicity_model: ModelSpec
@@ -98,17 +52,8 @@ class QrfKpointsConfig:
 
 
 def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
-    registry_path = path or os.environ.get(MODEL_REGISTRY_ENV)
-    if registry_path is None:
-        registry = resources.files("goldilocks_core.ml").joinpath(_REGISTRY_RESOURCE)
-        with registry.open("rb") as registry_file:
-            data = tomllib.load(registry_file)
-    else:
-        with Path(registry_path).open("rb") as registry_file:
-            data = tomllib.load(registry_file)
-
+    data = _load_registry(path)
     kpoints = data["defaults"]["kpoints"]
-    features = kpoints["features"]
     metallicity = kpoints["metallicity"]
     calibration = kpoints["calibration"]
     model_asset = _asset_spec(kpoints.get("asset"))
@@ -123,25 +68,6 @@ def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
         model=_model_spec(kpoints, model_file),
         model_asset=model_asset,
         model_file=model_file,
-        feature_settings=QrfFeatureSettings(
-            composition_featurizers=tuple(features["composition_featurizers"]),
-            element_property_preset=features["element_property_preset"],
-            impute_nan=features["impute_nan"],
-            structure_featurizers=tuple(features["structure_featurizers"]),
-            global_symmetry_features=tuple(features["global_symmetry_features"]),
-            density_features=tuple(features["density_features"]),
-            soap_species=features["soap_species"],
-            soap_r_cut=features["soap_r_cut"],
-            soap_n_max=features["soap_n_max"],
-            soap_l_max=features["soap_l_max"],
-            soap_sigma=features["soap_sigma"],
-            soap_periodic=features["soap_periodic"],
-            soap_sparse=features["soap_sparse"],
-            soap_reduction=features["soap_reduction"],
-            lattice_symprec=features["lattice_symprec"],
-            metallicity_graph_radius=features["metallicity_graph_radius"],
-            metallicity_max_neighbors=features["metallicity_max_neighbors"],
-        ),
         confidence=kpoints["interval_confidence"],
         correction=calibration["correction"],
         metallicity_model=_model_spec(metallicity, checkpoint_file),
@@ -151,9 +77,69 @@ def load_default_qrf_config(path: PathLike | None = None) -> QrfKpointsConfig:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class MlClassifierConfig:
+    """One standalone ML model this build can call directly (v2 epic 11,
+    #11): is_metal/is_magnetic today, registered under
+    ``[defaults.<name>]`` in registry.toml. Distinct from
+    ``QrfKpointsConfig`` above, which is kpoints' own *embedded*
+    dependency shape (a feature extractor with no decision threshold of
+    its own, never called standalone) -- these are complete,
+    ``goldilocks_ml.inference.load_model``-loadable releases."""
+
+    role: str
+    """``ml_target`` in ``capabilities.py``'s vocabulary (e.g.
+    ``"is_metal"``) -- what ``analysis/is_metal.py`` and friends ask
+    ``ml.predict.predict`` for by name."""
+    model: ModelSpec
+    asset: AssetSpec
+
+
+ML_CLASSIFIER_ROLES: tuple[str, ...] = ("is_metal", "is_magnetic")
+"""Every standalone classifier registry.toml declares under
+``[defaults.<role>]`` -- the ``k_distance`` (QRF) case predates this and
+stays its own ``QrfKpointsConfig`` shape above; a role added here needs
+no other change than a matching registry.toml section, since
+``load_ml_classifier``/``ml.predict.predict`` are both already generic
+over it."""
+
+
+def load_ml_classifier(role: str, path: PathLike | None = None) -> MlClassifierConfig:
+    """Load one ``[defaults.<role>]`` standalone classifier section."""
+    if role not in ML_CLASSIFIER_ROLES:
+        raise ValueError(
+            f"unknown ML classifier role {role!r}; this build knows: "
+            + ", ".join(ML_CLASSIFIER_ROLES)
+        )
+    data = _load_registry(path)
+    section = data["defaults"][role]
+    asset = _asset_spec(section["asset"])
+    if asset is None:
+        raise ValueError(f"[defaults.{role}] must declare an [defaults.{role}.asset]")
+    return MlClassifierConfig(
+        role=role, model=_model_spec(section, asset.id), asset=asset
+    )
+
+
+def registered_ml_classifiers(
+    path: PathLike | None = None,
+) -> tuple[MlClassifierConfig, ...]:
+    return tuple(load_ml_classifier(role, path) for role in ML_CLASSIFIER_ROLES)
+
+
+def _load_registry(path: PathLike | None) -> dict[str, Any]:
+    registry_path = path or os.environ.get(MODEL_REGISTRY_ENV)
+    if registry_path is None:
+        registry = resources.files("goldilocks_core.ml").joinpath(_REGISTRY_RESOURCE)
+        with registry.open("rb") as registry_file:
+            return tomllib.load(registry_file)
+    with Path(registry_path).open("rb") as registry_file:
+        return tomllib.load(registry_file)
+
+
 def registered_models(path: PathLike | None = None) -> tuple[RegisteredModel, ...]:
     config = load_default_qrf_config(path)
-    return (
+    models = [
         RegisteredModel(
             id=config.model_asset.id if config.model_asset else config.model.name,
             role="k_point_advisor",
@@ -168,16 +154,25 @@ def registered_models(path: PathLike | None = None) -> tuple[RegisteredModel, ..
             role="metallicity_classifier",
             spec=config.metallicity_model,
         ),
+    ]
+    models.extend(
+        RegisteredModel(
+            id=classifier.asset.id, role=classifier.role, spec=classifier.model
+        )
+        for classifier in registered_ml_classifiers(path)
     )
+    return tuple(models)
 
 
 def model_asset_specs(path: PathLike | None = None) -> tuple[AssetSpec, ...]:
     config = load_default_qrf_config(path)
-    return tuple(
+    specs = [
         spec
         for spec in (config.model_asset, config.metallicity_asset)
         if spec is not None
-    )
+    ]
+    specs.extend(classifier.asset for classifier in registered_ml_classifiers(path))
+    return tuple(specs)
 
 
 def _asset_spec(data: dict[str, Any] | None) -> AssetSpec | None:
@@ -229,11 +224,6 @@ def _model_spec(data: dict[str, Any], location: str) -> ModelSpec:
             f"model revision must be a non-empty string, or absent; got {revision!r}"
         )
 
-    source_value = data.get("source", "local")
-    if source_value not in _VALID_MODEL_SOURCES:
-        valid = ", ".join(sorted(_VALID_MODEL_SOURCES))
-        raise ValueError(f"model source must be one of {valid}; got {source_value!r}")
-    source = cast(ModelSource, source_value)
     model_type_value = data["model_type"]
     if model_type_value not in _VALID_MODEL_TYPES:
         valid = ", ".join(sorted(_VALID_MODEL_TYPES))
@@ -254,7 +244,6 @@ def _model_spec(data: dict[str, Any], location: str) -> ModelSpec:
         model_type=model_type,
         target=identity["target"],
         feature_set=identity["feature_set"],
-        source=source,
         location=data.get("location", location),
         revision=revision,
         **optional_material,

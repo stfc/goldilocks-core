@@ -7,11 +7,11 @@ description: Use the gh CLI for GitHub issues, PRs, comments, checks, and Action
 
 Use `gh` for GitHub work. Prefer structured commands over scraping web pages.
 
-Repo: `stfc/goldilocks-core`
+Repo: `junwen94/goldilocks-core`
 
 ## Rules
 
-- Use `--repo stfc/goldilocks-core` unless you are already inside this repo and deliberately relying on the current remote.
+- Use `--repo junwen94/goldilocks-core` unless you are already inside this repo and deliberately relying on the current remote.
 - Prefer `--json` and `--jq` for read operations so outputs are machine-checkable.
 - Use `--body-file` for long issue, comment, and PR bodies. Do not fight shell quoting goblins by pasting Markdown into one command.
 - Prefer issue comments for progress updates, reviews, decisions, blockers, and session reports. Edit issue bodies only when the issue's current plan/source-of-truth is stale or structurally wrong.
@@ -27,19 +27,19 @@ Replace `<user>` with the human who requested the work. **PR descriptions are ne
 ## Inspect state
 
 ```bash
-gh issue list --repo stfc/goldilocks-core --state open --limit 20
-gh pr list --repo stfc/goldilocks-core --state open --limit 20
-gh pr view <number> --repo stfc/goldilocks-core --json state,mergeStateStatus,isDraft,reviewDecision,baseRefName,headRefName
-gh pr checks <number> --repo stfc/goldilocks-core
-gh run list --repo stfc/goldilocks-core --branch <branch>
-gh run view <run-id> --repo stfc/goldilocks-core --log
+gh issue list --repo junwen94/goldilocks-core --state open --limit 20
+gh pr list --repo junwen94/goldilocks-core --state open --limit 20
+gh pr view <number> --repo junwen94/goldilocks-core --json state,mergeStateStatus,isDraft,reviewDecision,baseRefName,headRefName
+gh pr checks <number> --repo junwen94/goldilocks-core
+gh run list --repo junwen94/goldilocks-core --branch <branch>
+gh run view <run-id> --repo junwen94/goldilocks-core --log
 ```
 
 Use `gh api` for fields not exposed by high-level commands:
 
 ```bash
-gh api repos/stfc/goldilocks-core/issues/<number> --jq '{title, state, body}'
-gh api repos/stfc/goldilocks-core/pulls/<number> --jq '{title, state, mergeable, rebaseable}'
+gh api repos/junwen94/goldilocks-core/issues/<number> --jq '{title, state, body}'
+gh api repos/junwen94/goldilocks-core/pulls/<number> --jq '{title, state, mergeable, rebaseable}'
 ```
 
 ## Create an issue
@@ -61,7 +61,7 @@ cat > /tmp/issue-body.md <<'EOF'
 Written by an agent on behalf of <user>.
 EOF
 
-gh issue create --repo stfc/goldilocks-core --title "type: short title" --body-file /tmp/issue-body.md
+gh issue create --repo junwen94/goldilocks-core --title "type: short title" --body-file /tmp/issue-body.md
 ```
 
 ## Comment on an issue
@@ -80,7 +80,7 @@ cat > /tmp/comment.md <<'EOF'
 Written by an agent on behalf of <user>.
 EOF
 
-gh issue comment <number> --repo stfc/goldilocks-core --body-file /tmp/comment.md
+gh issue comment <number> --repo junwen94/goldilocks-core --body-file /tmp/comment.md
 ```
 
 ## Open a PR
@@ -90,7 +90,7 @@ PR descriptions are written by a human — an agent never writes a PR body, not 
 If the human hands you a body file **they wrote**, you may post it:
 
 ```bash
-gh pr create --repo stfc/goldilocks-core --title "type(scope): short title" --body-file <human-authored-file>
+gh pr create --repo junwen94/goldilocks-core --title "type(scope): short title" --body-file <human-authored-file>
 ```
 
 Never author, fill, or draft the body. Verify branch and base before creating.
@@ -110,16 +110,16 @@ Do **not** edit the issue body just to add a review, routine verification output
 Fetch current content first, edit locally, then write it back:
 
 ```bash
-gh issue view <number> --repo stfc/goldilocks-core --json body --jq .body > /tmp/body.md
+gh issue view <number> --repo junwen94/goldilocks-core --json body --jq .body > /tmp/body.md
 # edit /tmp/body.md
-gh issue edit <number> --repo stfc/goldilocks-core --body-file /tmp/body.md
+gh issue edit <number> --repo junwen94/goldilocks-core --body-file /tmp/body.md
 ```
 
 For comments, use the API:
 
 ```bash
-gh api repos/stfc/goldilocks-core/issues/<issue-number>/comments --jq '.[] | {id, body: .body[0:120]}'
-gh api repos/stfc/goldilocks-core/issues/comments/<comment-id> -X PATCH -f body="$(cat /tmp/comment.md)"
+gh api repos/junwen94/goldilocks-core/issues/<issue-number>/comments --jq '.[] | {id, body: .body[0:120]}'
+gh api repos/junwen94/goldilocks-core/issues/comments/<comment-id> -X PATCH -f body="$(cat /tmp/comment.md)"
 ```
 
 ## Checks and Actions
@@ -127,10 +127,10 @@ gh api repos/stfc/goldilocks-core/issues/comments/<comment-id> -X PATCH -f body=
 Use `gh pr checks` for the quick answer and `gh run` when you need workflow detail.
 
 ```bash
-gh pr checks <number> --repo stfc/goldilocks-core
-gh run list --repo stfc/goldilocks-core --branch <branch>
-gh run view <run-id> --repo stfc/goldilocks-core --log
-gh run download <run-id> --repo stfc/goldilocks-core
+gh pr checks <number> --repo junwen94/goldilocks-core
+gh run list --repo junwen94/goldilocks-core --branch <branch>
+gh run view <run-id> --repo junwen94/goldilocks-core --log
+gh run download <run-id> --repo junwen94/goldilocks-core
 ```
 
 If the repo has no workflows yet, say so plainly and rely on local verification instead of pretending CI exists.
@@ -144,21 +144,21 @@ This repo uses GitHub sub-issues to link parent planning issues to their impleme
 The sub-issues API requires integer database IDs (not issue numbers). Get the DB ID first, then link:
 
 ```bash
-PARENT_ID=$(gh api repos/stfc/goldilocks-core/issues/8 --jq '.id')
-CHILD_ID=$(gh api repos/stfc/goldilocks-core/issues/20 --jq '.id')
-gh api repos/stfc/goldilocks-core/issues/8/sub_issues --method POST -F sub_issue_id=$CHILD_ID
+PARENT_ID=$(gh api repos/junwen94/goldilocks-core/issues/8 --jq '.id')
+CHILD_ID=$(gh api repos/junwen94/goldilocks-core/issues/20 --jq '.id')
+gh api repos/junwen94/goldilocks-core/issues/8/sub_issues --method POST -F sub_issue_id=$CHILD_ID
 ```
 
 ### View sub-issues
 
 ```bash
-gh api repos/stfc/goldilocks-core/issues/8/sub_issues --jq '.[].number'
+gh api repos/junwen94/goldilocks-core/issues/8/sub_issues --jq '.[].number'
 ```
 
 ### Unlink a sub-issue
 
 ```bash
-gh api repos/stfc/goldilocks-core/issues/8/sub_issues/$CHILD_ID --method DELETE
+gh api repos/junwen94/goldilocks-core/issues/8/sub_issues/$CHILD_ID --method DELETE
 ```
 
 ### Conventions
@@ -174,13 +174,13 @@ Milestones group issues into deliverables. Every open issue should belong to one
 
 ```bash
 # List milestones with counts
-gh api repos/stfc/goldilocks-core/milestones --jq '.[] | "\(.number) | \(.title) | open=\(.open_issues) closed=\(.closed_issues)"'
+gh api repos/junwen94/goldilocks-core/milestones --jq '.[] | "\(.number) | \(.title) | open=\(.open_issues) closed=\(.closed_issues)"'
 
 # Create one (returns the new milestone id)
-gh api repos/stfc/goldilocks-core/milestones --method POST -f title='M1 — ...' -f description='...' -f state='open' --jq '.number'
+gh api repos/junwen94/goldilocks-core/milestones --method POST -f title='M1 — ...' -f description='...' -f state='open' --jq '.number'
 
 # Assign an issue to a milestone (the API takes the numeric milestone id)
-gh api repos/stfc/goldilocks-core/issues/<N> --method PATCH -F milestone=<id>
+gh api repos/junwen94/goldilocks-core/issues/<N> --method PATCH -F milestone=<id>
 ```
 
 `gh issue edit --milestone` expects the milestone *title*; the REST API takes the numeric *id*. Prefer the API for scripting.
@@ -191,17 +191,17 @@ Periodic board hygiene. The `triage` skill runs the full pass; these are the bui
 
 ```bash
 # Open issues with no milestone
-gh issue list --repo stfc/goldilocks-core --state open --limit 200 --json number,milestone --jq '.[] | select(.milestone == null) | .number'
+gh issue list --repo junwen94/goldilocks-core --state open --limit 200 --json number,milestone --jq '.[] | select(.milestone == null) | .number'
 
 # Recently updated (to tell stale from active)
-gh issue list --repo stfc/goldilocks-core --state all --limit 10 --search "sort:updated-desc"
+gh issue list --repo junwen94/goldilocks-core --state all --limit 10 --search "sort:updated-desc"
 ```
 
 Close-with-comment pattern (comment first, then close — avoids shell-quoting long bodies):
 
 ```bash
-gh issue comment <N> --repo stfc/goldilocks-core --body-file /tmp/close.md
-gh issue close   <N> --repo stfc/goldilocks-core
+gh issue comment <N> --repo junwen94/goldilocks-core --body-file /tmp/close.md
+gh issue close   <N> --repo junwen94/goldilocks-core
 ```
 
 Triage rules (AGENTS.md issue hygiene): one issue per PR/feature; fold decisions into feature issues; phases are a body checklist; close superseded/duplicate/stale/out-of-scope; never edit others' text — comment instead. Propose closes/folds to the user before executing on someone else's issues.

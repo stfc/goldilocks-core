@@ -11,7 +11,7 @@ Three CIF files are included for trying Goldilocks:
 After installing the default assets, run this from the repository root:
 
 ```bash
-uv run goldilocks compute src/goldilocks_core/examples/structures/Si.cif --preset generate --out si-run
+uv run goldilocks run src/goldilocks_core/examples/structures/Si.cif --out si-run
 ```
 
 In Python, `structure()` returns the path to a bundled file:

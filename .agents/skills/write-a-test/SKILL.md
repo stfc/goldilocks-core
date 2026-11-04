@@ -11,7 +11,7 @@ Use `pytest` directly. No `tox`, no `nox`.
 
 ```bash
 uv run pytest                          # all tests
-uv run pytest tests/test_kmesh.py      # one file
+uv run pytest tests/unit/test_kmesh.py # one file
 uv run pytest -k "test_entry"          # by name
 ```
 
@@ -48,7 +48,7 @@ Tests must not depend on `local_data/` or any private dataset. The test suite mu
 
 ## Naming and location
 
-- Test files: `tests/test_<module>.py`.
+- Test files: `tests/<unit|integration|server|physics>/test_<module>.py`, matching the `unit`/`integration`/`physics` markers in `pyproject.toml`. Most new tests are `unit`.
 - Test functions: `test_<behaviour_description>` — describe what's being verified, not what the function is called.
 - Bad: `test_kmesh_entry` — what about it?
 - Good: `test_kmesh_entry_index_starts_at_one`

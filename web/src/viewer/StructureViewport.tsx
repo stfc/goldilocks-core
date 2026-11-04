@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { StructureInspection } from "../api/coreClient";
 import { StructureFallback } from "./StructureFallback";
+import { formatSiteCount } from "./siteCount";
 import {
   attachStructureViewer,
   type StructureViewer,
@@ -22,6 +23,7 @@ import {
 } from "./structureViewer";
 
 const LATTICE_AXES = ["a", "b", "c"];
+const LATTICE_ANGLES = ["α", "β", "γ"];
 
 export function StructureViewport({
   inspection,
@@ -105,51 +107,38 @@ export function StructureViewport({
             setViewerRevision((revision) => revision + 1);
           }}
         />
-        <Group pos="absolute" top={16} left={16} align="baseline">
-          <Title order={2}>{inspection.structure.reduced_formula}</Title>
-          <Text size="sm">{inspection.structure.site_count} atomic sites</Text>
+        <Group pos="absolute" top={10} left={10} align="baseline" gap={6}>
+          <Title order={3}>{inspection.structure.reduced_formula}</Title>
+          <Text size="xs" c="dimmed">
+            {formatSiteCount(inspection.structure.site_count, "atomic site")}
+          </Text>
         </Group>
-        <Paper pos="absolute" right={16} bottom={16} p="sm" withBorder>
-          <SimpleGrid component="dl" cols={2} spacing="md" m={0}>
-            {lattice.lengths_angstrom.map((length, index) => (
-              <div key={index}>
-                <dt>{LATTICE_AXES[index]}</dt>
-                <dd>{length.toFixed(3)} Å</dd>
-              </div>
-            ))}
-            <div>
-              <dt>V</dt>
-              <dd>{lattice.volume_angstrom3.toFixed(2)} Å³</dd>
-            </div>
-          </SimpleGrid>
-        </Paper>
       </Box>
-      <Paper p="sm" withBorder>
-        <Stack gap="xs">
-          {approximateOccupancies ? (
-            <Text size="sm" role="note">
-              Mixed or partial occupancy: this 3D preview is an approximation
-              and does not faithfully represent site occupancies. Inspect the
-              canonical site details for the exact species and occupancies.
-            </Text>
-          ) : null}
-          <Button
-            fullWidth
-            styles={{ label: { whiteSpace: "normal" } }}
-            onClick={() => {
-              setDetailsOpened(true);
-            }}
-          >
-            Inspect canonical sites and occupancies
-          </Button>
-        </Stack>
-      </Paper>
+      <Stack gap={6} mt={6}>
+        {approximateOccupancies ? (
+          <Text size="xs" c="dimmed" role="note">
+            Mixed or partial occupancy: this 3D preview is an approximation.
+            Inspect the canonical site details for the exact species and
+            occupancies.
+          </Text>
+        ) : null}
+        <Button
+          size="compact-sm"
+          fullWidth
+          styles={{ label: { whiteSpace: "normal" } }}
+          onClick={() => {
+            setDetailsOpened(true);
+          }}
+        >
+          Inspect lattice, sites and occupancies
+        </Button>
+      </Stack>
       <Modal
         opened={detailsOpened}
         onClose={() => {
           setDetailsOpened(false);
         }}
-        title="Canonical sites and occupancies"
+        title="Lattice, sites and occupancies"
         size="lg"
         closeButtonProps={{ "aria-label": "Close canonical site details" }}
       >
@@ -159,6 +148,34 @@ export function StructureViewport({
               Canonical inspection data. Occupancies are fractions of each site;
               coordinates are fractional lattice coordinates.
             </Text>
+            <Paper
+              component="section"
+              aria-label="Lattice parameters"
+              p="sm"
+              withBorder
+            >
+              <Title order={4} mb="xs">
+                Lattice parameters
+              </Title>
+              <SimpleGrid component="dl" cols={3} spacing="md" m={0}>
+                {lattice.lengths_angstrom.map((length, index) => (
+                  <div key={index}>
+                    <dt>{LATTICE_AXES[index]}</dt>
+                    <dd>{length.toFixed(3)} Å</dd>
+                  </div>
+                ))}
+                {lattice.angles_degrees.map((angle, index) => (
+                  <div key={index}>
+                    <dt>{LATTICE_ANGLES[index]}</dt>
+                    <dd>{angle.toFixed(3)}°</dd>
+                  </div>
+                ))}
+                <div>
+                  <dt>V</dt>
+                  <dd>{lattice.volume_angstrom3.toFixed(2)} Å³</dd>
+                </div>
+              </SimpleGrid>
+            </Paper>
             {inspection.structure.sites.map((site, index) => (
               <Paper
                 component="section"

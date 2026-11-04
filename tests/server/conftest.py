@@ -1,149 +1,56 @@
+"""Shared fixtures for HTTP/MCP tests (v2 epic 8, #8).
+
+Unlike v1's own conftest (Service/Runtime/GraphHandler/TaskGraph, all
+gone in v2), these tests run against a real, already-resolvable
+pseudopotential table via the machine's actual asset store -- same
+convention as ``tests/integration/test_cli_v2.py``'s ``real_assets``
+fixture -- rather than hand-building a synthetic asset installation
+for every test file that needs one. The exception is
+``silicon_fixture_table``: one synthetic table, for the few ``run``
+tests that must also run in CI, which installs no assets.
+"""
+
 from __future__ import annotations
 
-import hashlib
-import json
-from collections.abc import Iterator
-from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
-from pymatgen.core import Structure
+from support import sssp_fixture_table_spec
 
-from goldilocks_core.assets.store import AssetStore
+from goldilocks_core.assets.pseudopotentials.importers import sssp_preparer
+from goldilocks_core.assets.runtime import statuses
+from goldilocks_core.assets.store import AssetStore, asset_root
 from goldilocks_core.examples.structures import structure
-from goldilocks_core.pseudo.registry import load_tables
-from goldilocks_core.runtime.dispatch import GraphHandler
-from goldilocks_core.runtime.graph import Preset, Stage, TaskGraph
-from goldilocks_core.runtime.models import Runtime
-from goldilocks_core.runtime.registry import RECORD_TYPE_IDS
-from goldilocks_core.runtime.service import Service
+
+REAL_ASSET_ROOT = asset_root()
 
 
-@dataclass(frozen=True, slots=True)
-class CustomSummary:
-    value: str
+def _default_profile_installed() -> bool:
+    store = AssetStore(REAL_ASSET_ROOT)
+    return all(state == "installed" for _, _, state in statuses("default", store=store))
 
 
 @pytest.fixture
-def sample_structure_path() -> str:
-    return str(structure("Si.cif"))
+def real_assets(monkeypatch: pytest.MonkeyPatch) -> None:
+    if not _default_profile_installed():
+        pytest.skip(f"default asset profile not installed at {REAL_ASSET_ROOT}")
+    monkeypatch.setenv("GOLDILOCKS_ASSET_ROOT", str(REAL_ASSET_ROOT))
 
 
 @pytest.fixture
-def sample_structure_text(sample_structure_path: str) -> str:
-    return Structure.from_file(sample_structure_path).to(fmt="cif")
+def silicon_cif() -> str:
+    return structure("Si.cif").read_text()
 
 
 @pytest.fixture
-def test_service() -> Iterator[Service]:
-    service = Service()
-    yield service
-    service.close()
-
-
-@pytest.fixture
-def custom_record_service() -> Iterator[Service]:
-    registered = dict(RECORD_TYPE_IDS)
-    handler = GraphHandler(
-        spec=TaskGraph(
-            task="custom_task",
-            stages=(
-                Stage(
-                    CustomSummary,
-                    (),
-                    lambda *, ctx: CustomSummary("custom result"),
-                    id="custom_summary",
-                    name="Custom summary",
-                ),
-            ),
-            presets=(Preset("summary", (CustomSummary,)),),
-            selectable_outputs=(CustomSummary,),
-            record_ids=((CustomSummary, "custom_summary"),),
-        ),
-        build_context=lambda request, normalized, runtime: None,
+def silicon_fixture_table(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The synthetic Si SSSP table (``support.sssp_fixture_table_spec``),
+    installed into this test's isolated asset root and registered as the
+    only table: ``run`` then completes for ``silicon_cif`` without the real
+    assets, which CI does not install."""
+    spec, registry_table = sssp_fixture_table_spec(tmp_path / "sources")
+    AssetStore().install(spec, sssp_preparer(registry_table))
+    monkeypatch.setattr(
+        "goldilocks_core.service._pseudo.load_tables",
+        lambda *_args, **_kwargs: {registry_table.id: registry_table},
     )
-    service = Service(task_handlers=(handler,))
-    try:
-        yield service
-    finally:
-        service.close()
-        RECORD_TYPE_IDS.clear()
-        RECORD_TYPE_IDS.update(registered)
-
-
-@pytest.fixture
-def publishable_service(tmp_path) -> Iterator[Service]:
-    sources = tmp_path / "asset-sources"
-    sources.mkdir()
-    pseudo = sources / "Si.UPF"
-    pseudo.write_bytes(b"<UPF version='2.0.1'>HTTP fixture</UPF>\n")
-    licence = sources / "LICENSE.txt"
-    licence.write_text("Fixture licence\n", encoding="utf-8")
-    manifest = sources / "pseudo-table.json"
-    manifest.write_text(
-        json.dumps(
-            {
-                "schema_version": 2,
-                "id": "pseudopotentials/fixture-table",
-                "version": "1",
-                "provider": "sssp",
-                "functional": "PBEsol",
-                "accuracy": "efficiency",
-                "relativistic": "scalar",
-                "licence": "Fixture-Licence",
-                "citation": "Fixture pseudopotential citation.",
-                "entries": [
-                    {
-                        "element": "Si",
-                        "path": "pseudos/Si.UPF",
-                        "md5": hashlib.md5(pseudo.read_bytes()).hexdigest(),
-                        "header_format": "attr",
-                        "pseudo_type": "NC",
-                        "z_valence": 4.0,
-                        "ecutwfc_ry": 30.0,
-                        "ecutrho_ry": 120.0,
-                        "source_identifier": "fixture/Si.UPF",
-                        "frozen_4f_core": False,
-                    }
-                ],
-            }
-        ),
-        encoding="utf-8",
-    )
-    registry = tmp_path / "pseudos.toml"
-    registry.write_text(
-        f'''[tables.fixture-table]
-provider = "sssp"
-upstream_table = "fixture"
-version = "1"
-functional = "PBEsol"
-relativistic = "scalar"
-accuracy = "efficiency"
-licence = "Fixture-Licence"
-citation = "Fixture pseudopotential citation."
-elements = ["Si"]
-default = true
-
-[[tables.fixture-table.files]]
-role = "pseudopotentials"
-path = "pseudos/Si.UPF"
-url = "{pseudo.as_uri()}"
-
-[[tables.fixture-table.files]]
-role = "metadata"
-path = "pseudo-table.json"
-url = "{manifest.as_uri()}"
-
-[[tables.fixture-table.files]]
-role = "licence"
-path = "LICENSE.txt"
-url = "{licence.as_uri()}"
-''',
-        encoding="utf-8",
-    )
-    store = AssetStore(tmp_path / "assets")
-    store.install(load_tables(registry)["fixture-table"].asset)
-    runtime = Runtime(asset_store=store, pseudo_registry_path=registry)
-    service = Service(runtime)
-    yield service
-    service.close()
-    runtime.close()

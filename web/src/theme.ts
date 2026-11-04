@@ -16,33 +16,43 @@ export const colorSchemeManager = localStorageColorSchemeManager({
 });
 
 export const workbenchTheme = createTheme({
-  primaryColor: "gold",
-  primaryShade: 7,
+  primaryColor: "blue",
+  primaryShade: 6,
   autoContrast: true,
   colors: {
-    gold: [
-      "#fff9e7",
-      "#fff0bf",
-      "#ffe38d",
-      "#f8d363",
-      "#e7bd52",
-      "#d5a62b",
-      "#b29043",
-      "#94701b",
-      "#745000",
-      "#4f3700",
+    blue: [
+      "#f0f7ff",
+      "#dbeafe",
+      "#bfdbfe",
+      "#93c5fd",
+      "#60a5fa",
+      "#3b82f6",
+      "#0071e3",
+      "#005bb8",
+      "#004a94",
+      "#003970",
     ],
   },
   fontFamily:
-    'Inter, "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif',
+    '-apple-system, BlinkMacSystemFont, Inter, "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif',
   fontFamilyMonospace: '"IBM Plex Mono", "SFMono-Regular", Consolas, monospace',
-  defaultRadius: 0,
+  defaultRadius: "lg",
+  shadows: {
+    xs: "0 1px 2px rgba(0, 0, 0, 0.04)",
+    sm: "0 2px 6px rgba(0, 0, 0, 0.05)",
+    md: "0 6px 16px rgba(0, 0, 0, 0.07)",
+    lg: "0 16px 32px -12px rgba(0, 0, 0, 0.16)",
+    xl: "0 24px 48px -16px rgba(0, 0, 0, 0.2)",
+  },
   respectReducedMotion: true,
   components: {
     Button: Button.extend({
+      defaultProps: { radius: "xl" },
       styles: { root: { minHeight: 44 } },
     }),
-    ActionIcon: ActionIcon.extend({ defaultProps: { size: 44 } }),
+    ActionIcon: ActionIcon.extend({
+      defaultProps: { size: 44, radius: "xl" },
+    }),
     Input: Input.extend({ styles: { input: { minHeight: 44 } } }),
     NativeSelect: NativeSelect.extend({ defaultProps: { size: "md" } }),
     NumberInput: NumberInput.extend({

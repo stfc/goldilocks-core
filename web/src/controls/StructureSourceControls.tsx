@@ -2,15 +2,16 @@ import { type DragEvent, useRef, useState } from "react";
 import {
   Button,
   FileButton,
+  Group,
   Loader,
   Paper,
-  SimpleGrid,
   Stack,
   Text,
 } from "@mantine/core";
 import { Upload } from "lucide-react";
 
-import type { StructureInspection, StructureSource } from "../api/coreClient";
+import type { StructureInput, StructureInspection } from "../api/coreClient";
+import { formatSiteCount } from "../viewer/siteCount";
 
 export function StructureSourceControls({
   source,
@@ -18,10 +19,10 @@ export function StructureSourceControls({
   inspecting,
   onOpen,
 }: {
-  readonly source: StructureSource | null;
+  readonly source: StructureInput | null;
   readonly inspection: StructureInspection | null;
   readonly inspecting: boolean;
-  readonly onOpen: (source: StructureSource) => Promise<void>;
+  readonly onOpen: (input: StructureInput) => Promise<void>;
 }) {
   const resetFileInput = useRef<(() => void) | null>(null);
   const selectionEpoch = useRef(0);
@@ -43,10 +44,9 @@ export function StructureSourceControls({
       const content = await file.text();
       if (selection !== selectionEpoch.current) return;
       await onOpen({
-        kind: "inline",
-        name: file.name,
-        format: structureFormat(file.name),
-        content,
+        structure_content: content,
+        structure_name: file.name,
+        structure_format: structureFormat(file.name),
       });
     } catch {
       if (selection === selectionEpoch.current) {
@@ -70,75 +70,103 @@ export function StructureSourceControls({
   let sourceHelp = "CIF or POSCAR · 5 MB maximum file size";
   if (source !== null) sourceHelp = "Inspecting structure";
   if (inspection !== null) {
-    sourceHelp = `${String(inspection.structure.site_count)} sites · parsed`;
+    sourceHelp = `${formatSiteCount(inspection.structure.site_count, "site")} · parsed`;
   }
+
+  const dropzoneProps = {
+    onDragEnter: (event: DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      setDragging(true);
+    },
+    onDragOver: (event: DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+    },
+    onDragLeave: () => {
+      setDragging(false);
+    },
+    onDrop: fileDropped,
+    "aria-busy": inspecting,
+    bg: dragging
+      ? "var(--mantine-primary-color-light)"
+      : "var(--mantine-color-body)",
+  };
+
+  const fileButton = (
+    <FileButton
+      resetRef={resetFileInput}
+      onChange={fileSelected}
+      disabled={inspecting}
+    >
+      {(fileButtonProps) => (
+        <Button
+          {...fileButtonProps}
+          variant="subtle"
+          type="button"
+          aria-describedby="structure-source-help"
+          aria-label={
+            source === null
+              ? "Choose a CIF or POSCAR structure"
+              : "Replace structure file"
+          }
+          disabled={inspecting}
+        >
+          {source === null ? "Browse files" : "Replace file"}
+        </Button>
+      )}
+    </FileButton>
+  );
 
   return (
     <>
-      <Paper
-        withBorder
-        p="md"
-        bg={
-          dragging
-            ? "var(--mantine-primary-color-light)"
-            : "var(--mantine-color-body)"
-        }
-        onDragEnter={(event) => {
-          event.preventDefault();
-          setDragging(true);
-        }}
-        onDragOver={(event) => {
-          event.preventDefault();
-        }}
-        onDragLeave={() => {
-          setDragging(false);
-        }}
-        onDrop={fileDropped}
-        aria-busy={inspecting}
-      >
-        <Stack align="center" gap="xs">
-          {inspecting ? (
-            <Loader size="sm" aria-hidden="true" />
-          ) : (
+      {/* Once a structure is loaded the viewer needs most of this card's
+       * height, so the dropzone collapses from the spacious first-run
+       * empty state into a single compact status row (same drop target,
+       * same controls) instead of staying full-size forever. */}
+      {source === null ? (
+        <Paper withBorder p="md" {...dropzoneProps}>
+          <Stack align="center" gap="xs">
             <Upload aria-hidden="true" size={18} />
-          )}
-          <Text fw={600} truncate w="100%" ta="center">
-            {source?.name ?? "Drop a structure"}
-          </Text>
-          <Text id="structure-source-help" c="dimmed" size="sm" ta="center">
-            {sourceHelp}
-          </Text>
-          <FileButton
-            resetRef={resetFileInput}
-            onChange={fileSelected}
-            disabled={inspecting}
-          >
-            {(fileButtonProps) => (
-              <Button
-                {...fileButtonProps}
-                variant="subtle"
-                type="button"
-                aria-describedby="structure-source-help"
-                aria-label={
-                  source === null
-                    ? "Choose a CIF or POSCAR structure"
-                    : "Replace structure file"
-                }
-                disabled={inspecting}
-              >
-                {source === null ? "Browse files" : "Replace file"}
-              </Button>
+            <Text fw={600} truncate w="100%" ta="center">
+              Drop a structure
+            </Text>
+            <Text id="structure-source-help" c="dimmed" size="sm" ta="center">
+              {sourceHelp}
+            </Text>
+            {fileButton}
+          </Stack>
+        </Paper>
+      ) : (
+        <Paper withBorder p="xs" {...dropzoneProps}>
+          <Stack gap={4}>
+            {/* The filename gets its own full-width row -- sharing a row
+             * with the site-count/status text left too little room for
+             * either, so both truncated into near-unreadable fragments. */}
+            <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+              {inspecting ? (
+                <Loader size="xs" aria-hidden="true" />
+              ) : (
+                <Upload aria-hidden="true" size={16} />
+              )}
+              <Text fw={600} truncate>
+                {source.structure_name}
+              </Text>
+            </Group>
+            <Group justify="space-between" wrap="nowrap" gap="xs">
+              <Text id="structure-source-help" c="dimmed" size="sm" truncate>
+                {sourceHelp}
+              </Text>
+              {fileButton}
+            </Group>
+            {inspection === null ? null : (
+              <StructureSummary inspection={inspection} />
             )}
-          </FileButton>
-        </Stack>
-      </Paper>
+          </Stack>
+        </Paper>
+      )}
       {readError === null ? null : (
         <Text c="red" size="sm" role="alert">
           {readError}
         </Text>
-      )}
-      {inspection === null ? null : (
-        <StructureSummary inspection={inspection} />
       )}
     </>
   );
@@ -157,47 +185,19 @@ function StructureSummary({
       ),
     ),
   ];
+  // No periodicity token: pymatgen marks every CIF/POSCAR fully periodic,
+  // so it never varies, and next to the formula it reads as the
+  // structure's dimensionality (a monolayer would show "3D").
   return (
-    <SimpleGrid
-      component="dl"
-      cols={2}
-      mt="md"
-      mb={0}
+    <Text
+      size="sm"
+      c="dimmed"
+      truncate
       aria-label="Inspected structure summary"
     >
-      <div>
-        <Text component="dt" c="dimmed" size="sm">
-          Formula
-        </Text>
-        <Text component="dd" m={0}>
-          {structure.formula}
-        </Text>
-      </div>
-      <div>
-        <Text component="dt" c="dimmed" size="sm">
-          Elements
-        </Text>
-        <Text component="dd" m={0}>
-          {elements.join(" · ")}
-        </Text>
-      </div>
-      <div>
-        <Text component="dt" c="dimmed" size="sm">
-          Cell volume
-        </Text>
-        <Text component="dd" m={0}>
-          {structure.lattice.volume_angstrom3.toFixed(1)} Å³
-        </Text>
-      </div>
-      <div>
-        <Text component="dt" c="dimmed" size="sm">
-          Periodicity
-        </Text>
-        <Text component="dd" m={0}>
-          {structure.periodicity.every(Boolean) ? "3D" : "Partial"}
-        </Text>
-      </div>
-    </SimpleGrid>
+      {structure.formula} · {elements.join(" ")} ·{" "}
+      {structure.lattice.volume_angstrom3.toFixed(1)} Å³
+    </Text>
   );
 }
 

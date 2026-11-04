@@ -1,93 +1,80 @@
 # goldilocks-core
 
-Python package for DFT input recommendation.
+Upstream Python package for DFT input recommendation.
 
 ## Commands
 
 ```bash
 uv sync --group dev
-uv run just check       # lint + complexity ceilings + pytest with branch coverage
-uv run just mutation    # focused mutation testing against the score gate
-uv run just web-check   # workbench frontend: lint + vitest + build
-uv run just dist        # build the sdist/wheel and validate its contents
-uv run just image-e2e   # production image build + Playwright e2e suite
+uv run poe check        # ruff check + format gate + pytest
+uv run poe web-check    # workbench frontend: lint + vitest + build
 uv run pre-commit run --all-files
 ```
 
-`uv run just` lists all recipes, including `workbench` (backend :8000 + Vite
-:5173 in one command).
+`uv run poe` lists tasks, including `workbench` (backend :8000 + Vite :5173 in one command).
 
-Every check has one entry point: a `just` recipe, an npm script, or a
-`scripts/` file. Workflows and pre-commit call these entry points and do not
-inline check commands. CI on `main` and PRs runs `just check` and
-`just mutation`. The full gate inventory and release flow are in
-[docs/contributing.md](docs/contributing.md).
-
-## Releases
-
-- One version for the repository, owned by `pyproject.toml`. The frontend
-  ships inside the image and carries no version of its own.
-- `uv run just bump <target>` edits the version and `uv.lock` and prints the
-  tag to use.
-- Publishing happens on `v*` tags and the nightly schedule only — never on
-  merges or PRs. The publish job refuses a tag that does not match the
-  version.
-- Artifacts: `ghcr.io/stfc/goldilocks-workbench` (semver + `latest` on tags,
-  `nightly` from the schedule) and sdist/wheel as GitHub Release assets.
-  Nothing is published to PyPI.
+Run `pre-commit` before committing. CI (on `main` and PRs) runs Ruff, pytest with branch coverage, focused mutation testing, and distribution validation — all via `uv` — plus a `workbench` job that builds/lints/tests the Node frontend and runs `docker build --check`. Building and booting the production Docker image and running the real Playwright e2e suite against it happen only for release tags, where they gate PyPI publishing, or on demand with `gh workflow run workbench-image.yml --ref <branch>` once that workflow is on the repository's default branch.
 
 ## Code style
 
-- Ruff `E`, `F`, `I`; Python 3.12; 4-space indent; `snake_case`.
-- Domain modules, not generic buckets — no `helpers/`, `utils/`,
-  `processing/`.
-- One clear API: no compatibility shims, legacy aliases, or duplicate import
-  paths unless backward compatibility is asked for.
-- Docstrings state what it does, returns, assumes — not essays.
-- Deep modules, composition over inheritance; do not abstract early.
-- When a bug appears, change the design that allowed it, not the symptom.
-- Validate operator input, external metadata, rendered syntax, and filesystem
-  writes. Trust records produced by internal stages.
+- Ruff `E`, `F`, `I`. Target Python 3.12.
+- Domain modules, not generic buckets — no `helpers/`, `utils/`, or `processing/`.
+- One clear API; no compatibility shims, legacy aliases, or duplicate import paths unless the user asks for backward compatibility.
+- `snake_case` everywhere; no `CamelCase` except string literals matching external formats.
+- Docstrings: factual — what it does, returns, assumes. Not essays.
+- Prefer modular design using SOLID principles and deep modules.
+- Composition over inheritance, and do not prematurely abstract.
+- If you run into a bug, rather than putting out fires you should think what design will make this error impossible.
+- Validate operator input, external metadata, rendered syntax, and filesystem writes.
+- Trust records produced by internal stages; do not test deliberately corrupted internals.
 - Let errors propagate; no catch-all fallbacks or failure-state machinery.
 
 ## Tests
 
-- Test scientific behavior, public APIs, and end-to-end workflows.
-- Mutation testing guards assertion strength. Do not add production complexity
-  for coverage or mutation metrics.
+- Prioritize scientific behavior, public APIs, and end-to-end workflows; keep unit, integration, and physics tests distinct.
+- Use focused mutation testing to detect weak assertions.
+- Do not add production complexity solely to satisfy coverage or mutation metrics.
 
-## Where things go
+## What doesn't belong here
 
-- Notebooks → `notebooks/` (gitignored); convert insights into tests.
-- Model and pseudopotential files → `local_data/` (gitignored).
+- Jupyter notebooks — `notebooks/` (gitignored); convert insights into tests.
+- Large ML model files or pseudo libraries — `local_data/` (gitignored).
+
+## Coordination layer
+
+Issues, PR descriptions, milestones, epics, labels, and the roadmap are the project's shared map. They must be accurate and minimal — slop here rots everyone's ability to coordinate.
 
 ## Rules
 
-- Run `catchup` at the start of every session.
-- Never push to `main`; all changes arrive through PRs.
-- Never overwrite the `main` branch (N.B. this isalready enforced by branch protection).
-  If a human repo admin does this, flag it immediately as a severe incident to other contributors as they should not be doing this
-- Every PR closes an issue (`Closes #N`).
-- PR descriptions are written by a human, always. Agents never draft them.
-- Never edit or delete GitHub text written by someone else; add a comment
-  instead. An agent may edit its own text when asked or when maintaining a
-  plan it created.
-- Agent-written issues and comments include
-  `Written by an agent on behalf of <user>.`
+- **Run `catchup` at the start of every session.**
+- Never push or merge directly to `main` — all changes arrive through PRs.
+- Every PR must close an issue (`Closes #N`).
+- **PR descriptions are written by a human, always.**
+- Never edit or delete GitHub text authored by someone else (issue bodies, PR descriptions, comments, reviews). Add new information as a comment. An agent may edit its own GitHub text only when explicitly asked or when maintaining a plan it created.
+- Any GitHub issue, issue comment, or review comment written by an agent must include `Written by an agent on behalf of <user>.` PR descriptions are never agent-written.
 - Use `uv`, not `pip`.
 
-## Issues
+## Issue hygiene
 
-An issue is a shippable unit of work someone can turn into a PR. Before
-filing:
+An issue is a shippable unit of work that someone turns into a PR — not a note, a placeholder, or a roadmap mirror. File an issue only when the work is concrete enough to start. Issues may be agent-written (this is normal); an agent writing one on behalf of a user applies these rules as a gate — it does not relay a request that fails the bar.
 
-- State the problem and a proposed approach. "Scope still to be worked out"
-  means it is not ready.
-- Search open and recently closed issues first; extend rather than duplicate.
-- Core scope excludes frontend/GUI, auth/sessions, pod management, AiiDA
-  workflows, and infra/ops; those need maintainer sign-off for a core issue.
-- One issue per PR/feature. Phases are a checklist inside the issue, not
-  sub-issues; decisions are not issues.
-- Every issue has a milestone.
-- Filing more than three issues in a session, or creating new structure
-  (milestone, epic, label), needs maintainer agreement first.
+**Before filing, the issue must clear:**
+
+- **Problem + proposed approach, not a placeholder.** State the concrete problem and a proposed approach. "Scope and design still to be worked out" means it is not ready — do the design first; an unplanned deliverable is not an issue.
+- **No roadmap mirroring.** Don't file one issue per roadmap bullet to "make the milestone reflect its real scope." A milestone tracks work being done, not populated for its own sake; an unplanned deliverable stays on the roadmap, not as an open issue.
+- **Scope gate.** Check "What doesn't belong here" first. Frontend/GUI, auth/sessions, pod management, AiiDA workflows, and pure infra/ops are not core features. An out-of-scope-layer item needs maintainer sign-off before it gets a core issue.
+- **Reuse before creating.** Search open *and recently closed* issues first; extend rather than duplicate. If a closed issue's design is stale, fold the fresh design into the new issue and point at the closed one — don't silently re-derive.
+- **Check live state.** Read open issues, recent merged PRs, and any open decision the issue depends on. An issue filed on a premise a same-day decision overturned is stale on arrival; cite the controlling decision.
+
+**Structure:**
+
+- **One issue per PR/feature.** An issue is a shippable unit; decisions, discussions, and sub-steps go inside the feature issue, not as standalone issues.
+- **Decisions are not issues.**
+- **Phases, not sub-issues.** Multi-phase work is one issue with a phase checklist; don't pre-file sub-issues for work that hasn't started.
+- **One structural change, one issue.** Milestone realignment, epic creation, repo chores: one issue with a checklist, not a pair and not a fleet of epics. Don't pre-create epic-index issues for work-streams with no live children — label grouping is enough until an epic issue earns its keep.
+- **Every issue has a milestone.** If none fits, propose one before filing.
+
+**Process:**
+
+- **Coordinate before burst-filing or structural change.** Filing more than three issues in a session, or any issue that creates new structure (milestone, epic, label) or re-aligns the board, needs prior maintainer agreement.
+- **Triage periodically.** Use `catchup` to surface candidates and `triage` to run the pass.

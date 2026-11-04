@@ -5,6 +5,8 @@ DEFAULT_PROFILE = RuntimeProfile(
     assets=(
         AssetReference("models/qrf-kpoints", "QRF95"),
         AssetReference("models/metallicity-cgcnn", "1"),
+        AssetReference("models/is-metal-classifier", "1"),
+        AssetReference("models/is-magnetic-classifier", "1"),
         AssetReference("pseudopotentials/pseudodojo-pbesol-efficiency-sr", "0.4"),
     ),
 )

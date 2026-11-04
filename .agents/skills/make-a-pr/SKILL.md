@@ -58,9 +58,9 @@ The human opens the PR and writes the body. If the human hands you a body file *
 
 ## After the human opens the PR
 
-- Get the PR number: `gh pr list --repo stfc/goldilocks-core --head "$(git branch --show-current)" --json number --jq '.[0].number'`.
+- Get the PR number: `gh pr list --repo junwen94/goldilocks-core --head "$(git branch --show-current)" --json number --jq '.[0].number'`.
 - Confirm the PR body includes `Closes #N` — flag it to the human if missing (it is their responsibility, not yours to write).
-- The linked issue must have a milestone; assign one before merge if it doesn't (`gh api repos/stfc/goldilocks-core/issues/<N> --method PATCH -F milestone=<id>`).
+- The linked issue must have a milestone; assign one before merge if it doesn't (`gh api repos/junwen94/goldilocks-core/issues/<N> --method PATCH -F milestone=<id>`).
 - Inspect CI: `gh pr checks <number>`. For detail, `gh run list --branch <branch>` and `gh run view <run-id> --log`. If there is no CI, say so plainly.
 - Respond to review comments by pushing new commits — don't force-push reviewed code unless asked.
 

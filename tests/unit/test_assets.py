@@ -4,7 +4,6 @@ import os
 import random
 import re
 import shutil
-import sys
 import threading
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -15,7 +14,7 @@ import pytest
 import requests
 
 from goldilocks_core.assets import runtime as asset_runtime
-from goldilocks_core.assets.download import _RETRIES, download
+from goldilocks_core.assets.download import _RETRIES, _SOURCE_ATTEMPTS, download
 from goldilocks_core.assets.records import AssetFile, AssetInstallation, AssetSpec
 from goldilocks_core.assets.runtime import catalogue, references
 from goldilocks_core.assets.store import (
@@ -62,8 +61,24 @@ def test_install_publishes_only_complete_verified_asset(tmp_path: Path) -> None:
     installed = store.install(source_spec(source, checksum=f"sha256:{checksum}"))
 
     assert installed.path("data/payload.bin").read_bytes() == b"verified payload"
+    assert installed.read_bytes("data/payload.bin") == b"verified payload"
     assert store.status("models/example", "1") == "installed"
     assert not list((tmp_path / "store").glob(".example-*"))
+
+
+def test_read_bytes_raises_key_error_on_an_unknown_path_like_path_does(
+    tmp_path: Path,
+) -> None:
+    """v2 epic 3 (#4) bug fix: ``read_bytes`` used to raise a bare
+    ``StopIteration`` here instead of ``KeyError``, unlike its sibling
+    ``path()`` on the same failure mode (assets/records.py)."""
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"payload")
+    store = AssetStore(tmp_path / "store")
+    installed = store.install(source_spec(source))
+
+    with pytest.raises(KeyError, match="no file 'missing'"):
+        installed.read_bytes("missing")
 
 
 def test_failed_install_leaves_no_false_installed_state(tmp_path: Path) -> None:
@@ -90,7 +105,7 @@ def test_verify_detects_changed_and_extra_files(tmp_path: Path) -> None:
         store.verify("models/example", "1")
 
     installed.path("data/payload.bin").write_bytes(b"payload")
-    (installed.root / "extra").write_text("unexpected", encoding="utf-8")
+    (installed.root / "extra").write_text("unexpected")
     with pytest.raises(AssetCorrupt, match="file set"):
         store.verify("models/example", "1")
 
@@ -144,7 +159,6 @@ def test_install_repairs_a_corrupt_asset(tmp_path: Path) -> None:
     assert store.status("models/example", "1") == "installed"
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX fifo fixture")
 def test_install_repairs_non_directory_asset_paths(tmp_path: Path) -> None:
     source = tmp_path / "source.bin"
     source.write_bytes(b"payload")
@@ -152,7 +166,7 @@ def test_install_repairs_non_directory_asset_paths(tmp_path: Path) -> None:
     store.root.mkdir()
     asset_id_path = store.root / "models" / "example"
     asset_id_path.parent.mkdir()
-    asset_id_path.write_text("corrupt", encoding="utf-8")
+    asset_id_path.write_text("corrupt")
 
     installed = store.install(source_spec(source))
 
@@ -222,7 +236,6 @@ def test_process_concurrent_installers_publish_one_valid_asset(
     )
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX fifo fixture")
 def test_verify_rejects_non_regular_installed_paths(tmp_path: Path) -> None:
     source = tmp_path / "source.bin"
     source.write_bytes(b"payload")
@@ -324,7 +337,7 @@ def test_download_fails_after_exhausted_retries(tmp_path: Path) -> None:
         thread.join(timeout=5)
         server.server_close()
 
-    assert served["count"] == 4
+    assert served["count"] == 12
 
 
 def _ranged_server(
@@ -496,7 +509,7 @@ def test_download_fails_when_ranges_persistently_fail(tmp_path: Path) -> None:
         thread.join(timeout=5)
         server.server_close()
 
-    assert served["requests"] == 1 + 1 + _RETRIES.total
+    assert served["requests"] == _SOURCE_ATTEMPTS * (1 + 1 + _RETRIES.total)
 
 
 def test_references_resolves_bare_registry_table_id() -> None:

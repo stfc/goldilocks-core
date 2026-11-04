@@ -4,14 +4,132 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  UV_FROZEN: "1"
+  UV_NO_PROGRESS: "1"
+
 jobs:
-  quality:
-    uses: ./.github/workflows/quality.yml
+  # Lint and pytest, and mutation testing, run as two parallel jobs with
+  # budgets of their own (#237). As one job they shared a 45-minute ceiling,
+  # and on the public runners pytest took 7 to 14 minutes and mutation testing
+  # 15 to 28 from one run to the next, so a slow runner cut the job off
+  # (#234's first run) although nothing in it had changed.
+  quality-and-test:
+    name: Quality and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv, the dependencies and enumlib
+        uses: ./.github/actions/core-setup
+
+      - name: Ruff check
+        run: uv run ruff check src tests scripts
+
+      - name: Ruff format check
+        run: uv run ruff format --check src tests scripts
+
+      - name: Import and cyclomatic complexity ceilings
+        run: uv run python scripts/check_complexity.py
+
+      - name: Pytest with branch coverage
+        run: >-
+          uv run pytest --cov --cov-report=term-missing:skip-covered
+          --cov-report=xml
+
+  mutation:
+    name: Mutation testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # enumlib too: the real-enumlib tests in tests/unit run under each mutant.
+      - name: Install uv, the dependencies and enumlib
+        uses: ./.github/actions/core-setup
+
+      - name: Mutation testing
+        # `shell: bash` adds -o pipefail to the default `bash -e`, so a score
+        # below --minimum fails the step despite the pipe into tee.
+        shell: bash
+        run: |
+          # --max-children 4: the public ubuntu-latest runner has 4 vCPUs.
+          # Commit aabcefd had lowered it to 2 for a pid-tracking race
+          # (KeyError in read_one_child_exit_status, #76). The forkserver
+          # process isolation in pyproject.toml is what makes more than 2
+          # children safe: its reap loop ignores pids it did not start (#104).
+          # If the KeyError returns, go back to --max-children 2.
+          uv run mutmut run --max-children 4
+          uv run mutmut export-cicd-stats
+          uv run python scripts/check_mutation_score.py \
+            mutants/mutmut-cicd-stats.json --minimum 0.86 \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+  workbench:
+    name: Workbench types, tests, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.3"
+          enable-cache: true
+
+      - name: Install frozen HTTP dependencies
+        run: uv sync --frozen --no-dev --extra http
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install frozen Workbench dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Lint, test, and build Workbench
+        working-directory: web
+        run: npm run check
+
+      # Lints the Dockerfile only. Building the image downloads every runtime
+      # asset, so the build and browser e2e run in workbench-image.yml, for
+      # release tags and on dispatch (#205).
+      - name: Check production image definition
+        run: docker build --check .
+
+  package-build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.3"
+          enable-cache: false
+
+      - name: Check the package and the Workbench library share one version
+        run: python scripts/check_release_version.py
+
+      - name: Build source and wheel distributions
+        run: uv build --no-sources
+
+      - name: Verify distribution contents
+        run: python scripts/validate_distribution.py dist

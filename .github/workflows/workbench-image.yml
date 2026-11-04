@@ -1,0 +1,86 @@
+name: workbench-image
+
+# Builds the production Workbench image, boots it, and runs the Playwright
+# e2e suite against it. Not run on PRs (#205): the image build downloads every
+# runtime asset from three hosts, so an outage of any one failed every PR.
+# release.yml calls it before publishing; run it on demand with
+# `gh workflow run workbench-image.yml --ref <branch>` (workflow_dispatch
+# needs this file on the repository's default branch).
+on:
+  workflow_call:
+    inputs:
+      keep-image:
+        description: Upload the tested image as the artifact workbench-image.
+        type: boolean
+        default: false
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  UV_FROZEN: "1"
+  UV_NO_PROGRESS: "1"
+
+jobs:
+  image-e2e:
+    name: Workbench image and browser e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.3"
+          enable-cache: true
+
+      # test:e2e's pretest:e2e hook exports the OpenAPI schema through uv run.
+      - name: Install frozen HTTP dependencies
+        run: uv sync --frozen --no-dev --extra http
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install frozen Workbench dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Build production Workbench image
+        run: docker build --tag goldilocks-workbench:e2e .
+
+      - name: Install Chromium
+        working-directory: web
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Exercise real-server browser workflow
+        working-directory: web
+        run: |
+          docker run --detach --name goldilocks-workbench-e2e \
+            --publish 8000:8000 goldilocks-workbench:e2e
+          trap 'docker rm --force goldilocks-workbench-e2e' EXIT
+          for attempt in {1..120}; do
+            curl --fail --silent http://127.0.0.1:8000/ready && break
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:8000/ready
+          npm run test:e2e
+
+      # release.yml publishes this exact image: a rebuild would download every
+      # runtime asset again and ship an image the e2e suite never ran against.
+      - name: Save the tested image
+        if: inputs.keep-image
+        run: docker save --output workbench-image.tar goldilocks-workbench:e2e
+
+      - name: Upload the tested image
+        if: inputs.keep-image
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: workbench-image
+          path: workbench-image.tar
+          retention-days: 1

@@ -1,12 +1,14 @@
 import { VisuallyHidden } from "@mantine/core";
 import type { WorkspaceOperation } from "../workspace/workspace";
 
+/** The request in flight, or else whether something waits for the user
+ * (`pipelineStatus.needsAttention`). */
 export function OperationStatus({
   operation,
-  hasFailure,
+  needsAttention,
 }: {
   readonly operation: WorkspaceOperation | null;
-  readonly hasFailure: boolean;
+  readonly needsAttention: boolean;
 }) {
   return (
     <VisuallyHidden
@@ -15,7 +17,7 @@ export function OperationStatus({
       aria-live="polite"
       aria-atomic="true"
     >
-      {operationMessage(operation, hasFailure)}
+      {operationMessage(operation, needsAttention)}
     </VisuallyHidden>
   );
 }
@@ -23,13 +25,14 @@ export function OperationStatus({
 const OPERATION_MESSAGES: Readonly<Record<WorkspaceOperation, string>> = {
   capabilities: "Loading capabilities",
   inspect: "Inspecting structure",
-  compute: "Computing recommendation",
+  explain: "Computing recommendation",
+  preview: "Generating input files",
 };
 
 function operationMessage(
   operation: WorkspaceOperation | null,
-  hasFailure: boolean,
+  needsAttention: boolean,
 ): string {
-  if (hasFailure) return "Needs attention";
-  return operation === null ? "Ready" : OPERATION_MESSAGES[operation];
+  if (operation !== null) return OPERATION_MESSAGES[operation];
+  return needsAttention ? "Needs attention" : "Ready";
 }

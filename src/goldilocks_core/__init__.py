@@ -1,70 +1,19 @@
+"""goldilocks_core: DFT input advice and generation for Quantum ESPRESSO.
+
+Deliberately re-exports nothing (v2 epic 9, #9, cutover). v1's
+``__init__.py`` flattened its whole ``Service``/``compute``/
+``ComputeRequest`` surface here; v2 has no equivalent single facade to
+re-export, by design (``service/__init__.py``'s own docstring: "the
+public API stays flat" at *that* level, not this one). The real entry
+points are the packages themselves:
+
+- ``goldilocks_core.service`` -- ``advise``/``check``/``generate`` (and
+  the other tasks' own, such as the ``dos`` task's ``advise_dos``/
+  ``check_dos``/``generate_dos`` and the ``band`` task's ``advise_band``/
+  ``check_band``/``generate_band``; ``TASK_PHASES`` holds every task's),
+  the programmatic API
+- ``goldilocks_core.cli`` -- the ``goldilocks`` command-line entry point
+- ``goldilocks_core.server`` -- the HTTP and MCP transports
+"""
+
 from __future__ import annotations
-
-from goldilocks_core.advice.parameters import ParameterAdvice
-from goldilocks_core.analysis import StructureAnalysisRecord
-from goldilocks_core.calculation import CalculationHints, CalculationIntent
-from goldilocks_core.generation.files import GeneratedFiles
-from goldilocks_core.input_data import DftInputData
-from goldilocks_core.io.structures import (
-    InlineStructureSource,
-    InMemoryStructureSource,
-    PathStructureSource,
-    StructureSource,
-)
-from goldilocks_core.kmesh.resolve import KPointSelection
-from goldilocks_core.ml.models import ModelSpec
-from goldilocks_core.pseudo.metadata import PseudoMetadata
-from goldilocks_core.publication import (
-    ArchiveOutput,
-    DirectoryOutput,
-    OutputTarget,
-)
-from goldilocks_core.request import (
-    CalculationDraft,
-    ComputeRequest,
-    PresetSelection,
-    RecordSelection,
-)
-from goldilocks_core.result import ComputationResult
-from goldilocks_core.runtime.dispatch import (
-    Dispatcher,
-    UnavailableRecord,
-    UnknownTask,
-)
-from goldilocks_core.runtime.graph import UnknownPreset
-from goldilocks_core.runtime.models import KMeshService, Runtime
-from goldilocks_core.runtime.service import Service, compute
-from goldilocks_core.selection import SelectionRecord
-
-__all__ = [
-    "ArchiveOutput",
-    "CalculationDraft",
-    "CalculationHints",
-    "CalculationIntent",
-    "ComputationResult",
-    "ComputeRequest",
-    "DftInputData",
-    "DirectoryOutput",
-    "Dispatcher",
-    "GeneratedFiles",
-    "InMemoryStructureSource",
-    "InlineStructureSource",
-    "KMeshService",
-    "KPointSelection",
-    "ModelSpec",
-    "OutputTarget",
-    "ParameterAdvice",
-    "PathStructureSource",
-    "PresetSelection",
-    "PseudoMetadata",
-    "RecordSelection",
-    "Runtime",
-    "SelectionRecord",
-    "Service",
-    "StructureAnalysisRecord",
-    "StructureSource",
-    "UnavailableRecord",
-    "UnknownPreset",
-    "UnknownTask",
-    "compute",
-]

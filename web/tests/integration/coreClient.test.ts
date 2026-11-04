@@ -1,323 +1,371 @@
-import { strToU8, zipSync } from "fflate";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   CoreFailure,
   HttpCoreClient,
-  type ComputationResult,
+  findingsOf,
+  type BlockingFinding,
   type ComputeRequest,
+  type MagneticOrderingsRequest,
 } from "../../src/api/coreClient";
 import {
   capabilities,
-  computationResult as inputDataResult,
+  explainResult,
   inspection,
-  source,
+  runResult,
+  structureInput,
 } from "../support/workbenchFixtures";
 
 const request: ComputeRequest = {
-  draft: {
-    structure: source,
-    intent: capabilities.default_intent,
-    hints: capabilities.default_hints,
-  },
-  selection: { preset: "generate" },
-};
-
-const computationResult: ComputationResult = {
-  schema_version: 1,
+  structure_content: structureInput.structure_content,
+  structure_name: structureInput.structure_name,
+  structure_format: "cif",
+  code: "quantum_espresso",
   task: "scf_single_point",
-  task_revision: "1",
-  selection: { preset: "generate" },
-  publication: null,
-  warnings: [],
-  records: {
-    generated_files: [
-      { path: "inputs/qe.in", role: "input", content: "&CONTROL\n/" },
-    ],
-  },
-  draft: {
-    structure: inspection,
-    intent: capabilities.default_intent,
-    hints: {
-      conv_thr: null,
-      electron_maxstep: null,
-      k_grid: null,
-      k_spacing: null,
-      mixing_beta: null,
-      pseudo_accuracy: null,
-      pseudo_type: null,
-      relativistic_mode: null,
-      smearing_type: null,
-      smearing_width_ry: null,
-      spin_orbit_coupling: null,
-      spin_polarized: null,
-      use_vdw: null,
-      vdw_method: null,
-    },
-    pseudo_metadata: null,
-    pseudo_root: null,
-    pseudo_table: null,
-    kmesh_model: null,
-  },
+  hpc: null,
+  overrides: {},
+  fetch_missing: false,
 };
 
-function preparedResponse(
-  result: unknown,
-  archive?: BlobPart,
-  filename = "goldilocks-inputs.zip",
-): Response {
-  const form = new FormData();
-  form.set(
-    "result",
-    new Blob([JSON.stringify(result)], { type: "application/json" }),
-    "result.json",
-  );
-  if (archive !== undefined) {
-    form.set(
-      "archive",
-      new Blob([archive], { type: "application/zip" }),
-      filename,
-    );
-  }
-  const response = new Response(null, {
-    headers: { "Content-Type": "multipart/form-data; boundary=test" },
-  });
-  vi.spyOn(response, "formData").mockResolvedValue(form);
-  return response;
-}
-
-function manifestArchive(manifest: string): ArrayBuffer {
-  return zipSync({
-    "goldilocks.json": new Uint8Array(strToU8(manifest)),
-    "pseudo/Si.upf": new Uint8Array(strToU8("UPF content")),
-  }).buffer as ArrayBuffer;
-}
+const npoolFinding: BlockingFinding = {
+  code: "parallelisation.npool_does_not_divide_ntasks",
+  fields: ["npool", "ntasks"],
+  message:
+    "npool=7 does not divide ntasks=64, and pw.x refuses that layout. Unset npool for the default, or set npool to a divisor of ntasks.",
+  summary:
+    "npool must divide the job's task count: choose a divisor, or leave npool automatic.",
+  remedies: [{ npool: null }],
+};
 
 describe("HttpCoreClient", () => {
-  it("contains an archive filename supplied by an untrusted response", async () => {
-    const client = new HttpCoreClient(
-      "",
-      vi
+  describe("capabilities", () => {
+    it("loads Capabilities as generated Core types", async () => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(Response.json(capabilities));
+      const client = new HttpCoreClient("/core", fetcher);
+
+      await expect(client.capabilities()).resolves.toEqual(capabilities);
+      expect(fetcher).toHaveBeenCalledWith("/core/capabilities", {
+        headers: { Accept: "application/json" },
+        method: "GET",
+      });
+    });
+
+    it("rejects a vocabulary_version the frontend wasn't built against", async () => {
+      const fetcher = vi
         .fn<typeof fetch>()
         .mockResolvedValue(
-          preparedResponse(
-            computationResult,
-            "reviewed ZIP bytes",
-            "../escape.zip",
-          ),
-        ),
-    );
+          Response.json({ ...capabilities, vocabulary_version: "3" }),
+        );
+      const client = new HttpCoreClient("", fetcher);
 
-    const prepared = await client.compute(request);
-
-    expect(prepared.archive?.filename).toBe("goldilocks-inputs.zip");
-    await expect(prepared.archive?.blob.text()).resolves.toBe(
-      "reviewed ZIP bytes",
-    );
-  });
-
-  it("rejects JSON operations with the wrong content type", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify(capabilities), {
-        headers: { "Content-Type": "text/plain" },
-      }),
-    );
-    const client = new HttpCoreClient("", fetcher);
-
-    await expect(client.capabilities()).rejects.toMatchObject({
-      kind: "invalid_response",
-      message: "Goldilocks Core returned an invalid JSON response.",
-      retryable: false,
-      rawResponse: capabilities,
+      await expect(client.capabilities()).rejects.toMatchObject({
+        kind: "incompatible_vocabulary",
+      });
     });
-  });
 
-  it("reports a retryable network failure", async () => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockRejectedValue(new TypeError("connection refused"));
-    const client = new HttpCoreClient("", fetcher);
+    it("rejects a response with the wrong content type", async () => {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(JSON.stringify(capabilities), {
+          headers: { "Content-Type": "text/plain" },
+        }),
+      );
+      const client = new HttpCoreClient("", fetcher);
 
-    await expect(client.capabilities()).rejects.toMatchObject({
-      name: "CoreFailure",
-      kind: "network_error",
-      message: "Cannot reach Goldilocks Core: connection refused",
-      retryable: true,
-      status: null,
+      await expect(client.capabilities()).rejects.toMatchObject({
+        kind: "invalid_response",
+        message: "Goldilocks Core returned an invalid JSON response.",
+      });
     });
-  });
 
-  it("converts a Core error envelope into one typed failure", async () => {
-    const payload = {
-      error: {
-        kind: "temporary_failure",
-        message: "Temporary Core failure.",
-        retryable: true,
+    it("reports a network failure", async () => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockRejectedValue(new TypeError("connection refused"));
+      const client = new HttpCoreClient("", fetcher);
+
+      await expect(client.capabilities()).rejects.toMatchObject({
+        name: "CoreFailure",
+        kind: "network_error",
+        message: "Cannot reach Goldilocks Core: connection refused",
+        status: null,
+      });
+    });
+
+    it("converts a Core error envelope into one typed failure", async () => {
+      const payload = {
+        error: {
+          kind: "advice_incomplete",
+          message:
+            "cannot generate a runnable input: pseudopotential unavailable",
+          details: { attempt: 2 },
+        },
+      };
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(Response.json(payload, { status: 424 }));
+      const client = new HttpCoreClient("", fetcher);
+
+      const failure = await client
+        .capabilities()
+        .catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(CoreFailure);
+      expect(failure).toMatchObject({
+        kind: "advice_incomplete",
+        message: payload.error.message,
         details: { attempt: 2 },
+        status: 424,
+        rawResponse: payload,
+      });
+    });
+  });
+
+  describe("findingsOf", () => {
+    it("reads the findings of a refused /run and leaves out what is not one", async () => {
+      // #151: advice_incomplete carries the gate's findings, each with its
+      // remedies, under details.findings.
+      const payload = {
+        error: {
+          kind: "advice_incomplete",
+          message: `cannot generate a runnable input: ${npoolFinding.message}`,
+          details: {
+            findings: [
+              npoolFinding,
+              { ...npoolFinding, fields: [7] },
+              { ...npoolFinding, remedies: [["npool", null]] },
+              {
+                code: npoolFinding.code,
+                fields: npoolFinding.fields,
+                message: npoolFinding.message,
+                remedies: npoolFinding.remedies,
+              },
+              { code: "advice.blocked", fields: [], remedies: [] },
+              "npool=7",
+              null,
+            ],
+          },
+        },
+      };
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(Response.json(payload, { status: 422 }));
+      const client = new HttpCoreClient("", fetcher);
+
+      const failure = await client
+        .run(request)
+        .catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(CoreFailure);
+      expect(findingsOf(failure as CoreFailure)).toEqual([npoolFinding]);
+    });
+
+    it.each([
+      { details: {} },
+      { details: { findings: "npool=7" } },
+      { details: { attempt: 2 } },
+    ])(
+      "finds no findings in a failure whose details are $details",
+      ({ details }) => {
+        expect(
+          findingsOf(new CoreFailure("advice_incomplete", "x", details)),
+        ).toEqual([]);
       },
-    };
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(Response.json(payload, { status: 503 }));
-    const client = new HttpCoreClient("", fetcher);
-
-    const failure = await client
-      .inspectStructure(source)
-      .catch((error: unknown) => error);
-
-    expect(failure).toBeInstanceOf(CoreFailure);
-    expect(failure).toMatchObject({
-      kind: "temporary_failure",
-      message: "Temporary Core failure.",
-      retryable: true,
-      details: { attempt: 2 },
-      status: 503,
-      rawResponse: payload,
-    });
-  });
-
-  it("loads Capabilities as generated Core types", async () => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(Response.json(capabilities));
-    const client = new HttpCoreClient("/core", fetcher);
-
-    await expect(client.capabilities()).resolves.toEqual(capabilities);
-    expect(fetcher).toHaveBeenCalledWith("/core/capabilities", {
-      headers: { Accept: "application/json" },
-      method: "GET",
-    });
-  });
-
-  it("rejects an incompatible reviewed result schema version", async () => {
-    const incompatible = { ...computationResult, schema_version: 2 };
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(preparedResponse(incompatible));
-    const client = new HttpCoreClient("", fetcher);
-
-    await expect(client.compute(request)).rejects.toMatchObject({
-      kind: "invalid_response",
-      message: "Goldilocks Core returned an incompatible schema version.",
-      retryable: false,
-      status: 200,
-      rawResponse: incompatible,
-    });
-  });
-
-  it("rejects a computation response with the wrong content type", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      Response.json({
-        error: { kind: "unexpected", message: "not multipart" },
-      }),
-    );
-    const client = new HttpCoreClient("", fetcher);
-
-    await expect(client.compute(request)).rejects.toMatchObject({
-      kind: "invalid_response",
-      message: "Goldilocks Core returned an invalid computation response.",
-      retryable: false,
-    });
-  });
-
-  it("returns one reviewed result with its exact ZIP", async () => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        preparedResponse(computationResult, "zip bytes", "silicon-inputs.zip"),
-      );
-    const client = new HttpCoreClient("", fetcher);
-
-    const prepared = await client.compute(request);
-
-    expect(prepared.result).toEqual(computationResult);
-    expect(prepared.archive?.filename).toBe("silicon-inputs.zip");
-    await expect(prepared.archive?.blob.text()).resolves.toBe("zip bytes");
-    expect(fetcher).toHaveBeenCalledOnce();
-    expect(fetcher).toHaveBeenCalledWith("/compute", {
-      body: JSON.stringify(request),
-      headers: {
-        Accept: "multipart/form-data",
-        "Content-Type": "application/json",
-      },
-      method: "POST",
-    });
-  });
-
-  it("enriches input data from the archive without replacing canonical result metadata", async () => {
-    const manifest = {
-      task: "archive-task",
-      intent: { functional: "archive-functional" },
-      files: {
-        "inputs/qe.in": { sha256: "a".repeat(64), size_bytes: 11 },
-        "pseudo/Si.upf": { sha256: "b".repeat(64), size_bytes: 128 },
-      },
-    };
-    const archive = manifestArchive(JSON.stringify(manifest));
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        preparedResponse(inputDataResult, archive, "silicon-inputs.zip"),
-      );
-    const prepared = await new HttpCoreClient("", fetcher).compute(request);
-
-    expect(prepared.result.task).toBe(inputDataResult.task);
-    const reviewed = prepared.result.records.dft_input_data?.manifest;
-    expect(reviewed?.files).toEqual(manifest.files);
-    expect(reviewed?.intent.functional).toBe("PBEsol");
-    expect(prepared.archive?.filename).toBe("silicon-inputs.zip");
-    await expect(prepared.archive?.blob.arrayBuffer()).resolves.toEqual(
-      archive,
     );
   });
 
-  it.each([
-    ["unreadable ZIP", "not a ZIP"],
-    ["missing manifest", zipSync({}).buffer as ArrayBuffer],
-    ["unreadable manifest JSON", manifestArchive("{")],
-    ["null manifest", manifestArchive("null")],
-    ["array manifest", manifestArchive("[]")],
-  ])("rejects an input-data archive with %s", async (_reason, archive) => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(preparedResponse(inputDataResult, archive));
+  describe("inspectStructure", () => {
+    it("posts the flattened structure body and requires a schema version", async () => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(Response.json(inspection));
+      const client = new HttpCoreClient("", fetcher);
 
-    await expect(
-      new HttpCoreClient("", fetcher).compute(request),
-    ).rejects.toMatchObject({
-      name: "CoreFailure",
-      kind: "invalid_response",
-      retryable: false,
-      status: 200,
+      await expect(client.inspectStructure(structureInput)).resolves.toEqual(
+        inspection,
+      );
+      expect(fetcher).toHaveBeenCalledWith("/inspect", {
+        body: JSON.stringify(structureInput),
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+    });
+
+    it("rejects a response missing schema_version", async () => {
+      const withoutVersion: Record<string, unknown> = { ...inspection };
+      delete withoutVersion.schema_version;
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(Response.json(withoutVersion));
+      const client = new HttpCoreClient("", fetcher);
+
+      await expect(
+        client.inspectStructure(structureInput),
+      ).rejects.toMatchObject({
+        kind: "invalid_response",
+        message: "Goldilocks Core returned an incompatible schema version.",
+      });
     });
   });
 
-  it("accepts a selected-record result without an archive", async () => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(preparedResponse(inputDataResult));
-    const client = new HttpCoreClient("", fetcher);
+  describe("explain", () => {
+    it("posts to /explain and returns records, warnings and blocking, no schema_version required", async () => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(Response.json(explainResult));
+      const client = new HttpCoreClient("", fetcher);
 
-    await expect(client.compute(request)).resolves.toEqual({
-      result: inputDataResult,
-      archive: null,
+      await expect(client.explain(request)).resolves.toEqual(explainResult);
+      expect(fetcher).toHaveBeenCalledWith("/explain", {
+        body: JSON.stringify(request),
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+    });
+
+    it("returns the findings /run would refuse with as a successful verdict", async () => {
+      const blocked = {
+        ...explainResult,
+        blocking: [npoolFinding],
+      };
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(Response.json(blocked));
+      const client = new HttpCoreClient("", fetcher);
+
+      await expect(client.explain(request)).resolves.toEqual(blocked);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(fetcher).toHaveBeenCalledWith("/explain", expect.anything());
+    });
+
+    it("surfaces advice_incomplete without ever having called /run", async () => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          Response.json(
+            { error: { kind: "advice_incomplete", message: "incomplete" } },
+            { status: 424 },
+          ),
+        );
+      const client = new HttpCoreClient("", fetcher);
+
+      await expect(client.explain(request)).rejects.toMatchObject({
+        kind: "advice_incomplete",
+      });
+      expect(fetcher).toHaveBeenCalledWith("/explain", expect.anything());
     });
   });
 
-  it("inspects an inline Structure Source through the Core operation", async () => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(Response.json(inspection));
-    const client = new HttpCoreClient("", fetcher);
+  describe("magneticOrderings", () => {
+    const orderingsRequest: MagneticOrderingsRequest = {
+      structure_content: structureInput.structure_content,
+      structure_name: structureInput.structure_name,
+      structure_format: "cif",
+      rank_with_mmace: false,
+    };
 
-    await expect(client.inspectStructure(source)).resolves.toEqual(inspection);
-    expect(fetcher).toHaveBeenCalledWith("/inspect", {
-      body: JSON.stringify({ source }),
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      method: "POST",
+    it("posts to /magnetic-orderings with the caller's abort signal", async () => {
+      const listing = { ranked: false, candidates: [], warnings: [] };
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(Response.json(listing));
+      const client = new HttpCoreClient("", fetcher);
+      const controller = new AbortController();
+
+      await expect(
+        client.magneticOrderings(orderingsRequest, controller.signal),
+      ).resolves.toEqual(listing);
+      expect(fetcher).toHaveBeenCalledWith("/magnetic-orderings", {
+        body: JSON.stringify(orderingsRequest),
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+        signal: controller.signal,
+      });
+    });
+
+    it("rejects an aborted request with the abort, not a network failure", async () => {
+      // #149: the Workbench aborts a listing whose structure was replaced;
+      // that is not a failure to report, nor one to retry.
+      const controller = new AbortController();
+      controller.abort();
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockRejectedValue(controller.signal.reason);
+      const client = new HttpCoreClient("", fetcher);
+
+      const failure = await client
+        .magneticOrderings(orderingsRequest, controller.signal)
+        .catch((error: unknown) => error);
+
+      expect(failure).toBe(controller.signal.reason);
+      expect(failure).toMatchObject({ name: "AbortError" });
+    });
+  });
+
+  describe("run", () => {
+    it("posts to /run with respond_with: json and returns the file list", async () => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(Response.json(runResult));
+      const client = new HttpCoreClient("", fetcher);
+
+      await expect(client.run(request)).resolves.toEqual(runResult);
+      expect(fetcher).toHaveBeenCalledWith("/run", {
+        body: JSON.stringify({ ...request, respond_with: "json" }),
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+    });
+  });
+
+  describe("runArchive", () => {
+    it("posts to /run with respond_with: archive and returns a synthesized filename", async () => {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+        new Response("zip bytes", {
+          headers: { "Content-Type": "application/zip" },
+        }),
+      );
+      const client = new HttpCoreClient("", fetcher);
+
+      const archive = await client.runArchive(request);
+
+      expect(archive.filename).toBe("Si.cif-scf_single_point.zip");
+      await expect(archive.blob.text()).resolves.toBe("zip bytes");
+      expect(fetcher).toHaveBeenCalledWith("/run", {
+        body: JSON.stringify({ ...request, respond_with: "archive" }),
+        headers: {
+          Accept: "application/zip",
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+    });
+
+    it("rejects an archive response with the wrong content type", async () => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          Response.json({ files: [], records: {}, warnings: [] }),
+        );
+      const client = new HttpCoreClient("", fetcher);
+
+      await expect(client.runArchive(request)).rejects.toMatchObject({
+        kind: "invalid_response",
+        message: "Goldilocks Core returned an invalid archive response.",
+      });
     });
   });
 });

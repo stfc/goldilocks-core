@@ -1,94 +1,278 @@
-.workbench-header {
+:root {
+  /* Tall enough for the two-line brand lockup (name + slogan); also
+   * matches the marketing site's own nav height (8-goldilocks-web). */
+  --app-header-height: 4.75rem;
+}
+
+/* The standalone app: the header and WorkbenchContent in one column exactly
+ * one viewport high, in which WorkbenchContent takes the height the header
+ * leaves. */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.app-header {
   position: sticky;
   top: 0;
-  z-index: 200;
-  border-radius: 0;
+  z-index: 8;
+  flex: none;
+  height: var(--app-header-height);
+  background: #2e2d62;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.app-header img {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 8px;
+}
+
+.app-header .app-header-toggle:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* WorkbenchContent fills its container's height: .app-layout's below the
+ * header here, an embedder's own sized container in the library build
+ * (index.ts). The failure banner keeps its own height and the grid takes
+ * the rest, so a banner never pushes the grid below the fold (#190).
+ * WorkbenchContent and the grid both flex from their content height
+ * (flex-basis auto), so in a container of indefinite height they take
+ * that height instead of collapsing. */
+.workbench-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+}
+
+.failure-banner {
+  flex: none;
+}
+
+/* Four columns (five once Magnetic Orderings pops in -- App.tsx sets
+ * --workbench-columns), mirroring goldilocks-core's own structure ->
+ * analysis -> advisors -> [magnetic orderings] -> bundle pipeline, one
+ * screen, no vertical page scroll -- each column scrolls its own body
+ * internally as a safety net. Every column has a floor (min-width, set
+ * per class below): --workbench-card-min for Magnetic Orderings/Bundle
+ * (their table/file-review content needs real room), the smaller
+ * --workbench-narrow-card-min for Structure/Analysis/Advisors.
+ * Analysis/Advisors used to be plain 1fr with no floor at all on the
+ * theory that ellipsis/truncation would keep them presentable -- in
+ * practice a fact's own explanatory sentence ("Whether the structure is
+ * metallic (zero DFT band gap)." plus its source label) isn't a single
+ * truncatable line, it's body text, and it turned into an unreadable
+ * column of wrapped words once Structure/Bundle's floors left it almost
+ * no room.
+ * overflow-x lets the grid scroll horizontally once these floors don't
+ * all fit, rather than shrinking any column below its floor to force
+ * everything in. max-width caps the grid on ultra-wide screens, but never
+ * below --workbench-floor-width, so that horizontal scroll starts only on
+ * a viewport narrower than every floor plus the gaps and padding (#190). */
 .workbench-grid {
+  --workbench-columns: 4;
+  /* Columns on the wide floor: Bundle, and Magnetic Orderings while shown
+   * (App.tsx sets both counts). */
+  --workbench-wide-columns: 1;
+  --workbench-card-min: 30rem;
+  --workbench-narrow-card-min: 20rem;
+  --workbench-gap: 1rem;
+  --workbench-padding: 1rem;
+  /* 95rem with four columns, 126rem with five. */
+  --workbench-floor-width: calc(
+    (var(--workbench-columns) - var(--workbench-wide-columns)) *
+      var(--workbench-narrow-card-min) + var(--workbench-wide-columns) *
+      var(--workbench-card-min) + (var(--workbench-columns) - 1) *
+      var(--workbench-gap) + 2 * var(--workbench-padding)
+  );
   display: grid;
-  min-height: calc(100dvh - 52px);
-  grid-template-columns:
-    minmax(22rem, var(--controls-width, 34%))
-    0.75rem minmax(32rem, 1fr);
-  align-items: start;
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(var(--workbench-columns), minmax(0, 1fr));
+  gap: var(--workbench-gap);
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-width: max(120rem, var(--workbench-floor-width));
+  margin-inline: auto;
+  padding: var(--workbench-padding);
+  box-sizing: border-box;
 }
 
-.workbench-grid--loading {
-  grid-template-columns: 1fr;
+@media (min-width: 84rem) {
+  .workbench-grid {
+    grid-template-columns: repeat(var(--workbench-columns), 1fr);
+    grid-template-rows: 1fr;
+    overflow-x: auto;
+  }
+}
+
+.workbench-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-top-width: 4px;
+  border-top-style: solid;
+  border-top-color: var(--card-accent);
+}
+
+.workbench-card .card-header {
+  flex: 0 0 auto;
+}
+
+.workbench-card .card-body {
+  display: flex;
+  flex-direction: column;
+  /* Most cards render a single child, where this is a no-op -- Structure
+   * is the one with several stacked direct children (file controls,
+   * code/task/hpc, the viewer), which used to butt up against each
+   * other with no space between them. */
+  gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* The containing block of anything positioned inside, which this body
+   * then clips and scrolls: VisuallyHidden text is position: absolute, and
+   * placed against the page instead, Download's hidden reason below a tall
+   * Bundle notice made the whole page scroll (#190). */
+  position: relative;
+}
+
+.workbench-card .card-kicker {
+  color: var(--card-accent);
+  /* A two-digit number has no natural break point of its own -- without
+   * this, a tight column (e.g. the 5-column layout once Magnetic
+   * Orderings pops in) can squeeze this flex item narrower than "04"
+   * itself, and the browser wraps it into "0"/"4" on separate lines. */
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.workbench-card .card-header h2 {
+  /* "Magnetic Orderings" is this app's only two-word card title --
+   * the same tight-column squeeze above wraps it onto two lines at the
+   * word space. Ellipsis (rather than a mid-title line break) if a
+   * column is ever too narrow to fit it. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Every --card-accent below is checked at >=4.5:1 against white --
+ * axe caught #e35437/#0f9488 (earlier, brighter picks) failing at
+ * ~3.75:1 on the kicker-number text; these are darkened just enough to
+ * clear AA while staying visually in the same red-orange/teal family. */
+.card-structure {
+  --card-accent: #c2410c;
+  min-width: var(--workbench-narrow-card-min);
+}
+
+.card-analysis {
+  --card-accent: #15803d;
+  min-width: var(--workbench-narrow-card-min);
+}
+
+.card-advisors {
+  --card-accent: #b02090;
+  min-width: var(--workbench-narrow-card-min);
+}
+
+/* Mantine's own Accordion.Control label padding (--mantine-spacing-sm,
+ * ~10px) reads as cramped for a list this long (Advisors' 13 groups;
+ * Analysis' own read-only records list, RecordAccordionItem, can run just
+ * as long) -- a two-class selector beats the single hashed Mantine class
+ * without needing !important or fighting cascade order. Both cards opt
+ * into the same `workbench-accordion-label` class (CalculationForm,
+ * AnalysisSection) rather than each defining its own rule, so the two
+ * lists stay visually consistent by construction instead of by
+ * coincidence. */
+.card-advisors .workbench-accordion-label,
+.card-analysis .workbench-accordion-label {
+  padding-block: var(--mantine-spacing-md);
+}
+
+.card-magnetic-orderings {
+  --card-accent: #0f766e;
+  /* Overrides .workbench-card's min-width: 0 (same specificity, later
+   * in the cascade) -- wide enough for the candidates table's 5 columns
+   * (checkbox, Ordering, Atoms, E/atom (eV), Status) at their natural
+   * width, so Table.ScrollContainer's own horizontal scroll is a
+   * narrow-viewport fallback rather than the normal desktop experience. */
+  min-width: var(--workbench-card-min);
+}
+
+.card-bundle {
+  --card-accent: #1e5df8;
+  min-width: var(--workbench-card-min);
+}
+
+/* The light-mode --card-accent values above are tuned against white and
+ * fail AA against Mantine's dark body (#242424) -- axe caught the
+ * kicker-number text at 2.99:1 in dark mode. Lightened to the nearest
+ * same-hue Tailwind 400 shade, each checked at >=4.5:1 against #242424. */
+[data-mantine-color-scheme="dark"] .card-structure {
+  --card-accent: #fb923c;
+}
+
+[data-mantine-color-scheme="dark"] .card-analysis {
+  --card-accent: #4ade80;
+}
+
+[data-mantine-color-scheme="dark"] .card-advisors {
+  --card-accent: #e879f9;
+}
+
+[data-mantine-color-scheme="dark"] .card-magnetic-orderings {
+  --card-accent: #2dd4bf;
+}
+
+[data-mantine-color-scheme="dark"] .card-bundle {
+  --card-accent: #60a5fa;
 }
 
 .structure-stage {
-  position: sticky;
-  top: 0;
-  min-width: 0;
-  height: calc(100dvh - 52px);
-  min-height: 34rem;
+  position: relative;
+  flex: 1 1 auto;
+  /* Structure's card-body now also holds the code/task/hpc selects
+   * above this -- at the old 22rem floor, that pushed the "Inspect
+   * lattice, sites and occupancies" button below the fold, forcing a
+   * scroll inside the card just to reach it. */
+  min-height: 16rem;
   overflow: hidden;
   background: var(--mantine-color-body);
-}
-
-.stage-navigation {
-  position: absolute;
-  z-index: 7;
-  top: 1rem;
-  right: 1rem;
-}
-
-.pane-resizer {
-  position: sticky;
-  top: 0;
-  height: 100dvh;
-  min-height: 34rem;
-  border-inline: 1px solid var(--mantine-color-default-border);
-  background: var(--mantine-color-body);
-  cursor: col-resize;
-  touch-action: none;
-}
-
-.pane-resizer::after {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 3px;
-  height: 3.5rem;
-  background: var(--mantine-color-dimmed);
-  content: "";
-  transform: translate(-50%, -50%);
-}
-
-.pane-resizer:hover::after,
-.pane-resizer:focus-visible::after {
-  background: var(--mantine-primary-color-filled);
-}
-
-@media (max-width: 57rem) {
-  .workbench-grid {
-    display: flex;
-    min-height: 0;
-    flex-direction: column;
-  }
-
-  .pane-resizer {
-    display: none;
-  }
-
-  #calculation-panel,
-  .structure-stage,
-  #recommendation-panel {
-    width: 100%;
-  }
-
-  .structure-stage {
-    position: relative;
-    height: 38rem;
-    min-height: 38rem;
-  }
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
 }
 
 @media (max-width: 47.5rem) {
+  /* The cards stack at their own height and the page, or an embedder's
+   * container, scrolls: WorkbenchContent keeps its content's height even
+   * in a container of definite height, and .app-layout grows with it,
+   * since the sticky header stays in view only within it, its containing
+   * block. */
+  .app-layout {
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .workbench-content {
+    flex: none;
+    height: auto;
+  }
+
+  .workbench-card {
+    min-height: 24rem;
+  }
+
   .structure-stage {
-    height: 31rem;
-    min-height: 31rem;
+    flex: 0 0 auto;
+    height: 16rem;
+    min-height: 16rem;
   }
 }

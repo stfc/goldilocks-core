@@ -1,16 +1,15 @@
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
 import re
 import shutil
-import sys
 import tempfile
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import BinaryIO
 
 from goldilocks_core.assets.download import download
 from goldilocks_core.assets.records import (
@@ -22,31 +21,15 @@ from goldilocks_core.assets.records import (
 )
 from goldilocks_core.failures import ExpectedFailure
 
-if sys.platform == "win32":
-    import msvcrt
-
-    def _lock_exclusive(lock_file: BinaryIO) -> None:
-        """Take an exclusive advisory lock (Windows, msvcrt byte range)."""
-        msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
-
-    def _unlock(lock_file: BinaryIO) -> None:
-        """Release the exclusive advisory lock (Windows, msvcrt byte range)."""
-        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
-else:
-    import fcntl
-
-    def _lock_exclusive(lock_file: BinaryIO) -> None:
-        """Take an exclusive advisory lock (POSIX, whole-file flock)."""
-        fcntl.flock(lock_file, fcntl.LOCK_EX)
-
-    def _unlock(lock_file: BinaryIO) -> None:
-        """Release the exclusive advisory lock (POSIX, whole-file flock)."""
-        fcntl.flock(lock_file, fcntl.LOCK_UN)
-
-
 ASSET_ROOT_ENV = "GOLDILOCKS_ASSET_ROOT"
 _MANIFEST_SCHEMA_VERSION = 2
 _MANIFEST = "manifest.json"
+MANIFEST_FILENAME = _MANIFEST
+"""Public alias for callers outside this module that need to name the
+manifest file without duplicating the literal (v2 epic 8, #8:
+``server/readiness.py`` reads it directly for a cheap cache-invalidation
+check, without going through the full ``verify_spec`` validation this
+module's own ``_read_manifest`` performs)."""
 
 
 class AssetNotInstalled(ExpectedFailure, FileNotFoundError):
@@ -245,14 +228,11 @@ class AssetStore:
         lock_name = f"{asset_id.replace('/', '_')}-{version}.lock"
         lock_path = locks / lock_name
         with lock_path.open("a+b") as lock:
-            # POSIX flock blocks until the lock frees; msvcrt LK_LOCK retries
-            # for about 10 seconds before failing. Asset installs are short,
-            # so the difference is acceptable.
-            _lock_exclusive(lock)
+            fcntl.flock(lock, fcntl.LOCK_EX)
             try:
                 yield
             finally:
-                _unlock(lock)
+                fcntl.flock(lock, fcntl.LOCK_UN)
 
 
 def asset_root(root: str | Path | None = None) -> Path:
@@ -317,9 +297,7 @@ def _write_manifest(
         ],
     }
     (root / _MANIFEST).write_text(
-        json.dumps(data, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-        newline="\n",
+        json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
 
 

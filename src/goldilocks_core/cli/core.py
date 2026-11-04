@@ -1,451 +1,110 @@
+"""``goldilocks``: the v2 CLI entry point (v2 epic 8, #8).
+
+Replaces v1's 30+-flag, per-advisor-option surface
+(``cli/core.py``:167-230+, one ``add_argument`` per backend/pseudo/model
+option) with the design doc's 6-command shape (``run``/``explain``/
+``inspect``/``settings``/``models``/``assets``; ``serve`` and
+``examples`` are the two "small, thoughtful" extras the design doc's
+own P1-P8 section calls out to keep, and ``capabilities`` is a third,
+added in #62 as a thin CLI entry point onto the same ``capabilities()``
+HTTP/MCP already exposed) -- adding an advisor never touches this file
+again, since every override surfaces through ``--set``, itself
+reflected from ``capabilities.bindings()`` (``set_overrides.py``'s own
+docstring).
+
+Split into one module per command (``_run.py``/``_explain.py``/etc.),
+not kept flat here: this project's own import-surface ceiling
+(``scripts/check_complexity.py``) sets ``cli.core`` specifically to a
+*tighter* limit (11 origins/16 symbols) than the default, so the
+dispatcher stays thin and every command's real logic lives in its own
+file -- one origin per command module plus ``failures`` and
+``cli._output``, so a new command always needs this ceiling bumped by
+exactly one (see #62's own bump from 8).
+
+stdout carries only the command's own output (#183): ``main()`` reserves
+it with ``cli._output.command_stdout`` before running any command but
+``serve``, and each command's ``run(args, out)`` writes there, so library
+prints, C extensions writing to fd 1 and child processes land on stderr.
+``serve`` runs unredirected because MCP's stdio transport claims fd 1
+itself, and only while ``sys.stdout`` is still fd 1.
+
+P1-P8 (goldilocks-core-design.md:3577-3584), carried forward:
+P1 every command has ``--json``; P2 JSON output is ``sort_keys=True``
+(``cli._output.write_json``, the one place a command's JSON is
+serialized); P3 ``--set``'s keys come from ``capabilities()``, never
+hand-typed (``set_overrides.py``); P4 mutually
+-exclusive semantics via argparse subparsers; P5 ``--set``/``--config``
+validate immediately, before ``Service`` is ever reached
+(``set_overrides.build_overrides``); P6 user errors (any
+``ExpectedFailure``, or ``FileExistsError`` from ``bundle.publish``'s
+no-overwrite guarantee) print usage + exit 2, anything else keeps its
+traceback; P7 ``serve``'s HTTP/MCP imports stay inside their own
+function (``_serve.py``); P8 ``--fetch-missing`` must be explicit
+(``run``/``explain``).
+"""
+
 from __future__ import annotations
 
 import argparse
-import json
 import sys
-from pathlib import Path
 
-from goldilocks_core.assets.runtime import (
-    install as install_assets,
-    statuses as asset_statuses,
-    verify as verify_assets,
+from goldilocks_core.cli import (
+    _assets,
+    _capabilities,
+    _explain,
+    _inspect,
+    _magnetic_orderings,
+    _models,
+    _run,
+    _serve,
+    _settings,
 )
-from goldilocks_core.assets.store import AssetStore
-from goldilocks_core.examples.structures import structures_path
-from goldilocks_core.generation.registry import available_codes, available_tasks
-from goldilocks_core.request import ComputeRequest
-from goldilocks_core.runtime.service import OperationFailure, Service
+from goldilocks_core.cli._output import command_stdout
+from goldilocks_core.failures import ExpectedFailure
+
+_COMMANDS = {
+    "run": _run,
+    "explain": _explain,
+    "inspect": _inspect,
+    "settings": _settings,
+    "capabilities": _capabilities,
+    "models": _models,
+    "assets": _assets,
+    "examples": _assets,
+    "magnetic-orderings": _magnetic_orderings,
+}
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="goldilocks",
-        description="Run the staged Goldilocks Core pipeline.",
+        prog="goldilocks", description="Generate and submit DFT calculations."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
-
-    capabilities = subparsers.add_parser(
-        "capabilities", help="Describe available Core tasks, presets, and assets."
-    )
-    capabilities.add_argument("--json", action="store_true", help="Print JSON output.")
-
-    inspect = subparsers.add_parser("inspect", help="Inspect a structure source.")
-    inspect.add_argument("structure", help="Path to the input structure file.")
-    inspect.add_argument("--json", action="store_true", help="Print JSON output.")
-
-    compute = subparsers.add_parser("compute", help="Run one Core computation.")
-    _add_common_arguments(compute)
-    selection = compute.add_mutually_exclusive_group(required=True)
-    selection.add_argument("--preset", help="Named computation preset id.")
-    selection.add_argument(
-        "--outputs", help="Comma-separated record type ids to compute."
-    )
-    output = compute.add_mutually_exclusive_group()
-    output.add_argument("--out", help="Publish a ready-to-run directory.")
-    output.add_argument("--archive", help="Publish a ready-to-run ZIP archive.")
-    output.add_argument(
-        "--no-out", action="store_true", help="Return memory-only structured output."
-    )
-
-    serve = subparsers.add_parser(
-        "serve",
-        help="Run an optional HTTP or MCP transport.",
-    )
-    transports = serve.add_subparsers(dest="transport", required=True)
-    http = transports.add_parser("http", help="Run the HTTP transport.")
-    http.add_argument("--host", default="127.0.0.1")
-    http.add_argument("--port", type=int, default=8000)
-    http.add_argument(
-        "--static-root",
-        type=Path,
-        help=(
-            "Directory containing the built Workbench. "
-            "Defaults to GOLDILOCKS_WORKBENCH_STATIC_ROOT."
-        ),
-    )
-    transports.add_parser("mcp", help="Run the MCP stdio transport.")
-
-    examples = subparsers.add_parser(
-        "examples",
-        help="Inspect the example structures bundled with the package.",
-    )
-    example_commands = examples.add_subparsers(dest="examples_command", required=True)
-    example_commands.add_parser(
-        "path",
-        help="Print the directory holding the bundled example structures.",
-    )
-
-    assets = subparsers.add_parser(
-        "assets",
-        help="Install and inspect immutable runtime assets.",
-    )
-    asset_commands = assets.add_subparsers(dest="assets_command", required=True)
-    for command in ("install", "status", "verify"):
-        operation = asset_commands.add_parser(command)
-        operation.add_argument(
-            "name",
-            nargs="?",
-            default="default",
-            help="Asset id or shipped profile name (default: default).",
-        )
-
+    _run.add_subparser(subparsers)
+    _explain.add_subparser(subparsers)
+    _inspect.add_subparser(subparsers)
+    _settings.add_subparser(subparsers)
+    _capabilities.add_subparser(subparsers)
+    _models.add_subparser(subparsers)
+    _assets.add_subparser(subparsers)
+    _serve.add_subparser(subparsers)
+    _magnetic_orderings.add_subparser(subparsers)
     return parser
 
 
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-
-    if args.command == "examples":
-        print(structures_path())
-        return
-    if args.command == "serve":
-        _serve(args)
-        return
-    if args.command == "assets":
-        _assets(args, parser)
-        return
-
     try:
-        if args.command in ("capabilities", "inspect"):
-            _describe(args)
-            return
-        try:
-            _validate_backend_options(args)
-            request = _request_from_args(args)
-        except (KeyError, ValueError) as error:
-            parser.print_usage(sys.stderr)
-            print(f"{parser.prog}: error: {error}", file=sys.stderr)
-            raise SystemExit(2) from error
-        with Service() as service:
-            output = service.compute_document(
-                request,
-                publication=(
-                    "memory"
-                    if args.no_out
-                    else "directory"
-                    if args.out is not None
-                    else "archive"
-                    if args.archive is not None
-                    else "auto"
-                ),
-                path=args.out if args.out is not None else args.archive,
-                fetch_missing=args.fetch_missing,
-            ).result
-    except OperationFailure as error:
-        parser.print_usage(sys.stderr)
-        print(f"{parser.prog}: error: {error}", file=sys.stderr)
-        raise SystemExit(2) from error
-
-    if args.json:
-        print(json.dumps(output, indent=2, sort_keys=True))
-        return
-
-    _print_human_summary(output)
-
-
-def _describe(args: argparse.Namespace) -> None:
-    with Service() as service:
-        if args.command == "capabilities":
-            output = service.capabilities_document()
+        if args.command == "serve":
+            _serve.run(args)
         else:
-            output = service.inspect_document(args.structure)
-    if args.json:
-        print(json.dumps(output, indent=2, sort_keys=True))
-    elif args.command == "capabilities":
-        print(f"Goldilocks Core {output['core_version']}")
-        for task in output["tasks"]:
-            presets = ", ".join(preset["id"] for preset in task["presets"])
-            print(f"{task['id']}: {presets}")
-    else:
-        print(f"structure: {output['source']['name']}")
-        print(f"formula: {output['structure']['reduced_formula']}")
-        print(f"sites: {output['structure']['site_count']}")
-
-
-def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("structure", help="Path to the input structure file.")
-    parser.add_argument(
-        "--code",
-        default="quantum_espresso",
-        choices=available_codes(),
-        help="Target DFT code.",
-    )
-    parser.add_argument(
-        "--task",
-        default="scf_single_point",
-        choices=available_tasks(),
-        help="Calculation task.",
-    )
-    parser.add_argument(
-        "--functional",
-        default="PBEsol",
-        help="Exchange-correlation functional.",
-    )
-    parser.add_argument(
-        "--pseudo-accuracy",
-        choices=["efficiency", "precision"],
-        default="efficiency",
-    )
-    parser.add_argument("--pseudo-type")
-    parser.add_argument("--relativistic-mode")
-    parser.add_argument("--pseudo-root", help="Directory containing UPF files.")
-    parser.add_argument(
-        "--pseudo-table",
-        help="Exact registered pseudopotential table id (default: registry default).",
-    )
-    parser.add_argument(
-        "--fetch-missing",
-        action="store_true",
-        help="Install only missing assets required by the request, then retry.",
-    )
-    parser.add_argument(
-        "--model",
-        help="Local ML k-index model path for k-point selection.",
-    )
-    parser.add_argument(
-        "--model-name",
-        help="Model name recorded in k-point provenance when --model is used.",
-    )
-    parser.add_argument(
-        "--model-version",
-        help="Model version recorded in metadata when --model is used.",
-    )
-    parser.add_argument(
-        "--model-licence",
-        help="Licence identifier for the local model (required for publication).",
-    )
-    parser.add_argument(
-        "--model-licence-file",
-        help="UTF-8 licence text file for the local model (required for publication).",
-    )
-    parser.add_argument(
-        "--model-citation",
-        help="Citation for the local model (required for publication).",
-    )
-    parser.add_argument("--k-spacing", type=float)
-    parser.add_argument(
-        "--k-grid",
-        nargs=3,
-        type=int,
-        metavar=("NK1", "NK2", "NK3"),
-    )
-    parser.add_argument(
-        "--smearing-type",
-        choices=["fixed", "gaussian", "mp", "cold"],
-    )
-    parser.add_argument("--smearing-width-ry", type=float)
-    parser.add_argument(
-        "--spin-polarized",
-        choices=["true", "false"],
-        help="Override spin-polarization advice.",
-    )
-    parser.add_argument(
-        "--spin-orbit-coupling",
-        choices=["true", "false"],
-        help="Override spin-orbit coupling advice.",
-    )
-    parser.add_argument(
-        "--use-vdw",
-        choices=["true", "false"],
-        help="Force vdW on/off; omit to let Core decide.",
-    )
-    parser.add_argument(
-        "--vdw-method",
-        help="Preferred vdW method: d3, d3bj, ts, or mbd.",
-    )
-    parser.add_argument("--conv-thr", type=float)
-    parser.add_argument("--mixing-beta", type=float)
-    parser.add_argument("--electron-maxstep", type=int)
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Print JSON output.",
-    )
-
-
-def _request_from_args(args: argparse.Namespace) -> ComputeRequest:
-    records = None
-    if args.outputs is not None:
-        records = [name.strip() for name in args.outputs.split(",")]
-        if any(not name for name in records):
-            raise ValueError("--outputs must contain comma-separated record type ids")
-    licence_text = None
-    if args.model_licence_file is not None:
-        try:
-            licence_text = (
-                Path(args.model_licence_file).expanduser().read_text(encoding="utf-8")
-            )
-        except (OSError, UnicodeError) as error:
-            raise ValueError(f"Cannot read --model-licence-file: {error}") from error
-    return ComputeRequest.from_local(
-        args.structure,
-        preset=args.preset,
-        records=records,
-        intent={
-            "code": args.code,
-            "task": args.task,
-            "functional": args.functional,
-            "pseudo_accuracy": args.pseudo_accuracy,
-        },
-        hints={
-            "k_spacing": args.k_spacing,
-            "k_grid": tuple(args.k_grid) if args.k_grid else None,
-            "smearing_type": args.smearing_type,
-            "smearing_width_ry": args.smearing_width_ry,
-            "spin_polarized": _parse_optional_bool(args.spin_polarized),
-            "spin_orbit_coupling": _parse_optional_bool(args.spin_orbit_coupling),
-            "pseudo_type": args.pseudo_type,
-            "relativistic_mode": args.relativistic_mode,
-            "conv_thr": args.conv_thr,
-            "mixing_beta": args.mixing_beta,
-            "electron_maxstep": args.electron_maxstep,
-            "use_vdw": _parse_optional_bool(args.use_vdw),
-            "vdw_method": args.vdw_method,
-        },
-        pseudo_root=args.pseudo_root,
-        pseudo_table=args.pseudo_table,
-        model=args.model,
-        model_name=args.model_name,
-        model_version=args.model_version,
-        model_licence=args.model_licence,
-        model_licence_text=licence_text,
-        model_citation=args.model_citation,
-    )
-
-
-def _assets(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    store = AssetStore()
-    print(f"asset root: {store.root}")
-    try:
-        if args.assets_command == "install":
-            installed = install_assets(args.name, store=store)
-            for asset in installed:
-                print(f"{asset.id}@{asset.version}: installed")
-            return
-        if args.assets_command == "status":
-            for asset_id, version, state in asset_statuses(args.name, store=store):
-                print(f"{asset_id}@{version}: {state}")
-            return
-        installed = verify_assets(args.name, store=store)
-        for asset in installed:
-            print(f"{asset.id}@{asset.version}: verified")
-    except Exception as error:
-        if (
-            not isinstance(error, KeyError | ValueError)
-            and OperationFailure.classify(error) is None
-        ):
-            raise
+            with command_stdout() as out:
+                _COMMANDS[args.command].run(args, out)
+    except (ExpectedFailure, FileExistsError) as error:
         parser.print_usage(sys.stderr)
         print(f"{parser.prog}: error: {error}", file=sys.stderr)
         raise SystemExit(2) from error
-
-
-def _serve(args: argparse.Namespace) -> None:
-    if args.transport == "http":
-        from goldilocks_core.server.workers import serve
-
-        serve(
-            host=args.host,
-            port=args.port,
-            static_root=args.static_root,
-        )
-        return
-
-    from goldilocks_core.server.mcp import serve
-
-    serve()
-
-
-def _validate_backend_options(args: argparse.Namespace) -> None:
-    backend_only_options = [
-        option
-        for option, value in (
-            ("--model-name", args.model_name),
-            ("--model-version", args.model_version),
-            ("--model-licence", args.model_licence),
-            ("--model-licence-file", args.model_licence_file),
-            ("--model-citation", args.model_citation),
-        )
-        if value is not None
-    ]
-    if args.model is None and backend_only_options:
-        options = " and ".join(backend_only_options)
-        verb = "requires" if len(backend_only_options) == 1 else "require"
-        raise ValueError(f"{options} {verb} --model")
-
-
-def _parse_optional_bool(value: str | None) -> bool | None:
-    if value is None:
-        return None
-    return value == "true"
-
-
-def _print_human_summary(result: dict) -> None:
-    structure = result["draft"]["structure"]
-    print(f"structure: {structure['source']['name']}")
-    print(f"formula: {structure['structure']['reduced_formula']}")
-    print(f"code: {result['draft']['intent']['code']}")
-    print(f"task: {result['draft']['intent']['task']}")
-    advice = result["records"].get("advice")
-    if advice is not None:
-        _print_advice(advice)
-    k_points = result["records"].get("k_points")
-    if k_points is not None:
-        grid = k_points["grid"]
-        print(f"k-grid: {grid[0]} {grid[1]} {grid[2]}")
-    selection = result["records"].get("selection")
-    if selection is not None:
-        selected = ", ".join(
-            f"{pseudo['element']}={pseudo['filename'] or 'unresolved'}"
-            for pseudo in selection["pseudopotentials"]
-        )
-        print(f"selection: {selected or 'no pseudopotentials'}")
-    input_data = result["records"].get("dft_input_data")
-    if input_data is not None:
-        print(
-            f"dft input data: {len(input_data['artifacts'])} artifacts, "
-            f"{len(input_data['citations'])} citations"
-        )
-        pseudo_set = input_data["pseudopotential_set"]
-        version = (
-            f"@{pseudo_set['version']}" if pseudo_set["version"] is not None else ""
-        )
-        print(f"pseudopotential set: {pseudo_set['id']}{version}")
-    generated_files = result["records"].get("generated_files", ())
-    if generated_files:
-        print("generated files:")
-        for generated_file in generated_files:
-            print(f"  {generated_file['path']}")
-    if result["publication"] is not None:
-        publication = result["publication"]
-        print(f"published {publication['kind']}: {publication['path']}")
-    if result["warnings"]:
-        print("warnings:")
-        for warning in result["warnings"]:
-            print(f"  - {warning}")
-
-
-def _print_advice(advice: dict) -> None:
-    smearing = advice["smearing"]["smearing_type"] or "none"
-    if advice["smearing"]["width_ry"] is not None:
-        smearing = f"{smearing}@{advice['smearing']['width_ry']:g} Ry"
-    pseudo = advice["pseudopotential_requirements"]
-    soc = (
-        "on"
-        if advice["spin_orbit"]["enabled"]
-        else "consider"
-        if advice["spin_orbit"]["consider"]
-        else "off"
-    )
-    print(
-        f"advice: smearing={smearing}; "
-        f"spin={'on' if advice['magnetism']['spin_polarized'] else 'off'}; "
-        f"SOC={soc}; "
-        f"pseudo={pseudo['functional']}/{pseudo['accuracy']}/"
-        f"{pseudo['pseudo_type'] or 'any'}/{pseudo['relativistic']}; "
-        f"vdW={'on' if advice['vdw']['use_vdw'] else 'off'}"
-    )
 
 
 if __name__ == "__main__":

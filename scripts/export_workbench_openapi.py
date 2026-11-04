@@ -4,7 +4,6 @@ import argparse
 import json
 from pathlib import Path
 
-from goldilocks_core.runtime.service import Service
 from goldilocks_core.server.http import create_app
 
 
@@ -19,11 +18,7 @@ def main() -> None:
         parser.error("--output must name a JSON file")
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    service = Service()
-    try:
-        schema = create_app(service).openapi()
-    finally:
-        service.close()
+    schema = create_app().openapi()
 
     temporary = output.with_suffix(".json.tmp")
     temporary.write_text(

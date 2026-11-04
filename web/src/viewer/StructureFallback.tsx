@@ -2,6 +2,7 @@ import { Alert, Button, Text } from "@mantine/core";
 import type { Ref } from "react";
 
 import type { StructureInspection } from "../api/coreClient";
+import { formatSiteCount } from "./siteCount";
 
 export function StructureFallback({
   structure,
@@ -14,10 +15,6 @@ export function StructureFallback({
   readonly containerRef?: Ref<HTMLDivElement>;
   readonly hidden?: boolean;
 }) {
-  const siteLabel =
-    structure.site_count === 1
-      ? "1 atomic site"
-      : `${String(structure.site_count)} atomic sites`;
   return (
     <Alert
       ref={containerRef}
@@ -32,7 +29,8 @@ export function StructureFallback({
       aria-live="polite"
     >
       <Text>
-        {structure.reduced_formula} · {siteLabel}
+        {structure.reduced_formula} ·{" "}
+        {formatSiteCount(structure.site_count, "atomic site")}
       </Text>
       <Text size="sm" mt="sm">
         The parsed structure and recommendation remain available without the

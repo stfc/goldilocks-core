@@ -16,6 +16,7 @@
   },
   "include": [
     "vite.config.ts",
+    "vite.lib.config.ts",
     "playwright.config.ts",
     "eslint.config.js",
     "tests/e2e/**/*.ts"

@@ -122,9 +122,14 @@ class InstalledAsset:
         return self.root / relative_path
 
     def read_bytes(self, relative_path: str) -> bytes:
-        """Read content bound to this installation's verified inventory."""
+        """Read content bound to this installation's verified inventory.
+
+        Raises ``KeyError`` for an unknown path, matching ``path()`` above --
+        looking the path up first, rather than iterating ``self.files``
+        directly, avoids an unhandled ``StopIteration`` on a miss."""
+        path = self.path(relative_path)
         file = next(item for item in self.files if item.path == relative_path)
-        payload = self.path(relative_path).read_bytes()
+        payload = path.read_bytes()
         if (
             len(payload) != file.size
             or hashlib.sha256(payload).hexdigest() != file.sha256

@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import json
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 
 from goldilocks_core.assets.records import AssetInstallation
 from goldilocks_core.assets.runtime import WORKBENCH_PROFILE, catalogue, references
-from goldilocks_core.assets.store import AssetCorrupt, AssetNotInstalled, AssetStore
+from goldilocks_core.assets.store import (
+    MANIFEST_FILENAME,
+    AssetCorrupt,
+    AssetNotInstalled,
+    AssetStore,
+)
 from goldilocks_core.types import PathLike
 
 
@@ -48,11 +55,35 @@ class AssetReadiness:
             return self._report
 
     def _filesystem_state(self) -> tuple[tuple[str, int, int, int], ...]:
+        """Stat exactly the files the installed manifest lists, not a
+        full ``rglob`` of the tree (v2 epic 8, #8, issue evidence #4:
+        v1 did a full recursive walk on every single ``/ready`` call).
+        Cost is proportional to file count, same as before, but without
+        ``rglob``'s directory-traversal/sorting overhead on top of that
+        count -- the manifest is the same file ``AssetStore.verify``
+        already trusts as the definitive list of what an installation
+        should contain, so a corrupted/replaced listed file is still
+        caught; a missing/unreadable manifest is treated as changed
+        state, which forces the real ``verify_spec`` to run and report
+        exactly why.
+
+        Accepted narrowing versus the old ``rglob``-based check: a file
+        *added* under a nested subdirectory that the manifest never
+        listed will not itself flip this state (only the top-level
+        ``root`` entry's own mtime would, and only if the extra file
+        landed directly inside ``root``). ``verify_spec``'s own
+        directory-listing-vs-manifest comparison still catches that the
+        next time it actually runs; this cache's job is only to decide
+        *when* to run it, not to replace it."""
         state: list[tuple[str, int, int, int]] = []
         for installation in self._installations:
             spec = installation.spec
             root = self._store.root / spec.id / spec.version
-            paths = (root, *sorted(root.rglob("*"))) if root.exists() else (root,)
+            manifest_path = root / MANIFEST_FILENAME
+            paths = [root, manifest_path]
+            paths.extend(
+                root / relative for relative in _manifest_file_paths(manifest_path)
+            )
             for path in paths:
                 try:
                     status = path.lstat()
@@ -86,3 +117,18 @@ class AssetReadiness:
                     state="corrupt",
                 )
         return ReadinessReport(ready=True, asset_count=len(installations))
+
+
+def _manifest_file_paths(manifest_path: Path) -> tuple[str, ...]:
+    """Best-effort, tolerant read of a manifest's file list -- deliberately
+    not ``assets.store``'s own ``_read_manifest``, which raises
+    ``AssetCorrupt``/``ValueError`` on any mismatch: this is only a cache
+    -invalidation signal, so a missing/malformed manifest here should
+    just look like "state changed" (empty list -> only the manifest's
+    own stat contributes), not raise -- the real validation still
+    happens in ``_verify_profile`` via ``verify_spec``."""
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        return tuple(entry["path"] for entry in data["files"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return ()

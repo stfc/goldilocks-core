@@ -11,6 +11,7 @@ export default tseslint.config(
   {
     ignores: [
       "dist",
+      "dist-lib",
       "playwright-report",
       "test-results",
       "eslint.config.js",

@@ -4,59 +4,157 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "goldilocks-core"
-version = "0.2.4"
+version = "0.3.0"
 description = "Materials machine learning tools for recommending DFT calculation inputs."
 readme = "README.md"
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
-    "dscribe>=2.1",
-    "joblib==1.5.3",
-    "matminer>=0.10.1",
+    # v2: generation/quantum_espresso/namelists.py uses only ase.io.espresso_namelist's
+    # Namelist class (a flat-dict -> QE namelist-text formatter with no Atoms/magnetic-
+    # moment logic at all) -- not ase.io.espresso.write_espresso_in, and not the
+    # Espresso calculator, both of which derive/overwrite starting_magnetization from
+    # atoms.get_initial_magnetic_moments() whenever nspin==2, unconditionally clobbering
+    # any value already resolved by advisors/magnetic_config.py (verified against
+    # installed ase 3.28, 2026-09-14; goldilocks-core-design.md:4220's "only use ASE at
+    # the namelists.py translation layer" insertion point).
+    "ase>=3.28",
     "numpy>=2.4.4",
     "pandas>=2.0",
     "pymatgen>=2026.3.23",
     "requests>=2.32",
-    "scikit-learn==1.7.2",
-    "sklearn-quantile==0.1.1",
-    # The default k-points model (QRF + CGCNN metallicity) is a core capability,
-    # so its ML stack ships in the base install (decision: stfc/goldilocks-core#32).
-    # torch-geometric requires torch. The base install resolves torch from the
-    # CPU-only PyTorch index so the workbench image doesn't ship ~3.5G of unused
-    # CUDA/nvidia libraries. GPU hosts pull the CUDA wheel via an index override
-    # (see [tool.uv] below), not the default resolution.
-    "torch>=2.13.0",
-    "torch-geometric>=2.5",
+    # The default k-points/metallicity models (QRF + CGCNN) are a core
+    # capability, so their ML stack ships in the base install (decision:
+    # stfc/goldilocks-core#32) -- via goldilocks-ml itself (v2 #11) rather
+    # than duplicating its dscribe/matminer/scikit-learn/sklearn-quantile/
+    # torch/torch-geometric pins here, which would drift the two packages
+    # apart. Since goldilocks-ml 0.3.0 that stack includes
+    # mace-torch[magnetic], which is_magnetic and mMACE ordering ranking
+    # run on (#240).
+    "goldilocks-ml==0.3.2",
+    # Named only so [tool.uv.sources] below can route it to the CPU-only
+    # PyTorch index: uv applies sources to direct dependencies alone, and
+    # torch otherwise arrives through goldilocks-ml, which pins its version
+    # (#242).
+    "torch",
+    # v2: contracts/ is pydantic BaseModel end to end (validation, serialization,
+    # OpenAPI/capabilities schema generation) -- promoted from the http/mcp
+    # extras to a core dependency (goldilocks-core-design.md S12, already decided).
+    "pydantic>=2.12",
+    # Imported directly for magnetic symmetry (get_magnetic_symmetry), which
+    # pymatgen does not wrap, and for pw.x's own symmetry count and the frame
+    # the cell is written in (pw_symmetry.py: get_symmetry_dataset,
+    # get_stabilized_reciprocal_mesh); the floor is pymatgen-core's own.
+    "spglib>=2.5",
 ]
 
 [project.optional-dependencies]
-http = ["fastapi", "pydantic>=2.12", "uvicorn"]
-mcp = ["mcp", "pydantic>=2.12"]
+http = ["fastapi", "uvicorn"]
+mcp = ["mcp"]
+# is_magnetic classification and mMACE-based magnetic-ordering ranking
+# (v2 #11, #87) need no extra: goldilocks-ml, a base dependency, brings
+# mace-torch[magnetic]. Both also need the backbone checkpoint named by
+# GOLDILOCKS_MACE_BACKBONE (docs/mmace-setup.md).
 
 [project.scripts]
 goldilocks = "goldilocks_core.cli.core:main"
 
+[project.urls]
+Documentation = "https://stfc.github.io/goldilocks-core/"
+Repository = "https://github.com/stfc/goldilocks-core"
+Issues = "https://github.com/stfc/goldilocks-core/issues"
+
+[tool.poe.tasks.fmt]
+help = "Format src, tests, and scripts with ruff"
+cmd = "ruff format src tests scripts"
+
+[tool.poe.tasks.lint]
+help = "Check style and complexity, matching the CI gate"
+sequence = [
+    { cmd = "ruff check src tests scripts" },
+    { cmd = "ruff format --check src tests scripts" },
+    { cmd = "python scripts/check_complexity.py" },
+]
+
+[tool.poe.tasks.test]
+help = "Run the pytest suite"
+cmd = "pytest"
+
+[tool.poe.tasks.check]
+help = "Lint and test, the local pre-PR gate"
+sequence = [
+    { ref = "lint" },
+    { ref = "test" },
+]
+
+[tool.poe.tasks.serve]
+help = "Install assets and serve the Core HTTP backend on :8000"
+shell = """
+if curl -s -m1 http://127.0.0.1:8000/ >/dev/null 2>&1; then
+    echo "port 8000 is already in use - stop the other server (poe workbench, poe serve, or poe stage)" >&2
+    exit 1
+fi
+set -e
+goldilocks assets install workbench
+exec goldilocks serve http --host 127.0.0.1 --port 8000
+"""
+
+[tool.poe.tasks.stage]
+help = "Build the Workbench bundle and serve it from the Core HTTP process on :8000"
+shell = """
+if curl -s -m1 http://127.0.0.1:8000/ >/dev/null 2>&1; then
+    echo "port 8000 is already in use - stop the other server (poe workbench, poe serve, or poe stage)" >&2
+    exit 1
+fi
+set -e
+cd web && npm run build
+cd ..
+goldilocks assets install workbench
+exec goldilocks serve http --host 127.0.0.1 --port 8000 --static-root web/dist
+"""
+
+[tool.poe.tasks.workbench]
+help = "Install assets, serve the Core HTTP backend on :8000, and run the Vite dev server on :5173"
+shell = """
+if curl -s -m1 http://127.0.0.1:8000/ >/dev/null 2>&1; then
+    echo "port 8000 is already in use - stop the other server (poe workbench, poe serve, or poe stage)" >&2
+    exit 1
+fi
+set -e
+goldilocks assets install workbench
+goldilocks serve http --host 127.0.0.1 --port 8000 &
+backend_pid=$!
+trap 'kill "$backend_pid"' EXIT
+cd web && npm run dev
+"""
+
+[tool.poe.tasks.web-check]
+help = "Lint, unit-test, and build the Workbench frontend"
+shell = "cd web && npm run check"
+
 [dependency-groups]
 dev = [
-    "mutmut>=3.7.0",
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.6.0",
+    "mutmut>=3.8.0",
+    "poethepoet>=0.35",
     "pre-commit>=4.5.1",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
     "ruff>=0.15.11",
-    "rust-just>=1.58",
 ]
 
 [tool.uv]
 package = true
 
-# PyTorch publishes CPU and CUDA wheels on separate indexes. Pin torch to the
-# CPU index so container/workbench builds don't ship ~3.5G of unused CUDA/nvidia
-# libraries. GPU hosts override with `uv sync --index-strategy unsafe-best-match
-# --extra-index-url https://download.pytorch.org/whl/cu130` (or set
-# UV_EXTRA_INDEX_URL to the cu130 index) to pull the CUDA wheel instead.
-# torch-geometric and other torch-* packages stay on PyPI; only torch itself is
-# re-sourced, since it's the one that drags in the nvidia/triton wheels.
+# PyTorch publishes CPU and CUDA wheels on separate indexes, and PyPI's Linux
+# torch wheel pulls in about 2 GB of CUDA/nvidia/triton wheels. torch is routed
+# to the CPU-only index, so every uv-managed install (development, CI and the
+# Workbench image) gets CPU torch; the source applies only because torch is
+# also a direct dependency above (#242). torch-geometric and the other torch-*
+# packages stay on PyPI. pip installs ignore uv sources and take torch from
+# PyPI. No GPU route is configured here: core runs its models on the CPU.
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
@@ -91,29 +189,38 @@ show_missing = true
 skip_covered = true
 
 [tool.mutmut]
+# process_isolation = "forkserver" (mutmut >=3.8.0) routes every mutant's
+# fork/reap through one dedicated forkserver child, instead of the default
+# ForkRunner's os.wait() in the main process -- which reaps *any* child, so an
+# untracked pid (e.g. a leftover from the stats/generation phase) causes a
+# bare `self._running.pop(pid)` KeyError (#76). The
+# forkserver's own reap loop explicitly ignores unknown pids instead of
+# crashing. Lowering --max-children (ci.yml, #77) only reduced how often the
+# race was hit; it could not fix a race that isn't about mutmut's own worker
+# concurrency in the first place.
+process_isolation = "forkserver"
 # source_paths creates parent directories for nested files; also_copy does not.
 # Copy nested test inputs without web/node_modules or build outputs.
 source_paths = [
     "src/goldilocks_core",
     "web/README.md",
-    "scripts/image_e2e.sh",
     ".agents/skills/use-goldilocks/references/workflows.md",
     ".agents/skills/use-goldilocks/references/qe-scf-template.md",
 ]
 # Documentation tests read these files and validate their relative links.
 also_copy = ["README.md", "LICENSE", "docs"]
 only_mutate = [
-    "src/goldilocks_core/advice/parameters.py",
+    "src/goldilocks_core/advisors/pseudo_selection.py",
     "src/goldilocks_core/functionals.py",
-    "src/goldilocks_core/generation/registry.py",
-    "src/goldilocks_core/generation/qe/scf.py",
-    "src/goldilocks_core/kmesh/math.py",
-    "src/goldilocks_core/runtime/dispatch.py",
-    "src/goldilocks_core/runtime/graph.py",
-    "src/goldilocks_core/selection.py",
+    "src/goldilocks_core/generation/quantum_espresso/scf.py",
+    "src/goldilocks_core/kmesh.py",
+    "src/goldilocks_core/service/_pipeline.py",
 ]
 mutate_only_covered_lines = false
 pytest_add_cli_args = ["-q"]
+# Mutants are tested by tests/unit only: with the whole suite the CI step
+# would take ~90 minutes, twice the job's 45-minute limit (#196).
+pytest_add_cli_args_test_selection = ["tests/unit"]
 
 [tool.ruff]
 target-version = "py312"
@@ -142,9 +249,14 @@ max-complexity = 10
 [tool.setuptools.package-data]
 goldilocks_core = [
     "ml/registry.toml",
-    "pseudo/registry.toml",
+    "assets/pseudopotentials/registry.toml",
+    "inputs/profiles/*.toml",
     "examples/structures/*.cif",
     "examples/structures/README.md",
+    # Populated only by release.yml (npm run build, copied in before `uv
+    # build`) -- a plain local/dev build never creates this directory, so
+    # this glob matches nothing and contributes nothing to the wheel (#122).
+    "webapp/**/*",
 ]
 
 

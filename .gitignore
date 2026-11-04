@@ -44,3 +44,10 @@ graph.json
 # Generated transport contracts
 web/openapi.json
 web/src/api/schema.d.ts
+
+# Vite library-mode build output
+web/dist-lib/
+
+# Built Workbench frontend, copied here only by release.yml before `uv
+# build` bundles it into the wheel (#122) -- never checked in.
+src/goldilocks_core/webapp/

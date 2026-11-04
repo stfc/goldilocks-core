@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from goldilocks_core.pseudo.parse_upf import parse_upf_metadata
+from goldilocks_core.assets.pseudopotentials.upf import parse_upf_metadata
 
 
 def write_attr_upf(
@@ -23,6 +23,17 @@ def write_attr_upf(
         f'relativistic="{relativistic}" '
         f'z_valence="{z_valence}" />'
         "</UPF>",
+        encoding="utf-8",
+    )
+    return path
+
+
+def write_attr_upf_without_element(path: Path) -> Path:
+    """A UPF header missing the ``element`` attribute entirely, forcing
+    ``_get_element`` to fall back to ``_extract_element_from_filename``."""
+    path.write_text(
+        '<UPF><PP_HEADER pseudo_type="NC" functional="PBE" '
+        'relativistic="scalar" z_valence="4.0" /></UPF>',
         encoding="utf-8",
     )
     return path
@@ -218,3 +229,39 @@ def test_parse_upf_metadata_prefers_header_pseudo_type_over_filename_hint(
     assert metadata.pseudo_type == "USPP"
     assert metadata.functional == "PBE"
     assert metadata.relativistic == "scalar"
+
+
+def test_element_falls_back_to_filename_when_header_omits_it(
+    tmp_path: Path,
+) -> None:
+    """The common, correctly-handled case: a lowercase symbol followed by a
+    delimiter (the GBRV/pslibrary naming convention) is extracted correctly
+    by _extract_element_from_filename's second regex."""
+    pseudo_path = write_attr_upf_without_element(tmp_path / "si_pbe_v1.4.UPF")
+
+    metadata = parse_upf_metadata(pseudo_path)
+
+    assert metadata.element == "Si"
+
+
+def test_element_extraction_gives_up_on_a_digit_prefixed_filename(
+    tmp_path: Path,
+) -> None:
+    """Neither of _extract_element_from_filename's two regexes match a
+    filename stem starting with a digit — it returns None rather than
+    guessing, which is the correct, already-handled behavior."""
+    pseudo_path = write_attr_upf_without_element(tmp_path / "04_pseudo.UPF")
+
+    metadata = parse_upf_metadata(pseudo_path)
+
+    assert metadata.element is None
+
+
+def test_element_extraction_does_not_misread_an_all_caps_two_letter_symbol(
+    tmp_path: Path,
+) -> None:
+    pseudo_path = write_attr_upf_without_element(tmp_path / "FE.UPF")
+
+    metadata = parse_upf_metadata(pseudo_path)
+
+    assert metadata.element == "Fe"

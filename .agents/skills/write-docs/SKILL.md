@@ -62,25 +62,17 @@ Primary docs:
 4. Keep package ownership consistent.
 
    ```text
-   calculation.py, request.py, result.py
-                        -> operator boundary contracts and stable Record IDs
-   runtime/graph.py      -> type-keyed DAG execution
-   runtime/dispatch.py   -> Calculation Task registry and Compute dispatch
-   runtime/models.py     -> model lifecycle
-   runtime/service.py    -> reusable operations, locking, and publication
-   runtime/jobs.py       -> short-lived Compute convenience
-   io/structures.py      -> Structure Source normalization and Inspection
-   runtime/capabilities.py -> coherent catalog snapshot
-   input_data.py         -> complete DFT Input Data assembly
-   publication.py        -> one directory/ZIP output layout
-   server/request.py     -> shared transport deserializer
-   server/http*.py       -> optional HTTP adapter
+   service/              -> orchestration: advise()/check()/generate()
+   advisors/             -> provenance-backed recommendations
+   analysis/             -> structure facts
+   kmesh.py              -> k-point mesh resolution
+   inputs/structure.py   -> Structure Source normalization and Inspection
+   inputs/hpc.py         -> HPC cluster profile schema and loader
+   bundle.py             -> one directory/ZIP output layout
+   capabilities.py       -> coherent catalog snapshot
+   server/http.py        -> optional HTTP adapter
    server/mcp.py         -> optional local stdio MCP adapter
    web/                  -> browser Workspace and generated HTTP types
-   analysis.py           -> structure facts
-   advice/               -> provenance-backed recommendations
-   kmesh/                -> k-point resolution
-   selection.py          -> concrete pseudopotential choices
    generation/           -> target-code rendering
    ```
 

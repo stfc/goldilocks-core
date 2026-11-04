@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from goldilocks_core.pseudo.registry import (
+from goldilocks_core.assets.pseudopotentials.registry import (
     InvalidPseudoRegistry,
     default_table,
     load_tables,
@@ -21,7 +21,10 @@ def test_registry_declares_complete_provider_assets() -> None:
         "metadata",
     }
     assert all(
-        file.url.startswith("https://www.pseudo-dojo.org/") for file in dojo.asset.files
+        file.url.startswith(
+            "https://data-collections.psdi.ac.uk/api/records/8gc82-qm928/files/"
+        )
+        for file in dojo.asset.files
     )
     assert dojo.asset.preparation_revision == "2"
 
@@ -48,6 +51,53 @@ def test_registry_has_one_exact_default() -> None:
 
     assert table.id == "pseudodojo-pbesol-efficiency-sr"
     assert table.asset.version == "0.4"
+
+
+def test_frozen_4f_core_is_a_declared_field_not_inferred_at_import_time() -> None:
+    """v2 epic 3 (#4) bug fix: frozen_4f_core used to be guessed by
+    substring-matching upstream_table for "3plus" at import time
+    (pseudo/import_pseudodojo.py); it is now a typed registry field."""
+    tables = load_tables()
+
+    assert tables["pseudodojo-pbe-lanthanides-sr"].frozen_4f_core is True
+    assert tables["pseudodojo-pbesol-efficiency-sr"].frozen_4f_core is False
+
+
+def test_note_and_record_reach_the_parsed_table_instead_of_being_dropped() -> None:
+    """v2 epic 3 (#4) bug fix: note/record were validated as allowed
+    optional TOML fields but never copied onto PseudoTable, so e.g. a
+    table's licence caveat in note never reached anything downstream."""
+    table = load_tables()["sssp-pbe-efficiency-sr"]
+
+    assert table.note is not None
+    assert "licences including GPL-3.0" in table.note
+    assert table.record == "rcyfm-68h65"
+    other = load_tables()["pseudodojo-pbesol-efficiency-sr"]
+    assert other.note is not None
+    assert "licences including GPL-3.0" not in other.note
+    assert other.record is None
+
+
+@pytest.mark.parametrize(
+    "table_id",
+    [
+        "sssp-pbe-efficiency-sr",
+        "sssp-pbe-precision-sr",
+        "sssp-pbesol-efficiency-sr",
+        "sssp-pbesol-precision-sr",
+    ],
+)
+def test_an_sssp_note_says_bundles_ship_its_licence(table_id: str) -> None:
+    """#157: a bundle ships an SSSP table's LICENSE.txt beside its UPFs, so
+    the note every SSSP record publishes says so, instead of claiming the
+    files are never redistributed."""
+    note = " ".join(load_tables()[table_id].note.split())
+
+    assert (
+        "a bundle that ships them ships the record's LICENSE.txt beside them, "
+        "as licences/<table-id>.txt"
+    ) in note
+    assert "never redistributed" not in note
 
 
 def test_registry_rejects_unknown_table_fields(tmp_path: Path) -> None:
@@ -79,8 +129,7 @@ url = "file:///tmp/pseudos.tgz"
 role = "metadata"
 path = "source/metadata.json"
 url = "file:///tmp/metadata.json"
-""".strip(),
-        encoding="utf-8",
+""".strip()
     )
 
     with pytest.raises(InvalidPseudoRegistry, match="extra: unexpected"):

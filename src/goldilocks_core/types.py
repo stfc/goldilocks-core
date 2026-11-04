@@ -1,39 +1,39 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal, get_args
-
-ProvenanceSource = Literal[
-    "analysis",
-    "user_hint",
-    "default",
-    "model",
-    "lookup",
-    "fallback",
-]
-"""``analysis``: derived from structure facts. ``user_hint``: operator-provided.
-``default``: package default when no analysis or hint applies. ``model``: ML
-prediction. ``lookup``: resolved from metadata. ``fallback``: no data available."""
+from typing import Any, Literal
 
 JsonDict = dict[str, Any]
 
 PathLike = str | Path
 
-TaskId = str
-
-StageId = str
-
-RecordId = str
-
 CodeName = str
 
-CalcTask = str
+CalcTask = Literal[
+    "scf_single_point",
+    "dos",
+    "band",
+    "relax",
+    "vc-relax",
+    "phonon",
+    "relax-phonon",
+    "vc-relax-phonon",
+]
+"""``dos`` added v2 epic 9, #9. ``relax``/``vc-relax`` added v2 epic 10,
+#10 -- both single-step (one ``pw.x`` run with ``calculation`` set
+accordingly), unlike ``dos``'s three-step scf/nscf/dos.x sequence.
+``band`` added #118: scf, pw.x along the band path, then bands.x.
+``phonon``/``relax-phonon``/``vc-relax-phonon`` added #215: an scf, a
+fixed-cell relax or a vc-relax, then ph.x on a q-point mesh, q2r.x, and
+matdyn.x for the phonon DOS and for the dispersion along the band path."""
 
-SmearingType = Literal["fixed", "gaussian", "mp", "cold"]
+SmearingType = Literal["gaussian", "mp", "cold", "fd"]
+"""QE's short names for its four smearing functions: Gaussian,
+Methfessel-Paxton, Marzari-Vanderbilt and Fermi-Dirac (QE 7.3
+``PW/src/set_occupations.f90:48-59``); pw.x stops on any other name.
+Fixed occupations are an ``occupations`` value, not a smearing kind."""
 
-ModelSource = Literal["huggingface", "local"]
-
-ModelType = Literal["random_forest", "cgcnn", "xgboost"]
+ModelType = Literal["random_forest", "cgcnn", "xgboost", "mlp"]
 
 PseudoAccuracy = Literal["efficiency", "precision"]
 
@@ -48,13 +48,6 @@ KPointShift = tuple[Literal[0, 1], Literal[0, 1], Literal[0, 1]]
 
 Dimensionality = Literal["3d", "2d", "1d", "molecule", "unknown"]
 
-ElectronicCharacter = Literal["metal", "insulator", "likely_metal", "unknown"]
-"""``metal``/``insulator``: model-backed. ``likely_metal``: all elements metallic,
-not confirmed. ``unknown``: cannot determine from structure alone."""
-
 VdwMethod = Literal["d3", "d3bj", "ts", "mbd"]
 """Code-agnostic labels mapped to code-specific keywords in Generate
 (e.g. ``d3bj`` → QE ``vdw_corr='grimme-d3'`` with ``dftd3_version=4``)."""
-
-_VALID_SMEARING_TYPES: frozenset[str] = frozenset(get_args(SmearingType))
-_VALID_VDW_METHODS: frozenset[str] = frozenset(get_args(VdwMethod))

@@ -12,7 +12,8 @@ from zipfile import ZipFile
 
 _REQUIRED_PACKAGE_FILES = (
     "goldilocks_core/ml/registry.toml",
-    "goldilocks_core/pseudo/registry.toml",
+    "goldilocks_core/assets/pseudopotentials/registry.toml",
+    "goldilocks_core/inputs/profiles/scarf.toml",
     "goldilocks_core/examples/structures/README.md",
     "goldilocks_core/examples/structures/Si.cif",
     "goldilocks_core/examples/structures/Fe_bcc.cif",
@@ -43,9 +44,7 @@ def main() -> int:
     args = parser.parse_args()
 
     project = tomllib.loads(
-        (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(
-            encoding="utf-8"
-        )
+        (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
     )["project"]
     wheels = tuple(args.dist_dir.glob("*.whl"))
     source_archives = tuple(args.dist_dir.glob("*.tar.gz"))

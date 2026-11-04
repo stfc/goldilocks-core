@@ -1,0 +1,45 @@
+site_name: goldilocks-core
+site_description: >-
+  Recommends settings for density functional theory (DFT) calculations and
+  generates Quantum ESPRESSO input files from a crystal structure.
+site_url: https://stfc.github.io/goldilocks-core/
+repo_url: https://github.com/stfc/goldilocks-core
+repo_name: goldilocks-core
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - search.suggest
+validation:
+  links:
+    # These docs deliberately cross-link to real files outside docs_dir
+    # (../README.md, ../web/README.md) that MkDocs can't resolve within
+    # its own site sandbox without a plugin -- not broken links. Broken
+    # *internal* links are still caught: tests/unit/test_docs_examples.py's
+    # test_doc_links_resolve() already checks every relative link across
+    # these same files resolves on disk (plain filesystem, no docs_dir
+    # sandboxing), runs in CI's existing quality-and-test job, and is
+    # not weakened by this.
+    not_found: info
+nav:
+  - Home: index.md
+  - First calculation: quickstart.md
+  - Python API: tutorial.md
+  - Recommendations: science.md
+  - Pseudopotentials: pseudopotentials.md
+  - CLI reference: cli.md
+  - mMACE: mmace-setup.md
+  - Scientific conventions: conventions.md
+  - Contributing: architecture.md

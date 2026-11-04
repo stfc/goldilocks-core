@@ -1,289 +1,105 @@
-"""Strict remote inputs and portable response schemas derived from native records.
+"""Wire-level request/response contracts shared by HTTP and MCP (v2
+epic 8, #8).
 
-Only this optional module depends on Pydantic. Input projections construct native
-values directly through ValidateAs; output projections describe trusted portable
-values and never revalidate execution results. Remote drafts deliberately expose
-only inline structures and registered pseudopotential identities.
+**`structure_content`, never `structure_path`.** The agent-design doc's
+own corrected rule (goldilocks-agent-design.md S9.1, "but 'pass path'
+has two boundaries") -- confirmed with the user for this epic: the
+browser-to-agent-server boundary passes a path, but the agent-to-core
+boundary passes content, matching core's own pitfall list item D3
+("remote interfaces do not accept local paths"). ``InlineStructureDocument``
+below is the same shape v1's ``server/documents.py`` already enforced
+(``InlineStructureSource``, path-shaped input explicitly rejected) --
+this rule did not change in v2, only the CLI (which *does* read local
+paths, being a local process, not a remote transport) needed the
+opposite rule spelled out.
+
+**Not a reflective ``_serialized_model``-style projection of internal
+dataclasses**, unlike v1's ``server/documents.py``. That reflection
+mechanism existed to mirror v1's `contracts.py`-centralized shapes
+automatically; v2 deliberately has no such central hub
+(``resolution.py``'s own docstring) and per-domain contracts are
+already pydantic (``inputs/overrides.py``'s ``HumanInput`` family,
+``resolution.ResolvedField``) -- so responses here just reuse those
+directly (``ResolvedField.from_state``) rather than re-deriving a
+parallel schema from scratch.
+
+**`overrides: dict[str, Any]`, not a typed model.** The same reasoning
+``set_overrides.py`` documents: every settable key is reflected from
+``capabilities.bindings()`` at request-validation time, not hand-listed
+in a schema -- a request body's ``overrides`` object is exactly the
+flat ``{key: value}`` shape ``set_overrides.build_overrides`` already
+accepts, JSON-typed instead of CLI-string-typed (no ``coerce_cli_value``
+step needed transport-side).
 """
 
 from __future__ import annotations
 
-import types
-from dataclasses import MISSING, fields, is_dataclass
-from functools import reduce
-from operator import or_
-from typing import (
-    Annotated,
-    Any,
-    Literal,
-    NotRequired,
-    Required,
-    TypeAliasType,
-    Union,
-    get_args,
-    get_origin,
-    get_type_hints,
-    is_typeddict,
-)
+from typing import Any, Literal
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    JsonValue,
-    ValidateAs,
-    create_model,
-    model_validator,
-)
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from goldilocks_core.calculation import CalculationHints, CalculationIntent
-from goldilocks_core.io.structures import InlineStructureSource, StructureInspection
-from goldilocks_core.request import (
-    CalculationDraft,
-    ComputeRequest,
-    PresetSelection,
-    RecordSelection,
-)
-from goldilocks_core.result import ComputationResult, PreparedComputation
-from goldilocks_core.runtime.capabilities import Capabilities
-from goldilocks_core.runtime.graph import CalculationTaskCapability
-from goldilocks_core.runtime.registry import record_types_by_id
-from goldilocks_core.serialization import Portable
+from goldilocks_core.types import CalcTask
 
-_STRICT = ConfigDict(extra="forbid", strict=True)
+_STRICT = ConfigDict(extra="forbid")
 
 
-def _contract_document(contract: type, **overrides: Any) -> Any:
-    hints = get_type_hints(contract)
-    definitions: dict[str, Any] = {}
-    for item in fields(contract):
-        default = (
-            Field(default_factory=item.default_factory)
-            if item.default_factory is not MISSING
-            else item.default
-            if item.default is not MISSING
-            else ...
-        )
-        definitions[item.name] = (hints[item.name], default)
-    model = create_model(
-        contract.__name__, __config__=_STRICT, **(definitions | overrides)
-    )
-    return Annotated[contract, ValidateAs(model, lambda value: contract(**vars(value)))]
+class InlineStructureDocument(BaseModel):
+    """Every scientific endpoint's structure input. Rejects anything
+    path-shaped outright, rather than relying on callers never sending
+    one -- the same guarantee v1's ``InlineStructureDocument`` gave via
+    its own ``_inline_structure`` validator."""
 
+    model_config = _STRICT
 
-IntentDocument = _contract_document(CalculationIntent)
-HintsDocument = _contract_document(CalculationHints, k_grid=(list[int] | None, None))
+    structure_content: str
+    structure_name: str = "structure"
+    structure_format: Literal["cif", "poscar"] | None = None
 
-
-def _inline_structure(value: Any) -> Any:
-    if isinstance(value, str) or (
-        isinstance(value, dict) and (value.get("kind") == "path" or "path" in value)
-    ):
-        raise ValueError(
-            "Transports do not accept file paths. Read the file and pass its "
-            "text as an inline Structure Source."
-        )
-    return value
-
-
-InlineStructureDocument = Annotated[
-    InlineStructureSource,
-    ValidateAs(
-        create_model(
-            "InlineStructureSource",
-            __config__=_STRICT,
-            __validators__={
-                "inline_structure": model_validator(mode="before")(_inline_structure)
-            },
-            kind=(Literal["inline"], "inline"),
-            name=(str, ...),
-            content=(str, ...),
-            format=(Literal["cif", "poscar"] | None, None),
-        ),
-        lambda value: InlineStructureSource(value.name, value.content, value.format),
-    ),
-]
-InspectRequestDocument = create_model(
-    "StructureInspectionRequest",
-    __config__=_STRICT,
-    source=(InlineStructureDocument, ...),
-)
-DraftDocument = Annotated[
-    CalculationDraft,
-    ValidateAs(
-        create_model(
-            "CalculationDraft",
-            __config__=_STRICT,
-            structure=(InlineStructureDocument, ...),
-            intent=(IntentDocument | None, None),
-            hints=(HintsDocument | None, None),
-            pseudo_table=(str | None, None),
-        ),
-        lambda value: CalculationDraft(
-            structure=value.structure,
-            intent=value.intent or CalculationIntent(),
-            hints=value.hints or CalculationHints(),
-            pseudo_table=value.pseudo_table,
-        ),
-    ),
-]
-PresetSelectionDocument = _contract_document(PresetSelection)
-RecordSelectionDocument = Annotated[
-    RecordSelection,
-    ValidateAs(
-        create_model("RecordSelection", __config__=_STRICT, records=(list[str], ...)),
-        lambda value: RecordSelection.from_ids(value.records),
-    ),
-]
-type SelectionDocument = PresetSelectionDocument | RecordSelectionDocument
-MemoryOutputDocument = create_model(
-    "MemoryOutput", __config__=_STRICT, kind=(Literal["memory"], ...)
-)
-ComputeRequestDocument = Annotated[
-    ComputeRequest,
-    ValidateAs(
-        create_model(
-            "ComputeRequest",
-            __config__=_STRICT,
-            draft=(DraftDocument, ...),
-            selection=(SelectionDocument, ...),
-        ),
-        lambda value: ComputeRequest(value.draft, value.selection),
-    ),
-]
-
-
-_SERIALIZED = ConfigDict(extra="forbid")
-_SERIALIZED_MODELS: dict[Any, Any] = {}
-_OMIT = object()
-
-
-def _serialized_annotation(annotation: Any) -> Any:
-    """Project domain annotations through the same exclusions as to_portable."""
-    if annotation is Any or annotation is JsonValue:
-        return JsonValue
-    if isinstance(annotation, TypeAliasType):
-        return _serialized_annotation(annotation.__value__)
-    origin = get_origin(annotation)
-    if origin in (Annotated, Required, NotRequired):
-        inner, *metadata = get_args(annotation)
-        for item in metadata:
-            if isinstance(item, Portable):
-                return (
-                    _OMIT
-                    if item.annotation is None
-                    else _serialized_annotation(item.annotation)
-                )
-        return _serialized_annotation(inner)
-    if is_typeddict(annotation) or (
-        isinstance(annotation, type) and is_dataclass(annotation)
-    ):
-        return _serialized_model(annotation)
-    if origin is None or origin is Literal:
-        return annotation
-    converted = tuple(_serialized_annotation(item) for item in get_args(annotation))
-    if origin in (tuple, list, dict):
-        return origin[converted]
-    if origin in (types.UnionType, Union):
-        return reduce(or_, converted)
-    return annotation
-
-
-def _serialized_model(
-    contract: type,
-    *,
-    overrides: dict[str, Any] | None = None,
-) -> type[BaseModel]:
-    if overrides is None and contract in _SERIALIZED_MODELS:
-        return _SERIALIZED_MODELS[contract]
-    hints = get_type_hints(contract, include_extras=True)
-    names = (
-        hints if is_typeddict(contract) else (item.name for item in fields(contract))
-    )
-    definitions: dict[str, Any] = {}
-    for name in names:
-        hint = hints[name]
-        annotation = (
-            overrides[name]
-            if overrides is not None and name in overrides
-            else _serialized_annotation(hint)
-        )
-        if annotation is _OMIT:
-            continue
-        optional = get_origin(hint) is NotRequired or (
-            is_typeddict(contract)
-            and name in contract.__optional_keys__
-            and get_origin(hint) is not Required
-        )
-        definitions[name] = (annotation, None if optional else ...)
-    document = create_model(contract.__name__, __config__=_SERIALIZED, **definitions)
-    if overrides is None:
-        _SERIALIZED_MODELS[contract] = document
-    return document
-
-
-CapabilitiesDocument = _serialized_model(Capabilities)
-StructureInspectionDocument = _serialized_model(StructureInspection)
-
-
-def computation_result_document(
-    tasks: tuple[CalculationTaskCapability, ...],
-) -> type[BaseModel]:
-    advertised_ids = dict.fromkeys(
-        record_id
-        for task in tasks
-        for record_id in (
-            *task["selectable_record_ids"],
-            *(
-                output_id
-                for preset in task["presets"]
-                for output_id in preset["output_record_ids"]
-            ),
-        )
-    )
-    registered_types = record_types_by_id()
-    records_document = create_model(
-        "Records",
-        __config__=_SERIALIZED,
-        **{
-            record_id: (_serialized_annotation(registered_types[record_id]), None)
-            for record_id in advertised_ids
-        },
-    )
-    return _serialized_model(ComputationResult, overrides={"records": records_document})
-
-
-def prepared_computation_document(
-    tasks: tuple[CalculationTaskCapability, ...],
-) -> type[BaseModel]:
-    hints = get_type_hints(PreparedComputation)
-    result_document = computation_result_document(tasks)
-    return create_model(
-        PreparedComputation.__name__,
-        __config__=_SERIALIZED,
-        **{
-            item.name: (
-                result_document
-                if item.name == "result"
-                else _serialized_annotation(hints[item.name]),
-                ... if item.default is MISSING else item.default,
+    @field_validator("structure_content")
+    @classmethod
+    def _reject_path_shaped_content(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("structure_content must not be empty")
+        if "\n" not in stripped and len(stripped) < 256:
+            # A bare one-line, no-newline value is far more likely to be
+            # a filesystem path a caller passed by mistake than real CIF/
+            # POSCAR text, which always spans multiple lines.
+            raise ValueError(
+                "structure_content must be file text (e.g. a CIF), not a "
+                "path -- remote transports do not accept local paths"
             )
-            for item in fields(PreparedComputation)
-        },
-    )
+        return value
 
 
-ErrorDocument = create_model(
-    "Error",
-    __config__=ConfigDict(extra="forbid", strict=True),
-    kind=(str, ...),
-    message=(str, ...),
-    retryable=(bool | None, None),
-    details=(dict[str, JsonValue] | None, None),
-    asset_id=(str | None, None),
-    version=(str | None, None),
-    reason=(str | None, None),
-)
-ErrorResponseDocument = create_model(
-    "ErrorResponse", __config__=_SERIALIZED, error=(ErrorDocument, ...)
-)
+class ComputeRequestDocument(InlineStructureDocument):
+    """Shared by ``/explain`` and ``/run`` (and MCP's ``explain``/``run``
+    tools) -- one request shape, per this epic's own "one shared
+    request-validation path" scope item.
+
+    ``task: CalcTask`` (v2 epic 9, #9, #28), not a bare ``str``: an
+    unknown task must be a pydantic validation error at the transport
+    boundary, the same "clear operator error, not a silent fallback"
+    contract an unknown ``--set`` key or hpc profile already gets --
+    before this, the field parsed but was never read anywhere, so any
+    value (typo or not) silently ran the scf-only pipeline."""
+
+    code: str = "quantum_espresso"
+    task: CalcTask = "scf_single_point"
+    hpc: str | None = None
+    overrides: dict[str, Any] = Field(default_factory=dict)
+    fetch_missing: bool = False
+
+
+class RunRequestDocument(ComputeRequestDocument):
+    respond_with: Literal["json", "archive"] = "json"
+
+
+class MagneticOrderingsRequestDocument(InlineStructureDocument):
+    """Shared by ``/magnetic-orderings`` and MCP's ``magnetic_orderings``
+    tool (#87). Its own document, not ``ComputeRequestDocument``: this
+    lists candidates independently of any code/task/hpc/overrides choice,
+    the same reason ``service.list_magnetic_orderings`` sits outside
+    ``advise()``/``generate()`` entirely."""
+
+    rank_with_mmace: bool = False

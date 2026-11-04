@@ -29,7 +29,9 @@ The current k-mesh code uses pymatgen's solid-state reciprocal lattice conventio
 N_i = max(1, ceil(|b_i| / spacing))
 ```
 
-where `|b_i|` is the reciprocal lattice vector length for direction `i`.
+where `|b_i|` is the reciprocal lattice vector length for direction `i`. A
+vacuum axis (an atom-free slab wider than 5 Å along that lattice vector,
+`analysis.geometry.vacuum_axes`) gets `N_i = 1` instead, whatever the spacing.
 
 When touching this code, be explicit about whether a spacing is crystallographic reciprocal length or solid-state reciprocal length including `2π`.
 
@@ -66,7 +68,7 @@ mesh.
 
 - Metals usually need denser k-point meshes than insulators because the Fermi surface is sharp.
 - Small primitive cells usually need denser meshes than large supercells.
-- 2D and 1D systems need fewer k-points in non-periodic directions, but the code must know which directions are non-periodic before making that choice.
+- Slabs, wires and molecules in a box need one k-point along each non-periodic direction. `kmesh.py` reads those directions from the vacuum of the cell it is given, not from the dimensionality label, which calls bulk graphite `2d`.
 - Symmetry can reduce the number of irreducible k-points and cost, but the full mesh still controls sampling density.
 
 ## Hints, Kmesh, and generation

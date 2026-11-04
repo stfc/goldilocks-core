@@ -12,10 +12,3 @@ class FileReference(TypedDict):
 
 class InputArtifact(FileReference):
     content: Annotated[bytes, Portable()]
-
-
-class GeneratedFile(FileReference):
-    content: str
-
-
-type GeneratedFiles = tuple[GeneratedFile, ...]

@@ -25,8 +25,8 @@ git log origin/HEAD..HEAD --oneline 2>/dev/null
 ### 2. Check Open PRs
 
 ```bash
-gh pr list --repo stfc/goldilocks-core --state open --limit 10
-gh pr checks <number> --repo stfc/goldilocks-core
+gh pr list --repo junwen94/goldilocks-core --state open --limit 10
+gh pr checks <number> --repo junwen94/goldilocks-core
 ```
 
 For each open PR, note: which issue it closes, whether checks pass, and whether it's been reviewed.
@@ -34,8 +34,8 @@ For each open PR, note: which issue it closes, whether checks pass, and whether 
 ### 3. Read Recent Issue Activity
 
 ```bash
-gh issue list --repo stfc/goldilocks-core --state open --limit 10
-gh issue list --repo stfc/goldilocks-core --state all --limit 5 --search "sort:updated-desc"
+gh issue list --repo junwen94/goldilocks-core --state open --limit 10
+gh issue list --repo junwen94/goldilocks-core --state all --limit 5 --search "sort:updated-desc"
 ```
 
 Read the most recently updated issues. Check their comments for progress reports from previous sessions.
@@ -49,10 +49,10 @@ Focus on:
 
 ```bash
 # Milestones: do they exist? are issues assigned?
-gh api repos/stfc/goldilocks-core/milestones --jq '.[] | "\(.number) | \(.title) | open=\(.open_issues)"'
+gh api repos/junwen94/goldilocks-core/milestones --jq '.[] | "\(.number) | \(.title) | open=\(.open_issues)"'
 
 # Open issues with no milestone (a hygiene red flag — see AGENTS.md "Issue hygiene")
-gh issue list --repo stfc/goldilocks-core --state open --limit 100 --json number,milestone --jq '.[] | select(.milestone == null) | .number'
+gh issue list --repo junwen94/goldilocks-core --state open --limit 100 --json number,milestone --jq '.[] | select(.milestone == null) | .number'
 ```
 
 If there are no milestones, or many milestone-less issues, flag it — the board is drifting.

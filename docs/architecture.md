@@ -531,7 +531,10 @@ magnetic-ordering enumeration runs on one long-lived worker process
 (`advisors/magnetic_enumeration.py`). mace sets torch's default dtype for the
 whole process, which breaks float32 models built on other threads, so the
 server and CLI processes never import it: `is_magnetic` predictions run on a
-second long-lived worker (`ml/mace_process.py`), and each mMACE ordering
+second long-lived worker (`ml/mace_process.py`), which is replaced by a fresh,
+warmed one once it has been idle for 30 s after a structure of more than 16
+atoms, since only its exit releases the memory a prediction leaves behind
+(`WorkerProcess.replace_when_idle`, #260). Each mMACE ordering
 ranking relaxes its candidates on a process of its own, one call per candidate
 and one ranking at a time (`advisors/magnetic_ordering_ml.py`). Over HTTP a
 ranking is a job: `server/ranking_jobs.py` queues them in order on one runner

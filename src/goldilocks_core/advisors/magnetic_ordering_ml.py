@@ -154,7 +154,8 @@ def max_atoms() -> int:
     classification. Their memory grows with the atom count: the is_magnetic
     embedding peaked at 3.5, 6.4 and 11.8 GB for 54, 128 and 250 atoms, and a
     ranking at 2.3 GB for a 16-atom bcc Fe supercell (core 0.3.0, macOS,
-    2026-11-09).
+    2026-11-09). On Linux with goldilocks-ml 0.3.3, the is_magnetic worker
+    peaked at 6.3 GB at this default, from a 0.7 GB baseline (#259).
 
     Raises ``ValueError`` for a value that is not a positive whole number."""
     raw = os.environ.get(MAX_ATOMS_ENV)

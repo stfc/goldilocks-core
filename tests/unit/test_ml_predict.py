@@ -403,6 +403,49 @@ def test_the_mace_worker_reports_a_mace_without_magnetic_models_as_unavailable(
         mace_process._predict_is_magnetic(tmp_path, tmp_path / "backbone.model", _IRON)
 
 
+@pytest.mark.parametrize(("atoms", "replaced"), [(16, False), (17, True)])
+def test_the_is_magnetic_worker_is_replaced_once_idle_after_a_large_structure(
+    atoms: int, replaced: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#260: the worker keeps much of a large prediction's memory until it
+    exits, so a fresh, warmed one takes over once it is idle."""
+
+    class Worker:
+        def __init__(self) -> None:
+            self.replacements: list[tuple[object, ...]] = []
+
+        def run(self, fn, *args):
+            return "prediction"
+
+        def replace_when_idle(self, after_s, warm_up, *args) -> None:
+            self.replacements.append((after_s, warm_up, *args))
+
+    worker = Worker()
+    monkeypatch.setattr(mace_process, "_IS_MAGNETIC_WORKER", worker)
+    hydrogens = Structure(
+        Lattice.cubic(20.0), ["H"] * atoms, [[i / atoms, 0, 0] for i in range(atoms)]
+    )
+    checkpoint = tmp_path / "backbone.model"
+
+    assert (
+        mace_process.predict_is_magnetic(tmp_path, checkpoint, hydrogens)
+        == "prediction"
+    )
+    assert worker.replacements == (
+        [
+            (
+                30.0,
+                mace_process._predict_is_magnetic,
+                tmp_path,
+                checkpoint,
+                mace_process._WARM_UP_CELL,
+            )
+        ]
+        if replaced
+        else []
+    )
+
+
 def test_is_magnetic_falls_back_when_the_worker_cannot_import_mace(
     tmp_path: Path,
     backbone: Path,

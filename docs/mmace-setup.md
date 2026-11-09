@@ -106,8 +106,10 @@ runs. Rankings take minutes: rock-salt NiO's eight candidates take about two on 
 ## 5. Structure size limit
 
 mMACE's memory grows with the number of atoms. The `is_magnetic` embedding peaked at 3.5,
-6.4 and 11.8 GB for 54, 128 and 250 atoms (core 0.3.0, macOS, 2026-11-09). So neither
-mMACE use runs on a structure with more atoms than `GOLDILOCKS_MMACE_MAX_ATOMS` (default 200):
+6.4 and 11.8 GB for 54, 128 and 250 atoms (core 0.3.0, macOS, 2026-11-09). On Linux with
+goldilocks-ml 0.3.3 (aarch64, glibc 2.36, 2026-11-09), its worker peaked at 4.3 GB for 128
+atoms and 6.3 GB for 200, from a 0.7 GB baseline. So neither mMACE use runs on a structure
+with more atoms than `GOLDILOCKS_MMACE_MAX_ATOMS` (default 200):
 
 - `is_magnetic` takes its next tier's answer (an LLM value, else the local-moment
   heuristic), and the record's `source_note` says the classifier was not run and why. The
@@ -119,3 +121,10 @@ mMACE use runs on a structure with more atoms than `GOLDILOCKS_MMACE_MAX_ATOMS` 
 ```bash
 export GOLDILOCKS_MMACE_MAX_ATOMS=400   # a positive whole number; anything else fails the request
 ```
+
+The `is_magnetic` worker keeps much of a prediction's memory afterwards: 0.45 GB after a
+16-atom structure, 0.9–2.3 GB after a 128-atom one. Only the process exiting releases it.
+So after a structure of more than 16 atoms, once the worker has been idle for 30 s, a fresh
+one is started and warmed up in the background and takes over, and the old one exits. On
+Linux that brought the worker back to 0.67 GB. Predictions keep going to the old worker
+meanwhile, so none waits for the model to load.

@@ -274,7 +274,9 @@ mMACE backbone it embeds structures with, the one the [magnetic
 orderings](#magnetic-orderings) `--rank-with-mmace` flag uses below, and
 `mace-torch`, `e3nn` and `sphericart` come with goldilocks-ml.
 `GOLDILOCKS_MACE_BACKBONE` overrides the installed backbone for both (see
-[mMACE](mmace-setup.md)). A model
+[mMACE](mmace-setup.md)). Above `GOLDILOCKS_MMACE_MAX_ATOMS` atoms (default
+200) `is_magnetic` skips the classifier, and the record's `source_note` says
+why ([structure size limit](mmace-setup.md#5-structure-size-limit)). A model
 that is not set up (its asset not installed or failing verification, or
 for `is_magnetic` the packages or checkpoint missing) leaves the value to
 the next tier. Once a model is set up, an error
@@ -368,8 +370,8 @@ and applied, so every label writes one slab with the uploaded vacuum.
 mMACE potential energy surface and recommends the lowest energy-per-atom
 one -- needs the mMACE backbone, installed with `is_magnetic`'s asset or
 named by `GOLDILOCKS_MACE_BACKBONE`, as described above. Missing it, or an
-error inside the relaxation itself, degrades to an unranked listing
-with a warning. Each ranking runs in its own process, one ranking at a time,
+error inside the relaxation itself, or a candidate with more atoms than
+`GOLDILOCKS_MMACE_MAX_ATOMS`, degrades to an unranked listing with a warning. Each ranking runs in its own process, one ranking at a time,
 so a long ranking never holds up `explain` or `run`; a ranking process that
 dies fails the request.
 

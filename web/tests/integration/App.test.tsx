@@ -243,6 +243,94 @@ describe("Goldilocks Workbench", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("says under is_magnetic why the mMACE classifier was not run", async () => {
+    // #259: above the server's atom limit the classifier is skipped, and the
+    // record the heuristic resolves carries the reason as its source_note.
+    const note =
+      "The mMACE classifier was not run: 312 atoms is above this server's " +
+      "200-atom limit for mMACE (GOLDILOCKS_MMACE_MAX_ATOMS), so the " +
+      "local-moment heuristic decided.";
+    const review = magneticReview({
+      isMagnetic: "magnetic",
+      spinPolarized: false,
+    });
+    const core = new CoreStub(
+      Promise.resolve({
+        ...capabilities,
+        facts: [
+          ...capabilities.facts,
+          {
+            key: "is_magnetic",
+            type: "enum",
+            values: ["magnetic", "non_magnetic"],
+            ml_target: "is_magnetic",
+            approaches: ["human", "ml", "heuristic"],
+            overridable: true,
+            description: "Whether the structure has local moments.",
+          },
+        ],
+      }),
+    );
+    core.inspectionResults = [Promise.resolve(inspection)];
+    core.explainResults = [
+      Promise.resolve({
+        ...review,
+        records: {
+          ...review.records,
+          is_magnetic: {
+            status: "resolved",
+            value: "magnetic",
+            source: "heuristic",
+            source_note: note,
+          },
+        },
+      }),
+    ];
+    const { container } = renderApp(core);
+
+    await openStructure(userEvent.setup(), container);
+
+    const analysis = screen.getByRole("region", {
+      name: "Goldilocks analysis",
+    });
+    expect(await within(analysis).findByText(note)).toBeInTheDocument();
+  });
+
+  it("says in the orderings card why a ranking was not run", async () => {
+    const user = userEvent.setup();
+    const message =
+      "mMACE ranking was not run: candidate afm-1 has 312 atoms, above " +
+      "this server's 200-atom limit for mMACE (GOLDILOCKS_MMACE_MAX_ATOMS)";
+    const core = new CoreStub(Promise.resolve(capabilities));
+    core.inspectionResults = [Promise.resolve(inspection)];
+    core.explainResults = [spinPolarizedReview()];
+    core.magneticOrderingsResults = [
+      Promise.resolve(orderingsListing(2, "fm", "afm-1")),
+      Promise.resolve({
+        ...orderingsListing(2, "fm", "afm-1"),
+        warnings: [
+          {
+            code: "magnetic.ordering_ranking_unavailable",
+            level: "warning",
+            category: "magnetic",
+            message,
+          },
+        ],
+      }),
+    ];
+    const { container } = renderApp(core);
+    await openStructure(user, container);
+    const card = await orderingsCard();
+    await within(card).findByRole("checkbox", {
+      name: "Select afm-1 for download",
+    });
+
+    await user.click(within(card).getByRole("button", { name: "Run mMACE" }));
+
+    expect(await within(card).findByText(message)).toBeInTheDocument();
+    expect(within(card).getByText("Not yet ranked")).toBeInTheDocument();
+  });
+
   it("lists and bundles a replacement structure's own orderings when the old listing lands late", async () => {
     // #149: the listing of a structure replaced while it was in flight was
     // shown on the new structure's card, kept the new structure from being

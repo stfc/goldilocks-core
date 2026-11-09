@@ -1,5 +1,6 @@
 import { Accordion, Stack, Text } from "@mantine/core";
 
+import type { ResolvedField } from "../api/coreClient";
 import { OverrideControl } from "../controls/OverrideControl";
 import { RecordAccordionItem } from "../review/RecordAccordionItem";
 import { FindingNotes } from "../status/FindingNote";
@@ -74,17 +75,7 @@ export function AnalysisSection() {
                 ) : (
                   <FactSummary fact={fact} record={record} />
                 )}
-                {record === undefined || record.status === "resolved" ? null : (
-                  <Text
-                    size="xs"
-                    c={record.status === "blocked" ? "red" : "dimmed"}
-                    mt={4}
-                  >
-                    {record.status === "blocked"
-                      ? `Blocked — ${record.blocked_by ?? "an upstream field failed"}`
-                      : `Unavailable — ${record.reason ?? "no reason given"}`}
-                  </Text>
-                )}
+                <FactNote record={record} />
                 <FindingNotes field={fact.key} />
               </div>
             );
@@ -103,5 +94,27 @@ export function AnalysisSection() {
         </Accordion>
       )}
     </Stack>
+  );
+}
+
+/** What a fact's record says besides its value: why it is blocked or
+ * unavailable, or the note of the tier that resolved it -- such as why the
+ * mMACE classifier was not run on a structure above the server's atom
+ * limit (#259). */
+function FactNote({ record }: { readonly record: ResolvedField | undefined }) {
+  if (record === undefined) return null;
+  if (record.status === "resolved") {
+    return record.source_note ? (
+      <Text size="xs" c="dimmed" mt={4}>
+        {record.source_note}
+      </Text>
+    ) : null;
+  }
+  return (
+    <Text size="xs" c={record.status === "blocked" ? "red" : "dimmed"} mt={4}>
+      {record.status === "blocked"
+        ? `Blocked — ${record.blocked_by ?? "an upstream field failed"}`
+        : `Unavailable — ${record.reason ?? "no reason given"}`}
+    </Text>
   );
 }

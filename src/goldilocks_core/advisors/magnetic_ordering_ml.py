@@ -26,6 +26,9 @@ mace changes process-wide state (torch's default dtype, ``os.environ``,
 stdout; see ``ml/mace_process.py``), so this process never imports it: each
 ranking relaxes its candidates in a fresh process, and one ranking runs at a
 time, since each process holds torch and the 84 MB backbone (#130).
+
+mMACE's memory grows with the number of atoms, so neither mMACE use runs on
+a structure above :func:`max_atoms` (#259).
 """
 
 from __future__ import annotations
@@ -49,6 +52,8 @@ if TYPE_CHECKING:
     from pymatgen.core import Structure
 
 CHECKPOINT_ENV = "GOLDILOCKS_MACE_BACKBONE"
+MAX_ATOMS_ENV = "GOLDILOCKS_MMACE_MAX_ATOMS"
+DEFAULT_MAX_ATOMS = 200
 _MACE_PACKAGES = ("mace", "e3nn", "sphericart")
 _RANKING_SLOT = threading.BoundedSemaphore(1)
 
@@ -138,6 +143,26 @@ def require_mace_packages() -> None:
         )
 
 
+def max_atoms() -> int:
+    """The most atoms this server runs an mMACE model on:
+    ``GOLDILOCKS_MMACE_MAX_ATOMS`` if set, else 200.
+
+    Shared by :func:`rank_orderings` and ``ml.predict``'s is_magnetic
+    classification. Their memory grows with the atom count: the is_magnetic
+    embedding peaked at 3.5, 6.4 and 11.8 GB for 54, 128 and 250 atoms, and a
+    ranking at 2.3 GB for a 16-atom bcc Fe supercell (core 0.3.0, macOS,
+    2026-11-09).
+
+    Raises ``ValueError`` for a value that is not a positive whole number."""
+    raw = os.environ.get(MAX_ATOMS_ENV)
+    if not raw:
+        return DEFAULT_MAX_ATOMS
+    text = raw.strip()
+    if not text.isdecimal() or int(text) == 0:
+        raise ValueError(f"{MAX_ATOMS_ENV}={raw!r} is not a positive whole number")
+    return int(text)
+
+
 def _seed_moments(candidate: Structure, limits: dict[str, float]) -> np.ndarray:
     """Signed initial moments for one candidate: magnitude from the same
     oxidation-state heuristic for every candidate (so the energy comparison
@@ -176,8 +201,9 @@ def rank_orderings(
     ranking in progress.
 
     Raises :class:`MagneticOrderingMlUnavailable` if the checkpoint is not
-    configured or mace, e3nn or sphericart is not installed, before any
-    process starts -- and also if relaxing a candidate itself fails at
+    configured, mace, e3nn or sphericart is not installed, or a candidate
+    has more atoms than :func:`max_atoms`, before any process starts -- and
+    also if relaxing a candidate itself fails at
     runtime, which no precondition here can check up front (a library
     error inside the ranking process, such as a goldilocks-ml/mace-torch
     version mismatch). Either way, the caller sees the same
@@ -189,6 +215,14 @@ def rank_orderings(
         raise ValueError("rank_orderings needs at least one candidate")
     checkpoint = checkpoint_path()
     require_mace_packages()
+    limit = max_atoms()
+    label, largest = max(candidates, key=lambda candidate: len(candidate[1]))
+    if len(largest) > limit:
+        raise MagneticOrderingMlUnavailable(
+            f"mMACE ranking was not run: candidate {label} has {len(largest)} "
+            f"atoms, above this server's {limit}-atom limit for mMACE "
+            f"({MAX_ATOMS_ENV})"
+        )
     with _RANKING_SLOT:
         results = run_in_fresh_process(
             _relax_candidates, tuple(candidates), checkpoint, device

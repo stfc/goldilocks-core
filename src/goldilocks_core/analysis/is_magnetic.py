@@ -17,6 +17,10 @@ read as Ni0 d10, FePt and FeCo had no guess, metallic TiN and WC read as
 Ti3+ d1 and W4+ d2, any lanthanide or actinide counted as magnetic (f0
 ThO2), and no p-block radical ever did (solid O2).
 
+The ml tier is skipped for a structure with more atoms than the server lets
+mMACE run on (``GOLDILOCKS_MMACE_MAX_ATOMS``), and the record the next tier
+resolves says so in its ``source_note`` (#259).
+
 The human and LLM overrides take the record's own values, ``magnetic`` or
 ``non_magnetic``, the values ``/capabilities`` advertises; a boolean is
 refused (#139).
@@ -30,7 +34,7 @@ from pymatgen.core import Structure
 
 from goldilocks_core.analysis.local_moments import local_moments
 from goldilocks_core.inputs.overrides import HumanInput, LlmInput
-from goldilocks_core.resolution import FieldState, Provenance, Resolved
+from goldilocks_core.resolution import FieldState, Provenance, Resolved, Unavailable
 
 if TYPE_CHECKING:
     from goldilocks_core.ml.predict import MlPrediction
@@ -56,23 +60,28 @@ def is_magnetic(
     if human.is_magnetic is not None:
         return Resolved(human.is_magnetic, Provenance(source="human"))
     prediction = _ml_is_magnetic(structure)
-    if prediction is not None:
+    if prediction is not None and not isinstance(prediction, str):
         return Resolved(
             "magnetic" if prediction.value else "non_magnetic", prediction.provenance
         )
+    skipped = prediction
     if llm.is_magnetic is not None:
-        return Resolved(llm.is_magnetic, Provenance(source="llm"))
-    return _heuristic(structure)
+        return Resolved(
+            llm.is_magnetic,
+            Provenance(source="llm", source_note=_skipped_note(skipped, "the LLM")),
+        )
+    return _heuristic(structure, skipped)
 
 
-def _ml_is_magnetic(structure: Structure) -> MlPrediction | None:
+def _ml_is_magnetic(structure: Structure) -> MlPrediction | str | None:
     """The published mMACE-embedding MLP classifier's prediction (v2 epic 11,
-    #11), whose ``provenance`` the record carries (#156), or
-    ``None`` if it is not set up: its model asset is not installed or fails
-    verification, ``mace``/``e3nn``/``sphericart`` are not installed
+    #11), whose ``provenance`` the record carries (#156); why it was skipped,
+    when the structure has more atoms than the server lets mMACE run on
+    (#259); or ``None`` if it is not set up: its model asset is not installed
+    or fails verification, ``mace``/``e3nn``/``sphericart`` are not installed
     (goldilocks-ml installs them with ``mace-torch[magnetic]``), or no mMACE
     backbone is available. ``is_magnetic()`` then falls back to its next
-    tier.
+    tier, and a skip reason goes on the record that tier resolves.
 
     The model asset carries the backbone beside the classifier (#244);
     ``GOLDILOCKS_MACE_BACKBONE`` overrides it.
@@ -87,20 +96,38 @@ def _ml_is_magnetic(structure: Structure) -> MlPrediction | None:
     model that is set up but fails to load or predict raises, failing
     ``is_magnetic()`` itself: a silent heuristic answer would change the
     generated input (#130)."""
-    from goldilocks_core.ml.predict import MlModelUnavailable, predict
+    from goldilocks_core.ml.predict import MlInputTooLarge, MlModelUnavailable, predict
 
     try:
         return predict("is_magnetic", structure)
+    except MlInputTooLarge as error:
+        return str(error)
     except MlModelUnavailable:
         return None
 
 
-def _heuristic(structure: Structure) -> FieldState[Magnetism]:
+def _skipped_note(skipped: str | None, decider: str) -> str | None:
+    """The record's note when the classifier was skipped, naming the tier
+    that decided instead."""
+    if skipped is None:
+        return None
+    return f"The mMACE classifier was not run: {skipped}, so {decider} decided."
+
+
+def _heuristic(structure: Structure, skipped: str | None) -> FieldState[Magnetism]:
     moments = local_moments(structure)
+    if isinstance(moments, Unavailable) and skipped is not None:
+        return Unavailable(
+            reason=f"{moments.reason} (the mMACE classifier was not run: {skipped})"
+        )
     if not moments.ok:
         return moments
     facts = moments.value
     magnetic = bool(facts.moment_elements) or facts.radical
     return Resolved(
-        "magnetic" if magnetic else "non_magnetic", Provenance(source="heuristic")
+        "magnetic" if magnetic else "non_magnetic",
+        Provenance(
+            source="heuristic",
+            source_note=_skipped_note(skipped, "the local-moment heuristic"),
+        ),
     )

@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import math
+import shutil
 import threading
 import time
 from importlib.machinery import ModuleSpec
@@ -23,8 +24,10 @@ from pymatgen.core import Lattice, Species, Structure
 from goldilocks_core.advisors import magnetic_ordering_ml
 from goldilocks_core.advisors.magnetic_ordering_ml import (
     CHECKPOINT_ENV,
+    MAX_ATOMS_ENV,
     MagneticOrderingMlUnavailable,
     checkpoint_path,
+    max_atoms,
     rank_orderings,
 )
 from goldilocks_core.service import (
@@ -370,6 +373,90 @@ def test_rank_orderings_relaxes_every_candidate_in_one_fresh_process(
     rank_orderings(candidates, device="cpu")
 
     assert started == [(tuple(candidates), tmp_path / "backbone.model", "cpu")]
+
+
+@pytest.mark.parametrize(("raw", "limit"), [(None, 200), ("", 200), (" 50 ", 50)])
+def test_max_atoms_reads_the_variable_with_a_default_of_200(
+    raw: str | None, limit: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if raw is None:
+        monkeypatch.delenv(MAX_ATOMS_ENV, raising=False)
+    else:
+        monkeypatch.setenv(MAX_ATOMS_ENV, raw)
+
+    assert max_atoms() == limit
+
+
+@pytest.mark.parametrize("raw", ["0", "-5", "1.5", "lots"])
+def test_max_atoms_refuses_a_value_that_is_not_a_positive_whole_number(
+    raw: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(MAX_ATOMS_ENV, raw)
+
+    with pytest.raises(ValueError, match=f"^{MAX_ATOMS_ENV}="):
+        max_atoms()
+
+
+def test_rank_orderings_refuses_a_candidate_above_the_atom_limit_before_a_process(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """#259: the largest candidate decides, since a candidate's cell can be
+    larger than the input's."""
+    _configure_checkpoint(monkeypatch, tmp_path)
+    _report_mace_installed(monkeypatch)
+    monkeypatch.setenv(MAX_ATOMS_ENV, "1")
+
+    def no_process(fn, *args):
+        raise AssertionError("no ranking process may start above the atom limit")
+
+    monkeypatch.setattr(magnetic_ordering_ml, "run_in_fresh_process", no_process)
+
+    with pytest.raises(MagneticOrderingMlUnavailable) as raised:
+        rank_orderings([("fm", _IRON), ("afm-1", _BCC_IRON_AFM)])
+
+    assert str(raised.value) == (
+        "mMACE ranking was not run: candidate afm-1 has 2 atoms, above this "
+        "server's 1-atom limit for mMACE (GOLDILOCKS_MMACE_MAX_ATOMS)"
+    )
+
+
+def test_rank_orderings_runs_with_every_candidate_at_the_atom_limit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    _configure_checkpoint(monkeypatch, tmp_path)
+    started = _stub_relax_seam(monkeypatch, _ok_relaxation)
+    monkeypatch.setenv(MAX_ATOMS_ENV, "2")
+
+    rank_orderings([("fm", _IRON), ("afm-1", _BCC_IRON_AFM)])
+
+    assert len(started) == 1
+
+
+def test_a_listing_above_the_atom_limit_comes_back_unranked_saying_why(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    _configure_checkpoint(monkeypatch, tmp_path)
+    _report_mace_installed(monkeypatch)
+    monkeypatch.setenv(MAX_ATOMS_ENV, "1")
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+
+    def no_process(fn, *args):
+        raise AssertionError("no ranking process may start above the atom limit")
+
+    monkeypatch.setattr(magnetic_ordering_ml, "run_in_fresh_process", no_process)
+
+    report = list_magnetic_orderings(_BCC_IRON, rank_with_mmace=True)
+
+    assert not report.ranked
+    assert [candidate.label for candidate in report.candidates] == ["fm"]
+    assert [
+        warning.message
+        for warning in report.warnings
+        if warning.code == "magnetic.ordering_ranking_unavailable"
+    ] == [
+        "mMACE ranking was not run: candidate fm has 2 atoms, above this "
+        "server's 1-atom limit for mMACE (GOLDILOCKS_MMACE_MAX_ATOMS)"
+    ]
 
 
 def test_a_relaxation_that_fails_degrades_the_ranking(

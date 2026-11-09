@@ -101,3 +101,20 @@ UI.
 Clicking **Run mMACE** there ranks the candidates in a separate process, so editing a setting
 while it runs is unaffected; a second ranking waits for the first to finish. Rankings take
 minutes: rock-salt NiO's eight candidates take about two on a laptop CPU.
+
+## 5. Structure size limit
+
+mMACE's memory grows with the number of atoms. The `is_magnetic` embedding peaked at 3.5,
+6.4 and 11.8 GB for 54, 128 and 250 atoms (core 0.3.0, macOS, 2026-11-09). So neither
+mMACE use runs on a structure with more atoms than `GOLDILOCKS_MMACE_MAX_ATOMS` (default 200):
+
+- `is_magnetic` takes its next tier's answer (an LLM value, else the local-moment
+  heuristic), and the record's `source_note` says the classifier was not run and why. The
+  Workbench shows it under the "is magnetic" field.
+- A ranking whose largest candidate is above the limit is not started. The candidates come
+  back unranked, with a `magnetic.ordering_ranking_unavailable` warning naming the candidate,
+  its atom count and the limit.
+
+```bash
+export GOLDILOCKS_MMACE_MAX_ATOMS=400   # a positive whole number; anything else fails the request
+```

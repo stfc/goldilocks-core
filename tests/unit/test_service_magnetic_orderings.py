@@ -72,8 +72,7 @@ def test_ranked_listing_marks_the_lowest_energy_candidate_as_recommended(
         lambda *_args, **_kwargs: ((_ROCK_SALT_FEO.copy(), "afm"),),
     )
 
-    def fake_rank_orderings(candidates, *, device="cpu"):
-        del device
+    def fake_rank_orderings(candidates, **_):
         results = tuple(
             OrderingCandidate(
                 label=label,
@@ -139,8 +138,8 @@ def test_every_candidate_is_generated_by_its_label_on_the_listed_structure(
 
 
 def test_ranking_unavailable_falls_back_to_unranked_with_a_warning(monkeypatch) -> None:
-    def fake_rank_orderings(candidates, *, device="cpu"):
-        del candidates, device
+    def fake_rank_orderings(candidates, **_):
+        del candidates
         raise MagneticOrderingMlUnavailable("set GOLDILOCKS_MACE_BACKBONE ...")
 
     monkeypatch.setattr(

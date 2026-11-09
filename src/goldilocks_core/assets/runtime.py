@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Iterator, Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from goldilocks_core.assets.profiles import profile
 from goldilocks_core.assets.pseudopotentials.importers import table_installations
@@ -11,7 +11,8 @@ from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.ml.models import model_asset_specs
 from goldilocks_core.types import PathLike
 
-WORKBENCH_PROFILE = "workbench"
+ALL_PROFILE = "all"
+"""Every registered model and pseudopotential table (#251)."""
 
 
 def catalogue(
@@ -38,7 +39,7 @@ def references(
     entries = dict(entries or catalogue())
     if name in entries:
         return (entries[name],)
-    if name == WORKBENCH_PROFILE:
+    if name == ALL_PROFILE:
         return tuple(entries[asset_id] for asset_id in sorted(entries))
     table_reference = _table_reference(name, entries)
     if table_reference is not None:
@@ -75,16 +76,27 @@ def _table_reference(
 def install(
     name: str, *, store: AssetStore | None = None
 ) -> tuple[InstalledAsset, ...]:
-    """Install independent assets concurrently with ordered, verified results."""
+    """Install independent assets concurrently; returns the verified assets
+    in ``references(name)`` order."""
+    installed = {asset.id: asset for asset in install_each(name, store=store)}
+    return tuple(installed[item.spec.id] for item in references(name))
+
+
+def install_each(
+    name: str, *, store: AssetStore | None = None
+) -> Iterator[InstalledAsset]:
+    """Install independent assets concurrently, yielding each verified asset
+    as its install finishes, so a caller can report progress (#253). The
+    first failure propagates and cancels the installs not yet started."""
     target = store or AssetStore()
-    registrations = references(name)
     executor = ThreadPoolExecutor(max_workers=8)
     try:
-        return tuple(
-            executor.map(
-                lambda item: target.install(item.spec, item.prepare), registrations
-            )
-        )
+        futures = [
+            executor.submit(target.install, item.spec, item.prepare)
+            for item in references(name)
+        ]
+        for future in as_completed(futures):
+            yield future.result()
     finally:
         executor.shutdown(wait=True, cancel_futures=True)
 

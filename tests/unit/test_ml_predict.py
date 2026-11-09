@@ -34,7 +34,7 @@ from pymatgen.core import Lattice, Structure
 
 from goldilocks_core.advisors import magnetic_ordering_ml
 from goldilocks_core.advisors.k_sampling import k_sampling
-from goldilocks_core.analysis.is_magnetic import is_magnetic
+from goldilocks_core.analysis.is_magnetic import IsMagneticLlmInput, is_magnetic
 from goldilocks_core.analysis.is_metal import is_metal
 from goldilocks_core.assets.records import AssetReference
 from goldilocks_core.assets.store import AssetCorrupt, AssetNotInstalled
@@ -403,6 +403,49 @@ def test_the_mace_worker_reports_a_mace_without_magnetic_models_as_unavailable(
         mace_process._predict_is_magnetic(tmp_path, tmp_path / "backbone.model", _IRON)
 
 
+@pytest.mark.parametrize(("atoms", "replaced"), [(16, False), (17, True)])
+def test_the_is_magnetic_worker_is_replaced_once_idle_after_a_large_structure(
+    atoms: int, replaced: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#260: the worker keeps much of a large prediction's memory until it
+    exits, so a fresh, warmed one takes over once it is idle."""
+
+    class Worker:
+        def __init__(self) -> None:
+            self.replacements: list[tuple[object, ...]] = []
+
+        def run(self, fn, *args):
+            return "prediction"
+
+        def replace_when_idle(self, after_s, warm_up, *args) -> None:
+            self.replacements.append((after_s, warm_up, *args))
+
+    worker = Worker()
+    monkeypatch.setattr(mace_process, "_IS_MAGNETIC_WORKER", worker)
+    hydrogens = Structure(
+        Lattice.cubic(20.0), ["H"] * atoms, [[i / atoms, 0, 0] for i in range(atoms)]
+    )
+    checkpoint = tmp_path / "backbone.model"
+
+    assert (
+        mace_process.predict_is_magnetic(tmp_path, checkpoint, hydrogens)
+        == "prediction"
+    )
+    assert worker.replacements == (
+        [
+            (
+                30.0,
+                mace_process._predict_is_magnetic,
+                tmp_path,
+                checkpoint,
+                mace_process._WARM_UP_CELL,
+            )
+        ]
+        if replaced
+        else []
+    )
+
+
 def test_is_magnetic_falls_back_when_the_worker_cannot_import_mace(
     tmp_path: Path,
     backbone: Path,
@@ -416,6 +459,97 @@ def test_is_magnetic_falls_back_when_the_worker_cannot_import_mace(
     monkeypatch.setattr(mace_process, "predict_is_magnetic", unavailable)
 
     assert is_magnetic(_IRON).source == "heuristic"
+
+
+_ABOVE_THE_LIMIT = (
+    "2 atoms is above this server's 1-atom limit for mMACE (GOLDILOCKS_MMACE_MAX_ATOMS)"
+)
+
+
+def _set_up_with_a_one_atom_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """is_magnetic's model is set up and mMACE may run on one atom; any
+    worker call fails the test."""
+
+    def no_worker(model_root: Path, checkpoint: Path, structure: Structure) -> None:
+        raise AssertionError("no worker call above the atom limit")
+
+    monkeypatch.setattr(predict_module, "AssetStore", lambda: _StubStore(tmp_path))
+    monkeypatch.setattr(mace_process, "predict_is_magnetic", no_worker)
+    monkeypatch.setenv("GOLDILOCKS_MMACE_MAX_ATOMS", "1")
+
+
+@pytest.mark.parametrize(
+    ("llm", "source", "decider"),
+    [
+        (None, "heuristic", "the local-moment heuristic"),
+        (IsMagneticLlmInput(is_magnetic="non_magnetic"), "llm", "the LLM"),
+    ],
+    ids=["heuristic", "llm"],
+)
+def test_is_magnetic_above_the_mmace_atom_limit_says_why_without_a_worker_call(
+    llm: IsMagneticLlmInput | None,
+    source: str,
+    decider: str,
+    tmp_path: Path,
+    backbone: Path,
+    mace_packages: set[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#259: the classifier's memory grows with the atom count, so a
+    structure above the limit gets the next tier's answer -- and the record
+    says why, unlike the quiet fall-back of a model that is not set up."""
+    _set_up_with_a_one_atom_limit(tmp_path, monkeypatch)
+
+    state = is_magnetic(_IRON, llm=llm)
+
+    assert state.source == source
+    assert state.provenance.source_note == (
+        f"The mMACE classifier was not run: {_ABOVE_THE_LIMIT}, so {decider} decided."
+    )
+
+
+def test_an_undecidable_is_magnetic_above_the_mmace_atom_limit_says_why_too(
+    tmp_path: Path,
+    backbone: Path,
+    mace_packages: set[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """US: the heuristic cannot decide (``test_is_magnetic.py``), so the
+    reason the record is unavailable names the skipped classifier too."""
+    _set_up_with_a_one_atom_limit(tmp_path, monkeypatch)
+    uranium_sulfide = Structure(
+        Lattice.cubic(4.0), ["U", "S"], [[0.0, 0.0, 0.0], [0.5, 0.0, 0.0]]
+    )
+
+    state = is_magnetic(uranium_sulfide)
+
+    assert state.status == "unavailable"
+    assert state.reason.startswith("no oxidation-state guess")
+    assert state.reason.endswith(
+        f"(the mMACE classifier was not run: {_ABOVE_THE_LIMIT})"
+    )
+
+
+def test_is_magnetic_at_the_mmace_atom_limit_runs_the_classifier(
+    tmp_path: Path,
+    backbone: Path,
+    mace_packages: set[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(predict_module, "AssetStore", lambda: _StubStore(tmp_path))
+    monkeypatch.setattr(
+        mace_process,
+        "predict_is_magnetic",
+        lambda root, checkpoint, cell: _IS_MAGNETIC_PREDICTION,
+    )
+    monkeypatch.setenv("GOLDILOCKS_MMACE_MAX_ATOMS", "2")
+
+    state = is_magnetic(_IRON)
+
+    assert state.source == "ml"
+    assert state.provenance.source_note is None
 
 
 @pytest.mark.parametrize(

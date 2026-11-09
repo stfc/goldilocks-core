@@ -9,6 +9,7 @@ import type {
   ExplainResult,
   MagneticOrderingsRequest,
   MagneticOrderingsResult,
+  RankingJob,
   StructureInput,
   StructureInspection,
 } from "../api/coreClient";
@@ -51,7 +52,20 @@ export interface MagneticOrderingsListing {
    * own: the card lists a structure only when it has no listing, or when
    * the user presses its Retry listing. */
   readonly error: string | null;
+  /** Where the ranking in flight stands (#261): queued behind other
+   * rankings, or running. `null` until the server first answers, and
+   * whenever no ranking is in flight. */
+  readonly ranking: RankingProgress | null;
 }
+
+/** A ranking job's status while it is in flight. */
+export type RankingProgress = Extract<
+  RankingJob,
+  { readonly state: "queued" | "running" }
+>;
+
+/** How often a ranking in flight is polled, in milliseconds. */
+const RANKING_POLL_MS = 2000;
 
 /** The v2 request shape has no `intent`/`hints` vocabulary: every tunable
  * knob is a flat `overrides` entry reflected from `capabilities().settings`/
@@ -280,7 +294,6 @@ function toComputeRequest(
 
 function toMagneticOrderingsRequest(
   structureInput: StructureInput,
-  rankWithMmace: boolean,
 ): MagneticOrderingsRequest {
   return {
     structure_content: structureInput.structure_content,
@@ -288,8 +301,33 @@ function toMagneticOrderingsRequest(
     ...(structureInput.structure_format
       ? { structure_format: structureInput.structure_format }
       : {}),
-    rank_with_mmace: rankWithMmace,
   };
+}
+
+/** Resolves after `ms`, or rejects with the abort reason once `signal`
+ * aborts. */
+function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason as Error);
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, ms);
+    function abort(): void {
+      clearTimeout(timer);
+      reject(signal.reason as Error);
+    }
+    signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
+/** Drops a `CoreFailure`: cancelling a ranking the server no longer holds,
+ * or cannot be reached about, leaves nothing to do. */
+function ignoreCoreFailure(error: unknown): void {
+  if (!(error instanceof CoreFailure)) throw error;
 }
 
 function mergeOverrides(
@@ -334,6 +372,8 @@ export function createWorkspace(
   // Aborts the listing request in flight; only the open structure's
   // listing can be in flight, since opening another structure aborts it.
   let orderingsRequest: AbortController | null = null;
+  // The ranking job in flight, cancelled on the server with the request.
+  let rankingJob: string | null = null;
 
   function beginOperation(
     operation: WorkspaceOperation,
@@ -514,6 +554,10 @@ export function createWorkspace(
   function abortOrderingsRequest(): void {
     orderingsRequest?.abort();
     orderingsRequest = null;
+    if (rankingJob !== null) {
+      void core.cancelRanking(rankingJob).catch(ignoreCoreFailure);
+      rankingJob = null;
+    }
   }
 
   /** Clears the busy state of the listing `pending` and applies `update`,
@@ -526,7 +570,12 @@ export function createWorkspace(
   ): void {
     if (store.getState().magneticOrderings !== pending) return;
     store.setState({
-      magneticOrderings: { ...pending, ...update, operation: null },
+      magneticOrderings: {
+        ...pending,
+        ...update,
+        operation: null,
+        ranking: null,
+      },
     });
   }
 
@@ -544,34 +593,93 @@ export function createWorkspace(
     completeOrderings(pending, { error: error.message });
   }
 
-  /** Lists (or mMACE-ranks) the open structure's candidate orderings.
-   * Refused while that structure's listing is busy; a result it already
-   * has stays on screen until the new one arrives. */
-  async function listMagneticOrderings(rankWithMmace: boolean): Promise<void> {
+  /** Starts the open structure's `operation` (a listing or a ranking):
+   * the busy listing, with any result it already has kept on screen until
+   * the new one arrives, and the request that owns it. `null` while that
+   * structure's listing is busy. */
+  function beginOrderings(
+    operation: "list" | "rank",
+  ): readonly [MagneticOrderingsListing, AbortController] | null {
     const snapshot = store.getState();
     const input = snapshot.structureInput;
     const current = currentOrderings(snapshot);
     if (input === null || (current !== null && current.operation !== null)) {
-      return;
+      return null;
     }
     const pending: MagneticOrderingsListing = {
       input,
-      operation: rankWithMmace ? "rank" : "list",
+      operation,
       result: current?.result ?? null,
       error: null,
+      ranking: null,
     };
     const request = new AbortController();
     orderingsRequest = request;
     store.setState({ magneticOrderings: pending });
+    return [pending, request];
+  }
+
+  /** Lists the open structure's candidate orderings. Refused while that
+   * structure's listing is busy. */
+  async function listMagneticOrderings(): Promise<void> {
+    const begun = beginOrderings("list");
+    if (begun === null) return;
+    const [pending, request] = begun;
     try {
       const result = await core.magneticOrderings(
-        toMagneticOrderingsRequest(input, rankWithMmace),
+        toMagneticOrderingsRequest(pending.input),
         request.signal,
       );
       completeOrderings(pending, { result });
     } catch (error) {
       failOrderings(pending, error);
     }
+  }
+
+  /** mMACE-ranks the open structure's candidate orderings as a server job
+   * (#261), polled until it finishes; the listing shows where it stands
+   * meanwhile. Refused while that structure's listing is busy. Opening
+   * another structure cancels the job. */
+  async function rankMagneticOrderings(): Promise<void> {
+    const begun = beginOrderings("rank");
+    if (begun === null) return;
+    let [pending] = begun;
+    const [, request] = begun;
+    let jobId: string | null = null;
+    try {
+      let job = await core.submitRanking(
+        toMagneticOrderingsRequest(pending.input),
+        request.signal,
+      );
+      jobId = job.job_id;
+      rankingJob = jobId;
+      while (job.state === "queued" || job.state === "running") {
+        pending = showRanking(pending, job);
+        await pause(RANKING_POLL_MS, request.signal);
+        job = await core.rankingStatus(jobId, request.signal);
+      }
+      if (job.state === "done") {
+        completeOrderings(pending, { result: job.report });
+      } else {
+        completeOrderings(pending, { error: job.error });
+      }
+    } catch (error) {
+      failOrderings(pending, error);
+    } finally {
+      if (rankingJob === jobId) rankingJob = null;
+    }
+  }
+
+  /** The listing `pending` showing where `job` stands, stored while
+   * `pending` is still the stored listing. */
+  function showRanking(
+    pending: MagneticOrderingsListing,
+    job: RankingProgress,
+  ): MagneticOrderingsListing {
+    if (store.getState().magneticOrderings !== pending) return pending;
+    const next = { ...pending, ranking: job };
+    store.setState({ magneticOrderings: next });
+    return next;
   }
 
   /** Generates and downloads each selected candidate's DFT input bundle
@@ -726,10 +834,10 @@ export function createWorkspace(
         downloadReviewed();
         return;
       case "magneticOrderings.list":
-        await listMagneticOrderings(false);
+        await listMagneticOrderings();
         return;
       case "magneticOrderings.rank":
-        await listMagneticOrderings(true);
+        await rankMagneticOrderings();
         return;
       case "magneticOrderings.downloadSelected":
         await downloadSelectedOrderings(action.labels);
@@ -753,6 +861,10 @@ export function createWorkspace(
   };
 }
 
+/** Saves `archive` as a download named `archive.filename`, the way the
+ * Workbench's Download button does: an object URL on a hidden anchor,
+ * clicked, then revoked. Call it from a user gesture (a click handler):
+ * browsers drop a download started outside one. */
 export function saveArchiveToBrowser(archive: ArchiveDownload): void {
   const url = URL.createObjectURL(archive.blob);
   const anchor = document.createElement("a");

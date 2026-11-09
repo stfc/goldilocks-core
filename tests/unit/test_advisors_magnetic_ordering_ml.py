@@ -1,9 +1,10 @@
 """rank_orderings: mMACE-relaxed energies pick a magnetic ordering (#87).
 
-Each ranking relaxes its candidates in a fresh process, one ranking at a
-time, so mace's process-wide torch settings never reach the caller (#130).
-Tests that stub goldilocks-ml's relaxation run that process's function
-inline, in this process, where the stubs are visible.
+Each ranking relaxes its candidates, one call each, on a child process of
+its own, one ranking at a time, so mace's process-wide torch settings never
+reach the caller (#130, #261). Tests that stub goldilocks-ml's relaxation
+replace that process with an inline worker, which runs each call in this
+process, where the stubs are visible.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import math
+import shutil
 import threading
 import time
 from importlib.machinery import ModuleSpec
@@ -23,8 +25,10 @@ from pymatgen.core import Lattice, Species, Structure
 from goldilocks_core.advisors import magnetic_ordering_ml
 from goldilocks_core.advisors.magnetic_ordering_ml import (
     CHECKPOINT_ENV,
+    MAX_ATOMS_ENV,
     MagneticOrderingMlUnavailable,
     checkpoint_path,
+    max_atoms,
     rank_orderings,
 )
 from goldilocks_core.service import (
@@ -146,9 +150,29 @@ def _report_mace_installed(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+class _InlineWorker:
+    """A ``WorkerProcess`` stand-in: runs each call in this process and
+    records the calls and whether it was closed."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, ...]] = []
+        self.closed = False
+
+    def run(self, fn, *args):
+        self.calls.append(args)
+        return fn(*args)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _no_worker() -> None:
+    raise AssertionError("no ranking process may start")
+
+
 def _stub_relax_seam(
     monkeypatch: pytest.MonkeyPatch, fake_relax
-) -> list[tuple[object, ...]]:
+) -> list[_InlineWorker]:
     """Replace goldilocks-ml's own relax/domain_limits/safe_load, so
     rank_orderings()'s winner-selection logic can be exercised without the
     real mace/e3nn/sphericart stack -- these modules import fine without it
@@ -156,16 +180,17 @@ def _stub_relax_seam(
     monkeypatching the real functions directly, not injecting fake modules,
     is enough here.
 
-    The ranking's fresh process runs inline, so the stubs apply; returns the
-    arguments of every process the ranking started."""
-    started: list[tuple[object, ...]] = []
+    The ranking's process is an inline worker, so the stubs apply; returns
+    every worker a ranking started."""
+    workers: list[_InlineWorker] = []
 
-    def run_inline(fn, *args):
-        started.append(args)
-        return fn(*args)
+    def start_worker() -> _InlineWorker:
+        workers.append(_InlineWorker())
+        return workers[-1]
 
     _report_mace_installed(monkeypatch)
-    monkeypatch.setattr(magnetic_ordering_ml, "run_in_fresh_process", run_inline)
+    magnetic_ordering_ml._domain_limits.cache_clear()
+    monkeypatch.setattr(magnetic_ordering_ml, "WorkerProcess", start_worker)
     monkeypatch.setattr(
         "goldilocks_ml.models.magnetism._mace_backbone.safe_load",
         lambda checkpoint, device: object(),
@@ -179,7 +204,7 @@ def _stub_relax_seam(
         "goldilocks_ml.models.magnetism.magnetic_moments.fm_fim_relax.relax.relax",
         fake_relax,
     )
-    return started
+    return workers
 
 
 def test_rank_orderings_never_recommends_a_candidate_relax_flagged_invalid(
@@ -349,10 +374,7 @@ def test_rank_orderings_needs_the_mace_packages_before_starting_a_process(
         lambda name: None if name == missing else ModuleSpec(name, None),
     )
 
-    def no_process(fn, *args):
-        raise AssertionError("no ranking process may start without mace")
-
-    monkeypatch.setattr(magnetic_ordering_ml, "run_in_fresh_process", no_process)
+    monkeypatch.setattr(magnetic_ordering_ml, "WorkerProcess", _no_worker)
 
     with pytest.raises(
         MagneticOrderingMlUnavailable, match=f"^{missing} not installed"
@@ -360,16 +382,123 @@ def test_rank_orderings_needs_the_mace_packages_before_starting_a_process(
         rank_orderings([("fm", _BCC_IRON)])
 
 
-def test_rank_orderings_relaxes_every_candidate_in_one_fresh_process(
+def test_rank_orderings_relaxes_each_candidate_in_turn_on_a_process_of_its_own(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """One call per candidate, so the caller hears after each one (#261);
+    the process is the ranking's own and ends with it."""
+    _configure_checkpoint(monkeypatch, tmp_path)
+    workers = _stub_relax_seam(monkeypatch, _ok_relaxation)
+    progress = []
+
+    rank_orderings(
+        [("fm", _BCC_IRON), ("afm-1", _BCC_IRON_AFM)],
+        device="cpu",
+        on_progress=lambda done, total: progress.append((done, total)),
+    )
+
+    checkpoint = tmp_path / "backbone.model"
+    assert [(worker.calls, worker.closed) for worker in workers] == [
+        (
+            [
+                ("fm", _BCC_IRON, checkpoint, "cpu"),
+                ("afm-1", _BCC_IRON_AFM, checkpoint, "cpu"),
+            ],
+            True,
+        )
+    ]
+    assert progress == [(0, 2), (1, 2), (2, 2)]
+
+
+def test_rank_orderings_runs_on_the_worker_it_is_given_and_leaves_it_open(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """A ranking job owns its worker, to kill it on cancel (#261)."""
+    _configure_checkpoint(monkeypatch, tmp_path)
+    started = _stub_relax_seam(monkeypatch, _ok_relaxation)
+    worker = _InlineWorker()
+
+    rank_orderings([("fm", _BCC_IRON)], worker=worker)
+
+    assert (len(worker.calls), worker.closed, started) == (1, False, [])
+
+
+@pytest.mark.parametrize(("raw", "limit"), [(None, 200), ("", 200), (" 50 ", 50)])
+def test_max_atoms_reads_the_variable_with_a_default_of_200(
+    raw: str | None, limit: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if raw is None:
+        monkeypatch.delenv(MAX_ATOMS_ENV, raising=False)
+    else:
+        monkeypatch.setenv(MAX_ATOMS_ENV, raw)
+
+    assert max_atoms() == limit
+
+
+@pytest.mark.parametrize("raw", ["0", "-5", "1.5", "lots"])
+def test_max_atoms_refuses_a_value_that_is_not_a_positive_whole_number(
+    raw: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(MAX_ATOMS_ENV, raw)
+
+    with pytest.raises(ValueError, match=f"^{MAX_ATOMS_ENV}="):
+        max_atoms()
+
+
+def test_rank_orderings_refuses_a_candidate_above_the_atom_limit_before_a_process(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """#259: the largest candidate decides, since a candidate's cell can be
+    larger than the input's."""
+    _configure_checkpoint(monkeypatch, tmp_path)
+    _report_mace_installed(monkeypatch)
+    monkeypatch.setenv(MAX_ATOMS_ENV, "1")
+
+    monkeypatch.setattr(magnetic_ordering_ml, "WorkerProcess", _no_worker)
+
+    with pytest.raises(MagneticOrderingMlUnavailable) as raised:
+        rank_orderings([("fm", _IRON), ("afm-1", _BCC_IRON_AFM)])
+
+    assert str(raised.value) == (
+        "mMACE ranking was not run: candidate afm-1 has 2 atoms, above this "
+        "server's 1-atom limit for mMACE (GOLDILOCKS_MMACE_MAX_ATOMS)"
+    )
+
+
+def test_rank_orderings_runs_with_every_candidate_at_the_atom_limit(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
     _configure_checkpoint(monkeypatch, tmp_path)
-    started = _stub_relax_seam(monkeypatch, _ok_relaxation)
-    candidates = [("fm", _BCC_IRON), ("afm-1", _BCC_IRON_AFM)]
+    workers = _stub_relax_seam(monkeypatch, _ok_relaxation)
+    monkeypatch.setenv(MAX_ATOMS_ENV, "2")
 
-    rank_orderings(candidates, device="cpu")
+    rank_orderings([("fm", _IRON), ("afm-1", _BCC_IRON_AFM)])
 
-    assert started == [(tuple(candidates), tmp_path / "backbone.model", "cpu")]
+    assert [len(worker.calls) for worker in workers] == [2]
+
+
+def test_a_listing_above_the_atom_limit_comes_back_unranked_saying_why(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    _configure_checkpoint(monkeypatch, tmp_path)
+    _report_mace_installed(monkeypatch)
+    monkeypatch.setenv(MAX_ATOMS_ENV, "1")
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+
+    monkeypatch.setattr(magnetic_ordering_ml, "WorkerProcess", _no_worker)
+
+    report = list_magnetic_orderings(_BCC_IRON, rank_with_mmace=True)
+
+    assert not report.ranked
+    assert [candidate.label for candidate in report.candidates] == ["fm"]
+    assert [
+        warning.message
+        for warning in report.warnings
+        if warning.code == "magnetic.ordering_ranking_unavailable"
+    ] == [
+        "mMACE ranking was not run: candidate fm has 2 atoms, above this "
+        "server's 1-atom limit for mMACE (GOLDILOCKS_MMACE_MAX_ATOMS)"
+    ]
 
 
 def test_a_relaxation_that_fails_degrades_the_ranking(
@@ -397,10 +526,11 @@ def test_a_ranking_process_that_dies_fails_the_listing(
     _configure_checkpoint(monkeypatch, tmp_path)
     _report_mace_installed(monkeypatch)
 
-    def killed(fn, *args):
-        raise WorkerDied("worker process exited with code -9")
+    class KilledWorker(_InlineWorker):
+        def run(self, fn, *args):
+            raise WorkerDied("worker process exited with code -9")
 
-    monkeypatch.setattr(magnetic_ordering_ml, "run_in_fresh_process", killed)
+    monkeypatch.setattr(magnetic_ordering_ml, "WorkerProcess", KilledWorker)
     monkeypatch.setattr(
         magnetic_orderings_module,
         "enumerate_magnetic_orderings",
@@ -423,21 +553,20 @@ def test_rankings_run_one_at_a_time(monkeypatch: pytest.MonkeyPatch, tmp_path) -
     running = 0
     most_at_once = []
 
-    def slow_process(fn, *args):
-        nonlocal running
-        with lock:
-            running += 1
-            most_at_once.append(running)
-        time.sleep(0.2)
-        with lock:
-            running -= 1
-        return (
-            magnetic_ordering_ml.OrderingCandidate(
+    class SlowWorker(_InlineWorker):
+        def run(self, fn, *args):
+            nonlocal running
+            with lock:
+                running += 1
+                most_at_once.append(running)
+            time.sleep(0.2)
+            with lock:
+                running -= 1
+            return magnetic_ordering_ml.OrderingCandidate(
                 label="fm", structure=_BCC_IRON, energy_per_atom_ev=-8.0, status="ok"
-            ),
-        )
+            )
 
-    monkeypatch.setattr(magnetic_ordering_ml, "run_in_fresh_process", slow_process)
+    monkeypatch.setattr(magnetic_ordering_ml, "WorkerProcess", SlowWorker)
     rankings = [
         threading.Thread(target=rank_orderings, args=([("fm", _BCC_IRON)],))
         for _ in range(3)

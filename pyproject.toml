@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "goldilocks-core"
-version = "0.3.0"
+version = "0.3.1"
 description = "Materials machine learning tools for recommending DFT calculation inputs."
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -32,7 +32,7 @@ dependencies = [
     # apart. Since goldilocks-ml 0.3.0 that stack includes
     # mace-torch[magnetic], which is_magnetic and mMACE ordering ranking
     # run on (#240).
-    "goldilocks-ml==0.3.2",
+    "goldilocks-ml==0.3.3",
     # Named only so [tool.uv.sources] below can route it to the CPU-only
     # PyTorch index: uv applies sources to direct dependencies alone, and
     # torch otherwise arrives through goldilocks-ml, which pins its version
@@ -96,7 +96,7 @@ if curl -s -m1 http://127.0.0.1:8000/ >/dev/null 2>&1; then
     exit 1
 fi
 set -e
-goldilocks assets install workbench
+goldilocks assets install all
 exec goldilocks serve http --host 127.0.0.1 --port 8000
 """
 
@@ -110,7 +110,7 @@ fi
 set -e
 cd web && npm run build
 cd ..
-goldilocks assets install workbench
+goldilocks assets install all
 exec goldilocks serve http --host 127.0.0.1 --port 8000 --static-root web/dist
 """
 
@@ -122,7 +122,7 @@ if curl -s -m1 http://127.0.0.1:8000/ >/dev/null 2>&1; then
     exit 1
 fi
 set -e
-goldilocks assets install workbench
+goldilocks assets install all
 goldilocks serve http --host 127.0.0.1 --port 8000 &
 backend_pid=$!
 trap 'kill "$backend_pid"' EXIT
@@ -151,7 +151,7 @@ package = true
 # PyTorch publishes CPU and CUDA wheels on separate indexes, and PyPI's Linux
 # torch wheel pulls in about 2 GB of CUDA/nvidia/triton wheels. torch is routed
 # to the CPU-only index, so every uv-managed install (development, CI and the
-# Workbench image) gets CPU torch; the source applies only because torch is
+# image) gets CPU torch; the source applies only because torch is
 # also a direct dependency above (#242). torch-geometric and the other torch-*
 # packages stay on PyPI. pip installs ignore uv sources and take torch from
 # PyPI. No GPU route is configured here: core runs its models on the CPU.

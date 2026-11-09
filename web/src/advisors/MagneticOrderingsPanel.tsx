@@ -14,13 +14,18 @@ import { Download, RotateCw } from "lucide-react";
 import { WarningsPanel } from "../review/WarningsPanel";
 import { useWorkspace, useWorkspaceSnapshot } from "../workspace/useWorkspace";
 import { currentOrderings } from "../workspace/workspace";
+import type {
+  MagneticOrderingsListing,
+  RankingProgress,
+} from "../workspace/workspace";
 
 /** What the card shows for a structure that has no listing yet. */
 const UNLISTED = { result: null, operation: null, error: null } as const;
 
 /** #87 layer 4: lists candidate magnetic orderings (FM plus any AFM
  * candidates enumerate_magnetic_orderings finds) for the currently
- * inspected structure, with an opt-in "Rank with mMACE" pass and a
+ * inspected structure, with an opt-in "Rank with mMACE" pass -- a server
+ * job whose place in the queue and progress the card shows (#261) -- and a
  * multi-select bundle download -- see workspace.ts's
  * `magneticOrderings.*` actions for the request/response plumbing.
  * Rendered inside `MagneticOrderingsCard`, which owns the heading --
@@ -90,6 +95,7 @@ export function MagneticOrderingsPanel() {
           Relaxes each candidate ordering with mMACE (a magnetic MLIP model) and
           ranks them by energy per atom.
         </Text>
+        <RankingStatus listing={listing} />
       </Stack>
       {error === null ? null : (
         <OrderingsError error={error} listed={magneticOrderings !== null} />
@@ -182,6 +188,37 @@ export function MagneticOrderingsPanel() {
       )}
     </Stack>
   );
+}
+
+/** Where the ranking in flight stands (#261): how many rankings are ahead
+ * of it on the server, then which candidate it is relaxing. Nothing while
+ * no ranking is in flight. */
+function RankingStatus({
+  listing,
+}: {
+  readonly listing: MagneticOrderingsListing | null;
+}) {
+  if (listing?.operation !== "rank") return null;
+  return (
+    <Text size="sm" aria-live="polite">
+      {rankingText(listing.ranking)}
+    </Text>
+  );
+}
+
+function rankingText(ranking: RankingProgress | null): string {
+  if (ranking === null) return "Submitting the ranking…";
+  if (ranking.state === "queued") {
+    const ahead = ranking.position;
+    if (ahead === 0) return "Queued: yours runs next";
+    return `Queued: ${String(ahead)} ranking${ahead === 1 ? "" : "s"} ahead of yours`;
+  }
+  const { progress } = ranking;
+  if (progress === null) return "Ranking: listing the candidates…";
+  if (progress.done < progress.total) {
+    return `Ranking candidate ${String(progress.done + 1)} of ${String(progress.total)}`;
+  }
+  return "Ranking: comparing the energies…";
 }
 
 /** A failed listing, ranking or download of the open structure. A failed

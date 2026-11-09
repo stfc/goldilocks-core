@@ -31,7 +31,11 @@ export { WorkbenchContent } from "./App";
 export { colorSchemeManager, workbenchTheme } from "./theme";
 export type { Theme } from "./theme";
 export { WorkspaceProvider } from "./workspace/WorkspaceProvider";
-export { createWorkspace, currentOrderings } from "./workspace/workspace";
+export {
+  createWorkspace,
+  currentOrderings,
+  saveArchiveToBrowser,
+} from "./workspace/workspace";
 export type {
   CalculationDraft,
   InspectFailure,
@@ -58,6 +62,7 @@ export type { WorkspaceFailure } from "./workspace/pipelineStatus";
 export { useWorkspace, useWorkspaceSnapshot } from "./workspace/useWorkspace";
 export { HttpCoreClient, findingsOf } from "./api/coreClient";
 export type {
+  ArchiveDownload,
   BlockingFinding,
   CoreClient,
   StructureInput,

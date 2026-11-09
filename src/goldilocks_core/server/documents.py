@@ -96,10 +96,16 @@ class RunRequestDocument(ComputeRequestDocument):
 
 
 class MagneticOrderingsRequestDocument(InlineStructureDocument):
-    """Shared by ``/magnetic-orderings`` and MCP's ``magnetic_orderings``
-    tool (#87). Its own document, not ``ComputeRequestDocument``: this
-    lists candidates independently of any code/task/hpc/overrides choice,
-    the same reason ``service.list_magnetic_orderings`` sits outside
-    ``advise()``/``generate()`` entirely."""
+    """``/magnetic-orderings``, which lists, and ``/magnetic-orderings/rank``,
+    which queues a ranking job (#87, #261). Its own document, not
+    ``ComputeRequestDocument``: this lists candidates independently of any
+    code/task/hpc/overrides choice, the same reason
+    ``service.list_magnetic_orderings`` sits outside ``advise()``/
+    ``generate()`` entirely."""
+
+
+class MagneticOrderingsToolDocument(MagneticOrderingsRequestDocument):
+    """MCP's ``magnetic_orderings`` tool, which ranks in the call itself
+    when ``rank_with_mmace`` is set: a tool call has no job to poll."""
 
     rank_with_mmace: bool = False

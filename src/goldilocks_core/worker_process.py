@@ -17,10 +17,15 @@ and result picklable. An exception it raises is re-raised in the caller, with
 the child's traceback as a note. A child exits when its caller does, however
 the caller ends: it reads its next call from a pipe only the caller writes
 to.
+
+A child can keep memory a call's native code allocated after the call
+returns, which only its exit releases: ``WorkerProcess.replace_when_idle``
+swaps in a fresh, warmed child once the worker is idle (#260).
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import pickle
 import subprocess
@@ -33,6 +38,8 @@ from multiprocessing import Pipe
 from multiprocessing.connection import Connection
 
 __all__ = ["WorkerDied", "WorkerProcess", "run_in_fresh_process"]
+
+_LOG = logging.getLogger(__name__)
 
 _BOOTSTRAP = """\
 import sys
@@ -62,19 +69,93 @@ class WorkerProcess:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._child: _Child | None = None
+        self._calling: _Child | None = None
+        self._killed = False
+        self._calls = 0
+        """Calls started so far: a pending replacement acts only if no call
+        has started since it was scheduled."""
 
     def run[T](self, fn: Callable[..., T], /, *args: object) -> T:
         request = pickle.dumps((fn, args))
+        self._calls += 1
         with self._lock:
+            if self._killed:
+                raise WorkerDied("worker process was killed")
             child = self._child if self._child is not None else _Child()
             self._child = None
+            self._calling = child
             try:
+                if self._killed:  # killed while the child started
+                    raise WorkerDied("worker process was killed")
                 reply = child.call(request)
             except BaseException:
                 child.kill()
                 raise
+            finally:
+                self._calling = None
             self._child = child
         return _result(reply)
+
+    def replace_when_idle(
+        self, after_s: float, warm_up: Callable[..., object], /, *args: object
+    ) -> None:
+        """Once no call has started for ``after_s`` seconds, start a new
+        child, run ``warm_up(*args)`` on it, and make it this worker's child;
+        the old child then exits, and with it all the memory it held. A call
+        started first cancels the replacement. Calls keep going to the old
+        child until the new one is warm, so none waits for the warm-up.
+
+        For a child that keeps memory after a call no matter what it frees
+        (#260). A warm-up that fails leaves the old child in place."""
+        request = pickle.dumps((warm_up, args))
+        timer = threading.Timer(after_s, self._replace, (self._calls, request))
+        timer.daemon = True
+        timer.start()
+
+    def _replace(self, calls: int, request: bytes) -> None:
+        if calls != self._calls or self._killed:
+            return
+        child = _Child()
+        try:
+            succeeded, error = child.call(request)
+        except WorkerDied:
+            child.kill()
+            return
+        if not succeeded:
+            child.kill()
+            _LOG.error("worker warm-up failed; keeping the old child: %s", error)
+            return
+        with self._lock:
+            old, self._child = self._child, child
+            if self._killed:
+                old, self._child = child, None
+        if old is not None:
+            old.close()
+
+    def close(self) -> None:
+        """End the child once the call in progress, if any, returns."""
+        with self._lock:
+            if self._child is not None:
+                self._child.close()
+                self._child = None
+
+    def kill(self) -> None:
+        """End the child now, without waiting; safe from any thread. The
+        call in progress and every later call raise ``WorkerDied``: a killed
+        worker is finished."""
+        self._killed = True
+        calling = self._calling
+        if calling is not None:
+            calling.end_process()
+        elif self._lock.acquire(blocking=False):
+            try:
+                if self._child is not None:
+                    self._child.kill()
+                    self._child = None
+            finally:
+                self._lock.release()
+        # Otherwise a call holds the lock without a child yet, and stops on
+        # the flag; or it is returning, and the next call stops on it.
 
 
 def run_in_fresh_process[T](fn: Callable[..., T], /, *args: object) -> T:
@@ -125,6 +206,11 @@ class _Child:
     def kill(self) -> None:
         self._process.kill()
         self.close()
+
+    def end_process(self) -> None:
+        """Kill the process and leave the pipes to the caller blocked on
+        them, whose read then fails."""
+        self._process.kill()
 
     def _send(self, message: bytes) -> None:
         try:

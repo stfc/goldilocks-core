@@ -1,16 +1,16 @@
-name: workbench-image
+name: image
 
-# Builds the production Workbench image, boots it, and runs the Playwright
+# Builds the production image, boots it, and runs the Playwright
 # e2e suite against it. Not run on PRs (#205): the image build downloads every
 # runtime asset from three hosts, so an outage of any one failed every PR.
 # release.yml calls it before publishing; run it on demand with
-# `gh workflow run workbench-image.yml --ref <branch>` (workflow_dispatch
+# `gh workflow run image.yml --ref <branch>` (workflow_dispatch
 # needs this file on the repository's default branch).
 on:
   workflow_call:
     inputs:
       keep-image:
-        description: Upload the tested image as the artifact workbench-image.
+        description: Upload the tested image as the artifact image.
         type: boolean
         default: false
   workflow_dispatch:
@@ -24,7 +24,7 @@ env:
 
 jobs:
   image-e2e:
-    name: Workbench image and browser e2e
+    name: Image and browser e2e
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -51,8 +51,8 @@ jobs:
         working-directory: web
         run: npm ci
 
-      - name: Build production Workbench image
-        run: docker build --tag goldilocks-workbench:e2e .
+      - name: Build the production image
+        run: docker build --tag goldilocks-core:e2e .
 
       - name: Install Chromium
         working-directory: web
@@ -62,7 +62,7 @@ jobs:
         working-directory: web
         run: |
           docker run --detach --name goldilocks-workbench-e2e \
-            --publish 8000:8000 goldilocks-workbench:e2e
+            --publish 8000:8000 goldilocks-core:e2e
           trap 'docker rm --force goldilocks-workbench-e2e' EXIT
           for attempt in {1..120}; do
             curl --fail --silent http://127.0.0.1:8000/ready && break
@@ -75,12 +75,12 @@ jobs:
       # runtime asset again and ship an image the e2e suite never ran against.
       - name: Save the tested image
         if: inputs.keep-image
-        run: docker save --output workbench-image.tar goldilocks-workbench:e2e
+        run: docker save --output image.tar goldilocks-core:e2e
 
       - name: Upload the tested image
         if: inputs.keep-image
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: workbench-image
-          path: workbench-image.tar
+          name: image
+          path: image.tar
           retention-days: 1

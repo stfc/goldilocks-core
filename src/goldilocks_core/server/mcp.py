@@ -32,7 +32,7 @@ from goldilocks_core.server import _handlers
 from goldilocks_core.server.documents import (
     ComputeRequestDocument,
     InlineStructureDocument,
-    MagneticOrderingsRequestDocument,
+    MagneticOrderingsToolDocument,
 )
 
 try:
@@ -110,9 +110,9 @@ def create_server(*, name: str = "goldilocks-core") -> MCPServer:
         )
     )
     async def magnetic_orderings(
-        document: MagneticOrderingsRequestDocument,
+        document: MagneticOrderingsToolDocument,
     ) -> dict[str, Any]:
-        return await _call(_handlers.magnetic_orderings, document)
+        return await _call(_handlers.magnetic_orderings_tool, document)
 
     @server.tool(
         description=(

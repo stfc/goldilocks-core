@@ -18,6 +18,7 @@ import type {
   CoreClient,
   ExplainResult,
   MagneticOrderingsRequest,
+  RankingJob,
   MagneticOrderingsResult,
   PseudopotentialTable,
   ResolvedField,
@@ -55,6 +56,11 @@ class CoreStub implements CoreClient {
   magneticOrderingsResults: Promise<MagneticOrderingsResult>[] = [];
   magneticOrderingsCalls: MagneticOrderingsRequest[] = [];
   magneticOrderingsSignals: (AbortSignal | undefined)[] = [];
+  rankingSubmissions: Promise<RankingJob>[] = [];
+  rankingStatuses: Promise<RankingJob>[] = [];
+  rankingCalls: MagneticOrderingsRequest[] = [];
+  rankingStatusCalls: string[] = [];
+  cancelledRankings: string[] = [];
 
   constructor(readonly capabilitiesResult: Promise<Capabilities>) {}
 
@@ -107,6 +113,27 @@ class CoreStub implements CoreClient {
       Promise.resolve({ ranked: false, candidates: [], warnings: [] })
     );
   }
+
+  submitRanking(request: MagneticOrderingsRequest): Promise<RankingJob> {
+    this.rankingCalls.push(request);
+    return (
+      this.rankingSubmissions.shift() ??
+      Promise.reject(new Error("ranking not configured"))
+    );
+  }
+
+  rankingStatus(jobId: string): Promise<RankingJob> {
+    this.rankingStatusCalls.push(jobId);
+    return (
+      this.rankingStatuses.shift() ??
+      Promise.reject(new Error("ranking status not configured"))
+    );
+  }
+
+  cancelRanking(jobId: string): Promise<void> {
+    this.cancelledRankings.push(jobId);
+    return Promise.resolve();
+  }
 }
 
 function renderApp(core: CoreStub, saveArchive = vi.fn()) {
@@ -123,7 +150,7 @@ async function openStructure(
   container: HTMLElement,
 ) {
   await screen.findByRole("button", {
-    name: "Choose a CIF or POSCAR structure",
+    name: "Browse files",
   });
   await user.upload(structureInputElement(container), structureFile());
   // Functional/pseudopotential table now live collapsed inside the
@@ -243,6 +270,156 @@ describe("Goldilocks Workbench", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("says under is_magnetic why the mMACE classifier was not run", async () => {
+    // #259: above the server's atom limit the classifier is skipped, and the
+    // record the heuristic resolves carries the reason as its source_note.
+    const note =
+      "The mMACE classifier was not run: 312 atoms is above this server's " +
+      "200-atom limit for mMACE (GOLDILOCKS_MMACE_MAX_ATOMS), so the " +
+      "local-moment heuristic decided.";
+    const review = magneticReview({
+      isMagnetic: "magnetic",
+      spinPolarized: false,
+    });
+    const core = new CoreStub(
+      Promise.resolve({
+        ...capabilities,
+        facts: [
+          ...capabilities.facts,
+          {
+            key: "is_magnetic",
+            type: "enum",
+            values: ["magnetic", "non_magnetic"],
+            ml_target: "is_magnetic",
+            approaches: ["human", "ml", "heuristic"],
+            overridable: true,
+            description: "Whether the structure has local moments.",
+          },
+        ],
+      }),
+    );
+    core.inspectionResults = [Promise.resolve(inspection)];
+    core.explainResults = [
+      Promise.resolve({
+        ...review,
+        records: {
+          ...review.records,
+          is_magnetic: {
+            status: "resolved",
+            value: "magnetic",
+            source: "heuristic",
+            source_note: note,
+          },
+        },
+      }),
+    ];
+    const { container } = renderApp(core);
+
+    await openStructure(userEvent.setup(), container);
+
+    const analysis = screen.getByRole("region", {
+      name: "Goldilocks analysis",
+    });
+    expect(await within(analysis).findByText(note)).toBeInTheDocument();
+  });
+
+  it("says in the orderings card why a ranking was not run", async () => {
+    const user = userEvent.setup();
+    const message =
+      "mMACE ranking was not run: candidate afm-1 has 312 atoms, above " +
+      "this server's 200-atom limit for mMACE (GOLDILOCKS_MMACE_MAX_ATOMS)";
+    const core = new CoreStub(Promise.resolve(capabilities));
+    core.inspectionResults = [Promise.resolve(inspection)];
+    core.explainResults = [spinPolarizedReview()];
+    core.magneticOrderingsResults = [
+      Promise.resolve(orderingsListing(2, "fm", "afm-1")),
+    ];
+    core.rankingSubmissions = [
+      Promise.resolve({
+        job_id: "j1",
+        state: "done",
+        report: {
+          ...orderingsListing(2, "fm", "afm-1"),
+          warnings: [
+            {
+              code: "magnetic.ordering_ranking_unavailable",
+              level: "warning",
+              category: "magnetic",
+              message,
+            },
+          ],
+        },
+      }),
+    ];
+    const { container } = renderApp(core);
+    await openStructure(user, container);
+    const card = await orderingsCard();
+    await within(card).findByRole("checkbox", {
+      name: "Select afm-1 for download",
+    });
+
+    await user.click(within(card).getByRole("button", { name: "Run mMACE" }));
+
+    expect(await within(card).findByText(message)).toBeInTheDocument();
+    expect(within(card).getByText("Not yet ranked")).toBeInTheDocument();
+  });
+
+  it("shows a queued ranking's place in the queue, then its progress, then the ranking", async () => {
+    // #261: a ranking behind someone else's says so instead of spinning.
+    const user = userEvent.setup();
+    const core = new CoreStub(Promise.resolve(capabilities));
+    core.inspectionResults = [Promise.resolve(inspection)];
+    core.explainResults = [spinPolarizedReview()];
+    core.magneticOrderingsResults = [
+      Promise.resolve(orderingsListing(2, "fm", "afm-1")),
+    ];
+    core.rankingSubmissions = [
+      Promise.resolve({ job_id: "j1", state: "queued", position: 2 }),
+    ];
+    core.rankingStatuses = [
+      Promise.resolve({
+        job_id: "j1",
+        state: "running",
+        progress: { done: 1, total: 2 },
+      }),
+      Promise.resolve({
+        job_id: "j1",
+        state: "done",
+        report: { ...orderingsListing(2, "fm", "afm-1"), ranked: true },
+      }),
+    ];
+    const { container } = renderApp(core);
+    await openStructure(user, container);
+    const card = await orderingsCard();
+    await within(card).findByRole("checkbox", {
+      name: "Select afm-1 for download",
+    });
+
+    await user.click(within(card).getByRole("button", { name: "Run mMACE" }));
+
+    expect(
+      await within(card).findByText("Queued: 2 rankings ahead of yours"),
+    ).toBeInTheDocument();
+    expect(
+      await within(card).findByText(
+        "Ranking candidate 2 of 2",
+        {},
+        { timeout: 4000 },
+      ),
+    ).toBeInTheDocument();
+    expect(
+      await within(card).findByText(
+        "Ranked by mMACE-relaxed energy per atom",
+        {},
+        { timeout: 4000 },
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(card).queryByText(/Queued|Ranking candidate/),
+    ).not.toBeInTheDocument();
+    expect(core.cancelledRankings).toEqual([]);
+  }, 15000);
+
   it("lists and bundles a replacement structure's own orderings when the old listing lands late", async () => {
     // #149: the listing of a structure replaced while it was in flight was
     // shown on the new structure's card, kept the new structure from being
@@ -266,7 +443,7 @@ describe("Goldilocks Workbench", () => {
     ];
     const { container } = renderApp(core, saveArchive);
     await screen.findByRole("button", {
-      name: "Choose a CIF or POSCAR structure",
+      name: "Browse files",
     });
 
     await user.upload(
@@ -439,7 +616,7 @@ describe("Goldilocks Workbench", () => {
     ];
     const { container } = renderApp(core);
     await screen.findByRole("button", {
-      name: "Choose a CIF or POSCAR structure",
+      name: "Browse files",
     });
 
     expect(
@@ -485,7 +662,7 @@ describe("Goldilocks Workbench", () => {
     core.inspectionResults = [Promise.resolve(inspection)];
     const { container } = renderApp(core);
     await screen.findByRole("button", {
-      name: "Choose a CIF or POSCAR structure",
+      name: "Browse files",
     });
 
     await userEvent.upload(structureInputElement(container), first);

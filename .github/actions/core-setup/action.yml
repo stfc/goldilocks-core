@@ -26,7 +26,10 @@ runs:
       run: |
         sudo apt-get update
         sudo apt-get install --yes gfortran
-        git clone --recursive --depth 1 https://github.com/msg-byu/enumlib.git /tmp/enumlib
+        # The same commit as the Dockerfile's ENUMLIB_COMMIT.
+        git clone --quiet https://github.com/msg-byu/enumlib.git /tmp/enumlib
+        git -C /tmp/enumlib checkout --quiet 67217859c1cfe6e1d8cfe25b76a1d14a28c6030e
+        git -C /tmp/enumlib submodule update --quiet --init --recursive
         make -C /tmp/enumlib/symlib/src F90=gfortran
         make -C /tmp/enumlib/src F90=gfortran
         make -C /tmp/enumlib/src F90=gfortran enum.x

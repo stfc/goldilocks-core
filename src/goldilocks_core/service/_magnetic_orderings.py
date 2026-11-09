@@ -37,8 +37,9 @@ naming why. A ranking process that dies (``worker_process.WorkerDied``,
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pymatgen.core import Structure
 
@@ -50,6 +51,9 @@ from goldilocks_core.advisors.magnetic_ordering_ml import (
 from goldilocks_core.analysis.local_moments import LocalMomentFacts, local_moments
 from goldilocks_core.inputs.structure import require_ordered
 from goldilocks_core.resolution import FieldState, Warning
+
+if TYPE_CHECKING:
+    from goldilocks_core.worker_process import WorkerProcess
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,7 +140,12 @@ def _has_moments_to_order(moments: FieldState[LocalMomentFacts]) -> bool:
 
 
 def list_magnetic_orderings(
-    structure: Structure, *, rank_with_mmace: bool = False, device: str = "cpu"
+    structure: Structure,
+    *,
+    rank_with_mmace: bool = False,
+    device: str = "cpu",
+    worker: WorkerProcess | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> MagneticOrderingsReport:
     """List every magnetic-ordering candidate for ``structure``.
 
@@ -145,7 +154,9 @@ def list_magnetic_orderings(
     energy-per-atom candidate as ``is_recommended``. If the ``magnetism``
     extra or its checkpoint is not configured, the candidates are still
     returned (unranked), with a warning naming why -- ranking is an
-    enhancement to this listing, never a precondition for it.
+    enhancement to this listing, never a precondition for it. ``worker`` and
+    ``on_progress`` go to ``rank_orderings``: the process the candidates are
+    relaxed on, and the ranking's progress.
 
     Also warns (rather than silently listing "fm" alone, indistinguishable
     from "this structure genuinely has no AFM candidates") whenever
@@ -172,7 +183,9 @@ def list_magnetic_orderings(
         )
 
     try:
-        ranked = rank_orderings(candidates, device=device)
+        ranked = rank_orderings(
+            candidates, device=device, worker=worker, on_progress=on_progress
+        )
     except MagneticOrderingMlUnavailable as error:
         return MagneticOrderingsReport(
             candidates=_unranked(candidates),

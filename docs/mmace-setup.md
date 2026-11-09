@@ -17,7 +17,7 @@ heuristic.
 
 ## 1. Install the model asset
 
-Part of the `default` and `workbench` asset profiles:
+Part of the `default` and `all` asset profiles:
 
 ```bash
 uv run goldilocks assets install default
@@ -82,7 +82,7 @@ variable (remove it from your shell profile too) and run
 
 ## 4. Use mMACE in the Workbench
 
-Nothing to configure: start the Workbench as usual once the default (or `workbench`) assets
+Nothing to configure: start the Workbench as usual once the default (or `all`) assets
 are installed.
 
 ```bash
@@ -99,5 +99,32 @@ on an odd d or f count did, or a setting such as `spin_polarized` or `magnetic_o
 UI.
 
 Clicking **Run mMACE** there ranks the candidates in a separate process, so editing a setting
-while it runs is unaffected; a second ranking waits for the first to finish. Rankings take
-minutes: rock-salt NiO's eight candidates take about two on a laptop CPU.
+while it runs is unaffected. Rankings run one at a time on the server: a ranking behind
+others shows "Queued: N rankings ahead of yours", then "Ranking candidate i of n" while it
+runs. Rankings take minutes: rock-salt NiO's eight candidates take about two on a laptop CPU.
+
+## 5. Structure size limit
+
+mMACE's memory grows with the number of atoms. The `is_magnetic` embedding peaked at 3.5,
+6.4 and 11.8 GB for 54, 128 and 250 atoms (core 0.3.0, macOS, 2026-11-09). On Linux with
+goldilocks-ml 0.3.3 (aarch64, glibc 2.36, 2026-11-09), its worker peaked at 4.3 GB for 128
+atoms and 6.3 GB for 200, from a 0.7 GB baseline. So neither mMACE use runs on a structure
+with more atoms than `GOLDILOCKS_MMACE_MAX_ATOMS` (default 200):
+
+- `is_magnetic` takes its next tier's answer (an LLM value, else the local-moment
+  heuristic), and the record's `source_note` says the classifier was not run and why. The
+  Workbench shows it under the "is magnetic" field.
+- A ranking whose largest candidate is above the limit is not started. The candidates come
+  back unranked, with a `magnetic.ordering_ranking_unavailable` warning naming the candidate,
+  its atom count and the limit.
+
+```bash
+export GOLDILOCKS_MMACE_MAX_ATOMS=400   # a positive whole number; anything else fails the request
+```
+
+The `is_magnetic` worker keeps much of a prediction's memory afterwards: 0.45 GB after a
+16-atom structure, 0.9–2.3 GB after a 128-atom one. Only the process exiting releases it.
+So after a structure of more than 16 atoms, once the worker has been idle for 30 s, a fresh
+one is started and warmed up in the background and takes over, and the old one exits. On
+Linux that brought the worker back to 0.67 GB. Predictions keep going to the old worker
+meanwhile, so none waits for the model to load.

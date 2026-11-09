@@ -274,7 +274,9 @@ mMACE backbone it embeds structures with, the one the [magnetic
 orderings](#magnetic-orderings) `--rank-with-mmace` flag uses below, and
 `mace-torch`, `e3nn` and `sphericart` come with goldilocks-ml.
 `GOLDILOCKS_MACE_BACKBONE` overrides the installed backbone for both (see
-[mMACE](mmace-setup.md)). A model
+[mMACE](mmace-setup.md)). Above `GOLDILOCKS_MMACE_MAX_ATOMS` atoms (default
+200) `is_magnetic` skips the classifier, and the record's `source_note` says
+why ([structure size limit](mmace-setup.md#5-structure-size-limit)). A model
 that is not set up (its asset not installed or failing verification, or
 for `is_magnetic` the packages or checkpoint missing) leaves the value to
 the next tier. Once a model is set up, an error
@@ -368,10 +370,13 @@ and applied, so every label writes one slab with the uploaded vacuum.
 mMACE potential energy surface and recommends the lowest energy-per-atom
 one -- needs the mMACE backbone, installed with `is_magnetic`'s asset or
 named by `GOLDILOCKS_MACE_BACKBONE`, as described above. Missing it, or an
-error inside the relaxation itself, degrades to an unranked listing
-with a warning. Each ranking runs in its own process, one ranking at a time,
-so a long ranking never holds up `explain` or `run`; a ranking process that
-dies fails the request.
+error inside the relaxation itself, or a candidate with more atoms than
+`GOLDILOCKS_MMACE_MAX_ATOMS`, degrades to an unranked listing with a warning.
+Each ranking relaxes its candidates on a process of its own, one ranking at a
+time, so a long ranking never holds up `explain` or `run`; a ranking process
+that dies fails the request. Over HTTP a ranking is a job (see [Ranking
+jobs](#ranking-jobs)); the CLI and the MCP `magnetic_orderings` tool rank in
+the call itself.
 
 ## Install and check assets
 
@@ -384,7 +389,7 @@ uv run goldilocks assets verify default
 Use a profile, asset ID, or table ID. `default` installs the four prediction
 models (`qrf-kpoints`, `metallicity-cgcnn`, `is-metal-classifier`,
 `is-magnetic-classifier`) and a PBEsol efficiency PseudoDojo table;
-`workbench` installs all registered models and tables. `install` also
+`all` installs every registered model and table. `install` also
 repairs corrupt installations.
 
 `run --fetch-missing` (or `explain --fetch-missing`) installs a missing
@@ -395,7 +400,7 @@ any other kind of missing dependency. See
 ## Serve HTTP
 
 ```bash
-uv run goldilocks assets install workbench
+uv run goldilocks assets install all
 uv run --extra http goldilocks serve http
 ```
 
@@ -409,11 +414,37 @@ the address. `--static-root DIRECTORY` also serves a built Workbench; a relative
 | `POST /inspect`     | Structure inspection (inline `structure_content`, not a path)                     |
 | `POST /explain`     | Analysis and advisor decisions with their `layout`, plus `blocking`: the findings `/run` would refuse with; never writes anything |
 | `POST /run`         | Generate a runnable input; `respond_with: "json"` (default) returns a JSON summary, `respond_with: "archive"` returns ZIP bytes; a refusal is a 422 `advice_incomplete` with the findings in `error.details.findings` |
+| `POST /magnetic-orderings` | Candidate magnetic orderings, unranked |
+| `POST /magnetic-orderings/rank` | Queue an mMACE ranking of the candidates; 202 with the job's status |
+| `GET /magnetic-orderings/rank/{job_id}` | The ranking job's status |
+| `DELETE /magnetic-orderings/rank/{job_id}` | Cancel the ranking job; 204 |
 | `GET /health`       | Process health                                                                     |
 | `GET /ready`        | Asset readiness; 503 for missing or corrupt assets                                |
 | `GET /openapi.json` | Request and response schemas                                                      |
 
 Interactive API documentation is at `/docs`.
+
+### Ranking jobs
+
+A ranking takes minutes and rankings run one at a time, so
+`POST /magnetic-orderings/rank` (the listing's request document) queues one and
+returns at once with `{"job_id", "state", "position"}`. Poll
+`GET /magnetic-orderings/rank/{job_id}`; its `state` is:
+
+- `queued`, with `position`: the number of rankings ahead of it;
+- `running`, with `progress`: `{"done", "total"}` candidates relaxed, or `null`
+  before the relaxations start;
+- `done`, with `report`: the ranked listing, as `/magnetic-orderings` returns
+  one;
+- `failed`, with `error`.
+
+`DELETE` cancels a job: a queued job is dropped and a running job's process is
+killed. Jobs live in the server's memory, so run one server process: a job the
+server does not hold (cancelled, long finished, or from before a restart) is a
+404 `unknown_ranking`. A queued or running job nobody has polled for 120 s is
+dropped, so poll at least that often; the Workbench polls every 2 s and cancels
+its job when another structure is opened. A proxy in front of the server must
+pass all three paths.
 
 ### HTTP security
 

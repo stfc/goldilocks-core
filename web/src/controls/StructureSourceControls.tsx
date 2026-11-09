@@ -103,11 +103,6 @@ export function StructureSourceControls({
           variant="subtle"
           type="button"
           aria-describedby="structure-source-help"
-          aria-label={
-            source === null
-              ? "Choose a CIF or POSCAR structure"
-              : "Replace structure file"
-          }
           disabled={inspecting}
         >
           {source === null ? "Browse files" : "Replace file"}

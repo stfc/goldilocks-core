@@ -327,6 +327,35 @@ export interface MagneticOrderingsResult {
   readonly warnings: readonly AdvisorWarning[];
 }
 
+/** A ranking job's status (`GET /magnetic-orderings/rank/{job_id}`, #261):
+ * how many rankings are ahead of it while it waits, how many candidates
+ * are relaxed while it runs (`null` before the relaxations start), then the
+ * ranked listing or why it failed. */
+export type RankingJob =
+  | {
+      readonly job_id: string;
+      readonly state: "queued";
+      readonly position: number;
+    }
+  | {
+      readonly job_id: string;
+      readonly state: "running";
+      readonly progress: {
+        readonly done: number;
+        readonly total: number;
+      } | null;
+    }
+  | {
+      readonly job_id: string;
+      readonly state: "done";
+      readonly report: MagneticOrderingsResult;
+    }
+  | {
+      readonly job_id: string;
+      readonly state: "failed";
+      readonly error: string;
+    };
+
 export interface ArchiveDownload {
   readonly blob: Blob;
   readonly filename: string;
@@ -354,14 +383,26 @@ export interface CoreClient {
    * the findings `run` would refuse with. */
   explain(request: ComputeRequest): Promise<ExplainResult>;
   /** Lists candidate magnetic orderings (FM plus any AFM candidates),
-   * optionally mMACE-ranked by relaxed energy per atom. Aborting `signal`
-   * abandons the request: the promise then rejects with the abort reason
-   * (fetch's `AbortError`), not a `CoreFailure`. The server still finishes
-   * the enumeration or ranking it started. */
+   * unranked. Aborting `signal` abandons the request: the promise then
+   * rejects with the abort reason (fetch's `AbortError`), not a
+   * `CoreFailure`. The server still finishes the enumeration it started. */
   magneticOrderings(
     request: MagneticOrderingsRequest,
     signal?: AbortSignal,
   ): Promise<MagneticOrderingsResult>;
+  /** Queues an mMACE ranking of the candidates by relaxed energy per atom;
+   * resolves to the new job's status. `signal` as for `magneticOrderings`. */
+  submitRanking(
+    request: MagneticOrderingsRequest,
+    signal?: AbortSignal,
+  ): Promise<RankingJob>;
+  /** The ranking job's status. A job the server does not hold (cancelled,
+   * long finished, or from before a restart) rejects with a `CoreFailure`
+   * of kind `unknown_ranking`. */
+  rankingStatus(jobId: string, signal?: AbortSignal): Promise<RankingJob>;
+  /** Cancels the ranking job: the server drops it, killing its process if
+   * it runs. */
+  cancelRanking(jobId: string): Promise<void>;
   /** Executes the pipeline and returns the JSON summary (file list +
    * records + warnings), not the files themselves. */
   run(request: ComputeRequest): Promise<RunResult>;
@@ -441,6 +482,44 @@ export class HttpCoreClient implements CoreClient {
       signal: signal ?? null,
     });
     return parseJson<MagneticOrderingsResult>(response);
+  }
+
+  async submitRanking(
+    request: MagneticOrderingsRequest,
+    signal?: AbortSignal,
+  ): Promise<RankingJob> {
+    const response = await this.request("/magnetic-orderings/rank", {
+      body: JSON.stringify(request),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+      signal: signal ?? null,
+    });
+    return parseJson<RankingJob>(response);
+  }
+
+  async rankingStatus(
+    jobId: string,
+    signal?: AbortSignal,
+  ): Promise<RankingJob> {
+    const response = await this.request(
+      `/magnetic-orderings/rank/${encodeURIComponent(jobId)}`,
+      {
+        headers: { Accept: "application/json" },
+        method: "GET",
+        signal: signal ?? null,
+      },
+    );
+    return parseJson<RankingJob>(response);
+  }
+
+  async cancelRanking(jobId: string): Promise<void> {
+    await this.request(
+      `/magnetic-orderings/rank/${encodeURIComponent(jobId)}`,
+      { method: "DELETE" },
+    );
   }
 
   async run(request: ComputeRequest): Promise<RunResult> {

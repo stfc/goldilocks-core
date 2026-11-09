@@ -24,6 +24,13 @@ updates:
       docker:
         patterns:
           - "*"
+    ignore:
+      # The image runs the Python CI tests (.python-version): take its patch
+      # releases only, and move it to a new minor on purpose.
+      - dependency-name: python
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
 
   - package-ecosystem: uv
     directory: /

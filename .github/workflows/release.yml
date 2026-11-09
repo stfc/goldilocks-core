@@ -3,7 +3,7 @@ name: Publish on PyPI and GHCR
 # Driven by a tag, so what reaches PyPI is always a commit in the history.
 # Shaped after stfc/goldilocks-ml's own release workflow (itself modeled on
 # stfc/janus-core's), so every package in this ecosystem releases the same
-# way. Publishing waits for workbench-image.yml to build the production image
+# way. Publishing waits for image.yml to build the production image
 # and pass its browser e2e (#205); that image goes to GHCR once the package
 # is on PyPI (#239).
 on:
@@ -13,15 +13,15 @@ on:
       - v[0-9]+.[0-9]+.[0-9]+*
 
 jobs:
-  workbench-image:
-    uses: ./.github/workflows/workbench-image.yml
+  image:
+    uses: ./.github/workflows/image.yml
     with:
       keep-image: true
     permissions:
       contents: read
 
   publish:
-    needs: workbench-image
+    needs: image
     runs-on: ubuntu-latest
     # A fork that pushes a tag must not try to publish.
     if: github.repository == 'stfc/goldilocks-core'
@@ -124,21 +124,22 @@ jobs:
       - name: Download the image the browser e2e passed against
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: workbench-image
+          name: image
 
-      # amd64 only: the image does not build on arm64 yet (stfc#229).
+      # amd64 only: the image also builds on arm64 since
+      # junwen94/goldilocks-core#257; publishing arm64 is a separate decision.
       - name: Push the image to GHCR
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          docker load --input workbench-image.tar
-          docker tag goldilocks-workbench:e2e "$IMAGE:$version"
+          docker load --input image.tar
+          docker tag goldilocks-core:e2e "$IMAGE:$version"
           echo "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           docker push "$IMAGE:$version"
           # A pre-release such as v0.4.0rc1 must not become what an untagged
           # `docker pull` fetches.
           if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            docker tag goldilocks-workbench:e2e "$IMAGE:latest"
+            docker tag goldilocks-core:e2e "$IMAGE:latest"
             docker push "$IMAGE:latest"
           fi

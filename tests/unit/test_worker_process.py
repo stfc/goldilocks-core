@@ -10,6 +10,8 @@ import os
 import signal
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -99,6 +101,92 @@ def test_a_killed_worker_fails_the_next_call_and_the_one_after_restarts_it() -> 
     with pytest.raises(WorkerDied):
         worker.run(os.getpid)
     assert worker.run(os.getpid) not in {killed, os.getpid()}
+
+
+def test_close_ends_the_idle_child_and_the_next_call_starts_another() -> None:
+    worker = WorkerProcess()
+    closed = worker.run(os.getpid)
+
+    worker.close()
+
+    with pytest.raises(ProcessLookupError):
+        os.kill(closed, 0)
+    assert worker.run(os.getpid) != closed
+
+
+def test_kill_from_another_thread_ends_the_call_in_progress() -> None:
+    """A ranking job is cancelled from a request thread while its runner
+    thread waits on the worker (#261)."""
+    worker = WorkerProcess()
+    worker.run(os.getpid)
+    outcome: list[BaseException] = []
+
+    def sleep_in_worker() -> None:
+        try:
+            worker.run(time.sleep, 30)
+        except BaseException as error:  # noqa: BLE001 -- asserted below
+            outcome.append(error)
+
+    caller = threading.Thread(target=sleep_in_worker)
+    caller.start()
+    time.sleep(0.5)
+    worker.kill()
+    caller.join(timeout=10)
+
+    assert not caller.is_alive()
+    assert [type(error) for error in outcome] == [WorkerDied]
+    with pytest.raises(WorkerDied, match="killed"):
+        worker.run(os.getpid)
+
+
+def _until_exited(pid: int) -> None:
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.05)
+    raise AssertionError(f"process {pid} did not exit")
+
+
+def test_an_idle_worker_is_replaced_by_a_warmed_child_and_the_old_one_exits() -> None:
+    """#260: the only sure way to release what a call's native code keeps
+    is to end the process; the replacement is warm before it serves."""
+    worker = WorkerProcess()
+    old = worker.run(os.getpid)
+
+    worker.replace_when_idle(0.1, os.chdir, "/")
+    _until_exited(old)
+
+    assert worker.run(os.getcwd) == "/"  # the warm-up ran on this child
+    assert worker.run(os.getpid) != old
+
+
+def test_a_call_before_the_worker_is_idle_cancels_its_replacement() -> None:
+    worker = WorkerProcess()
+    pid = worker.run(os.getpid)
+    worker.replace_when_idle(0.3, os.getpid)
+
+    assert worker.run(os.getpid) == pid
+    time.sleep(0.6)
+
+    assert worker.run(os.getpid) == pid
+
+
+def test_a_failed_warm_up_keeps_the_old_child(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    worker = WorkerProcess()
+    pid = worker.run(os.getpid)
+
+    worker.replace_when_idle(0.1, os.chdir, "/no/such/directory")
+    deadline = time.monotonic() + 10
+    while "warm-up failed" not in caplog.text and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+    assert "warm-up failed" in caplog.text
+    assert worker.run(os.getpid) == pid
 
 
 def test_the_worker_reads_no_stdin_and_writes_to_the_callers_stderr() -> None:

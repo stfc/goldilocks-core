@@ -99,14 +99,22 @@ class MlModelUnavailable(Exception):
     that is set up but fails to load or predict raises its own error."""
 
 
+class MlInputTooLarge(MlModelUnavailable):
+    """is_magnetic's model is set up, but the structure has more atoms than
+    ``advisors/magnetic_ordering_ml.max_atoms`` allows mMACE (#259). The
+    message names the atom count and the limit, for the record the next tier
+    resolves to say why the model was not used."""
+
+
 def predict(
     role: str, structure: Structure, *, store: AssetStore | None = None
 ) -> MlPrediction:
     """The registered ``role`` model's prediction for ``structure``
     (``is_metal`` or ``is_magnetic``).
 
-    Raises :class:`MlModelUnavailable` if the model is not set up, and
-    ``ValueError`` if what it returns has no strict JSON form; whatever
+    Raises :class:`MlModelUnavailable` if the model is not set up,
+    :class:`MlInputTooLarge` if it is but ``structure`` is too large for it,
+    and ``ValueError`` if what it returns has no strict JSON form; whatever
     loading or running it raises propagates."""
     return _predict(role, structure, store or AssetStore())
 
@@ -125,6 +133,7 @@ def _predict(target: str, structure: Structure, store: AssetStore) -> MlPredicti
     if target != "is_magnetic":
         return _ml_prediction(target, spec, asset, _model(root).predict(structure))
     checkpoint = _mmace_checkpoint()
+    _require_mmace_size(structure)
     from goldilocks_core.ml.mace_process import predict_is_magnetic
 
     returned = predict_is_magnetic(root, checkpoint, structure)
@@ -220,6 +229,22 @@ def _mmace_checkpoint() -> Path:
     except MagneticOrderingMlUnavailable as error:
         raise MlModelUnavailable(str(error)) from error
     return checkpoint
+
+
+def _require_mmace_size(structure: Structure) -> None:
+    """Raise :class:`MlInputTooLarge` if ``structure`` has more atoms than
+    mMACE may run on."""
+    from goldilocks_core.advisors.magnetic_ordering_ml import (
+        MAX_ATOMS_ENV,
+        max_atoms,
+    )
+
+    limit = max_atoms()
+    if len(structure) > limit:
+        raise MlInputTooLarge(
+            f"{len(structure)} atoms is above this server's {limit}-atom limit "
+            f"for mMACE ({MAX_ATOMS_ENV})"
+        )
 
 
 @cache

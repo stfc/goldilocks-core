@@ -861,6 +861,10 @@ export function createWorkspace(
   };
 }
 
+/** Saves `archive` as a download named `archive.filename`, the way the
+ * Workbench's Download button does: an object URL on a hidden anchor,
+ * clicked, then revoked. Call it from a user gesture (a click handler):
+ * browsers drop a download started outside one. */
 export function saveArchiveToBrowser(archive: ArchiveDownload): void {
   const url = URL.createObjectURL(archive.blob);
   const anchor = document.createElement("a");

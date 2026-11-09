@@ -1,4 +1,6 @@
+import argparse
 import hashlib
+import io
 import json
 import os
 import random
@@ -9,6 +11,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from multiprocessing import get_context
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import requests
@@ -23,6 +26,7 @@ from goldilocks_core.assets.store import (
     AssetStore,
     asset_root,
 )
+from goldilocks_core.cli import _assets as cli_assets
 
 
 def source_spec(
@@ -537,6 +541,72 @@ def test_references_rejects_unknown_names() -> None:
     """A name that is no asset, table, or profile fails with guidance."""
     with pytest.raises(KeyError, match="unknown asset 'not-a-table-or-profile'"):
         references("not-a-table-or-profile", {})
+
+
+def test_install_each_yields_each_asset_as_its_install_finishes(monkeypatch) -> None:
+    """#253: a first install takes minutes, so each asset is reported when its
+    own install finishes, not once every install has."""
+    fast_reported = threading.Event()
+    registrations = tuple(
+        SimpleNamespace(spec=SimpleNamespace(id=f"models/{name}", version="1"))
+        for name in ("slow", "fast")
+    )
+
+    class Store:
+        def install(self, spec, prepare):
+            if spec.id == "models/slow":
+                assert fast_reported.wait(timeout=10)
+            return SimpleNamespace(id=spec.id, version=spec.version)
+
+    for registration in registrations:
+        registration.prepare = None
+    monkeypatch.setattr(asset_runtime, "references", lambda name: registrations)
+
+    installing = asset_runtime.install_each("fixture", store=Store())
+    first = next(installing)
+    fast_reported.set()
+
+    assert [first.id, *(asset.id for asset in installing)] == [
+        "models/fast",
+        "models/slow",
+    ]
+
+
+@pytest.mark.parametrize("json_output", (False, True))
+def test_assets_install_prints_each_asset_while_the_rest_install(
+    json_output: bool, monkeypatch, tmp_path: Path
+) -> None:
+    """Text output prints an asset's line before the next install finishes,
+    flushed, since goldilocks-agent shows the last line as its startup
+    progress; --json still prints one document at the end (#253)."""
+    out = io.StringIO()
+    printed_before_second: list[str] = []
+
+    def install_each(name, *, store):
+        yield SimpleNamespace(id="models/a", version="1")
+        printed_before_second.append(out.getvalue())
+        yield SimpleNamespace(id="models/b", version="2")
+
+    monkeypatch.setattr(cli_assets, "install_each", install_each)
+    monkeypatch.setenv("GOLDILOCKS_ASSET_ROOT", str(tmp_path))
+    root = AssetStore().root
+
+    cli_assets.run(
+        argparse.Namespace(
+            command="assets", assets_command="install", name="x", json=json_output
+        ),
+        out,
+    )
+
+    if json_output:
+        assert printed_before_second == [""]
+        assert json.loads(out.getvalue())["assets"] == [
+            {"id": "models/a", "version": "1", "state": "installed"},
+            {"id": "models/b", "version": "2", "state": "installed"},
+        ]
+    else:
+        assert printed_before_second == [f"asset root: {root}\nmodels/a@1: installed\n"]
+        assert out.getvalue().endswith("models/b@2: installed\n")
 
 
 def test_the_all_profile_is_every_registered_asset_and_workbench_is_gone() -> None:

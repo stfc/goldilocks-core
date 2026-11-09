@@ -12,7 +12,7 @@ import argparse
 from typing import TextIO
 
 from goldilocks_core.assets.runtime import (
-    install as install_assets,
+    install_each,
     statuses as asset_statuses,
     verify as verify_assets,
 )
@@ -60,13 +60,10 @@ def run(args: argparse.Namespace, out: TextIO) -> None:
         # Printed before install/status/verify runs, not after: if a
         # requested asset id doesn't exist, the user still immediately
         # knows where to go looking (design doc: "先打印 asset root").
-        print(f"asset root: {store.root}", file=out)
+        print(f"asset root: {store.root}", file=out, flush=True)
 
     if args.assets_command == "install":
-        assets = [
-            {"id": asset.id, "version": asset.version, "state": "installed"}
-            for asset in install_assets(args.name, store=store)
-        ]
+        assets = _install(args.name, store, out, text=not args.json)
     elif args.assets_command == "status":
         assets = [
             {"id": asset_id, "version": version, "state": state}
@@ -81,5 +78,24 @@ def run(args: argparse.Namespace, out: TextIO) -> None:
     if args.json:
         write_json(out, {"asset_root": str(store.root), "assets": assets})
         return
-    for asset in assets:
-        print(f"{asset['id']}@{asset['version']}: {asset['state']}", file=out)
+    if args.assets_command != "install":  # install printed each as it finished
+        for asset in assets:
+            _print_asset(asset, out)
+
+
+def _install(
+    name: str, store: AssetStore, out: TextIO, *, text: bool
+) -> list[dict[str, str]]:
+    """Install ``name``; in text mode, print each asset as its install
+    finishes, since a first install takes minutes (#253)."""
+    assets = []
+    for installed in install_each(name, store=store):
+        asset = {"id": installed.id, "version": installed.version, "state": "installed"}
+        assets.append(asset)
+        if text:
+            _print_asset(asset, out)
+    return assets
+
+
+def _print_asset(asset: dict[str, str], out: TextIO) -> None:
+    print(f"{asset['id']}@{asset['version']}: {asset['state']}", file=out, flush=True)

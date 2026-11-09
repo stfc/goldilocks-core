@@ -14,7 +14,7 @@ newer installed:
 ```bash
 uv sync --extra http
 npm --prefix web ci
-uv run goldilocks assets install workbench
+uv run goldilocks assets install all
 uv run --extra http poe workbench
 ```
 
@@ -38,7 +38,7 @@ Then open **http://127.0.0.1:8000**.
   `poe` and call the CLI directly with a different port:
 
   ```bash
-  uv run goldilocks assets install workbench
+  uv run goldilocks assets install all
   uv run goldilocks serve http --host 127.0.0.1 --port 8001 --static-root web/dist
   ```
 
@@ -59,7 +59,7 @@ Then open **http://127.0.0.1:8000**.
 
 Two Workbench features (the ML `is_magnetic` classification and the
 "Run mMACE" magnetic-ordering ranking button) run on the ~80.5 MB mMACE
-backbone, which `goldilocks assets install workbench` above installs with the
+backbone, which `goldilocks assets install all` above installs with the
 `is_magnetic` classifier (see [mMACE](../docs/mmace-setup.md)).
 
 Load a magnetic structure and check the **Analysis** column's "is magnetic"

@@ -192,7 +192,7 @@ class TestOperationalRoutes:
     def test_ready_matches_the_readiness_checker_directly(
         self, client: TestClient
     ) -> None:
-        """Not gated on ``real_assets``: ``/ready`` checks the *workbench*
+        """Not gated on ``real_assets``: ``/ready`` checks the *all*
         profile (every pseudopotential table *and* every ml model), a
         stricter bar than the ``default`` profile ``real_assets``
         guarantees -- this machine has the pseudopotentials but was

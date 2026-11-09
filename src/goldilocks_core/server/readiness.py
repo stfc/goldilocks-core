@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from goldilocks_core.assets.records import AssetInstallation
-from goldilocks_core.assets.runtime import WORKBENCH_PROFILE, catalogue, references
+from goldilocks_core.assets.runtime import ALL_PROFILE, catalogue, references
 from goldilocks_core.assets.store import (
     MANIFEST_FILENAME,
     AssetCorrupt,
@@ -39,7 +39,7 @@ class AssetReadiness:
             pseudo_registry_path=pseudo_registry_path,
         )
         self._installations: tuple[AssetInstallation, ...] = references(
-            WORKBENCH_PROFILE, entries
+            ALL_PROFILE, entries
         )
         self._lock = threading.Lock()
         self._state: tuple[tuple[str, int, int, int], ...] | None = None

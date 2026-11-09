@@ -389,7 +389,7 @@ uv run goldilocks assets verify default
 Use a profile, asset ID, or table ID. `default` installs the four prediction
 models (`qrf-kpoints`, `metallicity-cgcnn`, `is-metal-classifier`,
 `is-magnetic-classifier`) and a PBEsol efficiency PseudoDojo table;
-`workbench` installs all registered models and tables. `install` also
+`all` installs every registered model and table. `install` also
 repairs corrupt installations.
 
 `run --fetch-missing` (or `explain --fetch-missing`) installs a missing
@@ -400,7 +400,7 @@ any other kind of missing dependency. See
 ## Serve HTTP
 
 ```bash
-uv run goldilocks assets install workbench
+uv run goldilocks assets install all
 uv run --extra http goldilocks serve http
 ```
 

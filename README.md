@@ -40,7 +40,7 @@ For the Workbench as well:
 
 ```bash
 pip install "goldilocks-core[http]"
-goldilocks assets install workbench
+goldilocks assets install all
 goldilocks serve http
 ```
 
@@ -63,7 +63,7 @@ git clone https://github.com/stfc/goldilocks-core.git
 cd goldilocks-core
 uv sync --extra http
 npm --prefix web ci
-uv run goldilocks assets install workbench
+uv run goldilocks assets install all
 uv run --extra http poe workbench
 ```
 

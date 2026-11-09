@@ -13,7 +13,7 @@ uv run pre-commit run --all-files
 
 `uv run poe` lists tasks, including `workbench` (backend :8000 + Vite :5173 in one command).
 
-Run `pre-commit` before committing. CI (on `main` and PRs) runs Ruff, pytest with branch coverage, focused mutation testing, and distribution validation — all via `uv` — plus a `workbench` job that builds/lints/tests the Node frontend and runs `docker build --check`. Building and booting the production Docker image and running the real Playwright e2e suite against it happen only for release tags, where they gate PyPI publishing, or on demand with `gh workflow run workbench-image.yml --ref <branch>` once that workflow is on the repository's default branch.
+Run `pre-commit` before committing. CI (on `main` and PRs) runs Ruff, pytest with branch coverage, focused mutation testing, and distribution validation — all via `uv` — plus a `workbench` job that builds/lints/tests the Node frontend and runs `docker build --check`. Building and booting the production Docker image and running the real Playwright e2e suite against it happen only for release tags, where they gate PyPI publishing, or on demand with `gh workflow run image.yml --ref <branch>` once that workflow is on the repository's default branch.
 
 ## Code style
 

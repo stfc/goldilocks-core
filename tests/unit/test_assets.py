@@ -539,6 +539,18 @@ def test_references_rejects_unknown_names() -> None:
         references("not-a-table-or-profile", {})
 
 
+def test_the_all_profile_is_every_registered_asset_and_workbench_is_gone() -> None:
+    """#251: "Workbench" names the browser interface, so the profile that
+    installs every model and table is ``all``, with no ``workbench`` alias."""
+    entries = catalogue()
+
+    assert [installation.spec.id for installation in references("all", entries)] == (
+        sorted(entries)
+    )
+    with pytest.raises(KeyError, match="unknown asset 'workbench'"):
+        references("workbench", entries)
+
+
 @pytest.mark.parametrize("corrupt", (False, True))
 def test_profile_downloads_overlap_and_publish_only_verified_assets(
     tmp_path: Path, monkeypatch, corrupt: bool

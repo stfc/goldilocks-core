@@ -11,7 +11,8 @@ from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.ml.models import model_asset_specs
 from goldilocks_core.types import PathLike
 
-WORKBENCH_PROFILE = "workbench"
+ALL_PROFILE = "all"
+"""Every registered model and pseudopotential table (#251)."""
 
 
 def catalogue(
@@ -38,7 +39,7 @@ def references(
     entries = dict(entries or catalogue())
     if name in entries:
         return (entries[name],)
-    if name == WORKBENCH_PROFILE:
+    if name == ALL_PROFILE:
         return tuple(entries[asset_id] for asset_id in sorted(entries))
     table_reference = _table_reference(name, entries)
     if table_reference is not None:

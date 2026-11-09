@@ -107,7 +107,7 @@ jobs:
         run: npm run check
 
       # Lints the Dockerfile only. Building the image downloads every runtime
-      # asset, so the build and browser e2e run in workbench-image.yml, for
+      # asset, so the build and browser e2e run in image.yml, for
       # release tags and on dispatch (#205).
       - name: Check production image definition
         run: docker build --check .

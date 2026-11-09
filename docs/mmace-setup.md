@@ -17,7 +17,7 @@ heuristic.
 
 ## 1. Install the model asset
 
-Part of the `default` and `workbench` asset profiles:
+Part of the `default` and `all` asset profiles:
 
 ```bash
 uv run goldilocks assets install default
@@ -82,7 +82,7 @@ variable (remove it from your shell profile too) and run
 
 ## 4. Use mMACE in the Workbench
 
-Nothing to configure: start the Workbench as usual once the default (or `workbench`) assets
+Nothing to configure: start the Workbench as usual once the default (or `all`) assets
 are installed.
 
 ```bash

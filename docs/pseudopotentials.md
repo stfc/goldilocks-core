@@ -26,7 +26,7 @@ The `pseudopotential_tables` array lists the registered tables. Each table's
 `elements` field lists elements permitted by Core's selection policy, not just
 those present in the upstream library. `uv run goldilocks assets status` with
 no argument only reports the `default` profile's single table; run
-`uv run goldilocks assets status workbench` to see every registered table's
+`uv run goldilocks assets status all` to see every registered table's
 install state.
 
 Without an explicit source, Goldilocks chooses a compatible registered table,

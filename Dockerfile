@@ -20,8 +20,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra http --no-editable
 COPY scripts/export_workbench_openapi.py ./scripts/export_workbench_openapi.py
 RUN /app/.venv/bin/python scripts/export_workbench_openapi.py --output /build/openapi.json
-RUN /app/.venv/bin/goldilocks assets install workbench \
-    && /app/.venv/bin/goldilocks assets verify workbench
+RUN /app/.venv/bin/goldilocks assets install all \
+    && /app/.venv/bin/goldilocks assets verify all
 
 FROM node:26.12.1-bookworm-slim@sha256:88e480776c6149ff1d098cd304f44bf18057fb5d284a3329b78162d29821e28c AS workbench-build
 WORKDIR /build/web

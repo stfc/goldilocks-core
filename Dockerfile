@@ -6,6 +6,13 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     GOLDILOCKS_ASSET_ROOT=/opt/goldilocks/assets
+# A C++ compiler for the sdists the lock has no wheel for on this platform:
+# dscribe ships x86_64 Linux wheels only, so arm64 builds it from source.
+RUN rm -f /etc/apt/sources.list.d/debian.sources \
+    && printf '%s\n' 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260801T000000Z bookworm main' > /etc/apt/sources.list \
+    && apt-get -o Acquire::Retries=5 update \
+    && apt-get -o Acquire::Retries=5 install --no-install-recommends -y g++=4:12.2.0-3 \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /build/core
 COPY pyproject.toml uv.lock README.md LICENSE ./
 COPY src/ ./src/

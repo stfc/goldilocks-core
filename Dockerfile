@@ -16,7 +16,7 @@ RUN /app/.venv/bin/python scripts/export_workbench_openapi.py --output /build/op
 RUN /app/.venv/bin/goldilocks assets install workbench \
     && /app/.venv/bin/goldilocks assets verify workbench
 
-FROM node:24.19.0-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS workbench-build
+FROM node:26.12.1-bookworm-slim@sha256:88e480776c6149ff1d098cd304f44bf18057fb5d284a3329b78162d29821e28c AS workbench-build
 WORKDIR /build/web
 COPY web/package.json web/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci

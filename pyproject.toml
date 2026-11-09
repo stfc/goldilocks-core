@@ -32,7 +32,7 @@ dependencies = [
     # apart. Since goldilocks-ml 0.3.0 that stack includes
     # mace-torch[magnetic], which is_magnetic and mMACE ordering ranking
     # run on (#240).
-    "goldilocks-ml==0.3.2",
+    "goldilocks-ml==0.3.3",
     # Named only so [tool.uv.sources] below can route it to the CPU-only
     # PyTorch index: uv applies sources to direct dependencies alone, and
     # torch otherwise arrives through goldilocks-ml, which pins its version

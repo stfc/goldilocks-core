@@ -950,7 +950,7 @@ dev = [
 requires-dist = [
     { name = "ase", specifier = ">=3.28" },
     { name = "fastapi", marker = "extra == 'http'" },
-    { name = "goldilocks-ml", specifier = "==0.3.2" },
+    { name = "goldilocks-ml", specifier = "==0.3.3" },
     { name = "mcp", marker = "extra == 'mcp'" },
     { name = "numpy", specifier = ">=2.4.4" },
     { name = "pandas", specifier = ">=2.0" },
@@ -977,7 +977,7 @@ dev = [
 
 [[package]]
 name = "goldilocks-ml"
-version = "0.3.2"
+version = "0.3.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "data-collections-api" },
@@ -992,9 +992,9 @@ dependencies = [
     { name = "torch", version = "2.13.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
     { name = "torch-geometric" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/13/0c/0fa0a7483978e279c49a7ab1ab2033a9a466fcd40f66c14dba56406e4a5a/goldilocks_ml-0.3.2.tar.gz", hash = "sha256:70e2ad473dc749420b842eeab982a444294f995118f1a3fcf7bf473a9f7558f9", size = 1776348, upload-time = "2026-11-03T16:24:38.871Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/07/86/8d473ab95324063c84bc671b0ec9a1c2cfb2623176dbde34df629b1f93e9/goldilocks_ml-0.3.3.tar.gz", hash = "sha256:27cd6347d08742fa38457eee607920cb7c548d088a31ff0c950d565df2bb9555", size = 1779597, upload-time = "2026-11-09T15:30:17.051Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9e/ac/d77e050e9796179bd89d7af192380d5f49270c5750c199d8f996cda87e0f/goldilocks_ml-0.3.2-py3-none-any.whl", hash = "sha256:de2786a9ce6b9656307cd83078df3f7763a505e45a7f7907629c02390c06c8ec", size = 137061, upload-time = "2026-11-03T16:24:37.792Z" },
+    { url = "https://files.pythonhosted.org/packages/48/c4/accdea4ea46ee14cbf1e80093775af75f6dfd6a5c15e06fe07a09073e668/goldilocks_ml-0.3.3-py3-none-any.whl", hash = "sha256:27180874f3554882611532d12905ee10bb324db5373fc9bc5b5025721d6cf24a", size = 137121, upload-time = "2026-11-09T15:30:15.449Z" },
 ]
 
 [[package]]
@@ -3581,7 +3581,7 @@ wheels = [
 
 [[package]]
 name = "torch-geometric"
-version = "2.8.0.post1"
+version = "2.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -3594,9 +3594,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "xxhash" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/40/2c/bfcb404c448f7c347cea7b956d3c7e92d53e36c8db2010eb1bdc1b937bfb/torch_geometric-2.8.0.post1.tar.gz", hash = "sha256:2c0c81666ec10f2132f6b4e0b6c57fc813f2c9f6b57599d7b7a799c614c22fbd", size = 928666, upload-time = "2026-07-20T20:44:40.36Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c1/d7/f754447893b8d275d479ffbce36e35d873b3df906eb380d810d239ffe66a/torch_geometric-2.8.1.tar.gz", hash = "sha256:3d4431567fcf4865a29cfec25c52484382dd38fd46a45fb4f9d473545d64b812", size = 929429, upload-time = "2026-10-12T11:47:39.023Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/14/5c/edf74a71249ad19aa0390fb97ff021e2a5b04ce23252730014e1feac957e/torch_geometric-2.8.0.post1-py3-none-any.whl", hash = "sha256:5d9841cbfa64eadc425e445767127d103dd52fdc5890548c6364986c9bc78029", size = 1325397, upload-time = "2026-07-20T20:44:38.789Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/24/486ae77b41d129b6a5035dd9f028141ec8d520c210a0c3fb803434f18b5f/torch_geometric-2.8.1-py3-none-any.whl", hash = "sha256:b628de243c0893f3435b6eca9a7bbc07f3219293ed27c974b8929aaae42e65d0", size = 1325471, upload-time = "2026-10-12T11:47:35.803Z" },
 ]
 
 [[package]]

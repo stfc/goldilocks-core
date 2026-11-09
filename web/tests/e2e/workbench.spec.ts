@@ -954,7 +954,7 @@ test("completes the preparation workflow with keyboard-only activation", async (
   await page.goto("/");
   await page.waitForLoadState("networkidle");
   const browse = page.getByRole("button", {
-    name: "Choose a CIF or POSCAR structure",
+    name: "Browse files",
   });
   await browse.waitFor();
   // Tab 1: theme toggle. Tab 2: Structure card's scrollable .card-body
@@ -1005,7 +1005,7 @@ test("keeps keyboard focus visible and primary targets usable", async ({
 }) => {
   await page.goto("/");
   const browse = page.getByRole("button", {
-    name: "Choose a CIF or POSCAR structure",
+    name: "Browse files",
   });
   await browse.waitFor();
 
@@ -1140,7 +1140,7 @@ test("fits all five columns once the viewport clears their floors", async ({
   const clipped = await page.evaluate<readonly string[]>(`(() => {
     const status = document.getElementById("structure-source-help");
     const replace = document.querySelector(
-      'button[aria-label="Replace structure file"] .mantine-Button-label',
+      'button[aria-describedby="structure-source-help"] .mantine-Button-label',
     );
     return [status, replace]
       .filter((element) => element.scrollWidth > element.clientWidth)

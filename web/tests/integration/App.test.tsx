@@ -150,7 +150,7 @@ async function openStructure(
   container: HTMLElement,
 ) {
   await screen.findByRole("button", {
-    name: "Choose a CIF or POSCAR structure",
+    name: "Browse files",
   });
   await user.upload(structureInputElement(container), structureFile());
   // Functional/pseudopotential table now live collapsed inside the
@@ -443,7 +443,7 @@ describe("Goldilocks Workbench", () => {
     ];
     const { container } = renderApp(core, saveArchive);
     await screen.findByRole("button", {
-      name: "Choose a CIF or POSCAR structure",
+      name: "Browse files",
     });
 
     await user.upload(
@@ -616,7 +616,7 @@ describe("Goldilocks Workbench", () => {
     ];
     const { container } = renderApp(core);
     await screen.findByRole("button", {
-      name: "Choose a CIF or POSCAR structure",
+      name: "Browse files",
     });
 
     expect(
@@ -662,7 +662,7 @@ describe("Goldilocks Workbench", () => {
     core.inspectionResults = [Promise.resolve(inspection)];
     const { container } = renderApp(core);
     await screen.findByRole("button", {
-      name: "Choose a CIF or POSCAR structure",
+      name: "Browse files",
     });
 
     await userEvent.upload(structureInputElement(container), first);

@@ -126,7 +126,8 @@ jobs:
         with:
           name: image
 
-      # amd64 only: the image does not build on arm64 yet (stfc#229).
+      # amd64 only: the image also builds on arm64 since
+      # junwen94/goldilocks-core#257; publishing arm64 is a separate decision.
       - name: Push the image to GHCR
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

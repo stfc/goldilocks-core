@@ -6,13 +6,33 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     GOLDILOCKS_ASSET_ROOT=/opt/goldilocks/assets
-# A C++ compiler for the sdists the lock has no wheel for on this platform:
-# dscribe ships x86_64 Linux wheels only, so arm64 builds it from source.
+# A C++ compiler for the sdists the lock has no wheel for on this platform
+# (dscribe ships x86_64 Linux wheels only, so arm64 builds it from source),
+# and gfortran, make and git for enumlib.
 RUN rm -f /etc/apt/sources.list.d/debian.sources \
     && printf '%s\n' 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260801T000000Z bookworm main' > /etc/apt/sources.list \
     && apt-get -o Acquire::Retries=5 update \
-    && apt-get -o Acquire::Retries=5 install --no-install-recommends -y g++=4:12.2.0-3 \
+    && apt-get -o Acquire::Retries=5 install --no-install-recommends -y \
+        g++=4:12.2.0-3 \
+        gfortran=4:12.2.0-3 \
+        make=4.3-4.1 \
+        git=1:2.39.5-0+deb12u3 \
     && rm -rf /var/lib/apt/lists/*
+# enumlib's enum.x and makeStr.py, which list antiferromagnetic orderings.
+# The same commit as .github/actions/core-setup, so CI tests this build.
+ARG ENUMLIB_COMMIT=67217859c1cfe6e1d8cfe25b76a1d14a28c6030e
+RUN git clone --quiet https://github.com/msg-byu/enumlib.git /build/enumlib \
+    && git -C /build/enumlib checkout --quiet "$ENUMLIB_COMMIT" \
+    && git -C /build/enumlib submodule update --quiet --init --recursive \
+    && make -C /build/enumlib/symlib/src F90=gfortran \
+    && make -C /build/enumlib/src F90=gfortran \
+    && make -C /build/enumlib/src F90=gfortran enum.x \
+    && install -d /build/enumlib-bin /build/enumlib-licenses/enumlib /build/enumlib-licenses/symlib \
+    && install /build/enumlib/src/enum.x /build/enumlib-bin/enum.x \
+    && sed '1s|.*|#!/app/.venv/bin/python3|' /build/enumlib/aux_src/makeStr.py > /build/enumlib-bin/makeStr.py \
+    && chmod +x /build/enumlib-bin/makeStr.py \
+    && install -m 644 /build/enumlib/LICENSE /build/enumlib-licenses/enumlib/LICENSE \
+    && install -m 644 /build/enumlib/symlib/LICENSE /build/enumlib-licenses/symlib/LICENSE
 WORKDIR /build/core
 COPY pyproject.toml uv.lock README.md LICENSE ./
 COPY src/ ./src/
@@ -35,18 +55,20 @@ FROM python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f14
 LABEL org.opencontainers.image.title="goldilocks-core" \
       org.opencontainers.image.description="Guided DFT input recommendation with bundled runtime assets" \
       org.opencontainers.image.source="https://github.com/stfc/goldilocks-core" \
-      org.opencontainers.image.licenses="BSD-3-Clause AND CC-BY-3.0 AND CC-BY-4.0 AND CC-BY-SA-4.0 AND GPL-2.0-or-later AND GPL-3.0-only" \
+      org.opencontainers.image.licenses="BSD-3-Clause AND CC-BY-3.0 AND CC-BY-4.0 AND CC-BY-SA-4.0 AND GPL-2.0-or-later AND GPL-3.0-only AND MIT" \
       org.opencontainers.image.license-notice="See /usr/share/licenses/goldilocks-core and /opt/goldilocks/assets"
 
 RUN rm -f /etc/apt/sources.list.d/debian.sources \
     && printf '%s\n' 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260801T000000Z bookworm main' > /etc/apt/sources.list \
-    && apt-get update \
-    && apt-get install --no-install-recommends -y libgomp1=12.2.0-14+deb12u1 \
+    && apt-get -o Acquire::Retries=5 update \
+    && apt-get -o Acquire::Retries=5 install --no-install-recommends -y \
+        libgomp1=12.2.0-14+deb12u1 \
+        libgfortran5=12.2.0-14+deb12u1 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system goldilocks \
     && useradd --system --gid goldilocks --home-dir /app goldilocks
 
-ENV PATH=/app/.venv/bin:$PATH \
+ENV PATH=/opt/goldilocks/enumlib-bin:/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     MPLCONFIGDIR=/app/.cache/matplotlib \
     GOLDILOCKS_ASSET_ROOT=/opt/goldilocks/assets \
@@ -60,6 +82,8 @@ RUN mkdir -p "$MPLCONFIGDIR" \
 COPY --from=core-build --chown=goldilocks:goldilocks /opt/goldilocks/assets /opt/goldilocks/assets
 COPY --from=workbench-build --chown=goldilocks:goldilocks /build/web/dist ./workbench
 COPY --chown=goldilocks:goldilocks LICENSE /usr/share/licenses/goldilocks-core/LICENSE
+COPY --from=core-build /build/enumlib-bin /opt/goldilocks/enumlib-bin
+COPY --from=core-build /build/enumlib-licenses /usr/share/licenses
 
 USER goldilocks
 EXPOSE 8000

@@ -101,6 +101,8 @@ def create_app(*, static_root: str | Path | None = None) -> Any:
     def magnetic_orderings(body: MagneticOrderingsRequestDocument) -> Any:
         return JSONResponse(_handlers.magnetic_orderings(body))
 
+    _register_ranking_routes(app, _handlers.build_ranking_queue())
+
     @app.post("/run")
     def run(body: RunRequestDocument) -> Response:
         summary, bundle_input = _handlers.run(body)
@@ -182,6 +184,45 @@ def _register_error_handlers(app: Any) -> None:
     ) -> JSONResponse:
         status = _STATUS_BY_CATEGORY.get(error.category, 500)
         return JSONResponse(status_code=status, content={"error": error.public_error()})
+
+
+def _register_ranking_routes(app: Any, queue: Any) -> None:
+    """Ranking jobs (#261): submit, poll, cancel. A job id this server does
+    not hold -- unknown, cancelled, long finished, or from before a restart
+    -- is a 404."""
+
+    @app.post("/magnetic-orderings/rank", status_code=202)
+    def submit_ranking(body: MagneticOrderingsRequestDocument) -> Any:
+        return JSONResponse(_handlers.submit_ranking(queue, body), status_code=202)
+
+    @app.get("/magnetic-orderings/rank/{job_id}")
+    def ranking_status(job_id: str) -> Any:
+        status = queue.status(job_id)
+        return _unknown_ranking(job_id) if status is None else JSONResponse(status)
+
+    @app.delete(
+        "/magnetic-orderings/rank/{job_id}", status_code=204, response_model=None
+    )
+    def cancel_ranking(job_id: str) -> Any:
+        if not queue.cancel(job_id):
+            return _unknown_ranking(job_id)
+        return Response(status_code=204)
+
+
+def _unknown_ranking(job_id: str) -> Any:
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": {
+                "kind": "unknown_ranking",
+                "message": (
+                    f"No ranking job {job_id} on this server: it was cancelled, "
+                    "finished long ago, or the server restarted. Run the "
+                    "ranking again."
+                ),
+            }
+        },
+    )
 
 
 def _register_operational_routes(app: Any, readiness: Any) -> None:

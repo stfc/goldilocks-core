@@ -99,8 +99,9 @@ on an odd d or f count did, or a setting such as `spin_polarized` or `magnetic_o
 UI.
 
 Clicking **Run mMACE** there ranks the candidates in a separate process, so editing a setting
-while it runs is unaffected; a second ranking waits for the first to finish. Rankings take
-minutes: rock-salt NiO's eight candidates take about two on a laptop CPU.
+while it runs is unaffected. Rankings run one at a time on the server: a ranking behind
+others shows "Queued: N rankings ahead of yours", then "Ranking candidate i of n" while it
+runs. Rankings take minutes: rock-salt NiO's eight candidates take about two on a laptop CPU.
 
 ## 5. Structure size limit
 

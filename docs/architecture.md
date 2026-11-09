@@ -532,8 +532,11 @@ magnetic-ordering enumeration runs on one long-lived worker process
 whole process, which breaks float32 models built on other threads, so the
 server and CLI processes never import it: `is_magnetic` predictions run on a
 second long-lived worker (`ml/mace_process.py`), and each mMACE ordering
-ranking runs in a fresh process, one ranking at a time
-(`advisors/magnetic_ordering_ml.py`). The Workbench static root is resolved to
+ranking relaxes its candidates on a process of its own, one call per candidate
+and one ranking at a time (`advisors/magnetic_ordering_ml.py`). Over HTTP a
+ranking is a job: `server/ranking_jobs.py` queues them in order on one runner
+thread, reports each job's queue position and progress, and kills a cancelled
+job's process. The Workbench static root is resolved to
 an absolute path once, when the app is created.
 
 Workbench keeps the editable draft and reviewed response in its browser store.

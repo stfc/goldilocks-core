@@ -19,6 +19,7 @@ from goldilocks_core.server.documents import (
     ComputeRequestDocument,
     InlineStructureDocument,
     MagneticOrderingsRequestDocument,
+    MagneticOrderingsToolDocument,
 )
 from goldilocks_core.service import AdviceIncomplete
 
@@ -86,15 +87,17 @@ class TestMagneticOrderings:
         assert "structure_format" not in candidate
         assert result["warnings"] == []
 
-    def test_rank_with_mmace_degrades_with_a_warning_when_unconfigured(
+    def test_the_tool_ranks_in_the_call_and_degrades_when_unconfigured(
         self, silicon_cif, monkeypatch
     ) -> None:
+        """MCP keeps its synchronous ranking: a tool call has no job to poll
+        (#261)."""
         monkeypatch.delenv("GOLDILOCKS_MACE_BACKBONE", raising=False)
-        document = MagneticOrderingsRequestDocument(
+        document = MagneticOrderingsToolDocument(
             structure_content=silicon_cif, rank_with_mmace=True
         )
 
-        result = _handlers.magnetic_orderings(document)
+        result = _handlers.magnetic_orderings_tool(document)
 
         assert result["ranked"] is False
         assert len(result["warnings"]) == 1

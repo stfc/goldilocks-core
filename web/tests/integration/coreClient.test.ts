@@ -268,7 +268,6 @@ describe("HttpCoreClient", () => {
       structure_content: structureInput.structure_content,
       structure_name: structureInput.structure_name,
       structure_format: "cif",
-      rank_with_mmace: false,
     };
 
     it("posts to /magnetic-orderings with the caller's abort signal", async () => {
@@ -309,6 +308,82 @@ describe("HttpCoreClient", () => {
 
       expect(failure).toBe(controller.signal.reason);
       expect(failure).toMatchObject({ name: "AbortError" });
+    });
+  });
+
+  describe("ranking jobs", () => {
+    const orderingsRequest: MagneticOrderingsRequest = {
+      structure_content: structureInput.structure_content,
+      structure_name: structureInput.structure_name,
+    };
+
+    it("submits to /magnetic-orderings/rank, polls the job, and cancels it", async () => {
+      const queued = { job_id: "a1", state: "queued", position: 2 };
+      const running = {
+        job_id: "a1",
+        state: "running",
+        progress: { done: 1, total: 8 },
+      };
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(Response.json(queued, { status: 202 }))
+        .mockResolvedValueOnce(Response.json(running))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+      const client = new HttpCoreClient("", fetcher);
+      const controller = new AbortController();
+
+      await expect(
+        client.submitRanking(orderingsRequest, controller.signal),
+      ).resolves.toEqual(queued);
+      await expect(
+        client.rankingStatus("a1", controller.signal),
+      ).resolves.toEqual(running);
+      await expect(client.cancelRanking("a1")).resolves.toBeUndefined();
+
+      expect(fetcher.mock.calls).toEqual([
+        [
+          "/magnetic-orderings/rank",
+          {
+            body: JSON.stringify(orderingsRequest),
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            method: "POST",
+            signal: controller.signal,
+          },
+        ],
+        [
+          "/magnetic-orderings/rank/a1",
+          {
+            headers: { Accept: "application/json" },
+            method: "GET",
+            signal: controller.signal,
+          },
+        ],
+        ["/magnetic-orderings/rank/a1", { method: "DELETE" }],
+      ]);
+    });
+
+    it("reports a job the server no longer holds as unknown_ranking", async () => {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+        Response.json(
+          {
+            error: {
+              kind: "unknown_ranking",
+              message: "No ranking job a1 on this server.",
+            },
+          },
+          { status: 404 },
+        ),
+      );
+      const client = new HttpCoreClient("", fetcher);
+
+      await expect(client.rankingStatus("a1")).rejects.toMatchObject({
+        kind: "unknown_ranking",
+        message: "No ranking job a1 on this server.",
+        status: 404,
+      });
     });
   });
 

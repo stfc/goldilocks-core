@@ -62,19 +62,53 @@ class WorkerProcess:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._child: _Child | None = None
+        self._calling: _Child | None = None
+        self._killed = False
 
     def run[T](self, fn: Callable[..., T], /, *args: object) -> T:
         request = pickle.dumps((fn, args))
         with self._lock:
+            if self._killed:
+                raise WorkerDied("worker process was killed")
             child = self._child if self._child is not None else _Child()
             self._child = None
+            self._calling = child
             try:
+                if self._killed:  # killed while the child started
+                    raise WorkerDied("worker process was killed")
                 reply = child.call(request)
             except BaseException:
                 child.kill()
                 raise
+            finally:
+                self._calling = None
             self._child = child
         return _result(reply)
+
+    def close(self) -> None:
+        """End the child once the call in progress, if any, returns."""
+        with self._lock:
+            if self._child is not None:
+                self._child.close()
+                self._child = None
+
+    def kill(self) -> None:
+        """End the child now, without waiting; safe from any thread. The
+        call in progress and every later call raise ``WorkerDied``: a killed
+        worker is finished."""
+        self._killed = True
+        calling = self._calling
+        if calling is not None:
+            calling.end_process()
+        elif self._lock.acquire(blocking=False):
+            try:
+                if self._child is not None:
+                    self._child.kill()
+                    self._child = None
+            finally:
+                self._lock.release()
+        # Otherwise a call holds the lock without a child yet, and stops on
+        # the flag; or it is returning, and the next call stops on it.
 
 
 def run_in_fresh_process[T](fn: Callable[..., T], /, *args: object) -> T:
@@ -125,6 +159,11 @@ class _Child:
     def kill(self) -> None:
         self._process.kill()
         self.close()
+
+    def end_process(self) -> None:
+        """Kill the process and leave the pipes to the caller blocked on
+        them, whose read then fails."""
+        self._process.kill()
 
     def _send(self, message: bytes) -> None:
         try:

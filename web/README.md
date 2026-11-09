@@ -68,8 +68,9 @@ live. Without the asset both features still work, just at a lower tier
 (LLM/heuristic classification, unranked ordering list) — never a failure.
 
 "Run mMACE" ranks in a separate backend process, so you can keep editing
-settings while it runs; a ranking can take minutes. Opening another structure
-abandons the ranking in the Workbench, but the backend still finishes it.
+settings while it runs; a ranking can take minutes. Rankings run one at a time
+on the backend, and the card shows how many are ahead of yours, then which
+candidate is being relaxed. Opening another structure cancels the ranking.
 
 ## Run in Docker
 

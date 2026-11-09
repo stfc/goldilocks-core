@@ -10,6 +10,8 @@ import os
 import signal
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -99,6 +101,42 @@ def test_a_killed_worker_fails_the_next_call_and_the_one_after_restarts_it() -> 
     with pytest.raises(WorkerDied):
         worker.run(os.getpid)
     assert worker.run(os.getpid) not in {killed, os.getpid()}
+
+
+def test_close_ends_the_idle_child_and_the_next_call_starts_another() -> None:
+    worker = WorkerProcess()
+    closed = worker.run(os.getpid)
+
+    worker.close()
+
+    with pytest.raises(ProcessLookupError):
+        os.kill(closed, 0)
+    assert worker.run(os.getpid) != closed
+
+
+def test_kill_from_another_thread_ends_the_call_in_progress() -> None:
+    """A ranking job is cancelled from a request thread while its runner
+    thread waits on the worker (#261)."""
+    worker = WorkerProcess()
+    worker.run(os.getpid)
+    outcome: list[BaseException] = []
+
+    def sleep_in_worker() -> None:
+        try:
+            worker.run(time.sleep, 30)
+        except BaseException as error:  # noqa: BLE001 -- asserted below
+            outcome.append(error)
+
+    caller = threading.Thread(target=sleep_in_worker)
+    caller.start()
+    time.sleep(0.5)
+    worker.kill()
+    caller.join(timeout=10)
+
+    assert not caller.is_alive()
+    assert [type(error) for error in outcome] == [WorkerDied]
+    with pytest.raises(WorkerDied, match="killed"):
+        worker.run(os.getpid)
 
 
 def test_the_worker_reads_no_stdin_and_writes_to_the_callers_stderr() -> None:

@@ -25,7 +25,8 @@ LIMITS = {
     #   is_magnetic=non_magnetic exactly where the spin rules then give none (#215)
     "checks": (17, 31),
     "cli.core": (11, 16),  # + cli._output.command_stdout (#183)
-    "server.http": (5, 12),
+    # + _handlers.build_ranking_queue and submit_ranking for ranking jobs (#261)
+    "server.http": (5, 14),
     "server.mcp": (5, 10),
     # + analysis.geometry.GeometryFacts for the geometry_eff record (#210)
     "service._system": (14, 23),

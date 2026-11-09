@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 import type {
   ArchiveDownload,
@@ -7,6 +7,7 @@ import type {
   CoreClient,
   ExplainResult,
   MagneticOrderingsRequest,
+  RankingJob,
   MagneticOrderingsResult,
   RunResult,
   StructureInput,
@@ -45,6 +46,11 @@ class CoreStub implements CoreClient {
   magneticOrderingsResults: Promise<MagneticOrderingsResult>[] = [];
   magneticOrderingsCalls: MagneticOrderingsRequest[] = [];
   magneticOrderingsSignals: (AbortSignal | undefined)[] = [];
+  rankingSubmissions: Promise<RankingJob>[] = [];
+  rankingStatuses: Promise<RankingJob>[] = [];
+  rankingCalls: MagneticOrderingsRequest[] = [];
+  rankingStatusCalls: string[] = [];
+  cancelledRankings: string[] = [];
 
   capabilities(): Promise<Capabilities> {
     this.capabilitiesCalls += 1;
@@ -92,6 +98,27 @@ class CoreStub implements CoreClient {
       this.magneticOrderingsResults.shift() ??
       Promise.reject(new Error("magnetic orderings not configured"))
     );
+  }
+
+  submitRanking(request: MagneticOrderingsRequest): Promise<RankingJob> {
+    this.rankingCalls.push(request);
+    return (
+      this.rankingSubmissions.shift() ??
+      Promise.reject(new Error("ranking not configured"))
+    );
+  }
+
+  rankingStatus(jobId: string): Promise<RankingJob> {
+    this.rankingStatusCalls.push(jobId);
+    return (
+      this.rankingStatuses.shift() ??
+      Promise.reject(new Error("ranking status not configured"))
+    );
+  }
+
+  cancelRanking(jobId: string): Promise<void> {
+    this.cancelledRankings.push(jobId);
+    return Promise.resolve();
   }
 }
 
@@ -803,6 +830,7 @@ describe("Workspace", () => {
       operation: null,
       result: replacementResult,
       error: null,
+      ranking: null,
     });
   });
 
@@ -938,18 +966,32 @@ describe("Workspace", () => {
         operation: null,
         result: replacementResult,
         error: null,
+        ranking: null,
       });
     },
   );
 
-  it("keeps the listing on screen while ranking it", async () => {
+  it("keeps the listing on screen while a ranking job is queued, runs and finishes", async () => {
+    // #261: the ranking is a server job, polled every 2 s; the listing
+    // shows where it stands meanwhile.
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const listing = orderingsListing(4, "fm", "afm-1");
     const rankedListing = { ...listing, ranked: true };
-    const pendingRanking = deferred<MagneticOrderingsResult>();
     const core = new CoreStub();
-    core.magneticOrderingsResults = [
-      Promise.resolve(listing),
-      pendingRanking.promise,
+    core.magneticOrderingsResults = [Promise.resolve(listing)];
+    core.rankingSubmissions = [
+      Promise.resolve({ job_id: "j1", state: "queued", position: 1 }),
+    ];
+    core.rankingStatuses = [
+      Promise.resolve({
+        job_id: "j1",
+        state: "running",
+        progress: { done: 1, total: 2 },
+      }),
+      Promise.resolve({ job_id: "j1", state: "done", report: rankedListing }),
     ];
     const workspace = createWorkspace(core, vi.fn());
     await workspace.dispatch({ type: "workspace.start" });
@@ -957,24 +999,108 @@ describe("Workspace", () => {
     await workspace.dispatch({ type: "magneticOrderings.list" });
 
     const ranking = workspace.dispatch({ type: "magneticOrderings.rank" });
+    await vi.advanceTimersByTimeAsync(0);
 
-    expect(core.magneticOrderingsCalls.at(-1)).toMatchObject({
-      structure_content: structureInput.structure_content,
-      rank_with_mmace: true,
-    });
+    expect(core.rankingCalls).toEqual([
+      {
+        structure_content: structureInput.structure_content,
+        structure_name: structureInput.structure_name,
+        structure_format: structureInput.structure_format,
+      },
+    ]);
     expect(currentOrderings(workspace.getSnapshot())).toEqual({
       input: structureInput,
       operation: "rank",
       result: listing,
       error: null,
+      ranking: { job_id: "j1", state: "queued", position: 1 },
     });
-    pendingRanking.resolve(rankedListing);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(currentOrderings(workspace.getSnapshot())?.ranking).toEqual({
+      job_id: "j1",
+      state: "running",
+      progress: { done: 1, total: 2 },
+    });
+    await vi.advanceTimersByTimeAsync(2000);
     await ranking;
     expect(currentOrderings(workspace.getSnapshot())).toEqual({
       input: structureInput,
       operation: null,
       result: rankedListing,
       error: null,
+      ranking: null,
+    });
+    expect(core.rankingStatusCalls).toEqual(["j1", "j1"]);
+    expect(core.cancelledRankings).toEqual([]);
+  });
+
+  it("cancels the ranking job when another structure opens", async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const core = new CoreStub();
+    core.inspectionResults = [
+      Promise.resolve(inspection),
+      Promise.resolve(inspection),
+    ];
+    core.magneticOrderingsResults = [
+      Promise.resolve(orderingsListing(4, "fm", "afm-1")),
+    ];
+    core.rankingSubmissions = [
+      Promise.resolve({ job_id: "j1", state: "queued", position: 3 }),
+    ];
+    const workspace = createWorkspace(core, vi.fn());
+    await workspace.dispatch({ type: "workspace.start" });
+    await workspace.dispatch({ type: "source.open", input: structureInput });
+    await workspace.dispatch({ type: "magneticOrderings.list" });
+    const ranking = workspace.dispatch({ type: "magneticOrderings.rank" });
+    await vi.advanceTimersByTimeAsync(0);
+
+    await workspace.dispatch({ type: "source.open", input: replacementInput });
+    await ranking;
+
+    expect(core.cancelledRankings).toEqual(["j1"]);
+    expect(core.rankingStatusCalls).toEqual([]);
+    expect(currentOrderings(workspace.getSnapshot())).toBeNull();
+  });
+
+  it("says a ranking the server lost can be run again", async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const listing = orderingsListing(4, "fm", "afm-1");
+    const lost =
+      "No ranking job j1 on this server: it was cancelled, finished long " +
+      "ago, or the server restarted. Run the ranking again.";
+    const core = new CoreStub();
+    core.magneticOrderingsResults = [Promise.resolve(listing)];
+    core.rankingSubmissions = [
+      Promise.resolve({ job_id: "j1", state: "queued", position: 0 }),
+    ];
+    const lostJob = Promise.reject(
+      new CoreFailure("unknown_ranking", lost, {}, 404),
+    );
+    // Read only after the 2 s poll; handled up front so the wait is not
+    // reported as an unhandled rejection.
+    lostJob.catch(() => undefined);
+    core.rankingStatuses = [lostJob];
+    const workspace = createWorkspace(core, vi.fn());
+    await workspace.dispatch({ type: "workspace.start" });
+    await workspace.dispatch({ type: "source.open", input: structureInput });
+    await workspace.dispatch({ type: "magneticOrderings.list" });
+
+    const ranking = workspace.dispatch({ type: "magneticOrderings.rank" });
+    await vi.advanceTimersByTimeAsync(2000);
+    await ranking;
+
+    expect(currentOrderings(workspace.getSnapshot())).toEqual({
+      input: structureInput,
+      operation: null,
+      result: listing,
+      error: lost,
+      ranking: null,
     });
   });
 

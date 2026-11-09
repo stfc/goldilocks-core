@@ -12,6 +12,7 @@ import io
 import json
 import math
 import re
+import time
 import zipfile
 from pathlib import Path
 
@@ -237,6 +238,8 @@ class TestOpenAPISchema:
             "/explain",
             "/run",
             "/magnetic-orderings",
+            "/magnetic-orderings/rank",
+            "/magnetic-orderings/rank/{job_id}",
         }
 
 
@@ -301,6 +304,7 @@ class TestDisorderedStructures:
             ("/explain", {"structure_content": content, "hpc": "scarf"}),
             ("/run", {"structure_content": content, "hpc": "scarf"}),
             ("/magnetic-orderings", {"structure_content": content}),
+            ("/magnetic-orderings/rank", {"structure_content": content}),
         ):
             response = client.post(route, json=body)
 
@@ -327,21 +331,53 @@ class TestMagneticOrderings:
         assert [c["label"] for c in body["candidates"]] == ["fm"]
         assert body["candidates"][0]["energy_per_atom_ev"] is None
 
-    def test_rank_with_mmace_degrades_with_a_warning_when_unconfigured(
-        self, client: TestClient, silicon_cif: str, monkeypatch
+    def test_listing_refuses_rank_with_mmace_now_that_ranking_is_a_job(
+        self, client: TestClient, silicon_cif: str
     ) -> None:
-        monkeypatch.delenv("GOLDILOCKS_MACE_BACKBONE", raising=False)
-
+        """#261: an old client asking the listing to rank is told so, not
+        silently handed an unranked listing."""
         response = client.post(
             "/magnetic-orderings",
             json={"structure_content": silicon_cif, "rank_with_mmace": True},
         )
 
-        assert response.status_code == 200
-        body = response.json()
-        assert body["ranked"] is False
-        assert len(body["warnings"]) == 1
-        assert body["warnings"][0]["code"] == "magnetic.ordering_ranking_unavailable"
+        assert response.status_code == 422
+
+    def test_a_ranking_job_degrades_with_a_warning_when_unconfigured(
+        self, client: TestClient, silicon_cif: str, monkeypatch
+    ) -> None:
+        monkeypatch.delenv("GOLDILOCKS_MACE_BACKBONE", raising=False)
+
+        submitted = client.post(
+            "/magnetic-orderings/rank", json={"structure_content": silicon_cif}
+        )
+
+        assert submitted.status_code == 202
+        job = submitted.json()
+        assert set(job) == {"job_id", "state", "position"}
+        assert job["state"] == "queued"
+        status = _finished(client, job["job_id"])
+        assert status["state"] == "done"
+        report = status["report"]
+        assert report["ranked"] is False
+        assert [w["code"] for w in report["warnings"]] == [
+            "magnetic.ordering_ranking_unavailable"
+        ]
+
+    def test_a_cancelled_ranking_job_is_gone(
+        self, client: TestClient, silicon_cif: str
+    ) -> None:
+        job_id = client.post(
+            "/magnetic-orderings/rank", json={"structure_content": silicon_cif}
+        ).json()["job_id"]
+
+        assert client.delete(f"/magnetic-orderings/rank/{job_id}").status_code == 204
+        for response in (
+            client.get(f"/magnetic-orderings/rank/{job_id}"),
+            client.delete(f"/magnetic-orderings/rank/{job_id}"),
+        ):
+            assert response.status_code == 404
+            assert response.json()["error"]["kind"] == "unknown_ranking"
 
     def test_rejects_a_path_shaped_value_as_422(self, client: TestClient) -> None:
         response = client.post(
@@ -1137,3 +1173,14 @@ class TestRun:
         )
 
         assert response.status_code == 422
+
+
+def _finished(client: TestClient, job_id: str) -> dict:
+    """The job's status once it is no longer queued or running."""
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        status = client.get(f"/magnetic-orderings/rank/{job_id}").json()
+        if status["state"] not in ("queued", "running"):
+            return status
+        time.sleep(0.05)
+    raise AssertionError(f"ranking job {job_id} did not finish")

@@ -123,8 +123,8 @@ def test_explains_during_a_ranking_match_sequential_ones(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The Workbench's Run mMACE, then a settings edit: explains run while a
-    ranking does, as the first requests after startup, so every model they
-    use is built during the ranking."""
+    ranking job does, as the first requests after startup, so every model
+    they use is built during the ranking."""
     sequential = {name: _explain(name) for name in _EXPLAINED}
     assert {
         (name, key): sequential[name]["records"][key]["source"]
@@ -139,20 +139,21 @@ def test_explains_during_a_ranking_match_sequential_ones(
     )
     predict_module._model.cache_clear()
 
-    with ThreadPoolExecutor(1 + len(_EXPLAINED)) as pool:
-        ranking = pool.submit(
-            _handlers.magnetic_orderings,
-            MagneticOrderingsRequestDocument(
-                structure_content=candidates[0][1].to(fmt="cif"),
-                rank_with_mmace=True,
-            ),
-        )
+    queue = _handlers.build_ranking_queue()
+    job_id = _handlers.submit_ranking(
+        queue,
+        MagneticOrderingsRequestDocument(
+            structure_content=candidates[0][1].to(fmt="cif")
+        ),
+    )["job_id"]
+
+    with ThreadPoolExecutor(len(_EXPLAINED)) as pool:
         rounds = []
-        while not ranking.done():
+        while (status := queue.status(job_id))["state"] in ("queued", "running"):
             rounds.append(
                 dict(zip(_EXPLAINED, pool.map(_explain, _EXPLAINED), strict=True))
             )
-        listing = ranking.result()
+    listing = status["report"]
 
     assert [
         candidate["label"]

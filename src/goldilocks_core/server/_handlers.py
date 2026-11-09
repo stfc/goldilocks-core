@@ -17,13 +17,19 @@ from typing import Any
 from goldilocks_core.assets.store import AssetStore
 from goldilocks_core.bundle import BundleInput, bundle_files
 from goldilocks_core.inputs.hpc import resolve_hpc_profile
-from goldilocks_core.inputs.structure import InlineStructureSource, normalize_structure
+from goldilocks_core.inputs.structure import (
+    InlineStructureSource,
+    normalize_structure,
+    require_ordered,
+)
 from goldilocks_core.resolution import records_document
 from goldilocks_core.server.documents import (
     ComputeRequestDocument,
     InlineStructureDocument,
     MagneticOrderingsRequestDocument,
+    MagneticOrderingsToolDocument,
 )
+from goldilocks_core.server.ranking_jobs import RankingQueue
 from goldilocks_core.server.readiness import AssetReadiness
 from goldilocks_core.service import (
     TASK_PHASES,
@@ -58,11 +64,34 @@ def inspect(document: InlineStructureDocument) -> dict[str, Any]:
 
 
 def magnetic_orderings(document: MagneticOrderingsRequestDocument) -> dict[str, Any]:
+    """The candidate orderings, unranked."""
+    structure = normalize_structure(_structure_source(document)).structure
+    return report_to_json(list_magnetic_orderings(structure))
+
+
+def magnetic_orderings_tool(document: MagneticOrderingsToolDocument) -> dict[str, Any]:
+    """The candidate orderings, ranked in this call if the tool was asked to."""
     structure = normalize_structure(_structure_source(document)).structure
     report = list_magnetic_orderings(
         structure, rank_with_mmace=document.rank_with_mmace
     )
     return report_to_json(report)
+
+
+def build_ranking_queue() -> RankingQueue:
+    """The HTTP transport's queue of ranking jobs (#261)."""
+    return RankingQueue()
+
+
+def submit_ranking(
+    queue: RankingQueue, document: MagneticOrderingsRequestDocument
+) -> dict[str, Any]:
+    """Queue a ranking of the document's structure; returns the job's
+    status. A structure that cannot be listed is refused here, before it
+    is queued."""
+    structure = normalize_structure(_structure_source(document)).structure
+    require_ordered(structure)
+    return queue.submit(structure)
 
 
 def explain(document: ComputeRequestDocument) -> dict[str, Any]:

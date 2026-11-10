@@ -374,6 +374,9 @@ export function createWorkspace(
   let orderingsRequest: AbortController | null = null;
   // The ranking job in flight, cancelled on the server with the request.
   let rankingJob: string | null = null;
+  // Bumped by every structure open and by reset, so an open that waited for
+  // capabilities goes ahead only if nothing replaced it meanwhile (#280).
+  let sourceEpoch = 0;
 
   function beginOperation(
     operation: WorkspaceOperation,
@@ -431,8 +434,12 @@ export function createWorkspace(
   }
 
   async function openSource(input: StructureInput): Promise<void> {
+    const epoch = ++sourceEpoch;
+    // A structure picked before capabilities arrive waits for them instead
+    // of being dropped (#280). If they fail, the startup failure says why.
+    if (store.getState().capabilities === null) await start();
     const capabilities = store.getState().capabilities;
-    if (capabilities === null) return;
+    if (capabilities === null || epoch !== sourceEpoch) return;
     // A new attempt replaces the last structure that failed to open.
     const owner = beginOperation("inspect", { inspectFailure: null });
     try {
@@ -793,6 +800,7 @@ export function createWorkspace(
   }
 
   async function reset(): Promise<void> {
+    sourceEpoch += 1;
     const { capabilities, revision } = store.getState();
     const pendingStartup =
       startup !== null && activeOperation === startup.owner ? startup : null;

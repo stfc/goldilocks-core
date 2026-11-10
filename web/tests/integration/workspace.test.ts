@@ -183,6 +183,105 @@ describe("Workspace", () => {
     });
   });
 
+  describe("a structure opened before capabilities arrive (#280)", () => {
+    // openSource used to return while capabilities were pending, so a file
+    // picked during a cold core start was dropped without a word.
+    function pendingStartup() {
+      const startup = deferred<Capabilities>();
+      const core = new CoreStub();
+      core.capabilitiesResult = startup.promise;
+      const workspace = createWorkspace(core);
+      const starting = workspace.dispatch({ type: "workspace.start" });
+      return { startup, core, workspace, starting };
+    }
+
+    it("is inspected once they do", async () => {
+      const { startup, core, workspace, starting } = pendingStartup();
+
+      const opening = workspace.dispatch({
+        type: "source.open",
+        input: structureInput,
+      });
+      await Promise.resolve();
+      expect(core.inspectedInputs).toEqual([]);
+      startup.resolve(capabilities);
+      await Promise.all([starting, opening]);
+
+      expect(core.capabilitiesCalls).toBe(1);
+      expect(core.inspectedInputs).toEqual([structureInput]);
+      expect(workspace.getSnapshot()).toMatchObject({
+        capabilities,
+        structureInput,
+        inspection,
+        draft,
+        operation: null,
+      });
+    });
+
+    it("gives way to a later one", async () => {
+      const { startup, core, workspace, starting } = pendingStartup();
+      const replacementInput = {
+        ...structureInput,
+        structure_name: "replacement.cif",
+      };
+
+      const first = workspace.dispatch({
+        type: "source.open",
+        input: structureInput,
+      });
+      const second = workspace.dispatch({
+        type: "source.open",
+        input: replacementInput,
+      });
+      startup.resolve(capabilities);
+      await Promise.all([starting, first, second]);
+
+      expect(core.inspectedInputs).toEqual([replacementInput]);
+      expect(workspace.getSnapshot().structureInput).toEqual(replacementInput);
+    });
+
+    it("is dropped by a reset", async () => {
+      const { startup, core, workspace, starting } = pendingStartup();
+
+      const opening = workspace.dispatch({
+        type: "source.open",
+        input: structureInput,
+      });
+      const resetting = workspace.dispatch({ type: "workspace.reset" });
+      startup.resolve(capabilities);
+      await Promise.all([starting, opening, resetting]);
+
+      expect(core.inspectedInputs).toEqual([]);
+      expect(workspace.getSnapshot()).toMatchObject({
+        capabilities,
+        structureInput: null,
+        operation: null,
+      });
+    });
+
+    it("is not inspected when they fail, and the startup failure shows", async () => {
+      const { startup, core, workspace, starting } = pendingStartup();
+      const failure = new CoreFailure(
+        "assets_unavailable",
+        "Runtime assets are unavailable.",
+      );
+
+      const opening = workspace.dispatch({
+        type: "source.open",
+        input: structureInput,
+      });
+      startup.reject(failure);
+      await Promise.all([starting, opening]);
+
+      expect(core.inspectedInputs).toEqual([]);
+      expect(workspace.getSnapshot()).toMatchObject({
+        capabilities: null,
+        startupFailure: failure,
+        operation: null,
+      });
+    });
+  });
+
   it("ignores a superseded inspection failure without releasing its replacement", async () => {
     const obsolete = deferred<StructureInspection>();
     const replacement = deferred<StructureInspection>();

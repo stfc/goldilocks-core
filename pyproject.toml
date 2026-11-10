@@ -32,12 +32,7 @@ dependencies = [
     # apart. Since goldilocks-ml 0.3.0 that stack includes
     # mace-torch[magnetic], which is_magnetic and mMACE ordering ranking
     # run on (#240).
-    "goldilocks-ml==0.3.3",
-    # Named only so [tool.uv.sources] below can route it to the CPU-only
-    # PyTorch index: uv applies sources to direct dependencies alone, and
-    # torch otherwise arrives through goldilocks-ml, which pins its version
-    # (#242).
-    "torch",
+    "goldilocks-ml==0.4.0",
     # v2: contracts/ is pydantic BaseModel end to end (validation, serialization,
     # OpenAPI/capabilities schema generation) -- promoted from the http/mcp
     # extras to a core dependency (goldilocks-core-design.md S12, already decided).
@@ -134,6 +129,12 @@ help = "Lint, unit-test, and build the Workbench frontend"
 shell = "cd web && npm run check"
 
 [dependency-groups]
+# Which torch build uv installs; goldilocks-ml pins its version. `cpu` is a
+# default group, so every uv sync gets CPU torch unless it swaps the group:
+# `--no-group cpu --group cu130` for CUDA 13.0, which GOLDILOCKS_MMACE_DEVICE=cuda
+# needs (#268). The two conflict, so asking for both is an error.
+cpu = ["torch"]
+cu130 = ["torch"]
 dev = [
     "mkdocs>=1.6.1",
     "mkdocs-material>=9.6.0",
@@ -147,22 +148,31 @@ dev = [
 
 [tool.uv]
 package = true
+default-groups = ["dev", "cpu"]
+conflicts = [[{ group = "cpu" }, { group = "cu130" }]]
 
 # PyTorch publishes CPU and CUDA wheels on separate indexes, and PyPI's Linux
-# torch wheel pulls in about 2 GB of CUDA/nvidia/triton wheels. torch is routed
-# to the CPU-only index, so every uv-managed install (development, CI and the
-# image) gets CPU torch; the source applies only because torch is
-# also a direct dependency above (#242). torch-geometric and the other torch-*
-# packages stay on PyPI. pip installs ignore uv sources and take torch from
-# PyPI. No GPU route is configured here: core runs its models on the CPU.
+# torch wheel pulls in about 2 GB of CUDA/nvidia/triton wheels. The default
+# `cpu` group routes torch to the CPU-only index, so development, CI and the
+# image get CPU torch (#242). The `cu130` group routes it to the CUDA 13.0
+# index on Linux, for a deployment that runs mMACE on a GPU (#268); macOS has
+# no CUDA build and keeps PyPI's. The sources apply because each group names
+# torch directly. torch-geometric and the other torch-* packages stay on
+# PyPI. pip installs ignore uv sources and take torch from PyPI.
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
 [tool.uv.sources]
 torch = [
-    { index = "pytorch-cpu" },
+    { index = "pytorch-cpu", group = "cpu" },
+    { index = "pytorch-cu130", group = "cu130", marker = "sys_platform == 'linux'" },
 ]
 
 [tool.pytest.ini_options]

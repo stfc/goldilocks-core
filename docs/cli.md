@@ -426,7 +426,8 @@ Interactive API documentation is at `/docs`.
 
 ### Ranking jobs
 
-A ranking takes minutes and rankings run one at a time, so
+A ranking takes seconds for a small cell and minutes for a large one, and rankings run one
+at a time, so
 `POST /magnetic-orderings/rank` (the listing's request document) queues one and
 returns at once with `{"job_id", "state", "position"}`. Poll
 `GET /magnetic-orderings/rank/{job_id}`; its `state` is:

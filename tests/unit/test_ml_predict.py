@@ -400,7 +400,9 @@ def test_the_mace_worker_reports_a_mace_without_magnetic_models_as_unavailable(
         monkeypatch.setitem(sys.modules, name, module)
 
     with pytest.raises(MlModelUnavailable, match=r"mace-torch 0\.3\.17"):
-        mace_process._predict_is_magnetic(tmp_path, tmp_path / "backbone.model", _IRON)
+        mace_process._predict_is_magnetic(
+            tmp_path, tmp_path / "backbone.model", "cpu", _IRON
+        )
 
 
 @pytest.mark.parametrize(("atoms", "replaced"), [(16, False), (17, True)])
@@ -422,6 +424,7 @@ def test_the_is_magnetic_worker_is_replaced_once_idle_after_a_large_structure(
 
     worker = Worker()
     monkeypatch.setattr(mace_process, "_IS_MAGNETIC_WORKER", worker)
+    monkeypatch.delenv("GOLDILOCKS_MMACE_DEVICE", raising=False)
     hydrogens = Structure(
         Lattice.cubic(20.0), ["H"] * atoms, [[i / atoms, 0, 0] for i in range(atoms)]
     )
@@ -438,12 +441,73 @@ def test_the_is_magnetic_worker_is_replaced_once_idle_after_a_large_structure(
                 mace_process._predict_is_magnetic,
                 tmp_path,
                 checkpoint,
+                "cpu",
                 mace_process._WARM_UP_CELL,
             )
         ]
         if replaced
         else []
     )
+
+
+def test_the_is_magnetic_worker_and_its_replacement_embed_on_the_configured_device(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#268: the device is read in this process, and the worker and the
+    warmed replacement it schedules both get it."""
+    import torch
+
+    from goldilocks_core.advisors import magnetic_ordering_ml
+
+    class Worker:
+        def __init__(self) -> None:
+            self.calls: list[tuple[object, ...]] = []
+
+        def run(self, fn, *args):
+            self.calls.append(args)
+            return "prediction"
+
+        def replace_when_idle(self, after_s, warm_up, *args) -> None:
+            self.calls.append(args)
+
+    worker = Worker()
+    monkeypatch.setattr(mace_process, "_IS_MAGNETIC_WORKER", worker)
+    monkeypatch.setenv("GOLDILOCKS_MMACE_DEVICE", "cuda")
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    magnetic_ordering_ml._cuda_or_cpu.cache_clear()
+    hydrogens = Structure(
+        Lattice.cubic(20.0), ["H"] * 17, [[i / 17, 0, 0] for i in range(17)]
+    )
+
+    mace_process.predict_is_magnetic(tmp_path, tmp_path / "backbone.model", hydrogens)
+    magnetic_ordering_ml._cuda_or_cpu.cache_clear()
+
+    assert [call[2] for call in worker.calls] == ["cuda", "cuda"]
+
+
+def test_the_is_magnetic_model_loads_on_the_device_it_is_given(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loads = []
+    monkeypatch.setattr(
+        "goldilocks_ml.inference.load_model",
+        lambda directory, **kwargs: loads.append((directory, kwargs)),
+    )
+    mace_process._is_magnetic_model.cache_clear()
+
+    mace_process._is_magnetic_model(tmp_path, tmp_path / "backbone.model", "cuda")
+    mace_process._is_magnetic_model.cache_clear()
+
+    assert loads == [
+        (
+            tmp_path,
+            {
+                "artifacts": {"mace_backbone": tmp_path / "backbone.model"},
+                "artifact_directory": tmp_path,
+                "device": "cuda",
+            },
+        )
+    ]
 
 
 def test_is_magnetic_falls_back_when_the_worker_cannot_import_mace(

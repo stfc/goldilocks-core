@@ -12,6 +12,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import math
+import re
 import shutil
 import threading
 import time
@@ -25,10 +26,12 @@ from pymatgen.core import Lattice, Species, Structure
 from goldilocks_core.advisors import magnetic_ordering_ml
 from goldilocks_core.advisors.magnetic_ordering_ml import (
     CHECKPOINT_ENV,
+    DEVICE_ENV,
     MAX_ATOMS_ENV,
     MagneticOrderingMlUnavailable,
     checkpoint_path,
     max_atoms,
+    mmace_device,
     rank_orderings,
 )
 from goldilocks_core.service import (
@@ -443,6 +446,125 @@ def test_max_atoms_refuses_a_value_that_is_not_a_positive_whole_number(
 
     with pytest.raises(ValueError, match=f"^{MAX_ATOMS_ENV}="):
         max_atoms()
+
+
+@pytest.fixture
+def torch_cuda(monkeypatch: pytest.MonkeyPatch):
+    """Sets what torch reports about CUDA, and forgets mmace_device's cached
+    answer before and after the test."""
+    import torch
+
+    def report(*, available: bool, build: str | None) -> None:
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: available)
+        monkeypatch.setattr(torch.version, "cuda", build)
+
+    magnetic_ordering_ml._cuda_or_cpu.cache_clear()
+    yield report
+    magnetic_ordering_ml._cuda_or_cpu.cache_clear()
+
+
+@pytest.mark.parametrize("raw", [None, "", " cpu "])
+def test_mmace_device_is_the_cpu_unless_set_to_cuda(
+    raw: str | None, monkeypatch: pytest.MonkeyPatch, torch_cuda
+) -> None:
+    torch_cuda(available=True, build="13.0")
+    if raw is None:
+        monkeypatch.delenv(DEVICE_ENV, raising=False)
+    else:
+        monkeypatch.setenv(DEVICE_ENV, raw)
+
+    assert mmace_device() == "cpu"
+
+
+@pytest.mark.parametrize("raw", ["gpu", "CUDA", "cuda:0", "mps"])
+def test_mmace_device_refuses_a_value_other_than_cpu_or_cuda(
+    raw: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(DEVICE_ENV, raw)
+
+    with pytest.raises(ValueError, match=f"^{DEVICE_ENV}=.* is neither cpu nor cuda$"):
+        mmace_device()
+
+
+def test_mmace_device_is_cuda_when_torch_sees_a_cuda_device(
+    monkeypatch: pytest.MonkeyPatch, torch_cuda, caplog: pytest.LogCaptureFixture
+) -> None:
+    torch_cuda(available=True, build="13.0")
+    monkeypatch.setenv(DEVICE_ENV, "cuda")
+
+    assert mmace_device() == "cuda"
+    assert caplog.records == []
+
+
+@pytest.mark.parametrize(
+    ("build", "reason"),
+    [
+        (
+            None,
+            "this torch build (.*) has no CUDA; install it with "
+            "`uv sync --no-group cpu --group cu130`",
+        ),
+        ("13.0", "torch sees no CUDA device"),
+    ],
+)
+def test_mmace_device_falls_back_to_the_cpu_once_saying_why(
+    build: str | None,
+    reason: str,
+    monkeypatch: pytest.MonkeyPatch,
+    torch_cuda,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """#268: Junwen's call -- a server set up for a GPU it cannot reach
+    still ranks, on the CPU, and says so once rather than per ranking."""
+    torch_cuda(available=False, build=build)
+    monkeypatch.setenv(DEVICE_ENV, "cuda")
+
+    assert [mmace_device(), mmace_device()] == ["cpu", "cpu"]
+    assert [record.levelname for record in caplog.records] == ["WARNING"]
+    assert re.fullmatch(
+        f"{DEVICE_ENV}=cuda, but {reason}.*, so mMACE runs on the CPU",
+        caplog.records[0].getMessage(),
+    )
+
+
+def test_rank_orderings_relaxes_on_the_configured_device_unless_given_one(
+    monkeypatch: pytest.MonkeyPatch, tmp_path, torch_cuda
+) -> None:
+    _configure_checkpoint(monkeypatch, tmp_path)
+    workers = _stub_relax_seam(monkeypatch, _ok_relaxation)
+    torch_cuda(available=True, build="13.0")
+    monkeypatch.setenv(DEVICE_ENV, "cuda")
+
+    rank_orderings([("fm", _IRON)])
+    rank_orderings([("fm", _IRON)], device="cpu")
+
+    assert [worker.calls[0][-1] for worker in workers] == ["cuda", "cpu"]
+
+
+def test_serve_stops_on_a_bad_device_before_either_transport_starts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import argparse
+
+    from goldilocks_core.cli import _serve
+    from goldilocks_core.server import http, mcp
+
+    started = []
+    monkeypatch.setattr(http, "serve", lambda **kwargs: started.append("http"))
+    monkeypatch.setattr(mcp, "serve", lambda: started.append("mcp"))
+    monkeypatch.setenv(DEVICE_ENV, "gpu")
+
+    for transport in ("http", "mcp"):
+        with pytest.raises(ValueError, match=f"^{DEVICE_ENV}="):
+            _serve.run(
+                argparse.Namespace(
+                    transport=transport, host="127.0.0.1", port=8000, static_root=None
+                )
+            )
+
+    monkeypatch.setenv(DEVICE_ENV, "cpu")
+    _serve.run(argparse.Namespace(transport="mcp"))
+    assert started == ["mcp"]
 
 
 def test_rank_orderings_refuses_a_candidate_above_the_atom_limit_before_a_process(

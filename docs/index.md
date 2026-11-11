@@ -1,24 +1,37 @@
 # goldilocks-core
 
-Goldilocks recommends settings for density functional theory (DFT) calculations
-and generates Quantum ESPRESSO input files from a crystal structure — single-point
-SCF, density of states, band structure, relaxation, variable-cell
-relaxation, and phonons with their density of states and dispersion, at the
-written geometry or after either relaxation.
+Give Goldilocks a crystal structure and it sets up a Quantum ESPRESSO
+calculation for you. It chooses the settings a DFT calculation needs, tells you
+why it chose each one, and writes input files that are ready to run.
 
-Treat the recommended settings as a starting point: review warnings and check
-convergence for your calculation.
+- **In:** a CIF or POSCAR file.
+- **Out:** a folder with the input files, the pseudopotentials, a SLURM
+  submission script, and a record of every setting and the reason for it.
+
+It sets up single-point SCF, density of states, band structure, relaxation,
+variable-cell relaxation, and phonons with their density of states and
+dispersion, at the written geometry or after either relaxation.
+
+Treat the recommended settings as a starting point: review the warnings and
+check convergence for your calculation.
+
+## Start here
+
+- [Install](install.md): Docker, pip, or pip with the browser interface.
+- [First calculation](quickstart.md): generate, check and run an input on the
+  command line.
+- [Workbench](workbench.md): do the same in your browser.
 
 ## Guides and reference
 
-- [First calculation](quickstart.md) — generate, check, and run an input.
-- [Python API](tutorial.md) — use Goldilocks in a script.
-- [Recommendations](science.md) — understand the choices and their limits.
-- [Pseudopotentials](pseudopotentials.md) — choose a table and understand
-  automatic selection.
-- [CLI reference](cli.md) — commands and options.
-- [Scientific conventions](conventions.md) — units and numerical definitions.
-- [Contributing](architecture.md) — code layout and development checks.
+- [Python API](tutorial.md): use Goldilocks in a script.
+- [Recommendations](science.md): how each setting is chosen, and its limits.
+- [Pseudopotentials](pseudopotentials.md): choose a table, or use your own
+  files.
+- [CLI reference](cli.md): commands and options.
+- [mMACE](mmace-setup.md): the magnetic machine-learning model, its size limit,
+  and running it on a GPU.
+- [Scientific conventions](conventions.md): units and numerical definitions.
+- [Contributing](architecture.md): code layout and development checks.
 
-See the [repository README](https://github.com/stfc/goldilocks-core) for
-installation and the interactive Workbench.
+The source code is on [GitHub](https://github.com/stfc/goldilocks-core).

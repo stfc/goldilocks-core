@@ -9,7 +9,7 @@ material Goldilocks installs for you.
 ## Choose a table
 
 List the registered choices and their supported elements, functional, accuracy,
-and relativistic treatment with `uv run goldilocks capabilities --json` (see
+and relativistic treatment with `goldilocks capabilities --json` (see
 the `pseudopotential_tables` array), or filter it directly in Python:
 
 ```python
@@ -24,9 +24,9 @@ for table in capabilities()["pseudopotential_tables"]:
 
 The `pseudopotential_tables` array lists the registered tables. Each table's
 `elements` field lists elements permitted by Core's selection policy, not just
-those present in the upstream library. `uv run goldilocks assets status` with
+those present in the upstream library. `goldilocks assets status` with
 no argument only reports the `default` profile's single table; run
-`uv run goldilocks assets status all` to see every registered table's
+`goldilocks assets status all` to see every registered table's
 install state.
 
 Without an explicit source, Goldilocks chooses a compatible registered table,
@@ -114,8 +114,8 @@ PBEsol files and asks for an SOC recommendation, which selects them
 automatically:
 
 ```bash
-uv run goldilocks assets install pseudodojo-pbesol-efficiency-fr
-uv run goldilocks explain structure.cif --set spin_orbit_coupling=true
+goldilocks assets install pseudodojo-pbesol-efficiency-fr
+goldilocks explain structure.cif --set spin_orbit_coupling=true
 ```
 
 Pinning the table with `--set pseudo_table_id=pseudodojo-pbesol-efficiency-fr`
@@ -127,8 +127,8 @@ table is missing.
 Check installation state and verify file integrity:
 
 ```bash
-uv run goldilocks assets status pseudodojo-pbesol-efficiency-fr
-uv run goldilocks assets verify pseudodojo-pbesol-efficiency-fr
+goldilocks assets status pseudodojo-pbesol-efficiency-fr
+goldilocks assets verify pseudodojo-pbesol-efficiency-fr
 ```
 
 Status is `installed`, `missing`, or `corrupt`. Repeat `assets install` to

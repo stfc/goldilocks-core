@@ -237,6 +237,27 @@ def test_max_seconds_is_the_steps_own_share_of_the_walltime(
     ]
 
 
+@pytest.mark.parametrize(
+    "purpose, flags",
+    [
+        ("scf", ["   tstress          = .true.", "   tprnfor          = .true."]),
+        ("nscf", []),
+    ],
+)
+def test_only_a_self_consistent_step_asks_for_forces_and_stress(
+    diamond_silicon, pseudo_metadata_factory, purpose, flags
+) -> None:
+    """#289: pw.x ignores tprnfor and tstress in an nscf step (QE 7.3
+    PW/src/input.f90:466, 646), so nscf.in does not suggest it computes
+    either."""
+    system = _system(diamond_silicon, pseudo_metadata_factory)
+
+    (rendered,) = write_qe_scf(system, _step(), _CTX, purpose=purpose)
+
+    lines = rendered.files[f"{purpose}.in"].splitlines()
+    assert [line for line in lines if "tprnfor" in line or "tstress" in line] == flags
+
+
 def test_a_step_without_a_max_seconds_share_writes_none(
     diamond_silicon, pseudo_metadata_factory
 ) -> None:

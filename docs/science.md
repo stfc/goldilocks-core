@@ -486,7 +486,7 @@ separate worker process, inside a private scratch directory, so it writes
 nothing to the current directory and concurrent requests cannot disturb each
 other.
 
-`uv run goldilocks magnetic-orderings` lists every candidate this same
+`goldilocks magnetic-orderings` lists every candidate this same
 enumeration finds -- the ferromagnetic guess plus any antiferromagnetic
 ones, by label -- for you to inspect or generate inputs
 from with `magnetic_ordering=<label>` on the same structure, optionally

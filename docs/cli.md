@@ -1,16 +1,17 @@
 # CLI reference
 
-For installation and a first calculation, follow the
-[quickstart](quickstart.md).
+For installation, see [Install](install.md); for a first calculation, follow
+[First calculation](quickstart.md). In a source checkout, put `uv run` in front
+of each command.
 
 ## Common commands
 
 Replace `structure.cif` with your CIF or POSCAR:
 
 ```bash
-uv run goldilocks inspect structure.cif --json
-uv run goldilocks explain structure.cif --json
-uv run goldilocks run structure.cif --out silicon-run
+goldilocks inspect structure.cif --json
+goldilocks explain structure.cif --json
+goldilocks run structure.cif --out silicon-run
 ```
 
 `inspect` reports structure metadata, including the site labels a
@@ -27,7 +28,7 @@ when it refuses. `explain` never writes anything, even without `--json`, and
 exits 0 whether or not it is blocked.
 `run` generates a complete runnable input (Quantum ESPRESSO by default) and
 publishes it to `silicon-run` because `-o/--out` was given; omit `-o/--out`
-for a memory-only preview instead. Use `uv run goldilocks --help` or a
+for a memory-only preview instead. Use `goldilocks --help` or a
 subcommand's `--help` for full syntax.
 
 `run` and `explain` share the same seven flags: the `structure` path,
@@ -40,25 +41,25 @@ is passed through unchecked — only `quantum_espresso` is a registered code
 today, so an unrecognised `--code` silently produces a Quantum-ESPRESSO-shaped
 bundle instead of failing.
 
-`uv run goldilocks capabilities --json` dumps the same full payload HTTP's
+`goldilocks capabilities --json` dumps the same full payload HTTP's
 `GET /capabilities` and the MCP `capabilities` tool return: `codes`, `tasks`
 (with descriptions, step counts, and executables), `facts`, `settings`,
 `pseudopotential_tables`, `hpc_profiles`, `models`, `warnings`, and `sources`.
 Narrower slices are also available directly:
 
-- `uv run goldilocks settings --json` — every `--set`-able key, its type,
+- `goldilocks settings --json` — every `--set`-able key, its type,
   default, and sources: `{"settings": [...], "facts": [...]}`, the same
   objects as `capabilities`'s `settings[]` and its overridable `facts[]`
   (`is_metal`, `is_magnetic`, ...); run this command for the current key
   count rather than trusting a number in these docs.
-- `uv run goldilocks models --json` — every model `ml/registry.toml`
+- `goldilocks models --json` — every model `ml/registry.toml`
   registers, whether or not it is actually installed (see [Scientific
   controls](#scientific-controls)).
-- `uv run goldilocks assets status --json` — installed pseudopotential-table
+- `goldilocks assets status --json` — installed pseudopotential-table
   and model assets.
 
 See [Serve HTTP](#serve-http) and [Serve local MCP](#serve-local-mcp) for the
-HTTP/MCP equivalents. `uv run goldilocks examples path` locates the bundled
+HTTP/MCP equivalents. `goldilocks examples path` locates the bundled
 example structures.
 
 ## Save output or print JSON
@@ -74,9 +75,8 @@ example structures.
 
 Explicit destinations must not already exist; `run` raises an error rather
 than overwrite one. Without `-o/--out`, `run` always builds the full bundle in
-memory and prints a preview listing each file's path and byte size — there is
-no auto-picked output directory (v1's `goldilocks_out`, `goldilocks_out_1`, …
-naming no longer exists in any form).
+memory and prints a preview listing each file's path and byte size; it never
+picks an output directory itself.
 
 A bundle's `goldilocks.json` records the request it answers under `request`:
 `--code`, `--task`, the HPC profile used, the goldilocks-core version, the
@@ -138,7 +138,7 @@ defaults and override rules.
 
 Every scientific parameter is reached through `--set KEY=VALUE` (repeatable)
 or `--config FILE.toml` (same `KEY=VALUE` pairs, TOML-format, merged the same
-way) — there are no dedicated per-parameter flags. `uv run goldilocks
+way) — there are no dedicated per-parameter flags. `goldilocks
 settings` (or `--json`) is the single source of truth for every override key,
 its type, default, and description; a selection of commonly used keys:
 
@@ -268,7 +268,7 @@ installed release as `<id>@<version>`) and keeps what it returned
 (`details`, such as a classifier's `score` and `threshold` or QRF95's
 `interval`, and `warnings`), and `records[...].citations` says what to cite.
 `is_metal`/`k_distance` become ML-backed once their PSDI-hosted asset is
-installed (`uv run goldilocks assets install <id>` — see [Install and check
+installed (`goldilocks assets install <id>` — see [Install and check
 assets](#install-and-check-assets)); `is_magnetic`'s asset also carries the
 mMACE backbone it embeds structures with, the one the [magnetic
 orderings](#magnetic-orderings) `--rank-with-mmace` flag uses below, and
@@ -284,7 +284,7 @@ loading or running it fails the command instead of being replaced by the
 heuristic answer. `is_magnetic` runs in a separate worker process, so mMACE
 never changes the torch settings of the command or server that asked for
 it. There is still no flag to point `run`/`explain` at a custom
-model file of your own. `uv run goldilocks models --json` reports every
+model file of your own. `goldilocks models --json` reports every
 model, installed or not, so it also confirms whether one you expect to
 be usable actually is.
 
@@ -342,8 +342,8 @@ the other tasks ignore it. See
 ## Magnetic orderings
 
 ```bash
-uv run goldilocks magnetic-orderings structure.cif --json
-uv run goldilocks magnetic-orderings structure.cif --rank-with-mmace
+goldilocks magnetic-orderings structure.cif --json
+goldilocks magnetic-orderings structure.cif --rank-with-mmace
 ```
 
 Lists a ferromagnetic guess plus any antiferromagnetic
@@ -355,7 +355,7 @@ candidate is named by its label (`fm`, `afm-1`, `afm-2`, ...), and its
 file:
 
 ```bash
-uv run goldilocks run structure.cif --hpc scarf --set magnetic_ordering=afm-2
+goldilocks run structure.cif --hpc scarf --set magnetic_ordering=afm-2
 ```
 
 The run enumerates again, applies the candidate of that label through the
@@ -381,9 +381,9 @@ the call itself.
 ## Install and check assets
 
 ```bash
-uv run goldilocks assets install default
-uv run goldilocks assets status default
-uv run goldilocks assets verify default
+goldilocks assets install default
+goldilocks assets status default
+goldilocks assets verify default
 ```
 
 Use a profile, asset ID, or table ID. `default` installs the four prediction
@@ -400,12 +400,13 @@ any other kind of missing dependency. See
 ## Serve HTTP
 
 ```bash
-uv run goldilocks assets install all
-uv run --extra http goldilocks serve http
+goldilocks assets install all
+goldilocks serve http
 ```
 
-The server defaults to **http://127.0.0.1:8000**. `--host` and `--port` change
-the address. `--static-root DIRECTORY` also serves a built Workbench; a relative
+It needs the `http` extra (`pip install "goldilocks-core[http]"`). The server
+defaults to **http://127.0.0.1:8000**. `--host` and `--port` change the
+address. `--static-root DIRECTORY` also serves a built Workbench; a relative
 `DIRECTORY` is resolved against the launch directory once, at startup.
 
 | Endpoint            | Purpose                                                                          |
@@ -468,10 +469,11 @@ default), but it always builds and serves the bundle in memory.
 
 ## Serve local MCP
 
-Configure your MCP client to launch this command from the repository root:
+Install the `mcp` extra (`pip install "goldilocks-core[mcp]"`), then configure
+your MCP client to launch:
 
 ```bash
-uv run --extra mcp goldilocks serve mcp
+goldilocks serve mcp
 ```
 
 The stdio tools are `capabilities`, `inspect_structure`, `explain`, and `run`.

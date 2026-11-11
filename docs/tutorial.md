@@ -1,9 +1,9 @@
 # Python API
 
-Use Goldilocks to generate inputs from a script. First complete the
-[installation and asset setup](quickstart.md#1-install). Run the examples in
-order in the same Python session, or save them in a script and run
-`uv run your_script.py`.
+Use Goldilocks to generate inputs from a script. First
+[install it and its assets](install.md#pip). Run the examples in order in the
+same Python session, or save them in a script and run `python your_script.py`
+(`uv run your_script.py` in a source checkout).
 
 ## Generate inputs
 

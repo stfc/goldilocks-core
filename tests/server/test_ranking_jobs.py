@@ -235,9 +235,9 @@ def test_start_warms_the_first_worker_before_any_job() -> None:
 def test_each_job_takes_a_worker_warmed_ahead_and_closes_it_when_done() -> None:
     """#285: no job starts its own worker, and none inherits another's."""
     warmer = _Warmer()
-    used: list[int] = []
+    used: list[_Worker] = []
     queue = RankingQueue(
-        lambda name, worker, progress: used.append(worker.number) or {"ranked": name},
+        lambda name, worker, progress: used.append(worker) or {"ranked": name},
         warm_worker=warmer,
     )
     queue.start()
@@ -248,12 +248,10 @@ def test_each_job_takes_a_worker_warmed_ahead_and_closes_it_when_done() -> None:
     _until(queue, second, lambda status: status["state"] == "done")
 
     _until_true(lambda: len(warmer.made) == 3)  # the next job's is ready
-    assert used == [1, 2]
-    assert [(w.closed, w.killed) for w in warmer.made] == [
-        (True, False),
-        (True, False),
-        (False, False),
-    ]
+    standby = [w for w in warmer.made if w not in used]
+    assert len(used) == len(set(map(id, used))) == 2
+    assert [(w.closed, w.killed) for w in used] == [(True, False), (True, False)]
+    assert [(w.closed, w.killed) for w in standby] == [(False, False)]
 
 
 def test_a_job_dropped_while_its_worker_warms_never_runs() -> None:
@@ -270,7 +268,11 @@ def test_a_job_dropped_while_its_worker_warms_never_runs() -> None:
     assert queue.cancel(job)
     warmer.hold.set()
 
-    _until_true(lambda: warmer.made and warmer.made[0].closed)
+    # The job's worker and the next standby warm at once, in either order:
+    # the one the dropped job took is closed unused, the other waits.
+    _until_true(lambda: any(w.closed for w in warmer.made))
+    _until_true(lambda: len(warmer.made) == 2)
+    assert sorted(w.closed for w in warmer.made) == [False, True]
     assert ranked == []
     assert queue.status(job) is None
 

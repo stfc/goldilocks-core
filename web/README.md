@@ -1,9 +1,8 @@
-# Workbench
+# Workbench development
 
-Upload a CIF or POSCAR, choose settings, and generate Quantum ESPRESSO inputs in
-your browser. Review the recommendations, then download the input bundle. The
-[quickstart](../docs/quickstart.md#4-run-quantum-espresso) explains how to run
-the extracted calculation.
+The Workbench is Goldilocks' browser interface. To use it, see the
+[Workbench guide](../docs/workbench.md). This page is for working on it from a
+source checkout.
 
 ## Run locally
 
@@ -55,41 +54,16 @@ Then open **http://127.0.0.1:8000**.
   **http://127.0.0.1:5173** explicitly (not `localhost`) to be sure you're
   reaching this project's Workbench.
 
-## Magnetism features (mMACE)
+## Build the image
 
-Two Workbench features (the ML `is_magnetic` classification and the
-"Run mMACE" magnetic-ordering ranking button) run on the ~80.5 MB mMACE
-backbone, which `goldilocks assets install all` above installs with the
-`is_magnetic` classifier (see [mMACE](../docs/mmace-setup.md)).
-
-Load a magnetic structure and check the **Analysis** column's "is magnetic"
-field: its caption reads **"Goldilocks-ML prediction"** once the `ml` tier is
-live. Without the asset both features still work, just at a lower tier
-(LLM/heuristic classification, unranked ordering list) — never a failure.
-
-"Run mMACE" ranks in a separate backend process, so you can keep editing
-settings while it runs; a ranking can take minutes. Rankings run one at a time
-on the backend, and the card shows how many are ahead of yours, then which
-candidate is being relaxed. Opening another structure cancels the ranking.
-
-## Run in Docker
-
-Each release publishes the image for x86-64 hosts:
-
-```bash
-docker run --rm --publish 127.0.0.1:8000:8000 ghcr.io/stfc/goldilocks-core
-```
-
-Pin a release with its version as the tag, such as
-`ghcr.io/stfc/goldilocks-core:0.3.0`. Alternatively, build and run from the
-repository root:
+From the repository root:
 
 ```bash
 docker build --tag goldilocks-core .
 docker run --rm --publish 127.0.0.1:8000:8000 goldilocks-core
 ```
 
-Open **http://127.0.0.1:8000**. The image includes the frontend and runtime
+Open **http://127.0.0.1:8000**. The image includes the frontend and the runtime
 assets. See [HTTP security](../docs/cli.md#http-security) before exposing it
 beyond localhost.
 

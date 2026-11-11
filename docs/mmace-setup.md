@@ -20,16 +20,15 @@ heuristic.
 Part of the `default` and `all` asset profiles:
 
 ```bash
-uv run goldilocks assets install default
-uv run goldilocks assets status models/is-magnetic-classifier
+goldilocks assets install default
+goldilocks assets status models/is-magnetic-classifier
 # models/is-magnetic-classifier@1: installed
 ```
 
 The install downloads `model.json`, `is_magnetic.pt`, the model card and the backbone
 `mmace-matpes-pbe-pretrained.model` from PSDI record
 [`sgk1t-48m42`](https://data-collections.psdi.ac.uk/records/sgk1t-48m42) and checks each
-file's SHA-256. An install from before #244 shows the asset as `corrupt` until this command
-re-fetches it.
+file's SHA-256.
 
 ## 2. Verify it's actually being used
 
@@ -38,8 +37,8 @@ field explicitly. `Fe_bcc.cif` (bundled with this repo, and actually magnetic) m
 check:
 
 ```bash
-STRUCTURE="$(uv run goldilocks examples path)/Fe_bcc.cif"
-uv run goldilocks explain "$STRUCTURE" --json | python3 -c \
+STRUCTURE="$(goldilocks examples path)/Fe_bcc.cif"
+goldilocks explain "$STRUCTURE" --json | python3 -c \
   "import json,sys; print(json.load(sys.stdin)['records']['is_magnetic']['source'])"
 # expect: ml   (not: heuristic, or llm)
 ```
@@ -51,11 +50,11 @@ For ordering ranking, a successful `--rank-with-mmace` run reports a `model_id` 
 per-candidate energies instead of degrading with a warning:
 
 ```bash
-uv run goldilocks magnetic-orderings "$STRUCTURE" --rank-with-mmace --json
+goldilocks magnetic-orderings "$STRUCTURE" --rank-with-mmace --json
 ```
 
 If `is_magnetic.source` still reads `heuristic`, check
-`uv run goldilocks assets status models/is-magnetic-classifier` (step 1), then whether
+`goldilocks assets status models/is-magnetic-classifier` (step 1), then whether
 `GOLDILOCKS_MACE_BACKBONE` is set in this shell (step 3): when it is, it replaces the
 installed backbone.
 
@@ -72,25 +71,13 @@ pins, so `is_magnetic` accepts only the file from record `sgk1t-48m42`: a differ
 fails with `... has SHA-256 ...; its record pins fb43d7aa...`. Leave the variable unset to
 use the installed backbone.
 
-### Upgrading from the v1.0 checkpoint
-
-Before #240, this guide installed a fork of `mace-torch` by hand, downloaded
-`mace_matpes_pbe_baseline_run-3.model` from v1.0 of the record (`1g8rw-q8128`) and set
-`GOLDILOCKS_MACE_BACKBONE` to it. That file no longer loads on `mace-torch` 0.3.17: unset the
-variable (remove it from your shell profile too) and run
-`uv run goldilocks assets install default`.
-
 ## 4. Use mMACE in the Workbench
 
-Nothing to configure: start the Workbench as usual once the default (or `all`) assets
-are installed.
+Nothing to configure: start the Workbench as usual (see the [Workbench guide](workbench.md))
+once the default (or `all`) assets are installed.
 
-```bash
-uv run poe workbench   # dev mode: backend on :8000, Vite dev server on :5173
-# or: uv run poe stage # production-like: one built bundle, served from :8000
-```
-
-Load a magnetic structure (e.g. `src/goldilocks_core/examples/structures/Fe_bcc.cif`) and
+Load a magnetic structure (for example the bundled `Fe_bcc.cif`, in the folder
+`goldilocks examples path` prints) and
 check the **Analysis** column's "is magnetic" field: once the `ml` tier is live, its caption
 reads **"Goldilocks-ML prediction"**. A "Magnetic Orderings" column also appears
 automatically once the run is spin-polarized, whether the classifier made it so, a Hubbard U

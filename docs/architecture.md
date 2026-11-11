@@ -2,14 +2,17 @@
 
 This page is for contributors changing Core or its transports. For using the
 library, start with the [Python tutorial](tutorial.md); for browser development,
-use the [Workbench guide](../web/README.md).
+use the [Workbench development guide](https://github.com/stfc/goldilocks-core/blob/main/web/README.md).
 
 ## Set up a contribution
 
-From the repository root:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then:
 
 ```bash
-uv sync --group dev
+git clone https://github.com/stfc/goldilocks-core.git
+cd goldilocks-core
+uv sync --group dev --all-extras
+uv run goldilocks assets install all
 uv run pre-commit install
 uv run poe check
 ```
@@ -17,7 +20,7 @@ uv run poe check
 `poe check` runs Ruff lint, format, and complexity checks, then pytest. Use
 `uv run poe fmt` to apply Python formatting. The commit hooks run the same checks
 and pytest with branch coverage. For frontend checks and API-schema refresh, follow the
-[Workbench guide](../web/README.md).
+[Workbench development guide](https://github.com/stfc/goldilocks-core/blob/main/web/README.md).
 
 ## Follow a request
 
@@ -603,7 +606,7 @@ Python stage and generates TypeScript in its Node stage.
 
 ## Run browser tests
 
-Start the [built Workbench](../web/README.md#run-locally) in another terminal,
+Start the [built Workbench](https://github.com/stfc/goldilocks-core/blob/main/web/README.md#run-locally) in another terminal,
 then run:
 
 ```bash

@@ -22,20 +22,11 @@ theme:
     - navigation.instant
     - navigation.tracking
     - search.suggest
-validation:
-  links:
-    # These docs deliberately cross-link to real files outside docs_dir
-    # (../README.md, ../web/README.md) that MkDocs can't resolve within
-    # its own site sandbox without a plugin -- not broken links. Broken
-    # *internal* links are still caught: tests/unit/test_docs_examples.py's
-    # test_doc_links_resolve() already checks every relative link across
-    # these same files resolves on disk (plain filesystem, no docs_dir
-    # sandboxing), runs in CI's existing quality-and-test job, and is
-    # not weakened by this.
-    not_found: info
 nav:
   - Home: index.md
+  - Install: install.md
   - First calculation: quickstart.md
+  - Workbench: workbench.md
   - Python API: tutorial.md
   - Recommendations: science.md
   - Pseudopotentials: pseudopotentials.md

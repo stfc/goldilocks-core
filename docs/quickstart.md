@@ -8,12 +8,13 @@ Already generated `si-run` from the README? Continue with
 
 ## 1. Install
 
-Follow the [repository setup](../README.md#from-source), then run these commands from
-the repository directory:
+Install Goldilocks with pip (see [Install](install.md) for the other ways), then
+download and check the models and the default pseudopotential table:
 
 ```bash
-uv run goldilocks assets install default
-uv run goldilocks assets verify default
+pip install goldilocks-core
+goldilocks assets install default
+goldilocks assets verify default
 ```
 
 This downloads and checks the k-point model, the metallicity classifier, the
@@ -23,13 +24,16 @@ pseudopotential table. The first installation needs an internet connection.
 ## 2. Generate an input
 
 ```bash
-uv run goldilocks run src/goldilocks_core/examples/structures/Si.cif --out si-run
+goldilocks run "$(goldilocks examples path)/Si.cif" --out si-run
 ```
 
 Replace the bundled silicon path with your own CIF or POSCAR when you are ready.
 Choose a new output directory each time; Goldilocks will not overwrite an
-existing one. (Only one HPC profile is installed by default, so `--hpc` can be
-omitted here; pass `--hpc <profile>` explicitly if more than one is available.)
+existing one.
+
+Goldilocks knows one cluster, STFC's SCARF (the `scarf` HPC profile), so
+`submit.sh` is written for it and `--hpc` can be left out. On another SLURM
+cluster, see [step 4](#4-run-quantum-espresso).
 
 The main files in `si-run/` are:
 
@@ -55,14 +59,14 @@ See [Recommendations](science.md) for how each choice is made and
 To choose a grid yourself, generate a second input with `--set k_grid=...`:
 
 ```bash
-uv run goldilocks run src/goldilocks_core/examples/structures/Si.cif --set 'k_grid=[4,4,4]' --out si-grid-4
+goldilocks run "$(goldilocks examples path)/Si.cif" --set 'k_grid=[4,4,4]' --out si-grid-4
 ```
 
 The value must be a valid JSON array (`--set k_grid=4,4,4` fails with a JSON
 parse error), and quoting the whole `key=value` pair keeps the shell from
 trying to glob-expand the brackets. The `4 × 4 × 4` grid demonstrates an
 override; it is not a converged value for silicon. Run
-`uv run goldilocks settings` to see every other `--set`-able key, or see the
+`goldilocks settings` to see every other `--set`-able key, or see the
 [CLI reference](cli.md#scientific-controls).
 
 ## 4. Run Quantum ESPRESSO
@@ -82,10 +86,21 @@ stops with a `goldilocks:` message on stderr unless every step finished
 (`pw.x` must record `exit_status` 0, and a phonon task's `ph.x` must write
 every dynamical matrix), so an SCF that did not converge fails the job.
 
+Two settings are worth giving when you generate a bundle for a cluster:
+
+- `--set walltime_h=12` (or what the run needs): otherwise the job asks for the
+  longest time the partition allows, 168 h on SCARF, and queues slowly.
+- `--set account=<your project code>`, if the cluster needs one. Goldilocks
+  never guesses it.
+
+`submit.sh` is written for SCARF, the only cluster Goldilocks knows. On another
+SLURM cluster, edit its `#SBATCH` lines (partition, nodes, tasks) and its
+`module load` line to match that cluster before you submit.
+
 ## Next
 
 - [Python API](tutorial.md) — inspect structures and generate inputs in a
   script.
 - [Pseudopotentials](pseudopotentials.md) — change the functional or
   pseudopotential table.
-- [Workbench](../web/README.md) — prepare and review inputs in a browser.
+- [Workbench](workbench.md) — prepare and review inputs in a browser.

@@ -174,7 +174,7 @@ def _nickel_oxide(pseudo_metadata_factory):
     )
 
 
-_PER_STEP_KEYWORDS = ("calculation", "max_seconds", "nbnd")
+_PER_STEP_KEYWORDS = ("calculation", "max_seconds", "nbnd", "tprnfor", "tstress")
 
 
 def _shared(content: str) -> list[str]:
@@ -261,7 +261,7 @@ def test_bands_in_repeats_scf_in_but_for_the_path_and_the_bands_step_s_values(
     its species and every keyword that defines the Hamiltonian from its own
     input, so bands.in, given the scf step's occupations and convergence,
     repeats scf.in apart from calculation, nbnd, max_seconds and the K_POINTS
-    card."""
+    card. It computes no forces or stress, so it asks for neither (#289)."""
     system, scf_step, bands_step = material(pseudo_metadata_factory)
 
     (scf,) = write_qe_scf(system, scf_step, _CTX)

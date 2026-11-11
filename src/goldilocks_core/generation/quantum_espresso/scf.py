@@ -283,23 +283,29 @@ def control_keywords(
     purpose: Literal["scf", "nscf", "bands", "relax", "vc-relax"],
 ) -> dict[str, object]:
     """``&CONTROL`` keywords. ``max_seconds`` is written only when the step
-    has a share of the walltime (module docstring). ``tstress`` is written
-    unless ``boundary`` is 'isolated': pw.x computes no stress under
-    Martyna-Tuckerman and clears the flag (QE 7.3 PW/src/input.f90:1361-1365),
-    even for vc-relax, where input.f90:646 switches it on. Under '2D', 'slab',
-    it computes the stress in a two-dimensional framework
+    has a share of the walltime (module docstring).
+
+    ``tprnfor`` and ``tstress`` are written only for the steps that compute
+    forces and stress (#289): pw.x ignores both in an nscf or bands step,
+    resetting lforce (QE 7.3 PW/src/input.f90:466, 471) and keeping the
+    stress only for a self-consistent run (input.f90:646). ``tstress`` is
+    also left out when ``boundary`` is 'isolated': pw.x computes no stress
+    under Martyna-Tuckerman and clears the flag (input.f90:1361-1365), even
+    for vc-relax, where input.f90:646 switches it on. Under '2D', 'slab', it
+    computes the stress in a two-dimensional framework
     (PW/Doc/INPUT_PW.def:1655-1675)."""
     keywords: dict[str, object] = {
         "calculation": purpose,
         "prefix": ctx.prefix,
         "outdir": ctx.outdir,
         "pseudo_dir": ctx.pseudo_dir,
-        "tprnfor": True,
     }
     if step.max_seconds is not None:
         keywords["max_seconds"] = step.max_seconds
-    if boundary.isolation != "isolated":
-        keywords["tstress"] = True
+    if purpose in ("scf", "relax", "vc-relax"):
+        keywords["tprnfor"] = True
+        if boundary.isolation != "isolated":
+            keywords["tstress"] = True
     if step.relax is not None:
         # forc_conv_thr/etot_conv_thr/nstep are real &CONTROL keys, not
         # &IONS ones (INPUT_PW.txt, ASE's own ALL_KEYS['pw']['control']

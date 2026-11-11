@@ -447,6 +447,13 @@ dropped, so poll at least that often; the Workbench polls every 2 s and cancels
 its job when another structure is opened. A proxy in front of the server must
 pass all three paths.
 
+Each job runs on a worker process warmed ahead of it. The server keeps one ready, with
+mace imported and the checkpoint loaded (and CUDA initialised on `cuda`), and starts
+warming the next as a job takes it. So a job does not pay that start: about 1.7 s per
+bcc Fe ranking on a laptop CPU (8.0 s down to 6.3 s), and more on a GPU, where CUDA
+initialisation dominates. A job's worker exits when the job ends, and with it all the
+memory the job used.
+
 ### HTTP security
 
 Keep the default localhost binding for local use. The server has no built-in

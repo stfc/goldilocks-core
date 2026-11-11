@@ -1184,3 +1184,23 @@ def _finished(client: TestClient, job_id: str) -> dict:
             return status
         time.sleep(0.05)
     raise AssertionError(f"ranking job {job_id} did not finish")
+
+
+def test_the_server_warms_the_first_ranking_worker_as_it_starts(monkeypatch) -> None:
+    """#285: starting the server warms it; an app that is only built, as in
+    every other test here, starts no worker."""
+    from goldilocks_core.server import _handlers
+
+    starts: list[bool] = []
+
+    class _Queue:
+        def start(self) -> None:
+            starts.append(True)
+
+    monkeypatch.setattr(_handlers, "build_ranking_queue", _Queue)
+    app = create_app()
+    TestClient(app)
+    assert starts == []
+
+    with TestClient(app):
+        assert starts == [True]

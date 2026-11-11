@@ -33,6 +33,7 @@ from goldilocks_core.advisors.magnetic_ordering_ml import (
     max_atoms,
     mmace_device,
     rank_orderings,
+    warm_ranking_worker,
 )
 from goldilocks_core.service import (
     _magnetic_orderings as magnetic_orderings_module,
@@ -539,6 +540,55 @@ def test_rank_orderings_relaxes_on_the_configured_device_unless_given_one(
     rank_orderings([("fm", _IRON)], device="cpu")
 
     assert [worker.calls[0][-1] for worker in workers] == ["cuda", "cpu"]
+
+
+class _RecordingWorker:
+    """A ``WorkerProcess`` stand-in that records its calls without running them."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, ...]] = []
+
+    def run(self, fn, *args):
+        self.calls.append((fn, *args))
+
+
+def test_warm_ranking_worker_relaxes_once_on_the_configured_device(
+    monkeypatch: pytest.MonkeyPatch, tmp_path, torch_cuda
+) -> None:
+    """#285: the ranking job that takes it starts no process, imports
+    nothing and loads no checkpoint, on the device its ranking will use."""
+    _configure_checkpoint(monkeypatch, tmp_path)
+    _report_mace_installed(monkeypatch)
+    torch_cuda(available=True, build="13.0")
+    monkeypatch.setenv(DEVICE_ENV, "cuda")
+    monkeypatch.setattr(magnetic_ordering_ml, "WorkerProcess", _RecordingWorker)
+
+    worker = warm_ranking_worker()
+
+    assert worker.calls == [
+        (magnetic_ordering_ml._warm_up, tmp_path / "backbone.model", "cuda")
+    ]
+
+
+def test_warm_ranking_worker_leaves_the_worker_cold_where_ranking_cannot_run(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The ranking given the cold worker then degrades to an unranked
+    listing, as it would have anyway."""
+
+    def no_checkpoint():
+        raise MagneticOrderingMlUnavailable("no mMACE backbone checkpoint")
+
+    monkeypatch.setattr(magnetic_ordering_ml, "checkpoint_path", no_checkpoint)
+    monkeypatch.setattr(magnetic_ordering_ml, "WorkerProcess", _RecordingWorker)
+    caplog.set_level("INFO", logger=magnetic_ordering_ml.__name__)
+
+    worker = warm_ranking_worker()
+
+    assert worker.calls == []
+    assert [r.getMessage() for r in caplog.records] == [
+        "ranking worker left cold: no mMACE backbone checkpoint"
+    ]
 
 
 def test_serve_stops_on_a_bad_device_before_either_transport_starts(

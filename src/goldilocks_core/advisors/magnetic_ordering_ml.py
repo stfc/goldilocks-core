@@ -50,7 +50,7 @@ import numpy as np
 
 from goldilocks_core.assets.store import AssetCorrupt, AssetNotInstalled, AssetStore
 from goldilocks_core.ml.models import load_ml_classifier
-from goldilocks_core.worker_process import WorkerProcess
+from goldilocks_core.worker_process import WorkerDied, WorkerProcess
 
 if TYPE_CHECKING:
     from pymatgen.core import Structure
@@ -334,6 +334,38 @@ def _relax_all(
         if worker is None:
             process.close()
     return tuple(results)
+
+
+def warm_ranking_worker() -> WorkerProcess:
+    """A new ranking worker that has already relaxed a 2-atom bcc Fe cell on
+    :func:`mmace_device`'s device: mace is imported, the checkpoint loaded
+    and the device initialised before a ranking uses it (#285). A cold
+    worker spends about 3.6 s on its first relaxation on a laptop CPU, and
+    0.54 s on each one after that; on an A100 the first took about 19 s,
+    CUDA initialisation included.
+
+    Returns the worker cold, and logs why, if this server cannot rank (no
+    checkpoint, mace missing) or the warm-up fails: a ranking given it then
+    starts it, or degrades to an unranked listing, as it would have anyway.
+    Raises ``ValueError`` for a bad ``GOLDILOCKS_MMACE_DEVICE``."""
+    worker = WorkerProcess()
+    try:
+        checkpoint = checkpoint_path()
+        require_mace_packages()
+        worker.run(_warm_up, checkpoint, mmace_device())
+    except (MagneticOrderingMlUnavailable, WorkerDied) as error:
+        _LOG.info("ranking worker left cold: %s", error)
+    return worker
+
+
+def _warm_up(checkpoint: Path, device: str) -> None:
+    """Worker side of :func:`warm_ranking_worker`."""
+    from pymatgen.core import Lattice, Structure
+
+    cell = Structure(
+        Lattice.cubic(2.87), ["Fe", "Fe"], [[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]]
+    )
+    _relax_candidate("warm-up", cell, checkpoint, device)
 
 
 def _relax_candidate(

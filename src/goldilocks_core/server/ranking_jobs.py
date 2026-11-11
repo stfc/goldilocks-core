@@ -7,6 +7,12 @@ relaxed so far while it runs, then the ranked listing or the error. One
 runner thread takes the jobs in the order they arrived; each runs on a
 ``WorkerProcess`` of its own, which cancelling the job kills.
 
+A job's worker is warmed ahead of it (#285): one standby worker, mace
+imported, checkpoint loaded and device initialised, waits for the next job,
+and as a job takes it the next standby starts warming. A worker exits when
+its job ends, and with it every byte the job left behind, so nothing carries
+over between jobs. The HTTP server warms the first standby as it starts.
+
 Jobs live in this process's memory, so the HTTP server must be one process;
 a restart forgets them. A queued or running job that nobody has asked about
 for ``abandoned_after_s`` seconds is dropped the next time any client calls,
@@ -23,11 +29,13 @@ import time
 import uuid
 from collections import deque
 from collections.abc import Callable
+from concurrent.futures import Future
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from pymatgen.core import Structure
 
+from goldilocks_core.advisors.magnetic_ordering_ml import warm_ranking_worker
 from goldilocks_core.service import list_magnetic_orderings, report_to_json
 from goldilocks_core.worker_process import WorkerProcess
 
@@ -73,18 +81,47 @@ def rank_orderings_report(
     return report_to_json(report)
 
 
+class _Standby:
+    """The worker the next job takes, warmed in the background (#285)."""
+
+    def __init__(self, warm: Callable[[], WorkerProcess]) -> None:
+        self._warm = warm
+        self._next = self._prepare()
+
+    def _prepare(self) -> Future[WorkerProcess]:
+        future: Future[WorkerProcess] = Future()
+
+        def build() -> None:
+            try:
+                future.set_result(self._warm())
+            except BaseException as error:  # noqa: BLE001 -- take() re-raises it
+                future.set_exception(error)
+
+        threading.Thread(target=build, name="ranking-standby", daemon=True).start()
+        return future
+
+    def take(self) -> WorkerProcess:
+        """The warm worker, once it is ready; the next one starts warming."""
+        future, self._next = self._next, self._prepare()
+        return future.result()
+
+
 class RankingQueue:
-    """Ranking jobs, run one at a time in submission order."""
+    """Ranking jobs, run one at a time in submission order, each on a worker
+    ``warm_worker()`` prepared ahead of it."""
 
     def __init__(
         self,
         rank: Rank = rank_orderings_report,
         *,
+        warm_worker: Callable[[], WorkerProcess] = warm_ranking_worker,
         keep_finished: int = 64,
         abandoned_after_s: float = 120.0,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._rank = rank
+        self._warm_worker = warm_worker
+        self._standby: _Standby | None = None
         self._keep_finished = keep_finished
         self._abandoned_after_s = abandoned_after_s
         self._clock = clock
@@ -94,6 +131,16 @@ class RankingQueue:
         self._running: _Job | None = None
         self._finished: deque[_Job] = deque()
         self._runner: threading.Thread | None = None
+
+    def start(self) -> None:
+        """Warm the first job's worker now, ahead of any job."""
+        with self._lock:
+            self._ready_standby()
+
+    def _ready_standby(self) -> _Standby:
+        if self._standby is None:
+            self._standby = _Standby(self._warm_worker)
+        return self._standby
 
     def submit(self, structure: Structure) -> dict[str, Any]:
         """Queue a ranking of ``structure``; returns its status."""
@@ -183,9 +230,22 @@ class RankingQueue:
                     self._lock.wait()
                 job = self._queued.popleft()
                 job.state = "running"
-                job.worker = WorkerProcess()
                 self._running = job
-            self._run_job(job, job.worker)
+                standby = self._ready_standby()
+            try:
+                worker = standby.take()
+            except Exception as failure:  # noqa: BLE001 -- the job reports it
+                self._finish(job, None, str(failure))
+                continue
+            with self._lock:
+                if job.cancelled:  # dropped while its worker warmed
+                    self._running = None
+                else:
+                    job.worker = worker
+            if job.worker is None:
+                worker.close()
+                continue
+            self._run_job(job, worker)
 
     def _run_job(self, job: _Job, worker: WorkerProcess) -> None:
         def progress(done: int, total: int) -> None:
@@ -201,6 +261,9 @@ class RankingQueue:
             error = str(failure)
         finally:
             worker.close()
+        self._finish(job, report, error)
+
+    def _finish(self, job: _Job, report: Any, error: str | None) -> None:
         with self._lock:
             self._running = None
             job.worker = None

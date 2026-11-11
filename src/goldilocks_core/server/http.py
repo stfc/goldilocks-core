@@ -35,6 +35,8 @@ never imports FastAPI (P7).
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -80,7 +82,16 @@ def create_app(*, static_root: str | Path | None = None) -> Any:
         raise ImportError(_MISSING_HTTP_EXTRA) from error
 
     readiness = _handlers.build_readiness()
-    app = FastAPI(title="goldilocks-core")
+    rankings = _handlers.build_ranking_queue()
+
+    @asynccontextmanager
+    async def lifespan(app: Any) -> AsyncIterator[None]:
+        # Warm the first ranking job's worker as the server starts (#285);
+        # an app that is never started, as in tests, warms none.
+        rankings.start()
+        yield
+
+    app = FastAPI(title="goldilocks-core", lifespan=lifespan)
     app.state.asset_readiness = readiness
     _register_error_handlers(app)
     _register_operational_routes(app, readiness)
@@ -101,7 +112,7 @@ def create_app(*, static_root: str | Path | None = None) -> Any:
     def magnetic_orderings(body: MagneticOrderingsRequestDocument) -> Any:
         return JSONResponse(_handlers.magnetic_orderings(body))
 
-    _register_ranking_routes(app, _handlers.build_ranking_queue())
+    _register_ranking_routes(app, rankings)
 
     @app.post("/run")
     def run(body: RunRequestDocument) -> Response:

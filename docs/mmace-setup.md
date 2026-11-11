@@ -144,6 +144,11 @@ its GPU memory is freed with it. The `is_magnetic` worker lives as long as the s
 it holds its CUDA context, and whatever its predictions leave cached, until it is replaced
 (section 5).
 
+A ranking job of the HTTP server runs on a worker warmed ahead of it, so the job does not
+pay CUDA initialisation, which took about 19 s on an A100. The warm worker waiting for
+the next job holds a CUDA context and the model on the GPU the whole time, and while a
+job runs there are two such processes.
+
 The CUDA build of torch comes from a uv dependency group. A uv-managed install takes CPU
 torch by default (the `cpu` group, so CI and the image stay small). Swap that group for
 `cu130` (Linux, with an NVIDIA driver for CUDA 13.0):

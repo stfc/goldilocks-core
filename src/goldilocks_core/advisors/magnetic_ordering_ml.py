@@ -35,6 +35,7 @@ a structure above :func:`max_atoms` (#259).
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 import threading
@@ -57,6 +58,9 @@ if TYPE_CHECKING:
 CHECKPOINT_ENV = "GOLDILOCKS_MACE_BACKBONE"
 MAX_ATOMS_ENV = "GOLDILOCKS_MMACE_MAX_ATOMS"
 DEFAULT_MAX_ATOMS = 200
+DEVICE_ENV = "GOLDILOCKS_MMACE_DEVICE"
+_DEVICES = ("cpu", "cuda")
+_LOG = logging.getLogger(__name__)
 _MACE_PACKAGES = ("mace", "e3nn", "sphericart")
 _RANKING_SLOT = threading.BoundedSemaphore(1)
 
@@ -167,6 +171,48 @@ def max_atoms() -> int:
     return int(text)
 
 
+def mmace_device() -> str:
+    """The torch device mMACE runs on: ``GOLDILOCKS_MMACE_DEVICE`` if set,
+    else ``"cpu"``.
+
+    ``cuda`` gives ``"cpu"`` when this torch build has no CUDA or no CUDA
+    device is visible, and logs a warning once saying which (maintainer
+    decision, #268): a server set up for a GPU it cannot reach still ranks,
+    only slower. A ranking's process exits after the ranking, so its GPU
+    memory is freed with it. On the A100, a bcc Fe ranking took 67 s against
+    107 s on 24 CPU cores, and GPU memory grew by about 41 MB per atom
+    (core 0.3.1, before goldilocks-ml 0.4.0's faster relaxation, 2026-11-10).
+
+    Raises ``ValueError`` for a value other than ``cpu`` or ``cuda``."""
+    raw = os.environ.get(DEVICE_ENV)
+    if not raw:
+        return "cpu"
+    requested = raw.strip()
+    if requested not in _DEVICES:
+        raise ValueError(f"{DEVICE_ENV}={raw!r} is neither cpu nor cuda")
+    if requested == "cpu":
+        return "cpu"
+    return _cuda_or_cpu()
+
+
+@cache
+def _cuda_or_cpu() -> str:
+    """``"cuda"`` if torch can use a CUDA device here, else ``"cpu"``, with
+    the reason logged once."""
+    import torch
+
+    if torch.cuda.is_available():
+        return "cuda"
+    reason = (
+        f"this torch build ({torch.__version__}) has no CUDA; install it with "
+        "`uv sync --no-group cpu --group cu130` (docs/mmace-setup.md)"
+        if torch.version.cuda is None
+        else "torch sees no CUDA device"
+    )
+    _LOG.warning("%s=cuda, but %s, so mMACE runs on the CPU", DEVICE_ENV, reason)
+    return "cpu"
+
+
 def _seed_moments(candidate: Structure, limits: dict[str, float]) -> np.ndarray:
     """Signed initial moments for one candidate: magnitude from the same
     oxidation-state heuristic for every candidate (so the energy comparison
@@ -192,7 +238,7 @@ def _seed_moments(candidate: Structure, limits: dict[str, float]) -> np.ndarray:
 def rank_orderings(
     candidates: Sequence[tuple[str, Structure]],
     *,
-    device: str = "cpu",
+    device: str | None = None,
     worker: WorkerProcess | None = None,
     on_progress: Callable[[int, int], None] | None = None,
 ) -> OrderingMlResult:
@@ -205,7 +251,8 @@ def rank_orderings(
     smaller -- cell than another candidate), so candidates are compared by
     energy *per atom*, never by total energy.
 
-    The candidates are relaxed one call each on ``worker``, else on a child
+    ``device`` is the torch device to relax on, :func:`mmace_device` if
+    ``None``. The candidates are relaxed one call each on ``worker``, else on a child
     process started for this ranking and ended after it; a concurrent call
     waits for the ranking in progress. ``on_progress(done, total)`` is called
     before the first relaxation and after each, with the number of candidates
@@ -234,6 +281,7 @@ def rank_orderings(
             f"atoms, above this server's {limit}-atom limit for mMACE "
             f"({MAX_ATOMS_ENV})"
         )
+    device = device or mmace_device()
     with _RANKING_SLOT:
         results = _relax_all(candidates, checkpoint, device, worker, on_progress)
 

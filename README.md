@@ -50,7 +50,8 @@ an input until the table it needs is installed.
 
 Goldilocks runs its models on the CPU, but on Linux pip installs PyTorch's
 CUDA build. Add `--extra-index-url https://download.pytorch.org/whl/cpu` to
-`pip install` for the much smaller CPU-only build.
+`pip install` for the much smaller CPU-only build. Only mMACE can use a GPU,
+when `GOLDILOCKS_MMACE_DEVICE=cuda` (see [mMACE setup](docs/mmace-setup.md)).
 
 ### From source
 

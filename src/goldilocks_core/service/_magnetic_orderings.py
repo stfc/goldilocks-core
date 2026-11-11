@@ -143,7 +143,7 @@ def list_magnetic_orderings(
     structure: Structure,
     *,
     rank_with_mmace: bool = False,
-    device: str = "cpu",
+    device: str | None = None,
     worker: WorkerProcess | None = None,
     on_progress: Callable[[int, int], None] | None = None,
 ) -> MagneticOrderingsReport:
@@ -154,9 +154,10 @@ def list_magnetic_orderings(
     energy-per-atom candidate as ``is_recommended``. If the ``magnetism``
     extra or its checkpoint is not configured, the candidates are still
     returned (unranked), with a warning naming why -- ranking is an
-    enhancement to this listing, never a precondition for it. ``worker`` and
-    ``on_progress`` go to ``rank_orderings``: the process the candidates are
-    relaxed on, and the ranking's progress.
+    enhancement to this listing, never a precondition for it. ``device``,
+    ``worker`` and ``on_progress`` go to ``rank_orderings``: the torch device
+    (``GOLDILOCKS_MMACE_DEVICE``'s if ``None``), the process the candidates
+    are relaxed on, and the ranking's progress.
 
     Also warns (rather than silently listing "fm" alone, indistinguishable
     from "this structure genuinely has no AFM candidates") whenever

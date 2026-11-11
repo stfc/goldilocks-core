@@ -67,20 +67,24 @@ def predict_is_magnetic(
     or running the model raises is re-raised from the worker, and
     ``worker_process.WorkerDied`` if the worker dies.
 
-    After a structure of more than ``_REPLACE_ABOVE_ATOMS`` atoms, schedules
-    the worker's replacement once it is idle."""
+    The embedding runs on ``GOLDILOCKS_MMACE_DEVICE``'s device (#268). After a
+    structure of more than ``_REPLACE_ABOVE_ATOMS`` atoms, schedules the
+    worker's replacement once it is idle."""
+    from goldilocks_core.advisors.magnetic_ordering_ml import mmace_device
+
+    device = mmace_device()
     prediction = _IS_MAGNETIC_WORKER.run(
-        _predict_is_magnetic, model_root, checkpoint, structure
+        _predict_is_magnetic, model_root, checkpoint, device, structure
     )
     if len(structure) > _REPLACE_ABOVE_ATOMS:
         _IS_MAGNETIC_WORKER.replace_when_idle(
-            _IDLE_S, _predict_is_magnetic, model_root, checkpoint, _WARM_UP_CELL
+            _IDLE_S, _predict_is_magnetic, model_root, checkpoint, device, _WARM_UP_CELL
         )
     return prediction
 
 
 def _predict_is_magnetic(
-    model_root: Path, checkpoint: Path, structure: Structure
+    model_root: Path, checkpoint: Path, device: str, structure: Structure
 ) -> Any:
     """Worker side of :func:`predict_is_magnetic`."""
     try:
@@ -92,17 +96,19 @@ def _predict_is_magnetic(
             "is_magnetic needs mace-torch 0.3.17 or later, with MagneticSCFMACE "
             f"(see docs/mmace-setup.md): {error}"
         ) from error
-    return _is_magnetic_model(model_root, checkpoint).predict(structure)
+    return _is_magnetic_model(model_root, checkpoint, device).predict(structure)
 
 
 @cache
-def _is_magnetic_model(model_root: Path, checkpoint: Path) -> Any:
+def _is_magnetic_model(model_root: Path, checkpoint: Path, device: str) -> Any:
     """The is_magnetic model at ``model_root``, loaded once per worker
-    process; goldilocks-ml loads the backbone on its first prediction."""
+    process, embedding on torch ``device``; goldilocks-ml loads the backbone
+    on its first prediction."""
     from goldilocks_ml.inference import load_model
 
     return load_model(
         model_root,
         artifacts={"mace_backbone": checkpoint},
         artifact_directory=model_root,
+        device=device,
     )

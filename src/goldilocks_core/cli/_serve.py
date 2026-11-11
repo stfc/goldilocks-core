@@ -34,6 +34,11 @@ def add_subparser(subparsers: argparse._SubParsersAction) -> None:
 
 
 def run(args: argparse.Namespace) -> None:
+    from goldilocks_core.advisors.magnetic_ordering_ml import mmace_device
+
+    # Read before either transport starts, so a bad GOLDILOCKS_MMACE_DEVICE
+    # stops the server and a cuda fallback to the CPU is logged now (#268).
+    mmace_device()
     if args.transport == "http":
         from goldilocks_core.server.http import serve
 

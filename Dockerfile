@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
-FROM python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 AS core-build
+FROM python:3.12.16-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df AS core-build
 COPY --from=ghcr.io/astral-sh/uv:0.12.3@sha256:2d890623d310b57771ce840f0da5eed5fc6d657da05ffaa45d82797b53fa3abc /uv /uvx /bin/
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -43,7 +43,7 @@ RUN /app/.venv/bin/python scripts/export_workbench_openapi.py --output /build/op
 RUN /app/.venv/bin/goldilocks assets install all \
     && /app/.venv/bin/goldilocks assets verify all
 
-FROM node:26.12.1-bookworm-slim@sha256:88e480776c6149ff1d098cd304f44bf18057fb5d284a3329b78162d29821e28c AS workbench-build
+FROM node:26.13.0-bookworm-slim@sha256:add5c17c14752c54d2f3d519ec46a3815684d41c33f198bcb09fb998f7dcbf68 AS workbench-build
 WORKDIR /build/web
 COPY web/package.json web/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
@@ -51,7 +51,7 @@ COPY web/ ./
 COPY --from=core-build /build/openapi.json ./openapi.json
 RUN npm run generate:schema && npm --ignore-scripts run build
 
-FROM python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 AS runtime
+FROM python:3.12.16-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df AS runtime
 LABEL org.opencontainers.image.title="goldilocks-core" \
       org.opencontainers.image.description="Guided DFT input recommendation with bundled runtime assets" \
       org.opencontainers.image.source="https://github.com/stfc/goldilocks-core" \
